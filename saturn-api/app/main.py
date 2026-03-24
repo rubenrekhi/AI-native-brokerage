@@ -1,7 +1,9 @@
+from arq.connections import ArqRedis
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.lifecycle import lifespan
 
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
