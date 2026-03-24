@@ -10,11 +10,9 @@ Delegate this workflow to the 'pr-wizard' agent using `mode: bypassPermissions` 
 
 ## PR Workflow
 
-PR body template to follow:
-!`cat .github/PULL_REQUEST_TEMPLATE.md`
-
-Commit message format used in this repo (for summarizing changes):
-!`cat .github/COMMIT_MESSAGE_TEMPLATE.md`
+Before starting, read both template files from the `.github/` folder. Use `git rev-parse --show-toplevel` to find the repo root if the files aren't in the current directory:
+- `.github/PULL_REQUEST_TEMPLATE.md` — PR body template to follow
+- `.github/COMMIT_MESSAGE_TEMPLATE.md` — commit format used in this repo (for summarizing changes)
 
 ## Task
 

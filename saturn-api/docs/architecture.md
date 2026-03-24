@@ -12,6 +12,7 @@ This document describes how the Saturn API works — the full stack, how service
   - [API security layers](#api-security-layers)
 - [🗄️ Database](#️-database)
   - [Connection setup](#connection-setup)
+  - [Local Supabase setup](#local-supabase-setup)
   - [Dual port setup (production only)](#dual-port-setup-production-only)
   - [Migrations (Alembic)](#migrations-alembic)
   - [Handling migration conflicts](#handling-migration-conflicts)
@@ -60,11 +61,14 @@ Saturn API — FastAPI (Railway)
 saturn-api/
 ├── pyproject.toml          # dependencies (managed by uv)
 ├── uv.lock                 # pinned dependency versions
+├── .python-version         # Python version pin (3.12), read by uv
 ├── Procfile                # Railway start commands (web + worker)
 ├── Makefile                # local dev shortcuts (make server, make worker, etc.)
 ├── alembic.ini             # migration config
 ├── .env                    # local env vars (gitignored)
 ├── .env.example            # template for other devs
+├── supabase/
+│   └── config.toml         # Supabase local dev config (ports, auth settings, etc.)
 ├── migrations/
 │   ├── env.py              # Alembic environment config
 │   └── versions/           # generated migration files
@@ -141,6 +145,24 @@ The database is Supabase-hosted Postgres, accessed via SQLAlchemy with the async
 - The engine connects using `DATABASE_URL` (pooled connection via Supavisor, port 6543 in production).
 - Route handlers get a session via FastAPI dependency injection.
 
+### Local Supabase setup
+
+Local development uses the Supabase CLI to run Postgres and Auth as Docker containers. The config lives in `supabase/config.toml` (committed to git).
+
+Key local ports (from `supabase/config.toml`):
+
+| Service | Port |
+|---------|------|
+| Supabase API (PostgREST) | 54321 |
+| Postgres | 54322 |
+| Supabase Studio | 54323 |
+| Inbucket (email testing) | 54324 |
+| Analytics | 54327 |
+
+After running `make infra` (`supabase start`), run `supabase status` to retrieve the local `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY`, and other local credentials needed for `.env`.
+
+The `supabase start` command starts all containers defined by `config.toml`. Data persists between sessions in a local Docker volume. `supabase stop` stops the containers without deleting data; `supabase db reset` wipes and reseeds from scratch.
+
 ### Dual port setup (production only)
 
 Supabase provides two connection endpoints for the same database:
@@ -148,7 +170,7 @@ Supabase provides two connection endpoints for the same database:
 - **Port 6543 (Supavisor pooled):** Used by the running app. The connection pooler multiplexes many concurrent requests across a smaller pool of database connections. Required to avoid exhausting Postgres connection limits under load.
 - **Port 5432 (direct):** Used by Alembic for migrations. DDL statements (CREATE TABLE, ALTER COLUMN) require a direct session — the pooler doesn't handle these reliably.
 
-In Railway env vars: `DATABASE_URL` points to port 6543, `DATABASE_URL_DIRECT` points to port 5432. Alembic's `env.py` reads `DATABASE_URL_DIRECT`. Locally, both point to the same `localhost:5432`.
+In Railway env vars: `DATABASE_URL` points to port 6543, `DATABASE_URL_DIRECT` points to port 5432. Alembic's `env.py` reads `DATABASE_URL_DIRECT`. Locally, both point to the same `localhost:54322` (the port Supabase CLI exposes Postgres on, as configured in `supabase/config.toml`).
 
 ### Migrations (Alembic)
 

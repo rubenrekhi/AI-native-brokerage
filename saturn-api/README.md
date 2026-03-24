@@ -27,7 +27,8 @@ uv sync
 # Copy environment template and fill in your keys
 cp .env.example .env
 
-# Start infrastructure, run migrations, and start the server
+# Start infrastructure (Supabase local config lives in supabase/config.toml)
+# Run `supabase status` after this to get the local SUPABASE_JWT_SECRET
 make infra
 make migrate
 make server
@@ -128,7 +129,7 @@ The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade 
 
 | Variable | Description | Local Default |
 |----------|-------------|---------------|
-| `DATABASE_URL` | Postgres connection (pooled in prod via port 6543) | `postgresql+asyncpg://postgres:postgres@localhost:5432/saturn` |
+| `DATABASE_URL` | Postgres connection (pooled in prod via port 6543) | `postgresql+asyncpg://postgres:postgres@localhost:54322/postgres` |
 | `DATABASE_URL_DIRECT` | Direct Postgres connection (for Alembic, port 5432 in prod) | Same as DATABASE_URL locally |
 | `REDIS_URL` | Redis connection for ARQ job queue | `redis://localhost:6379` |
 | `SUPABASE_JWT_SECRET` | Secret for verifying Supabase Auth JWTs. Locally: run `supabase status` to get it. Production: Supabase dashboard → Settings → API. | From `supabase status` |
