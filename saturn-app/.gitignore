@@ -1,8 +1,8 @@
 # Xcode build
 build/
 DerivedData/
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
+**/*.xcodeproj/xcuserdata/
+**/*.xcworkspace/xcuserdata/
 
 # Xcode state
 *.xcodeproj/project.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
