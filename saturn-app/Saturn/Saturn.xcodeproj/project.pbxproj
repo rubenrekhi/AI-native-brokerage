@@ -27,6 +27,7 @@
 		0B40D02C2F7346F400C0AB94 /* Saturn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saturn.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B40D0392F7346F500C0AB94 /* SaturnTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaturnTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0B40D0432F7346F500C0AB94 /* SaturnUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaturnUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E14A3B002F73480000AABB00 /* Config.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -78,6 +79,7 @@
 				0B40D02E2F7346F400C0AB94 /* Saturn */,
 				0B40D03C2F7346F500C0AB94 /* SaturnTests */,
 				0B40D0462F7346F500C0AB94 /* SaturnUITests */,
+				E14A3B002F73480000AABB00 /* Config.xcconfig */,
 				0B40D02D2F7346F400C0AB94 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -112,6 +114,7 @@
 			);
 			name = Saturn;
 			packageProductDependencies = (
+				E14A3B022F73480000AABB02 /* Supabase */,
 			);
 			productName = Saturn;
 			productReference = 0B40D02C2F7346F400C0AB94 /* Saturn.app */;
@@ -203,6 +206,9 @@
 				0B40D02B2F7346F400C0AB94 /* Saturn */,
 				0B40D0382F7346F500C0AB94 /* SaturnTests */,
 				0B40D0422F7346F500C0AB94 /* SaturnUITests */,
+			);
+			packageReferences = (
+				E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 		};
 /* End PBXProject section */
@@ -392,6 +398,7 @@
 		};
 		0B40D04E2F7346F500C0AB94 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E14A3B002F73480000AABB00 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -424,6 +431,7 @@
 		};
 		0B40D04F2F7346F500C0AB94 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E14A3B002F73480000AABB00 /* Config.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
@@ -578,6 +586,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E14A3B022F73480000AABB02 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 0B40D0242F7346F400C0AB94 /* Project object */;
 }
