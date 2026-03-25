@@ -115,11 +115,29 @@ Authentication uses Supabase Auth. The Saturn app handles signup/login via the `
 2. The app stores tokens (Supabase SDK handles this) and attaches the JWT to every API request: `Authorization: Bearer <token>`.
 3. FastAPI's `get_current_user` dependency (in `app/auth.py`) runs on every protected route:
    - Extracts the token from the header.
-   - Verifies the signature using `SUPABASE_JWT_SECRET` (via PyJWT). This secret differs per environment — locally it comes from `supabase status`, in production from the Supabase dashboard.
+   - Verifies the signature using JWKS (JSON Web Key Set). The backend fetches the public key from Supabase's JWKS endpoint (`{SUPABASE_URL}/.well-known/jwks.json`) and verifies the token's ECC (P-256) signature using PyJWT's `PyJWKClient`. No shared secret is needed — this is asymmetric verification.
    - Checks expiration.
    - Extracts the user ID from the `sub` claim.
 4. The user ID is injected into route handlers via `current_user = Depends(get_current_user)`.
 5. All database queries scope to that user ID (`WHERE user_id = ...`).
+
+### JWT verification details
+
+Supabase uses ECC (P-256) asymmetric signing for JWTs. The backend verifies tokens using the public key published at the JWKS endpoint — no `SUPABASE_JWT_SECRET` env var is needed.
+
+The `PyJWKClient` from PyJWT handles key fetching and caching automatically:
+
+```python
+from jwt import PyJWKClient
+
+jwks_client = PyJWKClient(f"{SUPABASE_URL}/.well-known/jwks.json")
+signing_key = jwks_client.get_signing_key_from_jwt(token)
+payload = jwt.decode(token, signing_key.key, algorithms=["ES256"], audience="authenticated")
+```
+
+The JWKS endpoint is public and cacheable. `PyJWKClient` caches keys in memory and only refetches when it encounters an unknown key ID, so there's no per-request latency hit.
+
+Locally, the Supabase CLI (`supabase start`) also exposes a JWKS endpoint at `http://127.0.0.1:54321/.well-known/jwks.json`, so the same verification code works in both environments — just point `SUPABASE_URL` at the right host.
 
 ### User data split
 
@@ -130,7 +148,7 @@ When a user signs up, a row in `profiles` is created with the same UUID, mapping
 
 ### API security layers
 
-1. **JWT authentication** (primary) — Supabase Auth tokens verified on every request.
+1. **JWT authentication** (primary) — Supabase Auth tokens verified via JWKS on every request.
 2. **HTTPS** — Railway provides TLS automatically.
 3. **API key** — static key embedded in the Saturn app, sent as `X-API-Key` header. Checked by middleware. Prevents casual abuse.
 4. **Rate limiting** — per-user request limits via FastAPI middleware (e.g., `slowapi`).
@@ -159,7 +177,7 @@ Key local ports (from `supabase/config.toml`):
 | Inbucket (email testing) | 54324 |
 | Analytics | 54327 |
 
-After running `make infra` (`supabase start`), run `supabase status` to retrieve the local `SUPABASE_JWT_SECRET`, `SUPABASE_ANON_KEY`, and other local credentials needed for `.env`.
+After running `make infra` (`supabase start`), run `supabase status` to retrieve the local `SUPABASE_ANON_KEY` and other local credentials needed for `.env`.
 
 The `supabase start` command starts all containers defined by `config.toml`. Data persists between sessions in a local Docker volume. `supabase stop` stops the containers without deleting data; `supabase db reset` wipes and reseeds from scratch.
 

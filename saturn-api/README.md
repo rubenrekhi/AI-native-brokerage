@@ -8,7 +8,7 @@ FastAPI backend for Saturn. Handles authentication, trading (via Alpaca), bank l
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (package manager)
-- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) (local Postgres + Auth)
+- [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) v2.71.1+ (local Postgres + Auth; >=2.71.1 required for JWKS asymmetric key signing)
 - [Redis](https://redis.io/) — install via `brew install redis`
 - Docker (required by Supabase CLI)
 - Alpaca Broker API sandbox keys ([sign up](https://broker-app.alpaca.markets/sign-up))
@@ -28,7 +28,7 @@ uv sync
 cp .env.example .env
 
 # Start infrastructure (Supabase local config lives in supabase/config.toml)
-# Run `supabase status` after this to get the local SUPABASE_JWT_SECRET
+# Run `supabase status` after this to confirm local services are running
 make infra
 make migrate
 make server
@@ -132,7 +132,7 @@ The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade 
 | `DATABASE_URL` | Postgres connection (pooled in prod via port 6543) | `postgresql+asyncpg://postgres:postgres@localhost:54322/postgres` |
 | `DATABASE_URL_DIRECT` | Direct Postgres connection (for Alembic, port 5432 in prod) | Same as DATABASE_URL locally |
 | `REDIS_URL` | Redis connection for ARQ job queue | `redis://localhost:6379` |
-| `SUPABASE_JWT_SECRET` | Secret for verifying Supabase Auth JWTs. Locally: run `supabase status` to get it. Production: Supabase dashboard → Settings → API. | From `supabase status` |
+| `SUPABASE_URL` | Supabase API URL — used to fetch JWKS public keys for JWT verification. Production: Supabase dashboard → Settings → API → Project URL. | `http://127.0.0.1:54321` |
 | `ALPACA_API_KEY` | Alpaca Broker API key (sandbox) | From Alpaca dashboard |
 | `ALPACA_SECRET_KEY` | Alpaca Broker API secret (sandbox) | From Alpaca dashboard |
 | `PLAID_CLIENT_ID` | Plaid client ID (sandbox) | From Plaid dashboard |

@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     database_url: str
     database_url_direct: str = ""
     redis_url: str
-    supabase_jwt_secret: str
+    supabase_url: str
     alpaca_api_key: str
     alpaca_secret_key: str
     plaid_client_id: str
