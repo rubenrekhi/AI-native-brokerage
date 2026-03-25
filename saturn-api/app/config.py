@@ -1,4 +1,7 @@
-from pydantic import field_validator, model_validator
+import ssl as _ssl
+from typing import Any
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 _PROD_KEYWORDS = {"prod", "production"}
@@ -14,16 +17,14 @@ def _normalize_env(raw: str) -> str:
     return cleaned
 
 
-def _ensure_ssl_param(url: str, *, require: bool) -> str:
-    if not url:
-        return url
-    mode = "require" if require else "disable"
-    sep = "&" if "?" in url else "?"
-    # Replace existing ssl param if present (asyncpg uses 'ssl', not 'sslmode')
-    if "ssl=" in url:
-        import re
-        return re.sub(r"ssl=[^&]*", f"ssl={mode}", url)
-    return f"{url}{sep}ssl={mode}"
+def get_ssl_connect_args(environment: str) -> dict[str, Any]:
+    """Return connect_args with SSL context for prod, empty dict for dev."""
+    if environment == "prod":
+        ctx = _ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = _ssl.CERT_NONE
+        return {"ssl": ctx}
+    return {}
 
 
 class Settings(BaseSettings):
@@ -51,15 +52,6 @@ class Settings(BaseSettings):
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
-
-    @model_validator(mode="after")
-    def apply_ssl_mode(self) -> "Settings":
-        require = self.environment == "prod"
-        self.database_url = _ensure_ssl_param(self.database_url, require=require)
-        self.database_url_direct = _ensure_ssl_param(
-            self.database_url_direct, require=require
-        )
-        return self
 
 
 settings = Settings()
