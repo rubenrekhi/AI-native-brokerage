@@ -5,6 +5,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings
 
 _PROD_KEYWORDS = {"prod", "production"}
+_STAGING_KEYWORDS = {"staging"}
 _DEV_KEYWORDS = {"dev", "development"}
 
 
@@ -12,14 +13,16 @@ def _normalize_env(raw: str) -> str:
     cleaned = raw.strip().lower()
     if cleaned in _PROD_KEYWORDS:
         return "prod"
+    if cleaned in _STAGING_KEYWORDS:
+        return "staging"
     if cleaned in _DEV_KEYWORDS:
         return "dev"
     return cleaned
 
 
 def get_ssl_connect_args(environment: str) -> dict[str, Any]:
-    """Return connect_args with SSL context for prod, empty dict for dev."""
-    if environment == "prod":
+    """Return connect_args with SSL context for hosted environments, empty dict for dev."""
+    if environment in ("prod", "staging"):
         ctx = _ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = _ssl.CERT_NONE
