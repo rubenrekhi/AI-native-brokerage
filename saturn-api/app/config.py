@@ -19,11 +19,11 @@ def _ensure_ssl_param(url: str, *, require: bool) -> str:
         return url
     mode = "require" if require else "disable"
     sep = "&" if "?" in url else "?"
-    # Replace existing sslmode param if present
-    if "sslmode=" in url:
+    # Replace existing ssl param if present (asyncpg uses 'ssl', not 'sslmode')
+    if "ssl=" in url:
         import re
-        return re.sub(r"sslmode=[^&]*", f"sslmode={mode}", url)
-    return f"{url}{sep}sslmode={mode}"
+        return re.sub(r"ssl=[^&]*", f"ssl={mode}", url)
+    return f"{url}{sep}ssl={mode}"
 
 
 class Settings(BaseSettings):
