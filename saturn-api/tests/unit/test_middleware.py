@@ -2,11 +2,14 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
 import structlog
 from structlog.testing import capture_logs
 from starlette.requests import Request
 from starlette.responses import Response
 
+from app.config import settings
+from app.middleware.api_key import APIKeyMiddleware, _EXEMPT_PATHS
 from app.middleware.correlation import CORRELATION_HEADER, CorrelationIDMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
 
@@ -176,3 +179,114 @@ async def test_handles_missing_correlation_id():
         await middleware.dispatch(request, call_next)
 
     assert cap_logs[0]["event"] == "GET /test"
+
+
+# ---------------------------------------------------------------------------
+# APIKeyMiddleware
+# ---------------------------------------------------------------------------
+
+_TEST_KEY = "test-secret-key-abc123"
+
+
+async def test_api_key_rejects_missing_header():
+    with patch.object(settings, "api_key", _TEST_KEY):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        request = _make_request()
+        called = False
+
+        async def call_next(req):
+            nonlocal called
+            called = True
+            return Response()
+
+        resp = await middleware.dispatch(request, call_next)
+        assert not called
+        assert resp.status_code == 403
+        body = __import__("json").loads(resp.body)
+        assert body["code"] == "FORBIDDEN"
+        assert body["error"] == "Invalid or missing API key"
+
+
+async def test_api_key_rejects_invalid_key():
+    with patch.object(settings, "api_key", _TEST_KEY):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        request = _make_request(headers={"x-api-key": "wrong-key"})
+        called = False
+
+        async def call_next(req):
+            nonlocal called
+            called = True
+            return Response()
+
+        resp = await middleware.dispatch(request, call_next)
+        assert not called
+        assert resp.status_code == 403
+
+
+async def test_api_key_allows_valid_key():
+    with patch.object(settings, "api_key", _TEST_KEY):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        request = _make_request(headers={"x-api-key": _TEST_KEY})
+        expected_response = Response(status_code=200)
+
+        async def call_next(req):
+            return expected_response
+
+        resp = await middleware.dispatch(request, call_next)
+        assert resp is expected_response
+
+
+@pytest.mark.parametrize("path", list(_EXEMPT_PATHS))
+async def test_api_key_skips_exempt_paths(path: str):
+    with patch.object(settings, "api_key", _TEST_KEY):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        scope = {
+            "type": "http",
+            "method": "GET",
+            "path": path,
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+        }
+        request = Request(scope)
+        expected_response = Response(status_code=200)
+
+        async def call_next(req):
+            return expected_response
+
+        resp = await middleware.dispatch(request, call_next)
+        assert resp is expected_response
+
+
+async def test_api_key_skips_options_method():
+    with patch.object(settings, "api_key", _TEST_KEY):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        scope = {
+            "type": "http",
+            "method": "OPTIONS",
+            "path": "/some-endpoint",
+            "query_string": b"",
+            "headers": [],
+            "server": ("testserver", 80),
+        }
+        request = Request(scope)
+        expected_response = Response(status_code=200)
+
+        async def call_next(req):
+            return expected_response
+
+        resp = await middleware.dispatch(request, call_next)
+        assert resp is expected_response
+
+
+async def test_api_key_skips_when_not_configured():
+    with patch.object(settings, "api_key", ""):
+        middleware = APIKeyMiddleware(app=MagicMock())
+        request = _make_request()
+        expected_response = Response(status_code=200)
+
+        async def call_next(req):
+            return expected_response
+
+        resp = await middleware.dispatch(request, call_next)
+        assert resp is expected_response

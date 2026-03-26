@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.database import get_db
 from app.exceptions import AuthenticationError, AuthorizationError, NotFoundError
 from app.main import app
@@ -21,7 +22,9 @@ async def client():
     app.state.arq = AsyncMock(ping=AsyncMock(return_value=True))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": settings.api_key},
     ) as ac:
         yield ac
 
