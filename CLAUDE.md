@@ -1,0 +1,111 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Repository Overview
+
+Saturn is an AI-native brokerage app. This monorepo contains:
+- **saturn-api/** — FastAPI backend (Python 3.12, deployed on Railway)
+- **saturn-app/** — iOS app (Swift/SwiftUI, Xcode 16+, iOS 17+)
+
+## Common Commands
+
+All commands run from `saturn-api/`:
+
+```bash
+# Infrastructure
+make infra          # Start Supabase + Redis (run once per session)
+make down           # Stop Supabase + Redis
+
+# Development (two terminals)
+make server         # FastAPI with hot-reload (uvicorn)
+make worker         # ARQ background worker
+
+# Testing
+make test           # All tests (uv run pytest)
+make test-unit      # Unit tests only (uv run pytest tests/unit)
+uv run pytest -x    # Stop on first failure
+uv run pytest -k "test_health"  # Run tests matching keyword
+uv run pytest tests/integration/test_health.py::test_health_ok  # Single test
+
+# Database migrations
+make migrate                          # Apply migrations (alembic upgrade head)
+make migration msg="add users table"  # Create new migration (autogenerate)
+
+# Dependencies
+uv add <package>      # Add dependency
+uv add --dev <package>  # Add dev dependency
+uv sync               # Install from lock file
+```
+
+## Architecture
+
+```
+iOS App → FastAPI (Railway) → Supabase Postgres (async SQLAlchemy + Alembic)
+                            → Alpaca Broker API (accounts, KYC, trading)
+                            → Plaid API (bank linking)
+                            → Redis + ARQ (background jobs)
+```
+
+### Backend structure (`saturn-api/app/`)
+
+- `main.py` — FastAPI app creation, CORS, root + health endpoints
+- `config.py` — Pydantic Settings loading env vars; normalizes `environment` to `dev`/`staging`/`prod`
+- `database.py` — Async SQLAlchemy engine + session factory; `get_db` dependency
+- `lifecycle.py` — FastAPI lifespan (startup/shutdown, ARQ pool init)
+- `exceptions.py` — Custom exceptions (`AuthenticationError`, `AuthorizationError`, `NotFoundError`) + global handlers including SQLAlchemy error mapping. Use `raise NotFoundError(...)` etc. instead of `HTTPException`
+- `models/` — SQLAlchemy models (DeclarativeBase in `base.py`)
+- `routes/` — API route modules (included via `app.include_router`)
+- `services/` — Business logic and external API wrappers
+- `tasks/` — ARQ background job definitions
+- `worker.py` — ARQ worker settings and cron job registration
+
+### Error handling pattern
+
+Raise domain exceptions directly — global handlers convert them to structured JSON:
+```python
+raise NotFoundError("Account not found")  # → 422/401/403/404/409/500 JSON
+```
+
+Response shape: `{"error": "message", "code": "NOT_FOUND", "detail": {...}}`
+
+### Testing structure
+
+```
+tests/
+├── conftest.py           # Shared fixtures (mock_db, mock_arq, async client)
+├── unit/                 # No DB or network
+├── integration/          # Real test DB, mocked external services
+└── fixtures/mock_responses/  # JSON matching Alpaca/Plaid response shapes
+```
+
+- pytest-asyncio with `asyncio_mode = "auto"` (no `@pytest.mark.asyncio` needed)
+- External services mocked via `conftest.py` fixtures overriding FastAPI dependencies
+
+## Conventions
+
+### Commits
+
+Conventional commits: `<type>(<scope>): <summary>`
+- Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
+- Scope: 1-3 words, snakecase (e.g., `auth`, `trading_routes`)
+- Summary: imperative, under 72 chars, no period
+- Reference Linear tickets in body: `Refs: SEV-42`
+
+### PRs
+
+Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each PR should be a single logical change. The PR description should cover the branch's net change, not individual commits.
+
+### Deployment
+
+- Railway auto-deploys `main` to production
+- PRs get automatic preview environments
+- Release phase runs `alembic upgrade head` before serving
+- Two Railway services: `web` (uvicorn) and `worker` (arq)
+- Verify no multiple Alembic heads before merging: `uv run alembic heads`
+
+### Database
+
+- Connection strings auto-converted from `postgresql://` to `postgresql+asyncpg://`
+- SSL enabled for prod/staging, disabled for dev
+- Supabase local dev: Postgres on port 54322, Studio on 54323
