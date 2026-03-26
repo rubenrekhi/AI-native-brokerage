@@ -397,7 +397,7 @@ function s(tag, a={}, txt) {
 // ── State ──
 let pos = {};
 Object.entries(TABLES).forEach(([k,t]) => { pos[k] = {x:t.x, y:t.y}; });
-let zoom = 0.44, pan = {x:40, y:20};
+let zoom = 0.44, pan = {x:0, y:0};
 let dragging = null, dragOff = {x:0,y:0};
 let panning = false, panStart = {x:0,y:0};
 let hoverTable = null, hoverRel = -1;
@@ -647,8 +647,23 @@ function render() {
   });
 }
 
+function centerView() {
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  Object.entries(TABLES).forEach(([k,t])=>{
+    const p=pos[k], h=thh(t);
+    if(p.x<minX)minX=p.x;
+    if(p.y<minY)minY=p.y;
+    if(p.x+TW>maxX)maxX=p.x+TW;
+    if(p.y+h>maxY)maxY=p.y+h;
+  });
+  const cx=(minX+maxX)/2, cy=(minY+maxY)/2;
+  pan.x=window.innerWidth/2-cx*zoom;
+  pan.y=window.innerHeight/2-cy*zoom;
+}
+
 buildLines();
 buildTables();
+centerView();
 render();
 
 // ── Events ──
@@ -687,8 +702,9 @@ svg.addEventListener("wheel", e => {
 document.getElementById("bp").onclick=()=>{ zoom=Math.min(1.8,zoom+0.1); render(); };
 document.getElementById("bm").onclick=()=>{ zoom=Math.max(0.12,zoom-0.1); render(); };
 document.getElementById("br").onclick=()=>{
-  zoom=0.44; pan={x:40,y:20};
+  zoom=0.44;
   Object.entries(TABLES).forEach(([k,t])=>{ pos[k]={x:t.x,y:t.y}; });
+  centerView();
   render();
 };
 
