@@ -16,6 +16,7 @@ dependencies = [
     "plaid-python",
     "arq",
     "httpx",
+    "structlog>=25.5.0",
 ]
 
 [dependency-groups]

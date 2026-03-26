@@ -8,6 +8,10 @@ from app.config import settings
 from app.database import get_db
 from app.exceptions import register_exception_handlers
 from app.lifecycle import lifespan
+from app.logging_config import configure_logging
+from app.middleware import CorrelationIDMiddleware, RequestLoggingMiddleware
+
+configure_logging(settings.environment)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -18,6 +22,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Middleware executes in reverse registration order (last added = outermost).
+# CorrelationIDMiddleware must wrap RequestLoggingMiddleware so the ID is
+# available when the request reaches the logging layer.
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(CorrelationIDMiddleware)
 
 app.add_middleware(
     CORSMiddleware,

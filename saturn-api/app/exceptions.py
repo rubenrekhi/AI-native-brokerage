@@ -1,12 +1,12 @@
-import logging
 from typing import Any
 
+import structlog
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError, IntegrityError, ProgrammingError
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -90,14 +90,14 @@ async def not_found_error_handler(
 async def data_error_handler(
     request: Request, exc: DataError
 ) -> JSONResponse:
-    logger.warning("SQLAlchemy DataError: %s", exc)
+    logger.warning("sqlalchemy_data_error", error=str(exc))
     return error_response(422, "Invalid data provided", "INVALID_DATA")
 
 
 async def integrity_error_handler(
     request: Request, exc: IntegrityError
 ) -> JSONResponse:
-    logger.warning("SQLAlchemy IntegrityError: %s", exc)
+    logger.warning("sqlalchemy_integrity_error", error=str(exc))
     msg = str(exc.orig) if exc.orig else str(exc)
     if "unique" in msg.lower() or "duplicate" in msg.lower():
         return error_response(409, "A record with this value already exists", "DUPLICATE_ENTRY")
@@ -107,7 +107,7 @@ async def integrity_error_handler(
 async def programming_error_handler(
     request: Request, exc: ProgrammingError
 ) -> JSONResponse:
-    logger.error("SQLAlchemy ProgrammingError: %s", exc)
+    logger.error("sqlalchemy_programming_error", error=str(exc))
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 
@@ -116,7 +116,7 @@ async def programming_error_handler(
 async def generic_exception_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
-    logger.error("Unhandled exception: %s", exc, exc_info=True)
+    logger.error("unhandled_exception", error=str(exc), exc_info=True)
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 
