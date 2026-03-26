@@ -11,6 +11,7 @@ dependencies = [
     "asyncpg",
     "alembic",
     "pyjwt",
+    "cryptography",
     "pydantic-settings",
     "alpaca-py",
     "plaid-python",
