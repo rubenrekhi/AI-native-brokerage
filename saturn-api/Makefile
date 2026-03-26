@@ -7,7 +7,7 @@ infra:
 
 # Start the API server (terminal 1)
 server:
-	uv run uvicorn app.main:app --reload
+	uv run uvicorn app.main:app --reload --no-access-log
 
 # Start the background worker (terminal 2)
 worker:

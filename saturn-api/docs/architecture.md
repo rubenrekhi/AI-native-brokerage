@@ -10,6 +10,10 @@ This document describes how the Saturn API works — the full stack, how service
   - [The flow](#the-flow)
   - [User data split](#user-data-split)
   - [API security layers](#api-security-layers)
+- [🔍 Error Handling & Logging](#-error-handling--logging)
+  - [Structured error responses](#structured-error-responses)
+  - [Request logging & correlation IDs](#request-logging--correlation-ids)
+  - [Log output format](#log-output-format)
 - [🗄️ Database](#️-database)
   - [Connection setup](#connection-setup)
   - [Local Supabase setup](#local-supabase-setup)
@@ -73,30 +77,23 @@ saturn-api/
 │   ├── env.py              # Alembic environment config
 │   └── versions/           # generated migration files
 ├── app/
-│   ├── main.py             # FastAPI app entry point, middleware, CORS
+│   ├── main.py             # FastAPI app, middleware wiring, exception handlers, endpoints
 │   ├── config.py           # Pydantic Settings class (reads env vars / .env)
 │   ├── database.py         # SQLAlchemy async engine, session factory
 │   ├── auth.py             # get_current_user dependency (JWT verification)
+│   ├── exceptions.py       # Custom exceptions + global error handlers
+│   ├── lifecycle.py        # FastAPI lifespan (ARQ pool init/shutdown)
+│   ├── logging_config.py   # structlog setup (console dev, JSON prod/staging)
+│   ├── middleware/          # HTTP middleware
+│   │   ├── correlation.py  # X-Correlation-ID generation + structlog contextvars
+│   │   └── logging.py      # Request/response access logging
 │   ├── models/             # SQLAlchemy ORM models
-│   │   ├── user.py         # profiles table (linked to auth.users)
-│   │   ├── conversation.py # AI chat history
-│   │   └── ...
+│   │   └── base.py         # DeclarativeBase
 │   ├── routes/             # API endpoint handlers
-│   │   ├── auth.py         # signup callback, profile creation
-│   │   ├── trading.py      # place/cancel orders, natural language trading
-│   │   ├── portfolio.py    # positions, balances, history
-│   │   ├── funding.py      # Plaid link, ACH transfers
-│   │   ├── chat.py         # AI conversation endpoints
-│   │   └── ...
 │   ├── services/           # business logic, external API wrappers
-│   │   ├── alpaca.py       # Alpaca BrokerClient wrapper
-│   │   ├── plaid.py        # Plaid client wrapper
-│   │   ├── ai/             # AI agent logic
-│   │   └── ...
 │   ├── worker.py           # ARQ worker settings and config
 │   └── tasks/              # background task definitions
-│       ├── analysis.py     # portfolio/trade analysis jobs
-│       └── ...
+│       └── health_ping.py  # placeholder cron task
 └── tests/
     ├── conftest.py          # shared fixtures
     ├── unit/
@@ -152,6 +149,30 @@ When a user signs up, a row in `profiles` is created with the same UUID, mapping
 2. **HTTPS** — Railway provides TLS automatically.
 3. **API key** — static key embedded in the Saturn app, sent as `X-API-Key` header. Checked by middleware. Prevents casual abuse.
 4. **Rate limiting** — per-user request limits via FastAPI middleware (e.g., `slowapi`).
+
+## 🔍 Error Handling & Logging
+
+### Structured error responses
+
+All errors return a consistent JSON shape: `{"error": "message", "code": "ERROR_CODE", "detail": {...}}`. Custom exceptions (`AuthenticationError`, `AuthorizationError`, `NotFoundError`) are raised in route/service code and mapped to HTTP status codes by global handlers registered in `app/exceptions.py`. SQLAlchemy errors (integrity, data, programming) are caught and mapped automatically.
+
+### Request logging & correlation IDs
+
+Every request is assigned a correlation ID (`X-Correlation-ID` header) by `CorrelationIDMiddleware`. If the client sends one, it's reused; otherwise a UUID is generated. The ID is:
+- Stored on `request.state.correlation_id`
+- Bound to structlog's contextvars — automatically included in every log call during the request
+- Echoed back in the response header
+- Attached to Sentry scope (when sentry-sdk is installed)
+
+`RequestLoggingMiddleware` logs each request with method, path, status, latency, user ID, client IP, and user-agent. The correlation ID appears automatically via contextvars.
+
+### Log output format
+
+Logging is configured in `app/logging_config.py` using structlog:
+- **Dev:** Colored console output (structlog `ConsoleRenderer`) — timestamps, logger names, IP, and user-agent are hidden for cleanliness
+- **Prod/Staging:** JSON output for Railway log aggregation — all fields included for searchability
+
+Uvicorn's built-in access log is disabled (`--no-access-log`) since the custom middleware provides richer output.
 
 ## 🗄️ Database
 
@@ -305,7 +326,7 @@ Railway uses Nixpacks for zero-config builds. It detects `pyproject.toml`, runs 
 
 ```
 # Procfile
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
 worker: arq app.worker.WorkerSettings
 ```
 
@@ -319,8 +340,9 @@ Each Railway service uses a different process from the Procfile.
 
 ### Environments & PR previews
 
-- `main` branch auto-deploys to production.
-- PR preview environments spin up automatically when PRs are opened — isolated instances with unique URLs. Torn down on merge/close.
+- `main` branch auto-deploys to **staging** on Railway.
+- **Production** deployments are triggered manually from the Railway dashboard.
+- PR preview environments spin up automatically off the staging environment when PRs are opened — isolated instances with unique URLs. Torn down on merge/close.
 - Focused PR environments: Railway only deploys services affected by changed files. Root directory is set to `saturn-api/` so app-only PRs don't trigger API deploys.
 - Watch path `/saturn-api/**` can be set as additional scoping.
 - Instant rollback available via Railway dashboard.

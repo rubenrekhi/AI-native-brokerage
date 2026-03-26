@@ -13,7 +13,7 @@ iOS app for Saturn — an AI-native brokerage built by [Sevino](https://sevino.a
 
 ### Setup
 
-1. Open `saturn-app/Saturn.xcodeproj` in Xcode.
+1. Open `saturn-app/Saturn/Saturn.xcodeproj` in Xcode.
 2. Create a `Config.xcconfig` file (gitignored) with your environment values:
    ```
    SUPABASE_URL = http://localhost:54321
