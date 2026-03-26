@@ -1,0 +1,706 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sevino DB Schema v2.1</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0d0d1a; overflow: hidden; font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace; }
+    #canvas { width: 100vw; height: 100vh; cursor: default; display: block; }
+    #legend {
+      position: fixed; top: 16px; left: 16px; z-index: 10;
+      background: rgba(13,13,26,0.94); padding: 12px 16px; border-radius: 10px;
+      border: 1px solid #1f2937; display: flex; gap: 6px; flex-wrap: wrap; max-width: 680px;
+      backdrop-filter: blur(12px);
+    }
+    #legend .lbl { color: #6b7280; font-size: 11px; align-self: center; margin-right: 6px; font-weight: 600; letter-spacing: 0.5px; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px; font-size: 9.5px;
+      padding: 3px 8px; border-radius: 5px; font-weight: 500;
+    }
+    .dot { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+    #controls {
+      position: fixed; top: 16px; right: 16px; z-index: 10;
+      background: rgba(13,13,26,0.94); padding: 14px 18px; border-radius: 10px;
+      border: 1px solid #1f2937; display: flex; flex-direction: column; gap: 8px; align-items: center;
+      backdrop-filter: blur(12px);
+    }
+    #controls .title { color: #e5e7eb; font-size: 12px; font-weight: 700; letter-spacing: 1px; }
+    #controls .sub { color: #6b7280; font-size: 10px; }
+    #controls .hint { color: #4b5563; font-size: 8.5px; margin-top: 2px; }
+    #btn-row { display: flex; gap: 5px; }
+    #btn-row button {
+      background: #1a1a2e; border: 1px solid #2d3748; color: #9ca3af; border-radius: 5px;
+      cursor: pointer; font-family: inherit; height: 30px; transition: all 0.15s;
+    }
+    #btn-row button:hover { border-color: #4b5563; color: #e5e7eb; background: #1f2937; }
+    #bp, #bm { width: 30px; font-size: 15px; }
+    #br { padding: 0 10px; font-size: 9px; letter-spacing: 0.3px; }
+    #search-box {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 10;
+      background: rgba(13,13,26,0.94); padding: 8px 14px; border-radius: 10px;
+      border: 1px solid #1f2937; display: flex; gap: 8px; align-items: center;
+      backdrop-filter: blur(12px);
+    }
+    #search-box input {
+      background: #111827; border: 1px solid #2d3748; color: #e5e7eb; border-radius: 5px;
+      padding: 5px 10px; font-family: inherit; font-size: 11px; width: 220px; outline: none;
+    }
+    #search-box input::placeholder { color: #4b5563; }
+    #search-box input:focus { border-color: #4a9eff; }
+    #search-box .search-hint { color: #4b5563; font-size: 9px; }
+  </style>
+</head>
+<body>
+<div id="legend"><span class="lbl">DOMAINS</span></div>
+<div id="controls">
+  <span class="title">SEVINO DB v2.1</span>
+  <span class="sub" id="stats"></span>
+  <div id="btn-row">
+    <button id="bp">+</button>
+    <button id="bm">−</button>
+    <button id="br">reset</button>
+  </div>
+  <span class="hint">scroll to zoom · drag tables · drag canvas</span>
+</div>
+<div id="search-box">
+  <input type="text" id="search" placeholder="Search tables or columns..." />
+  <span class="search-hint">ESC to clear</span>
+</div>
+<svg id="canvas"></svg>
+<script>
+const TABLES = {
+  // ── USERS & ONBOARDING ──
+  user_profiles: { domain:"users", x:60, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"age",type:"INT"},
+    {name:"annual_income",type:"INT"},
+    {name:"net_worth",type:"INT"},
+    {name:"risk_tolerance",type:"TEXT"},
+    {name:"investment_goals",type:"TEXT[]"},
+    {name:"time_horizon",type:"TEXT"},
+    {name:"experience_level",type:"TEXT"},
+    {name:"onboarding_completed",type:"BOOL"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  user_preferences: { domain:"users", x:60, y:360, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"theme",type:"TEXT"},
+    {name:"default_order_type",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  disclaimer_acceptances: { domain:"users", x:60, y:580, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"disclaimer_type",type:"TEXT"},
+    {name:"disclaimer_version",type:"TEXT"},
+    {name:"accepted_at",type:"TIMESTAMPTZ"},
+    {name:"ip_address",type:"TEXT"}
+  ]},
+
+  // ── ACCOUNTS ──
+  accounts: { domain:"accounts", x:460, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"account_type",type:"TEXT"},
+    {name:"account_subtype",type:"TEXT"},
+    {name:"display_name",type:"TEXT"},
+    {name:"institution_name",type:"TEXT"},
+    {name:"account_mask",type:"TEXT"},
+    {name:"is_active",type:"BOOL"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  alpaca_accounts: { domain:"accounts", x:460, y:340, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"account_id",type:"UUID",fk:true,ref:"accounts"},
+    {name:"alpaca_account_id",type:"TEXT"},
+    {name:"kyc_status",type:"TEXT"},
+    {name:"account_status",type:"TEXT"},
+    {name:"account_number",type:"TEXT"},
+    {name:"currency",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  bank_links: { domain:"accounts", x:460, y:680, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"alpaca_account_id",type:"UUID",fk:true,ref:"alpaca_accounts"},
+    {name:"alpaca_ach_relationship_id",type:"TEXT"},
+    {name:"plaid_institution_id",type:"TEXT"},
+    {name:"bank_name",type:"TEXT"},
+    {name:"account_mask",type:"TEXT"},
+    {name:"account_type",type:"TEXT"},
+    {name:"status",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── REFERENCE DATA ──
+  securities: { domain:"reference", x:880, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"ticker_symbol",type:"TEXT"},
+    {name:"name",type:"TEXT"},
+    {name:"asset_type",type:"TEXT"},
+    {name:"exchange",type:"TEXT"},
+    {name:"is_tradable",type:"BOOL"},
+    {name:"cached_price",type:"NUMERIC"},
+    {name:"cached_price_change",type:"NUMERIC"},
+    {name:"cached_price_change_pct",type:"NUMERIC"},
+    {name:"cache_updated_at",type:"TIMESTAMPTZ"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── TRADING ──
+  orders: { domain:"trading", x:1320, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"account_id",type:"UUID",fk:true,ref:"accounts"},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"security_id",type:"UUID",fk:true,ref:"securities"},
+    {name:"alpaca_order_id",type:"TEXT"},
+    {name:"client_order_id",type:"TEXT"},
+    {name:"ticker_symbol",type:"TEXT"},
+    {name:"side",type:"TEXT"},
+    {name:"order_type",type:"TEXT"},
+    {name:"time_in_force",type:"TEXT"},
+    {name:"quantity",type:"NUMERIC(18,8)"},
+    {name:"notional",type:"NUMERIC"},
+    {name:"limit_price",type:"NUMERIC"},
+    {name:"filled_quantity",type:"NUMERIC(18,8)"},
+    {name:"filled_avg_price",type:"NUMERIC"},
+    {name:"status",type:"TEXT"},
+    {name:"is_queued",type:"BOOL"},
+    {name:"submitted_at",type:"TIMESTAMPTZ"},
+    {name:"filled_at",type:"TIMESTAMPTZ"},
+    {name:"canceled_at",type:"TIMESTAMPTZ"},
+    {name:"expired_at",type:"TIMESTAMPTZ"},
+    {name:"failed_at",type:"TIMESTAMPTZ"},
+    {name:"replaced_by",type:"UUID",fk:true,ref:"orders"},
+    {name:"replaces",type:"UUID",fk:true,ref:"orders"},
+    {name:"commission",type:"NUMERIC"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  transfers: { domain:"trading", x:1320, y:640, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"account_id",type:"UUID",fk:true,ref:"accounts"},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"bank_link_id",type:"UUID",fk:true,ref:"bank_links"},
+    {name:"alpaca_transfer_id",type:"TEXT"},
+    {name:"direction",type:"TEXT"},
+    {name:"amount",type:"NUMERIC"},
+    {name:"status",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── AI CONVERSATIONS ──
+  conversations: { domain:"ai", x:1740, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"title",type:"TEXT"},
+    {name:"system_prompt_version",type:"TEXT"},
+    {name:"is_archived",type:"BOOL"},
+    {name:"last_message_at",type:"TIMESTAMPTZ"},
+    {name:"message_count",type:"INT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  messages: { domain:"ai", x:1740, y:290, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"conversation_id",type:"UUID",fk:true,ref:"conversations"},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"role",type:"TEXT"},
+    {name:"content",type:"TEXT"},
+    {name:"sequence_number",type:"INT"},
+    {name:"input_tokens",type:"INT"},
+    {name:"output_tokens",type:"INT"},
+    {name:"model",type:"TEXT"},
+    {name:"latency_ms",type:"INT"},
+    {name:"stop_reason",type:"TEXT"},
+    {name:"error_message",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+  tool_calls: { domain:"ai", x:1740, y:560, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"message_id",type:"UUID",fk:true,ref:"messages"},
+    {name:"conversation_id",type:"UUID",fk:true,ref:"conversations"},
+    {name:"tool_name",type:"TEXT"},
+    {name:"tool_input",type:"JSONB"},
+    {name:"tool_output",type:"JSONB"},
+    {name:"status",type:"TEXT"},
+    {name:"duration_ms",type:"INT"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+  message_feedback: { domain:"ai", x:1740, y:790, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"message_id",type:"UUID",fk:true,ref:"messages"},
+    {name:"conversation_id",type:"UUID",fk:true,ref:"conversations"},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"rating",type:"TEXT"},
+    {name:"feedback_text",type:"TEXT"},
+    {name:"feedback_category",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── AUDIT TRAIL ──
+  trade_audit_logs: { domain:"audit", x:2160, y:40, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"order_id",type:"UUID",fk:true,ref:"orders"},
+    {name:"conversation_id",type:"UUID",fk:true,ref:"conversations"},
+    {name:"message_id",type:"UUID",fk:true,ref:"messages"},
+    {name:"action",type:"TEXT"},
+    {name:"user_message",type:"TEXT"},
+    {name:"agent_interpretation",type:"JSONB"},
+    {name:"trade_card_data",type:"JSONB"},
+    {name:"risk_flags",type:"JSONB"},
+    {name:"outcome",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── WATCHLISTS ──
+  watchlists: { domain:"watchlist", x:2160, y:380, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"name",type:"TEXT"},
+    {name:"sort_order",type:"INT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  watchlist_items: { domain:"watchlist", x:2160, y:580, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"watchlist_id",type:"UUID",fk:true,ref:"watchlists"},
+    {name:"security_id",type:"UUID",fk:true,ref:"securities"},
+    {name:"sort_order",type:"INT"},
+    {name:"added_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── REGULATORY ──
+  documents: { domain:"regulatory", x:2160, y:740, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"account_id",type:"UUID",fk:true,ref:"accounts"},
+    {name:"user_id",type:"UUID",fk:true,ref:"auth.users"},
+    {name:"alpaca_document_id",type:"TEXT"},
+    {name:"document_type",type:"TEXT"},
+    {name:"document_sub_type",type:"TEXT"},
+    {name:"document_date",type:"DATE"},
+    {name:"viewed_at",type:"TIMESTAMPTZ"},
+    {name:"downloaded_at",type:"TIMESTAMPTZ"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+
+  // ── CONFIG ──
+  feature_flags: { domain:"config", x:1320, y:920, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"name",type:"TEXT"},
+    {name:"enabled_globally",type:"BOOL"},
+    {name:"description",type:"TEXT"},
+    {name:"created_at",type:"TIMESTAMPTZ"},
+    {name:"updated_at",type:"TIMESTAMPTZ"}
+  ]},
+  user_feature_flags: { domain:"config", x:1580, y:920, columns:[
+    {name:"user_id",type:"UUID",pk:true,fk:true,ref:"auth.users"},
+    {name:"flag_id",type:"UUID",pk:true,fk:true,ref:"feature_flags"},
+    {name:"enabled",type:"BOOL"},
+    {name:"created_at",type:"TIMESTAMPTZ"}
+  ]},
+  webhook_events: { domain:"config", x:1840, y:920, columns:[
+    {name:"id",type:"UUID",pk:true},
+    {name:"provider",type:"TEXT"},
+    {name:"event_type",type:"TEXT"},
+    {name:"payload",type:"JSONB"},
+    {name:"processed",type:"BOOL"},
+    {name:"error_message",type:"TEXT"},
+    {name:"idempotency_key",type:"TEXT"},
+    {name:"received_at",type:"TIMESTAMPTZ"},
+    {name:"processed_at",type:"TIMESTAMPTZ"}
+  ]},
+};
+
+const RELATIONS = [
+  // accounts domain
+  {from:"alpaca_accounts",fCol:"account_id",to:"accounts",tCol:"id"},
+  {from:"bank_links",fCol:"alpaca_account_id",to:"alpaca_accounts",tCol:"id"},
+
+  // trading → accounts & securities
+  {from:"orders",fCol:"account_id",to:"accounts",tCol:"id"},
+  {from:"orders",fCol:"security_id",to:"securities",tCol:"id"},
+  {from:"transfers",fCol:"account_id",to:"accounts",tCol:"id"},
+  {from:"transfers",fCol:"bank_link_id",to:"bank_links",tCol:"id"},
+
+  // documents → accounts
+  {from:"documents",fCol:"account_id",to:"accounts",tCol:"id"},
+
+  // ai domain
+  {from:"messages",fCol:"conversation_id",to:"conversations",tCol:"id"},
+  {from:"tool_calls",fCol:"message_id",to:"messages",tCol:"id"},
+  {from:"tool_calls",fCol:"conversation_id",to:"conversations",tCol:"id"},
+  {from:"message_feedback",fCol:"message_id",to:"messages",tCol:"id"},
+  {from:"message_feedback",fCol:"conversation_id",to:"conversations",tCol:"id"},
+
+  // audit → orders + ai
+  {from:"trade_audit_logs",fCol:"order_id",to:"orders",tCol:"id"},
+  {from:"trade_audit_logs",fCol:"conversation_id",to:"conversations",tCol:"id"},
+  {from:"trade_audit_logs",fCol:"message_id",to:"messages",tCol:"id"},
+
+  // watchlist → securities
+  {from:"watchlist_items",fCol:"watchlist_id",to:"watchlists",tCol:"id"},
+  {from:"watchlist_items",fCol:"security_id",to:"securities",tCol:"id"},
+
+  // config
+  {from:"user_feature_flags",fCol:"flag_id",to:"feature_flags",tCol:"id"},
+];
+
+const DC = {
+  users:     "#4a9eff",
+  accounts:  "#f59e0b",
+  reference: "#a78bfa",
+  trading:   "#f472b6",
+  ai:        "#60a5fa",
+  audit:     "#fb923c",
+  watchlist: "#c084fc",
+  regulatory:"#ef4444",
+  config:    "#6b7280",
+};
+const DL = {
+  users:      "Users & Onboarding",
+  accounts:   "Accounts",
+  reference:  "Reference Data",
+  trading:    "Trading",
+  ai:         "AI Conversations",
+  audit:      "Audit Trail",
+  watchlist:  "Watchlists",
+  regulatory: "Regulatory Docs",
+  config:     "Config & Events",
+};
+
+const TW = 280, RH = 22, HH = 34;
+const NS = "http://www.w3.org/2000/svg";
+function s(tag, a={}, txt) {
+  const e = document.createElementNS(NS, tag);
+  for (const [k,v] of Object.entries(a)) e.setAttribute(k, v);
+  if (txt !== undefined) e.textContent = txt;
+  return e;
+}
+
+// ── State ──
+let pos = {};
+Object.entries(TABLES).forEach(([k,t]) => { pos[k] = {x:t.x, y:t.y}; });
+let zoom = 0.44, pan = {x:40, y:20};
+let dragging = null, dragOff = {x:0,y:0};
+let panning = false, panStart = {x:0,y:0};
+let hoverTable = null, hoverRel = -1;
+let searchTerm = "";
+
+// ── Legend ──
+const legend = document.getElementById("legend");
+const seenDomains = [];
+Object.values(TABLES).forEach(t => { if (!seenDomains.includes(t.domain)) seenDomains.push(t.domain); });
+seenDomains.forEach(d => {
+  const p = document.createElement("span");
+  p.className = "pill";
+  p.style.cssText = `color:${DC[d]};border:1px solid ${DC[d]}33;background:${DC[d]}0d`;
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  dot.style.background = DC[d];
+  p.appendChild(dot);
+  p.appendChild(document.createTextNode(DL[d]));
+  legend.appendChild(p);
+});
+document.getElementById("stats").textContent =
+  `${Object.keys(TABLES).length} tables · ${RELATIONS.length} relations`;
+
+// ── SVG setup ──
+const svg = document.getElementById("canvas");
+const bgR = s("rect",{width:"100%",height:"100%",fill:"#0d0d1a"});
+svg.appendChild(bgR);
+const defs = s("defs");
+const pat = s("pattern",{id:"grid",width:40,height:40,patternUnits:"userSpaceOnUse"});
+pat.appendChild(s("circle",{cx:1,cy:1,r:0.5,fill:"#151525"}));
+defs.appendChild(pat);
+// Glow filter
+const glow = s("filter",{id:"glow",x:"-50%",y:"-50%",width:"200%",height:"200%"});
+const gb = s("feGaussianBlur",{stdDeviation:"3",result:"blur"});
+const fm = s("feMerge");
+fm.appendChild(s("feMergeNode",{in:"blur"}));
+fm.appendChild(s("feMergeNode",{in:"SourceGraphic"}));
+glow.appendChild(gb); glow.appendChild(fm);
+defs.appendChild(glow);
+svg.appendChild(defs);
+const gridR = s("rect",{width:"100%",height:"100%",fill:"url(#grid)"});
+svg.appendChild(gridR);
+const world = s("g");
+svg.appendChild(world);
+const linesG = s("g");
+const tablesG = s("g");
+world.appendChild(linesG);
+world.appendChild(tablesG);
+
+function thh(t) { return HH + t.columns.length * RH + 10; }
+
+function getRect(key) {
+  const t = TABLES[key], p = pos[key], h = thh(t);
+  return { x:p.x, y:p.y, w:TW, h, cx:p.x+TW/2, cy:p.y+h/2 };
+}
+
+function bestSides(fKey, tKey) {
+  const f = getRect(fKey), t = getRect(tKey);
+  const dx = t.cx - f.cx, dy = t.cy - f.cy;
+  const overlapX = f.x < t.x+t.w && f.x+f.w > t.x;
+  const overlapY = f.y < t.y+t.h && f.y+f.h > t.y;
+  if (overlapX && !overlapY) return dy>0?["bottom","top"]:["top","bottom"];
+  if (overlapY && !overlapX) return dx>0?["right","left"]:["left","right"];
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (ady > adx*1.2) return dy>0?["bottom","top"]:["top","bottom"];
+  return dx>0?["right","left"]:["left","right"];
+}
+
+function anchor(key, colName, side) {
+  const t = TABLES[key], p = pos[key];
+  const ci = t.columns.findIndex(c => c.name === colName);
+  const rowY = p.y + HH + ci*RH + RH/2;
+  const h = thh(t);
+  if (side==="right")  return {x:p.x+TW, y:rowY};
+  if (side==="left")   return {x:p.x, y:rowY};
+  if (side==="bottom") return {x:p.x+TW/2, y:p.y+h};
+  if (side==="top")    return {x:p.x+TW/2, y:p.y};
+}
+
+function bezier(f, t, fSide, tSide) {
+  const isV = side => side==="top"||side==="bottom";
+  const dist = Math.sqrt((t.x-f.x)**2+(t.y-f.y)**2);
+  const cp = Math.min(Math.max(dist*0.45,60),220);
+  const fcx = isV(fSide)?f.x:f.x+(fSide==="right"?cp:-cp);
+  const fcy = isV(fSide)?f.y+(fSide==="bottom"?cp:-cp):f.y;
+  const tcx = isV(tSide)?t.x:t.x+(tSide==="right"?cp:-cp);
+  const tcy = isV(tSide)?t.y+(tSide==="bottom"?cp:-cp):t.y;
+  return `M${f.x} ${f.y} C${fcx} ${fcy},${tcx} ${tcy},${t.x} ${t.y}`;
+}
+
+function matchesSearch(tableName, table) {
+  if (!searchTerm) return true;
+  const q = searchTerm.toLowerCase();
+  if (tableName.toLowerCase().includes(q)) return true;
+  return table.columns.some(c => c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q));
+}
+
+// ── Build table elements ──
+const tEls = {};
+function buildTables() {
+  tablesG.innerHTML = "";
+  Object.entries(TABLES).forEach(([key, table]) => {
+    const p = pos[key], color = DC[table.domain], h = thh(table);
+    const g = s("g",{transform:`translate(${p.x},${p.y})`});
+
+    // Shadow
+    g.appendChild(s("rect",{x:3,y:3,width:TW,height:h,rx:8,fill:"#000",opacity:0.3}));
+    // Body
+    g.appendChild(s("rect",{x:0,y:0,width:TW,height:h,rx:8,fill:"#12121f",stroke:color,"stroke-width":1.2}));
+    // Header bg
+    g.appendChild(s("rect",{x:0,y:0,width:TW,height:HH,rx:8,fill:color,opacity:0.12}));
+    // Clip header bottom corners
+    g.appendChild(s("rect",{x:0,y:HH-8,width:TW,height:8,fill:color,opacity:0.12}));
+    // Header divider
+    g.appendChild(s("rect",{x:0,y:HH-1,width:TW,height:1.5,fill:color,opacity:0.35}));
+    // Table name
+    g.appendChild(s("text",{x:14,y:22,fill:color,"font-size":12.5,"font-weight":700,"font-family":"inherit"},key));
+    // Domain label
+    g.appendChild(s("text",{x:TW-10,y:22,fill:color,"font-size":9,"text-anchor":"end",opacity:0.5,"font-family":"inherit"},DL[table.domain]));
+
+    table.columns.forEach((col, ci) => {
+      const cy = HH + ci*RH + RH/2 + 1;
+      // Zebra stripe
+      if (ci%2===0) g.appendChild(s("rect",{x:1,y:HH+ci*RH,width:TW-2,height:RH,fill:"#fff",opacity:0.015}));
+      // PK/FK badge
+      if (col.pk && col.fk) {
+        g.appendChild(s("text",{x:13,y:cy+4,fill:"#fbbf24","font-size":7.5,"font-family":"inherit","font-weight":600},"PFK"));
+      } else if (col.pk) {
+        g.appendChild(s("text",{x:13,y:cy+4,fill:"#fbbf24","font-size":7.5,"font-family":"inherit","font-weight":600},"PK"));
+      } else if (col.fk) {
+        g.appendChild(s("text",{x:13,y:cy+4,fill:"#60a5fa","font-size":7.5,"font-family":"inherit","font-weight":600},"FK"));
+      }
+      // Column name
+      const nameX = (col.pk && col.fk) ? 38 : 34;
+      g.appendChild(s("text",{x:nameX,y:cy+4,fill:col.fk?"#93c5fd":"#d1d5db","font-size":11,"font-family":"inherit"},col.name));
+      // Type
+      g.appendChild(s("text",{x:TW-10,y:cy+4,fill:"#4b5563","font-size":9.5,"text-anchor":"end","font-family":"inherit"},col.type));
+    });
+
+    // Drag handle
+    const hit = s("rect",{x:0,y:0,width:TW,height:HH,fill:"transparent",style:"cursor:grab"});
+    hit.addEventListener("mousedown", e => {
+      e.stopPropagation();
+      dragging = key;
+      dragOff.x = (e.clientX-pan.x)/zoom - pos[key].x;
+      dragOff.y = (e.clientY-pan.y)/zoom - pos[key].y;
+      Object.values(tEls).forEach(el => el.style.pointerEvents = "none");
+    });
+    g.appendChild(hit);
+    g.addEventListener("mouseenter",()=>{ hoverTable=key; render(); });
+    g.addEventListener("mouseleave",()=>{ hoverTable=null; render(); });
+    tEls[key] = g;
+    tablesG.appendChild(g);
+  });
+}
+
+// ── Build line elements ──
+const rEls = [];
+function buildLines() {
+  linesG.innerHTML = "";
+  rEls.length = 0;
+  RELATIONS.forEach((rel, i) => {
+    const fT = TABLES[rel.from], tT = TABLES[rel.to];
+    if (!fT||!tT) { rEls.push(null); return; }
+    const g = s("g");
+    const path = s("path",{fill:"none",stroke:DC[fT.domain],"stroke-width":1.2,opacity:0.6});
+    if (rel.style==="dashed") path.setAttribute("stroke-dasharray","6 3");
+    const dot  = s("circle",{r:3.5,fill:DC[tT.domain],opacity:0.8});
+    const lbl  = s("text",{fill:"#e5e7eb","font-size":10,"text-anchor":"middle",
+      "font-family":"inherit",style:"pointer-events:none",visibility:"hidden"},
+      `${rel.from}.${rel.fCol} → ${rel.to}.${rel.tCol}`);
+    const lblBg = s("rect",{fill:"#0d0d1a",rx:4,opacity:0.9,style:"pointer-events:none",visibility:"hidden"});
+    const hit  = s("path",{fill:"none",stroke:"transparent","stroke-width":16});
+    hit.addEventListener("mouseenter",()=>{ hoverRel=i; render(); });
+    hit.addEventListener("mouseleave",()=>{ hoverRel=-1; render(); });
+    g.append(path,dot,lblBg,lbl,hit);
+    linesG.appendChild(g);
+    rEls.push({path,dot,lbl,lblBg,hit,rel,fc:DC[fT.domain],tc:DC[tT.domain],isDashed:!!rel.style});
+  });
+}
+
+function render() {
+  world.setAttribute("transform",`translate(${pan.x},${pan.y}) scale(${zoom})`);
+
+  // Connected tables for hover
+  const conn = new Set();
+  if (hoverTable) {
+    conn.add(hoverTable);
+    RELATIONS.forEach(r=>{ if(r.from===hoverTable) conn.add(r.to); if(r.to===hoverTable) conn.add(r.from); });
+  }
+
+  // Search matches
+  const searchMatches = new Set();
+  if (searchTerm) {
+    Object.entries(TABLES).forEach(([k,t])=>{ if (matchesSearch(k,t)) searchMatches.add(k); });
+  }
+
+  // Update tables
+  Object.entries(tEls).forEach(([key,g]) => {
+    g.setAttribute("transform",`translate(${pos[key].x},${pos[key].y})`);
+    const dimmedHover = hoverTable && !conn.has(key);
+    const dimmedSearch = searchTerm && !searchMatches.has(key);
+    const dimmed = dimmedHover || dimmedSearch;
+    g.style.opacity = dimmed ? 0.08 : 1;
+    const bg = g.querySelectorAll("rect")[1]; // body rect
+    if (bg) {
+      bg.setAttribute("stroke", hoverTable===key?"#fff":DC[TABLES[key].domain]);
+      bg.setAttribute("stroke-width", hoverTable===key?2.5:1.2);
+    }
+    if (hoverTable===key) {
+      g.setAttribute("filter","url(#glow)");
+    } else {
+      g.removeAttribute("filter");
+    }
+  });
+
+  // Update lines
+  rEls.forEach((e,i) => {
+    if (!e) return;
+    const {rel,path,dot,lbl,lblBg,hit,fc,tc,isDashed} = e;
+    const [fSide, tSide] = bestSides(rel.from, rel.to);
+    const f = anchor(rel.from, rel.fCol, fSide);
+    const t = anchor(rel.to, rel.tCol, tSide);
+    const d = bezier(f, t, fSide, tSide);
+    const hi = hoverTable && (rel.from===hoverTable||rel.to===hoverTable);
+    const hl = hoverRel===i;
+    const dim = (hoverTable && !hi) || (searchTerm && !searchMatches.has(rel.from) && !searchMatches.has(rel.to));
+    path.setAttribute("d",d); hit.setAttribute("d",d);
+    path.setAttribute("stroke", hl?"#fff":dim?"#1a1a2e":fc);
+    path.setAttribute("stroke-width", hi||hl?2.8:1.2);
+    if (!isDashed) path.setAttribute("stroke-dasharray", dim?"4 4":"none");
+    path.style.opacity = dim?0.08:0.6;
+    dot.setAttribute("cx",t.x); dot.setAttribute("cy",t.y);
+    dot.setAttribute("r", hi?4.5:3.5);
+    dot.setAttribute("fill", dim?"#1a1a2e":tc);
+    dot.style.opacity = dim?0.08:0.8;
+
+    const mx = (f.x+t.x)/2, my = (f.y+t.y)/2-10;
+    lbl.setAttribute("x",mx); lbl.setAttribute("y",my);
+    lbl.setAttribute("visibility", hl?"visible":"hidden");
+    // Label background
+    if (hl) {
+      const text = `${rel.from}.${rel.fCol} → ${rel.to}.${rel.tCol}`;
+      const tw = text.length * 5.8 + 16;
+      lblBg.setAttribute("x",mx-tw/2); lblBg.setAttribute("y",my-12);
+      lblBg.setAttribute("width",tw); lblBg.setAttribute("height",18);
+      lblBg.setAttribute("visibility","visible");
+    } else {
+      lblBg.setAttribute("visibility","hidden");
+    }
+  });
+}
+
+buildLines();
+buildTables();
+render();
+
+// ── Events ──
+svg.addEventListener("mousedown", e => {
+  if (e.target===svg||e.target===bgR||e.target===gridR) {
+    panning=true;
+    panStart.x=e.clientX-pan.x; panStart.y=e.clientY-pan.y;
+    svg.style.cursor="grabbing";
+  }
+});
+window.addEventListener("mousemove", e => {
+  if (dragging) {
+    pos[dragging].x = (e.clientX-pan.x)/zoom - dragOff.x;
+    pos[dragging].y = (e.clientY-pan.y)/zoom - dragOff.y;
+    render();
+  } else if (panning) {
+    pan.x=e.clientX-panStart.x; pan.y=e.clientY-panStart.y;
+    render();
+  }
+});
+window.addEventListener("mouseup",()=>{
+  dragging=null; panning=false; svg.style.cursor="default";
+  Object.values(tEls).forEach(el => el.style.pointerEvents = "");
+});
+svg.addEventListener("wheel", e => {
+  e.preventDefault();
+  const oz=zoom;
+  zoom=Math.min(1.8,Math.max(0.12,zoom-e.deltaY*0.001));
+  const r=svg.getBoundingClientRect();
+  const mx=e.clientX-r.left, my=e.clientY-r.top;
+  pan.x=mx-(mx-pan.x)*(zoom/oz);
+  pan.y=my-(my-pan.y)*(zoom/oz);
+  render();
+},{passive:false});
+
+document.getElementById("bp").onclick=()=>{ zoom=Math.min(1.8,zoom+0.1); render(); };
+document.getElementById("bm").onclick=()=>{ zoom=Math.max(0.12,zoom-0.1); render(); };
+document.getElementById("br").onclick=()=>{
+  zoom=0.44; pan={x:40,y:20};
+  Object.entries(TABLES).forEach(([k,t])=>{ pos[k]={x:t.x,y:t.y}; });
+  render();
+};
+
+// ── Search ──
+const searchInput = document.getElementById("search");
+searchInput.addEventListener("input", e => {
+  searchTerm = e.target.value.trim();
+  render();
+});
+searchInput.addEventListener("keydown", e => {
+  if (e.key==="Escape") { searchInput.value=""; searchTerm=""; render(); }
+});
+</script>
+</body>
+</html>
