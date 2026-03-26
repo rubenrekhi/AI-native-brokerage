@@ -1,5 +1,6 @@
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +11,7 @@ from app.database import get_db
 from app.exceptions import register_exception_handlers
 from app.lifecycle import lifespan
 from app.logging_config import configure_logging
-from app.middleware import CorrelationIDMiddleware, RequestLoggingMiddleware
+from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 
 configure_logging(settings.environment)
 
@@ -23,9 +24,40 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    schemes = schema.setdefault("components", {}).setdefault("securitySchemes", {})
+    schemes["APIKeyHeader"] = {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+    }
+    schema["security"] = [{"APIKeyHeader": []}, {"HTTPBearer": []}]
+    # Ensure every operation includes APIKeyHeader so Swagger sends it even
+    # when FastAPI auto-generates operation-level security (e.g. HTTPBearer).
+    api_key_entry = {"APIKeyHeader": []}
+    for path_ops in schema.get("paths", {}).values():
+        for operation in path_ops.values():
+            if isinstance(operation, dict) and "security" in operation:
+                if api_key_entry not in operation["security"]:
+                    operation["security"].insert(0, api_key_entry)
+    app.openapi_schema = schema
+    return schema
+
+
+app.openapi = custom_openapi
+
 # Middleware executes in reverse registration order (last added = outermost).
-# CorrelationIDMiddleware must wrap RequestLoggingMiddleware so the ID is
-# available when the request reaches the logging layer.
+# Request flow: CORS → CorrelationID → RequestLogging → APIKey → route
+app.add_middleware(APIKeyMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 

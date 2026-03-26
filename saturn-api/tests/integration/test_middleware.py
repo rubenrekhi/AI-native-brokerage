@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.database import get_db
 from app.main import app
 from app.middleware.correlation import CORRELATION_HEADER
@@ -22,7 +23,9 @@ async def client():
     app.state.arq = AsyncMock(ping=AsyncMock(return_value=True))
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": settings.api_key},
     ) as ac:
         yield ac
 
@@ -70,3 +73,45 @@ async def test_health_endpoint_is_logged(client: AsyncClient, caplog):
 
     access_records = [r for r in caplog.records if r.name == "saturn.access"]
     assert len(access_records) >= 1
+
+
+# ---------------------------------------------------------------------------
+# API key gate
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+async def client_no_api_key():
+    """Client without X-API-Key header for testing rejection."""
+    mock_db = AsyncMock()
+
+    async def _override():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = _override
+    app.state.arq = AsyncMock(ping=AsyncMock(return_value=True))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+async def test_api_key_required_for_root(client_no_api_key: AsyncClient):
+    resp = await client_no_api_key.get("/")
+    assert resp.status_code == 403
+    body = resp.json()
+    assert body["code"] == "FORBIDDEN"
+    assert body["error"] == "Invalid or missing API key"
+
+
+async def test_api_key_valid_passes(client: AsyncClient):
+    resp = await client.get("/")
+    assert resp.status_code == 200
+
+
+async def test_api_key_not_required_for_health(client_no_api_key: AsyncClient):
+    resp = await client_no_api_key.get("/health")
+    assert resp.status_code == 200

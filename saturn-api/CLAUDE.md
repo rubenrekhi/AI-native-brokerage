@@ -41,7 +41,7 @@ make migrate                           # apply pending migrations (alembic upgra
 **Stack**: FastAPI + SQLAlchemy async (asyncpg) + Pydantic Settings + ARQ (Redis) + Alembic
 
 **App layout** (`app/`):
-- `main.py` — FastAPI app, CORS middleware, health endpoint, exception handler registration
+- `main.py` — FastAPI app, middleware stack (CORS, correlation ID, request logging, API key gate), health endpoint, exception handler registration
 - `config.py` — `Settings` (Pydantic BaseSettings) loaded from `.env`; normalizes environment names; handles asyncpg URL scheme; SSL for prod/staging
 - `database.py` — async engine + session factory; `get_db` dependency yields a session with auto-commit/rollback
 - `lifecycle.py` — FastAPI lifespan context manager that creates/closes the ARQ Redis pool (`app.state.arq`)
@@ -59,6 +59,7 @@ make migrate                           # apply pending migrations (alembic upgra
 - ARQ pool lives on `app.state.arq`, initialized in lifespan
 - Errors use the structured `error_response()` format: `{"error": str, "code": str, "detail"?: dict}`
 - Raise custom exceptions (`AuthenticationError`, `NotFoundError`, etc.) instead of `HTTPException` — they're caught by registered handlers
+- `APIKeyMiddleware` checks `X-API-Key` header on all requests except `/health`, `/docs`, `/redoc`, `/openapi.json`, and OPTIONS. Skipped entirely when `API_KEY` env var is empty (dev convenience)
 
 ## Testing
 
@@ -80,4 +81,4 @@ make migrate                           # apply pending migrations (alembic upgra
 ## Environment Variables
 
 All managed via Pydantic Settings from `.env`:
-`ENVIRONMENT`, `DATABASE_URL`, `DATABASE_URL_DIRECT`, `REDIS_URL`, `SUPABASE_URL`, `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`
+`ENVIRONMENT`, `DATABASE_URL`, `DATABASE_URL_DIRECT`, `REDIS_URL`, `SUPABASE_URL`, `API_KEY`, `ALPACA_API_KEY`, `ALPACA_SECRET_KEY`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV`

@@ -134,11 +134,26 @@ The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade 
 | `DATABASE_URL_DIRECT` | Direct Postgres connection (for Alembic, port 5432 in prod) | Same as DATABASE_URL locally |
 | `REDIS_URL` | Redis connection for ARQ job queue | `redis://localhost:6379` |
 | `SUPABASE_URL` | Supabase API URL — used to fetch JWKS public keys for JWT verification. Production: Supabase dashboard → Settings → API → Project URL. | `http://127.0.0.1:54321` |
+| `API_KEY` | Static API key checked via `X-API-Key` header — lightweight gate to prevent random API discovery (not auth). **Optional for local dev** (leave empty to disable). Required for staging/prod. Generate with `openssl rand -hex 32`. | _(empty — disabled)_ |
 | `ALPACA_API_KEY` | Alpaca Broker API key (sandbox) | From Alpaca dashboard |
 | `ALPACA_SECRET_KEY` | Alpaca Broker API secret (sandbox) | From Alpaca dashboard |
 | `PLAID_CLIENT_ID` | Plaid client ID (sandbox) | From Plaid dashboard |
 | `PLAID_SECRET` | Plaid secret key (sandbox) | From Plaid dashboard |
 | `PLAID_ENV` | Plaid environment | `sandbox` |
+
+## API Key
+
+Staging, production, and PR preview environments require an `X-API-Key` header on every request (except `/health` and `/docs`). This is a static key baked into the iOS app — it's not auth, just a lightweight gate to prevent random discovery.
+
+**Local dev:** The key is optional. Leave `API_KEY` empty in your `.env` and the middleware is disabled entirely.
+
+**Testing against staging or PR environments** (Swagger, curl, Postman, iOS app via TestFlight/dev builds):
+
+1. Go to [Railway](https://railway.app) → **Saturn Backend** project → select **Staging** environment → **Saturn** service → **Variables**
+2. Copy the `API_KEY` value
+3. Include it as a header in your requests: `X-API-Key: <value>`
+
+PR preview environments share the same key as staging. If you're using the Swagger docs (`/docs`), click the **Authorize** button at the top and paste the key there — all "Try it out" requests will include it automatically.
 
 ## Further Reading
 

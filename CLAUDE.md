@@ -49,7 +49,7 @@ iOS App → FastAPI (Railway) → Supabase Postgres (async SQLAlchemy + Alembic)
 
 ### Backend structure (`saturn-api/app/`)
 
-- `main.py` — FastAPI app creation, CORS, root + health endpoints
+- `main.py` — FastAPI app creation, middleware stack (CORS, correlation ID, request logging, API key gate), root + health endpoints
 - `config.py` — Pydantic Settings loading env vars; normalizes `environment` to `dev`/`staging`/`prod`
 - `database.py` — Async SQLAlchemy engine + session factory; `get_db` dependency
 - `lifecycle.py` — FastAPI lifespan (startup/shutdown, ARQ pool init)

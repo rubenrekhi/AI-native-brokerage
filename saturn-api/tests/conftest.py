@@ -3,8 +3,12 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.config import settings
 from app.database import get_db
 from app.main import app
+
+TEST_API_KEY = "test-api-key-for-testing"
+settings.api_key = TEST_API_KEY
 
 
 @pytest.fixture
@@ -29,7 +33,11 @@ async def client(mock_db, mock_arq):
     app.dependency_overrides[get_db] = _override_get_db
     app.state.arq = mock_arq
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": TEST_API_KEY},
+    ) as ac:
         yield ac
 
     app.dependency_overrides.clear()
@@ -54,7 +62,9 @@ async def authenticated_client(mock_db, mock_arq, mock_current_user):
     app.state.arq = mock_arq
 
     async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+        headers={"X-API-Key": TEST_API_KEY},
     ) as ac:
         yield ac
 
