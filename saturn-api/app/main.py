@@ -4,6 +4,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.exceptions import register_exception_handlers
@@ -67,3 +68,16 @@ async def health(request: Request, db: AsyncSession = Depends(get_db)):
             "redis": "ok" if redis_ok else "error",
         },
     )
+
+@app.get("/health/auth")
+async def auth_health(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("SELECT email FROM auth.users WHERE id = :uid"),
+        {"uid": user_id},
+    )
+    row = result.one_or_none()
+    return {"user_id": user_id, "email": row.email if row else None}
+

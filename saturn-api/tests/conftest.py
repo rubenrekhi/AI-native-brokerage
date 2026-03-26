@@ -33,3 +33,29 @@ async def client(mock_db, mock_arq):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def mock_current_user():
+    """Fixed user ID returned by the auth dependency override."""
+    return "test-user-id-123"
+
+
+@pytest.fixture
+async def authenticated_client(mock_db, mock_arq, mock_current_user):
+    """AsyncClient with auth dependency overridden to return mock_current_user."""
+    from app.auth import get_current_user
+
+    async def _override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = lambda: mock_current_user
+    app.state.arq = mock_arq
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
