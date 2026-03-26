@@ -98,8 +98,8 @@ Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each 
 
 ### Deployment
 
-- Railway auto-deploys `main` to production
-- PRs get automatic preview environments
+- Railway auto-deploys `main` to staging; production deployments are triggered manually
+- PRs get automatic preview environments (spun off staging)
 - Release phase runs `alembic upgrade head` before serving
 - Two Railway services: `web` (uvicorn) and `worker` (arq)
 - Verify no multiple Alembic heads before merging: `uv run alembic heads`

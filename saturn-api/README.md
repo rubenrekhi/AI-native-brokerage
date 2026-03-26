@@ -121,14 +121,15 @@ Both `pyproject.toml` and `uv.lock` are committed to git. The `.venv/` directory
 
 ## Deployment
 
-The API deploys to Railway automatically on push to `main`. See [docs/architecture.md](docs/architecture.md) for the full deployment architecture.
+Pushing to `main` auto-deploys to **staging** on Railway. Production deployments are triggered manually. See [docs/architecture.md](docs/architecture.md) for the full deployment architecture.
 
-The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
+The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`).
 
 ## Environment Variables
 
 | Variable | Description | Local Default |
 |----------|-------------|---------------|
+| `ENVIRONMENT` | App environment; normalized to `dev`, `staging`, or `prod`. Controls SSL, log format (console vs JSON), and whether `/docs` is exposed. | `dev` |
 | `DATABASE_URL` | Postgres connection (pooled in prod via port 6543) | `postgresql+asyncpg://postgres:postgres@localhost:54322/postgres` |
 | `DATABASE_URL_DIRECT` | Direct Postgres connection (for Alembic, port 5432 in prod) | Same as DATABASE_URL locally |
 | `REDIS_URL` | Redis connection for ARQ job queue | `redis://localhost:6379` |
