@@ -1,5 +1,4 @@
-from arq.connections import ArqRedis
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -18,19 +17,32 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+async def root():
+    return {"message": "Saturn API (by Sevino)"}
+
 
 @app.get("/health")
-async def health():
-    return {"status": "ok"}
+async def health(request: Request, db: AsyncSession = Depends(get_db)):
+    db_ok = True
+    redis_ok = True
 
-
-@app.get("/health/db")
-async def health_db(db: AsyncSession = Depends(get_db)):
     try:
         await db.execute(text("SELECT 1"))
     except Exception:
-        return JSONResponse(
-            status_code=503,
-            content={"status": "unavailable", "detail": "database connection failed"},
-        )
-    return {"status": "ok"}
+        db_ok = False
+
+    try:
+        await request.app.state.arq.ping()
+    except Exception:
+        redis_ok = False
+
+    status = "ok" if (db_ok and redis_ok) else "degraded"
+    return JSONResponse(
+        status_code=200 if status == "ok" else 503,
+        content={
+            "status": status,
+            "db": "ok" if db_ok else "error",
+            "redis": "ok" if redis_ok else "error",
+        },
+    )

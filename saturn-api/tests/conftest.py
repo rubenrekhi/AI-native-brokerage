@@ -1,10 +1,35 @@
-import pytest
-from httpx import AsyncClient, ASGITransport
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
+from httpx import ASGITransport, AsyncClient
+
+from app.database import get_db
 from app.main import app
 
 
 @pytest.fixture
-async def client():
+def mock_db():
+    session = AsyncMock()
+    session.execute = AsyncMock()
+    return session
+
+
+@pytest.fixture
+def mock_arq():
+    pool = AsyncMock()
+    pool.ping = AsyncMock(return_value=True)
+    return pool
+
+
+@pytest.fixture
+async def client(mock_db, mock_arq):
+    async def _override_get_db():
+        yield mock_db
+
+    app.dependency_overrides[get_db] = _override_get_db
+    app.state.arq = mock_arq
+
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
+
+    app.dependency_overrides.clear()
