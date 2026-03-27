@@ -6,9 +6,13 @@ from httpx import ASGITransport, AsyncClient
 from app.config import settings
 from app.database import get_db
 from app.main import app
+from app.rate_limit import limiter
 
 TEST_API_KEY = "test-api-key-for-testing"
 settings.api_key = TEST_API_KEY
+
+# Disable rate limiting globally in tests so it doesn't interfere with test assertions.
+limiter.enabled = False
 
 
 @pytest.fixture

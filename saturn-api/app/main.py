@@ -2,16 +2,19 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
-from app.exceptions import register_exception_handlers
+from app.exceptions import error_response, register_exception_handlers
 from app.lifecycle import lifespan
 from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
+from app.rate_limit import limiter
 
 configure_logging(settings.environment)
 
@@ -55,9 +58,21 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+app.state.limiter = limiter
+
+
+def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    response = error_response(429, "Rate limit exceeded", "RATE_LIMIT_EXCEEDED")
+    response.headers["Retry-After"] = "60"
+    return response
+
+
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 # Middleware executes in reverse registration order (last added = outermost).
-# Request flow: CORS → CorrelationID → RequestLogging → APIKey → route
+# Request flow: CORS → CorrelationID → RequestLogging → APIKey → SlowAPI → route
 app.add_middleware(APIKeyMiddleware)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 
@@ -72,11 +87,13 @@ app.add_middleware(
 register_exception_handlers(app)
 
 @app.get("/")
+@limiter.exempt
 async def root():
     return {"message": "Saturn API (by Sevino)"}
 
 
 @app.get("/health")
+@limiter.exempt
 async def health(request: Request, db: AsyncSession = Depends(get_db)):
     db_ok = True
     redis_ok = True
@@ -103,6 +120,7 @@ async def health(request: Request, db: AsyncSession = Depends(get_db)):
 
 @app.get("/health/auth")
 async def auth_health(
+    request: Request, 
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
