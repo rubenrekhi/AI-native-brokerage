@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     def show_docs(self) -> bool:
         return self.environment != "prod"
 
+    @property
+    def cors_origins(self) -> list[str]:
+        if self.environment == "dev":
+            return ["*"]
+        return []
+
     model_config = {"env_file": ".env"}
 
     @field_validator("environment")
