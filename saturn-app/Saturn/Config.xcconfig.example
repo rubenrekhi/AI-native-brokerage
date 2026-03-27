@@ -1,6 +1,7 @@
 // Saturn – Supabase configuration
 // Copy this file to Config.xcconfig and fill in real values
 // Config.xcconfig is gitignored – do not commit secrets
-SUPABASE_URL = https://your-project.supabase.co
+// NOTE: Use $() in URLs to prevent // being parsed as a comment
+SUPABASE_URL = https:/$()/your-project.supabase.co
 SUPABASE_ANON_KEY = your-anon-key-here
-API_BASE_URL = http://127.0.0.1:8000
+API_BASE_URL = http:/$()/127.0.0.1:8000
