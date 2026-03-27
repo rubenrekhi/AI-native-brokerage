@@ -54,11 +54,6 @@ async def root():
     return {"message": "Saturn API (by Sevino)"}
 
 
-@app.get("/debug-sentry")
-async def trigger_error():
-    raise ValueError("Sentry test error")
-
-
 @app.get("/health")
 async def health(request: Request, db: AsyncSession = Depends(get_db)):
     db_ok = True
