@@ -13,7 +13,9 @@ Packages/
 Package.resolved
 
 # Configuration (secrets)
-Config.xcconfig
+Config.debug.xcconfig
+Config.staging.xcconfig
+Config.release.xcconfig
 
 # CocoaPods (if used later)
 Pods/
