@@ -1,12 +1,19 @@
 from arq.connections import RedisSettings
 from arq.cron import cron
+import sentry_sdk
 from app.config import settings
 from app.tasks.health_ping import health_ping
 
 
 async def startup(ctx: dict) -> None:
     """Called when the worker starts. Initialize shared resources."""
-    pass
+    if settings.sentry_dsn:
+        sentry_sdk.init(
+            dsn=settings.sentry_dsn,
+            environment=settings.environment,
+            traces_sample_rate=0.1,
+        )
+        sentry_sdk.set_tag("process", "worker")
 
 
 async def shutdown(ctx: dict) -> None:
