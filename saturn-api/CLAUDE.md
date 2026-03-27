@@ -41,7 +41,8 @@ make migrate                           # apply pending migrations (alembic upgra
 **Stack**: FastAPI + SQLAlchemy async (asyncpg) + Pydantic Settings + ARQ (Redis) + Alembic
 
 **App layout** (`app/`):
-- `main.py` — FastAPI app, middleware stack (CORS, correlation ID, request logging, API key gate), health endpoint, exception handler registration
+- `main.py` — FastAPI app, middleware stack (CORS, correlation ID, request logging, API key gate, rate limiting), health endpoint, exception handler registration
+- `rate_limit.py` — slowapi `Limiter` instance with Redis backend; key functions `get_user_or_ip` (default, keys by user ID or IP) and `get_remote_address` (IP-only, for unauthenticated endpoints)
 - `config.py` — `Settings` (Pydantic BaseSettings) loaded from `.env`; normalizes environment names; handles asyncpg URL scheme; SSL for prod/staging
 - `database.py` — async engine + session factory; `get_db` dependency yields a session with auto-commit/rollback
 - `lifecycle.py` — FastAPI lifespan context manager that creates/closes the ARQ Redis pool (`app.state.arq`)
@@ -60,6 +61,7 @@ make migrate                           # apply pending migrations (alembic upgra
 - Errors use the structured `error_response()` format: `{"error": str, "code": str, "detail"?: dict}`
 - Raise custom exceptions (`AuthenticationError`, `NotFoundError`, etc.) instead of `HTTPException` — they're caught by registered handlers
 - `APIKeyMiddleware` checks `X-API-Key` header on all requests except `/health`, `/docs`, `/redoc`, `/openapi.json`, and OPTIONS. Skipped entirely when `API_KEY` env var is empty (dev convenience)
+- **Rate limiting** via slowapi + Redis (configured in `app/rate_limit.py`). Two tiers: authenticated routes default to `120/minute` per user; future auth endpoints (login, signup) should use `@limiter.limit("10/minute", key_func=get_remote_address)` per IP. `/health` and `/` are exempt. Rate limit exceeded returns structured `{"error": "...", "code": "RATE_LIMIT_EXCEEDED"}` with a `Retry-After` header. Limiter is disabled in tests via `limiter.enabled = False` in conftest
 
 ## Testing
 

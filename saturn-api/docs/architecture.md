@@ -84,6 +84,7 @@ saturn-api/
 │   ├── exceptions.py       # Custom exceptions + global error handlers
 │   ├── lifecycle.py        # FastAPI lifespan (ARQ pool init/shutdown)
 │   ├── logging_config.py   # structlog setup (console dev, JSON prod/staging)
+│   ├── rate_limit.py       # slowapi Limiter instance, key functions, rate limit config
 │   ├── middleware/          # HTTP middleware
 │   │   ├── correlation.py  # X-Correlation-ID generation + structlog contextvars
 │   │   └── logging.py      # Request/response access logging
@@ -148,7 +149,11 @@ When a user signs up, a row in `profiles` is created with the same UUID, mapping
 1. **JWT authentication** (primary) — Supabase Auth tokens verified via JWKS on every request.
 2. **HTTPS** — Railway provides TLS automatically.
 3. **API key** — static key embedded in the Saturn app, sent as `X-API-Key` header. Checked by middleware. Prevents casual abuse.
-4. **Rate limiting** — per-user request limits via FastAPI middleware (e.g., `slowapi`).
+4. **Rate limiting** — implemented via slowapi + Redis (`app/rate_limit.py`). Two tiers:
+   - **Authenticated routes (default):** `120/minute` per user — keyed by `request.state.user_id` (set by `get_current_user`), falls back to client IP for unauthenticated requests.
+   - **Auth endpoints (strict):** `10/minute` per IP — applied via `@limiter.limit("10/minute", key_func=get_remote_address)` decorator on login/signup routes.
+   - `/health` and `/` are exempt (decorated with `@limiter.exempt`).
+   - Rate limit exceeded returns `{"error": "Rate limit exceeded", "code": "RATE_LIMIT_EXCEEDED"}` with a `Retry-After` header.
 
 ## 🔍 Error Handling & Logging
 
