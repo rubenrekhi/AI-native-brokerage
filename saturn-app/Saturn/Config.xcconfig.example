@@ -13,15 +13,18 @@
 // SUPABASE_URL = http:/$()/127.0.0.1:54321
 // SUPABASE_ANON_KEY = your-local-anon-key
 // API_BASE_URL = http:/$()/127.0.0.1:8000
+// API_KEY =
 //
 // ─── Staging ────────────────────────────────────────────────────────
 //
 // SUPABASE_URL = https:/$()/your-staging-project.supabase.co
 // SUPABASE_ANON_KEY = your-staging-anon-key
 // API_BASE_URL = https:/$()/your-staging-api.example.com
+// API_KEY = ce7b9e773000223c60abdc7d671f0ac50116d2f6ffc67f333cc854f32354622c
 //
 // ─── Release (production) ───────────────────────────────────────────
 //
 // SUPABASE_URL = https:/$()/your-project.supabase.co
 // SUPABASE_ANON_KEY = your-production-anon-key
 // API_BASE_URL = https:/$()/your-production-api.example.com
+// API_KEY = ca5a6c7da61b1430dcc80e353b319a594773b943030a2263fe918e1a525cf652
