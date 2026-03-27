@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 from fastapi.responses import JSONResponse
+import sentry_sdk
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,6 +15,15 @@ from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 
 configure_logging(settings.environment)
+
+if settings.sentry_dsn:
+    sentry_sdk.init(
+        dsn=settings.sentry_dsn,
+        environment=settings.environment,
+        traces_sample_rate=0.1,
+        send_default_pii=False,
+    )
+    sentry_sdk.set_tag("process", "api")
 
 app = FastAPI(
     title=settings.APP_NAME,

@@ -18,6 +18,7 @@ dependencies = [
     "arq",
     "httpx",
     "structlog>=25.5.0",
+    "sentry-sdk[fastapi]>=2.56.0",
 ]
 
 [dependency-groups]
