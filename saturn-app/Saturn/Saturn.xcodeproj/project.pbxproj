@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E14A3B022F73480000AABB02 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		0B40D03A2F7346F500C0AB94 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -53,6 +57,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -198,6 +203,9 @@
 			);
 			mainGroup = 0B40D0232F7346F400C0AB94;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B40D02D2F7346F400C0AB94 /* Products */;
 			projectDirPath = "";
@@ -206,9 +214,6 @@
 				0B40D02B2F7346F400C0AB94 /* Saturn */,
 				0B40D0382F7346F500C0AB94 /* SaturnTests */,
 				0B40D0422F7346F500C0AB94 /* SaturnUITests */,
-			);
-			packageReferences = (
-				E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 			);
 		};
 /* End PBXProject section */
@@ -407,6 +412,7 @@
 				DEVELOPMENT_TEAM = A876FFJF55;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -440,6 +446,7 @@
 				DEVELOPMENT_TEAM = A876FFJF55;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
