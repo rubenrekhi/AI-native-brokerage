@@ -2,15 +2,6 @@ import Auth
 import Foundation
 import Supabase
 
-enum APIError: Error {
-    case unauthorized
-    case notFound
-    case serverError(statusCode: Int)
-    case networkError(Error)
-    case decodingError(Error)
-    case invalidURL
-}
-
 final class APIClient {
     static let shared = APIClient()
 
@@ -38,13 +29,17 @@ final class APIClient {
         try await request(path, method: "DELETE")
     }
 
+    /**
+     Throws `APIError` on non-2xx, `URLError` on network failure,
+     `DecodingError` if the success body can't be decoded into `T`.
+     */
     private func request<T: Decodable>(
         _ path: String,
         method: String,
         body: (some Encodable)? = nil as Empty?
     ) async throws -> T {
         guard let url = URL(string: baseURL + path) else {
-            throw APIError.invalidURL
+            throw URLError(.badURL)
         }
 
         var urlRequest = URLRequest(url: url)
@@ -67,37 +62,20 @@ final class APIClient {
             urlRequest.httpBody = try JSONEncoder().encode(body)
         }
 
-        // Send request
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await session.data(for: urlRequest)
-        } catch {
-            throw APIError.networkError(error)
-        }
+        let (data, response) = try await session.data(for: urlRequest)
 
-        // Check status code
         guard let httpResponse = response as? HTTPURLResponse else {
-            throw APIError.serverError(statusCode: 0)
+            throw APIError.unknown
         }
 
-        switch httpResponse.statusCode {
-        case 200..<300:
-            break
-        case 401:
-            throw APIError.unauthorized
-        case 404:
-            throw APIError.notFound
-        default:
-            throw APIError.serverError(statusCode: httpResponse.statusCode)
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
+                throw apiError
+            }
+            throw APIError.unknown
         }
 
-        // Decode response
-        do {
-            return try JSONDecoder().decode(T.self, from: data)
-        } catch {
-            throw APIError.decodingError(error)
-        }
+        return try JSONDecoder().decode(T.self, from: data)
     }
 }
 
