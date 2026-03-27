@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
+    sentry_dsn: str = ""
 
     @property
     def show_docs(self) -> bool:
