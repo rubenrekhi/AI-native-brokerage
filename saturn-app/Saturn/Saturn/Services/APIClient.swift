@@ -1,6 +1,4 @@
-import Auth
 import Foundation
-import Supabase
 
 final class APIClient {
     static let shared = APIClient()
@@ -52,9 +50,8 @@ final class APIClient {
             urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         }
 
-        // Attach JWT from Supabase auth session
-        if let session = try? await supabase.auth.session {
-            urlRequest.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
+        if let token = await AuthService.shared.accessToken {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
         // Encode request body
