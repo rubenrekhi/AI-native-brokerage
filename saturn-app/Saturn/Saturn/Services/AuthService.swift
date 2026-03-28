@@ -54,6 +54,11 @@ final class AuthService: AuthServiceProtocol {
         try await client.auth.signOut()
     }
 
+    // Used by APIClient to attach the JWT to requests
+    var accessToken: String? {
+        get async { try? await client.auth.session.accessToken }
+    }
+
     private func startListening() {
         listenerTask = Task { [weak self, client] in
             for await (event, session) in client.auth.authStateChanges {
