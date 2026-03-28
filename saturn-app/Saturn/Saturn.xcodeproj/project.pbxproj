@@ -209,6 +209,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B40D02D2F7346F400C0AB94 /* Products */;
@@ -736,6 +737,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/plaid/plaid-link-ios";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 6.4.7;
+			};
+		};
 		E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/supabase/supabase-swift.git";
