@@ -1,7 +1,6 @@
-from arq.connections import RedisSettings
 from arq.cron import cron
 import sentry_sdk
-from app.config import settings
+from app.config import get_redis_settings, settings
 from app.tasks.health_ping import health_ping
 
 
@@ -26,4 +25,4 @@ class WorkerSettings:
     cron_jobs = [cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55})]
     on_startup = startup
     on_shutdown = shutdown
-    redis_settings = RedisSettings.from_dsn(settings.redis_url)
+    redis_settings = get_redis_settings()

@@ -1,8 +1,12 @@
 import ssl as _ssl
 from typing import Any
 
+from arq.connections import RedisSettings
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
+from redis.backoff import ExponentialBackoff
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.retry import Retry
 
 _PROD_KEYWORDS = {"prod", "production"}
 _STAGING_KEYWORDS = {"staging"}
@@ -74,3 +78,14 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+def get_redis_settings() -> RedisSettings:
+    """Build ARQ RedisSettings from the configured URL with retry/reconnect support."""
+    base = RedisSettings.from_dsn(settings.redis_url)
+    base.conn_retries = 10
+    base.conn_retry_delay = 1
+    base.retry_on_timeout = True
+    base.retry_on_error = [RedisConnectionError]
+    base.retry = Retry(backoff=ExponentialBackoff(), retries=5)
+    return base
