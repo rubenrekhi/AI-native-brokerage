@@ -14,13 +14,19 @@ iOS app for Saturn — an AI-native brokerage built by [Sevino](https://sevino.a
 ### Setup
 
 1. Open `saturn-app/Saturn/Saturn.xcodeproj` in Xcode.
-2. Create a `Config.xcconfig` file (gitignored) with your environment values:
+2. Copy `Config.xcconfig.example` to create per-environment config files (all gitignored):
+   - `Config.debug.xcconfig` — local development (Cmd+R)
+   - `Config.staging.xcconfig` — TestFlight / staging builds
+   - `Config.release.xcconfig` — App Store / production builds
+
+   Example for local dev (`Config.debug.xcconfig`):
    ```
-   SUPABASE_URL = http://localhost:54321
-   SUPABASE_ANON_KEY = your-anon-key
-   API_BASE_URL = http://localhost:8000
-   API_KEY = your-dev-api-key
+   SUPABASE_URL = http:/$()/127.0.0.1:54321
+   SUPABASE_ANON_KEY = your-local-anon-key
+   API_BASE_URL = http:/$()/127.0.0.1:8000
+   API_KEY =
    ```
+   Note: Use `$()` in URLs to prevent `//` being parsed as an xcconfig comment.
 3. Build and run on the iOS Simulator (Cmd+R).
 
 For the full experience locally, you need the Saturn API running — see [saturn-api/README.md](../saturn-api/README.md).
@@ -30,27 +36,40 @@ For the full experience locally, you need the Saturn API running — see [saturn
 ```
 saturn-app/
 ├── Saturn.xcodeproj
+├── Config.xcconfig.example       # Template for per-environment configs
 ├── Saturn/
-│   ├── App/                  # App entry point, app-level config
-│   ├── Views/                # SwiftUI views (screens + components)
-│   │   ├── Auth/             # Login, signup, onboarding
-│   │   ├── Trading/          # Trade execution, natural language input
-│   │   ├── Portfolio/        # Holdings, performance charts
-│   │   ├── Funding/          # Deposits, withdrawals, bank linking
-│   │   └── Chat/             # AI conversation interface
-│   ├── ViewModels/           # View models (business logic for views)
-│   ├── Services/             # API clients, Supabase auth, Plaid Link
-│   │   ├── APIClient.swift   # HTTP client for Saturn API
-│   │   ├── AuthService.swift # Supabase Auth wrapper
-│   │   └── PlaidService.swift# Plaid Link integration
-│   ├── Models/               # Data models (API responses, local state)
-│   └── Utils/                # Extensions, helpers, formatters
-├── SaturnTests/              # Unit tests
-│   ├── ViewModelTests/
-│   ├── ServiceTests/
+│   ├── App/
+│   │   └── SaturnApp.swift       # @main entry point
+│   ├── Views/                    # SwiftUI views (screens + components)
+│   │   ├── ContentView.swift     # Root view
+│   │   ├── Auth/
+│   │   ├── Trading/
+│   │   ├── Portfolio/
+│   │   ├── Funding/
+│   │   ├── Chat/
+│   │   └── Components/
+│   ├── ViewModels/
+│   │   └── Auth/
+│   │       └── AuthViewModel.swift   # Observable auth state for views
+│   ├── Services/
+│   │   ├── APIClient.swift       # HTTP client for Saturn API
+│   │   ├── AuthService.swift     # Supabase Auth wrapper (protocol-backed)
+│   │   └── Supabase+Client.swift # SupabaseClient singleton
+│   ├── Models/
+│   │   └── APIError.swift        # Structured error model matching backend format
+│   └── Utils/
+│       ├── AppConfig.swift       # Reads xcconfig values from Info.plist at runtime
+│       └── AnyCodable.swift      # Type-erased Codable wrapper (for APIError.detail)
+├── SaturnTests/
+│   ├── Auth/
+│   │   ├── AuthViewModelTests.swift
+│   │   └── AuthServiceIntegrationTests.swift
+│   ├── Models/
+│   │   ├── APIErrorTests.swift
+│   │   └── AnyCodableTests.swift
 │   └── Mocks/
-└── SaturnUITests/            # UI tests (critical flows only)
-    └── Flows/
+│       └── MockAuthService.swift
+└── SaturnUITests/                # UI tests (critical flows only)
 ```
 
 ## How It Connects to the Backend
@@ -59,14 +78,15 @@ All API communication goes through `Services/APIClient.swift`. Every request inc
 - `Authorization: Bearer <jwt>` — Supabase Auth token, managed by `AuthService`.
 - `X-API-Key: <key>` — static API key for app identification.
 
-The base URL (`API_BASE_URL`) points to `localhost:8000` in development and the Railway production URL in release builds.
+The base URL (`API_BASE_URL`) points to `localhost:8000` in development and the Railway production URL in release builds. Non-2xx responses are decoded into a structured `APIError` model (with `error`, `code`, and `detail` fields matching the backend's error format).
 
 ## Authentication
 
 Auth is handled by Supabase via the `supabase-swift` SDK:
-- Signup/login methods in `AuthService.swift`.
-- JWT and refresh tokens stored and managed automatically by the SDK.
-- JWT is attached to every API request by `APIClient.swift`.
+- `AuthService` wraps Supabase auth and listens to auth state changes (sign in, sign out, token refresh) via an async stream.
+- Conforms to `AuthServiceProtocol` for dependency injection — tests use `MockAuthService`.
+- `AuthViewModel` observes `AuthService` and exposes auth state (`isAuthenticated`, `isLoading`, `authError`) to SwiftUI views.
+- JWT is attached to every API request by `APIClient` (reads the token from `AuthService.accessToken`).
 - Social logins (Google, Apple) supported via Supabase Auth.
 
 ## Key Integrations
@@ -89,7 +109,7 @@ The app never talks to Alpaca directly. All trading, portfolio, and account oper
 
 Tests for view models, services, data models, and business logic. Uses XCTest (built into Xcode).
 
-**Mocking pattern:** Define protocols for services (e.g., `TradingServiceProtocol`). In production, inject the real implementation. In tests, inject a mock that returns predetermined data. This also benefits SwiftUI previews.
+**Mocking pattern:** Define protocols for services (e.g., `AuthServiceProtocol`). In production, inject the real implementation. In tests, inject a mock that returns predetermined data (see `MockAuthService`). This also benefits SwiftUI previews.
 
 Run in Xcode: Cmd+U or Product → Test.
 

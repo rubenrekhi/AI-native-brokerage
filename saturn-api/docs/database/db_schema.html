@@ -153,6 +153,7 @@ const TABLES = {
     {name:"user_id",            type:"UUID",  fk:true, ref:"user_profiles"},
     {name:"plaid_item_id",      type:"TEXT"},
     {name:"plaid_access_token", type:"TEXT",   note:"encrypted at rest"},
+    {name:"plaid_account_id",   type:"TEXT",   note:"for processor tokens"},
     {name:"institution_name",   type:"TEXT"},
     {name:"account_mask",       type:"TEXT",   note:"last 4 digits"},
     {name:"account_name",       type:"TEXT"},
