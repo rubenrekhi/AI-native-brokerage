@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.user_profile import UserProfile
 
 
 class PlaidItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -28,7 +29,7 @@ class PlaidItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Relationships
-    user: Mapped["UserProfile"] = relationship(back_populates="plaid_items")
+    user: Mapped[UserProfile] = relationship(back_populates="plaid_items")
     ach_relationships: Mapped[list["AchRelationship"]] = relationship(
         back_populates="plaid_item", cascade="all, delete-orphan"
     )

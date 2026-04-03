@@ -6,6 +6,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.brokerage_account import BrokerageAccount
+from app.models.plaid_item import PlaidItem
+from app.models.user_profile import UserProfile
 
 
 class AchRelationship(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -37,10 +40,10 @@ class AchRelationship(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Relationships
-    user: Mapped["UserProfile"] = relationship(back_populates="ach_relationships")
-    brokerage_account: Mapped["BrokerageAccount"] = relationship(
+    user: Mapped[UserProfile] = relationship(back_populates="ach_relationships")
+    brokerage_account: Mapped[BrokerageAccount] = relationship(
         back_populates="ach_relationships"
     )
-    plaid_item: Mapped[Optional["PlaidItem"]] = relationship(
+    plaid_item: Mapped[Optional[PlaidItem]] = relationship(
         back_populates="ach_relationships"
     )

@@ -8,6 +8,8 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.conversation import Conversation
+from app.models.user_profile import UserProfile
 
 
 class OrderEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -44,7 +46,7 @@ class OrderEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Relationships
-    user: Mapped["UserProfile"] = relationship(back_populates="order_events")
-    conversation: Mapped[Optional["Conversation"]] = relationship(
+    user: Mapped[UserProfile] = relationship(back_populates="order_events")
+    conversation: Mapped[Optional[Conversation]] = relationship(
         back_populates="order_events"
     )

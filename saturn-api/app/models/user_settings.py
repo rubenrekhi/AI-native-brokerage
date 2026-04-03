@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.user_profile import UserProfile
 
 
 class UserSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -30,4 +31,4 @@ class UserSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     )
 
     # Relationships
-    user: Mapped["UserProfile"] = relationship(back_populates="settings")
+    user: Mapped[UserProfile] = relationship(back_populates="settings")

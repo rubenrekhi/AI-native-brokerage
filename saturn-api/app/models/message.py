@@ -6,6 +6,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.conversation import Conversation
 
 
 class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -23,4 +24,4 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     tool_calls: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
     # Relationships
-    conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+    conversation: Mapped[Conversation] = relationship(back_populates="messages")

@@ -1,12 +1,13 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from app.models.user_profile import UserProfile
 
 
 class BrokerageAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
@@ -29,9 +30,12 @@ class BrokerageAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     activated_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    kyc_results: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=True
+    )
 
     # Relationships
-    user: Mapped["UserProfile"] = relationship(back_populates="brokerage_account")
+    user: Mapped[UserProfile] = relationship(back_populates="brokerage_account")
     ach_relationships: Mapped[list["AchRelationship"]] = relationship(
         back_populates="brokerage_account", cascade="all, delete-orphan"
     )
