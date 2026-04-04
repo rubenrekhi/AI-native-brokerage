@@ -1,6 +1,18 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Button" : {
+
+    },
+    "Card" : {
+
+    },
+    "Chip A" : {
+
+    },
+    "Chip B" : {
+
+    },
     "Colour Palette" : {
 
     },
@@ -21,6 +33,12 @@
       }
     },
     "Light Mode" : {
+
+    },
+    "Liquid Glass" : {
+
+    },
+    "Nav Bar" : {
 
     }
   },
