@@ -7,7 +7,7 @@ Saturn is an AI-native brokerage app for US consumers, built by [Sevino](https:/
 The iOS app is the user-facing interface. It communicates with a FastAPI backend over HTTPS using REST APIs. Every request is authenticated with a JWT issued by Supabase Auth.
 
 ```
-┌──────────────┐        HTTPS + JWT        ┌──────────────┐
+┌──────────────┐        HTTPS + JWT         ┌──────────────┐
 │              │  ────────────────────────▶ │              │
 │  Saturn App  │                            │  Saturn API  │
 │  (Swift/     │  ◀──────────────────────── │  (FastAPI)   │
