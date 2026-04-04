@@ -1,10 +1,3 @@
-//
-//  ContentView.swift
-//  Saturn
-//
-//  Created by Ruben Rekhi on 2026-03-24.
-//
-
 import SwiftUI
 
 struct ContentView: View {
@@ -13,7 +6,7 @@ struct ContentView: View {
             Image(systemName: "globe")
                 .imageScale(.large)
                 .foregroundStyle(.tint)
-            Text("Hello, world!")
+            Text(L10n.General.appName)
         }
         .padding()
     }
