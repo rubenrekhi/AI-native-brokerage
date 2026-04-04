@@ -13,9 +13,20 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Import Base and all models so Alembic can detect schema changes for autogenerate.
-# Add new model imports here as they are created, e.g.:
-#   from app.models.user import User  # noqa: F401
-from app.models.base import Base  # noqa: E402
+from app.models import (  # noqa: F401, E402
+    AchRelationship,
+    Base,
+    BrokerageAccount,
+    Conversation,
+    FeatureFlag,
+    Message,
+    OrderEvent,
+    PlaidItem,
+    RadarItem,
+    UserFinancialProfile,
+    UserProfile,
+    UserSettings,
+)
 
 target_metadata = Base.metadata
 

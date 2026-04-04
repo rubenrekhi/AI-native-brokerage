@@ -140,6 +140,7 @@ Plaid-linked bank accounts. One-to-many with `user_profiles`.
 | `user_id` **[FK]** | UUID | FK → `user_profiles(id)` |
 | `plaid_item_id` | TEXT | Plaid's item identifier |
 | `plaid_access_token` | TEXT | Encrypted at rest |
+| `plaid_account_id` | TEXT | Plaid account ID for the selected bank account. Needed with `access_token` to create processor tokens. |
 | `institution_name` | TEXT | Bank name |
 | `account_mask` | TEXT | Last 4 digits |
 | `account_name` | TEXT | Account display name |

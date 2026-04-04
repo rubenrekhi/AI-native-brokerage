@@ -1,0 +1,722 @@
+# Alpaca Broker API Integration Architecture
+
+> **Sevino Technical Reference Document** — Version 1.0 • March 2026
+>
+> This document defines how the Sevino mobile application integrates with Alpaca's Broker API. It maps each feature to specific Alpaca endpoints, communication protocols (REST, WebSocket, SSE), and data flows. Use this as the single source of truth for the entire brokerage integration layer.
+
+---
+
+## Key Architectural Principles
+
+- **The mobile app NEVER communicates directly with Alpaca.** All Alpaca API calls originate from the Sevino backend.
+- **Broker API authentication uses Sevino's firm-level API keys**, not individual user credentials.
+- **The backend is the single source of truth** for all account, position, and order state.
+- **Fully disclosed broker structure**: each end user gets their own Alpaca brokerage account.
+- Alpaca Securities LLC is a FINRA-member, SIPC-protected, self-clearing broker-dealer.
+
+**Alpaca API Reference:** https://docs.alpaca.markets/reference/api-references
+
+---
+
+## Communication Protocols
+
+Sevino uses three communication mechanisms with Alpaca. Each serves a different purpose.
+
+### REST API (Request/Response)
+
+The primary mechanism for reading data and initiating actions. Every account creation, order placement, position query, and market data lookup is a synchronous HTTP call.
+
+| Property | Value |
+|---|---|
+| **Sandbox Base URL** | `https://broker-api.sandbox.alpaca.markets` |
+| **Production Base URL** | `https://broker-api.alpaca.markets` |
+| **Authentication** | HTTP Basic Auth — Sevino's firm API key + secret, base64-encoded |
+
+### Server-Sent Events (SSE)
+
+Server-to-server event streaming for asynchronous state changes. The Sevino backend opens a persistent HTTP connection to Alpaca's Events API and receives pushed updates (account approvals, transfer completions, order state changes).
+
+- Supports both real-time streaming and historical queries.
+- On connection drop, reconnect and replay missed events using `since` / `since_id` parameters.
+
+### WebSocket (Trade Updates Only)
+
+A single WebSocket connection for order lifecycle events.
+
+| Property | Value |
+|---|---|
+| **URL** | `wss://broker-api.alpaca.markets/stream` |
+| **Purpose** | Real-time order fill, cancel, and reject events |
+| **Management** | Server-side only (Sevino backend) |
+
+When the user confirms a trade, the backend receives fill/error events within milliseconds via this stream and updates the Trade Confirmation Card.
+
+### Protocol Decision Matrix
+
+Use this table to determine which protocol to use for each data type:
+
+| Data Type | Protocol | Direction | Frequency |
+|---|---|---|---|
+| Account creation / KYC submission | REST | Sevino → Alpaca | One-time per user |
+| Account status changes (KYC approval) | SSE | Alpaca → Sevino | Per event |
+| ACH transfer initiation | REST | Sevino → Alpaca | Per transfer |
+| Transfer status updates | SSE | Alpaca → Sevino | Per event |
+| Position / holdings queries | REST | Sevino → Alpaca | On demand (user opens modal) |
+| Account info (balance, buying power) | REST | Sevino → Alpaca | On demand + 5-min background |
+| Portfolio history (charts) | REST | Sevino → Alpaca | On demand (user opens modal) |
+| Order placement | REST | Sevino → Alpaca | Per trade |
+| Order fill / cancel / reject events | WebSocket | Alpaca → Sevino | Real-time |
+| Stock prices (Stock Info Cards, Radar) | REST | Sevino → Alpaca | On demand (user taps) |
+| Historical bars (sparklines, charts) | REST | Sevino → Alpaca | On demand (user taps) |
+| Market clock / calendar | REST | Sevino → Alpaca | On app open / new conversation |
+| FDIC Sweep enrollment | REST | Sevino → Alpaca | One-time per user |
+| Interest data (APY, accrued) | REST | Sevino → Alpaca | On demand |
+
+---
+
+## Account Creation & KYC
+
+**PRD References:** FR-3.1, FR-3.2, FR-1.5, FR-1.6
+
+Account creation follows a two-phase pattern: synchronous REST submission, then asynchronous SSE monitoring.
+
+### Phase 1: Submit KYC Data (REST)
+
+**Endpoint:** `POST /v1/accounts`
+
+The Sevino settings UI collects all required KYC fields:
+
+- Legal name
+- Date of birth
+- SSN / tax ID
+- Address
+- Employment information
+- Investor profile
+
+This data is submitted as a single POST request. The user is never redirected to an Alpaca-hosted page.
+
+**Agreement requirements:**
+
+- Customer Agreement
+- Margin Agreement (if applicable)
+- For FDIC Sweep eligibility: account must be on Customer Agreement **revision 22.2024.08 or newer**
+- Must present FDIC Bank Sweep Program Terms & Conditions during this flow
+
+### Phase 2: Monitor Approval (SSE)
+
+**Endpoint:** `GET /v1/events/accounts/status`
+
+After submission, the account enters `SUBMITTED` status. The SSE connection receives status transitions:
+
+| Transition | Meaning | Sevino Action |
+|---|---|---|
+| `SUBMITTED → APPROVED → ACTIVE` | Happy path — account is fully operational | Notify user, trigger FDIC Sweep enrollment |
+| `SUBMITTED → ACTION_REQUIRED` | KYC check returned issues | SSE event includes `kyc_results` with field-level details. Surface in Settings UI. |
+| `SUBMITTED → REJECTED` | Account denied | Display explanation and next steps |
+
+### Sandbox vs. Production
+
+- **Sandbox:** Account approval is fully automated with test fixtures.
+- **Production:** Alpaca's operations team may perform manual review (approval SSE event could take longer). Show messaging: "Your account is being reviewed. We'll notify you when it's ready."
+
+---
+
+## Funding — ACH Transfers
+
+**PRD References:** FR-3.3, FR-3.4, FR-3.5
+
+### Bank Account Linking (Plaid)
+
+Sevino uses **Plaid Link** on the mobile client to capture bank account info. Plaid generates a processor token passed to Alpaca.
+
+**Endpoint:** `POST /v1/accounts/{account_id}/ach_relationships`
+
+**Request body includes:** Plaid processor token
+
+**Response:** Returns a `relationship_id` — store this for subsequent transfers.
+
+This is a one-time flow per bank account.
+
+### Deposits and Withdrawals
+
+**Endpoint:** `POST /v1/accounts/{account_id}/transfers`
+
+**Request body:**
+
+```json
+{
+  "relationship_id": "<stored_relationship_id>",
+  "amount": "500",
+  "direction": "INCOMING"  // INCOMING = deposit, OUTGOING = withdrawal
+}
+```
+
+**Response:** Returns immediately with `status: QUEUED`.
+
+**Transfer lifecycle:** `QUEUED → PENDING → COMPLETE` (or `REJECTED`)
+
+**SSE Monitoring Endpoint:** `GET /v1/events/transfers/status`
+
+- ACH settlement: **1–3 business days**
+- When SSE reports `COMPLETE`, push notification to user confirming funds are available
+- **Sandbox:** Transfers simulate ACH delay with 10–30 minute processing time. Transfer then reflects via a cash deposit activity (`CSD`).
+
+---
+
+## Portfolio Data & Account Information
+
+**PRD References:** FR-3.9, FR-4.3, FR-4.7, FR-9.1–FR-9.8
+
+### Account Information
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/account`
+
+**Returns:** Account object containing:
+
+- `equity` — current total equity
+- `last_equity` — previous close equity
+- `cash` — available cash
+- `buying_power` — available buying power
+- Account status flags
+- `cash_interest` object (within USD property) — FDIC Sweep interest data
+
+**Used for:**
+
+- Daily P/L calculation: `equity - last_equity`
+- Status bar portfolio value and daily change indicator (FR-9.2)
+- AI greeting: "Your portfolio is at $4,230, up 1.2% today" (FR-4.7)
+- Cash balance and buying power display (FR-3.9)
+- FDIC Sweep interest data (FR-3.12)
+
+### Current Positions / Holdings
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/positions`
+
+**Returns per position:**
+
+- `symbol`, `qty`, `current_price`, `market_value`
+- `cost_basis`, `unrealized_pl`, `unrealized_plpc`
+
+Market values are updated live by Alpaca — a fresh call returns current data.
+
+**Used for:**
+
+- Holdings modal from status bar (FR-9.6)
+- Portfolio Summary Card — allocation breakdown, top holdings (FR-5.1)
+- AI context injection for portfolio-related queries (FR-4.3)
+- Concentration risk detection — flag if any single position exceeds 50% (FR-8.10)
+
+### Portfolio History
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/account/portfolio/history`
+
+**Returns:** Timeseries arrays of timestamps, equity values, and P/L data.
+
+**Parameters:**
+
+| Parameter | Options | Use Case |
+|---|---|---|
+| `period` | `1D`, `1W`, `1M`, `3M`, `6M`, `1A`, `all`, `intraday` | Time range for chart |
+| `timeframe` | `1Min`, `5Min`, `15Min`, `1H`, `1D` | Resolution of data points |
+| `date_start` / `date_end` | ISO 8601 dates | Custom date range |
+
+**Automatic resolution defaults:**
+
+- `1Min` for periods under 7 days
+- `15Min` for under 30 days
+- `1D` for longer periods
+
+The v2 portfolio history engine updates in real-time for intraday timeframes.
+
+**Powers:** Performance Chart Card (FR-5.1) with selectable time ranges (1D, 1W, 1M, 3M, 6M, 1Y, All).
+
+### Order History
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/orders`
+
+**Returns:** All orders with status, fill price, timestamps, order details.
+
+**Filter param:** `status` = `open`, `closed`, `all`
+
+**Powers:** Order History view in Settings > Accounts (FR-3.9).
+
+### Account Activities
+
+**Endpoint:** `GET /v1/accounts/activities`
+
+**Returns:** Historical transaction activities:
+
+- `FILL` — trade executions
+- `DIV` — dividend payments
+- `CSD` / `CSW` — ACH transfers (deposits/withdrawals)
+- Other non-trade activities
+
+Useful for building activity feeds and AI context ("what happened in my account this week?").
+
+---
+
+## Status Bar & Modal Data Architecture
+
+**PRD References:** FR-9.1–FR-9.8
+
+Sevino's UI is chat-first. All detailed financial data lives behind modals opened explicitly by the user. Market data is fetched on demand.
+
+### On-Demand Fetch Pattern
+
+User taps a button → app calls Alpaca REST API → renders result with brief loading indicator.
+
+**Caching strategy:**
+
+- **Backend:** Redis cache, 30–60 second TTL per user per endpoint
+- **Frontend:** In-memory cache so navigation back to a previously viewed modal feels instant while fresh data loads in background
+
+| User Action | Alpaca Endpoint(s) | Data Returned |
+|---|---|---|
+| Opens app / starts new conversation | `GET .../account` | Equity, cash, daily change for status bar + AI greeting |
+| Force-presses portfolio value | `GET .../account` + `.../account/portfolio/history` | Total value, daily change, performance chart data |
+| Taps Holdings icon | `GET .../positions` | All open positions with current market values, P/L |
+| Taps Radar icon | `GET /v2/stocks/snapshots?symbols=X,Y,Z` | Current prices for all Radar items (batch call) |
+| Asks AI about a stock | `GET /v2/stocks/{symbol}/snapshot` + `/bars` | Price, daily change, sparkline data for Stock Info Card |
+| Asks AI about portfolio | `GET .../account` + `.../positions` + `.../portfolio/history` | Full portfolio context for AI response |
+| Taps a stock's chart time range | `GET /v2/stocks/{symbol}/bars?timeframe=X` | Historical bars for selected period |
+
+### Status Bar Background Refresh
+
+The status bar showing portfolio value is the one always-visible element.
+
+**Refresh mechanism:** Frontend background job calls account endpoint **every 5 minutes**.
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/account`
+
+- Returns `equity`, `last_equity`, `cash`
+- Frontend computes daily change: `equity - last_equity`
+- Between refreshes, the number is static
+- **Frontend-initiated** — only runs while app is active and in foreground (not a server-side polling loop)
+
+### Force-Press Modal Data Sources
+
+When the user force-presses the portfolio value (FR-9.4):
+
+| Modal Element | Alpaca Endpoint |
+|---|---|
+| Total portfolio value, daily change ($/%) | `GET /v1/trading/accounts/{id}/account` |
+| Performance chart with time ranges | `GET /v1/trading/accounts/{id}/account/portfolio/history` |
+| Holdings breakdown | `GET /v1/trading/accounts/{id}/positions` |
+| Cash balance, buying power | `GET /v1/trading/accounts/{id}/account` (same call) |
+
+All on-demand REST calls triggered when modal opens.
+
+---
+
+## Order Execution & Trade Flow
+
+**PRD References:** FR-8.1–FR-8.15
+
+### Placing Orders (REST)
+
+**Endpoint:** `POST /v1/trading/accounts/{account_id}/orders`
+
+When the user confirms a trade via long-press on the Trade Confirmation Card (FR-8.4), the backend submits the order.
+
+#### Market Order (Dollar Amount — Fractional)
+
+```json
+{
+  "symbol": "TSLA",
+  "notional": "200",
+  "side": "buy",
+  "type": "market",
+  "time_in_force": "day"
+}
+```
+
+- The `notional` field enables **dollar-amount purchases** resulting in fractional shares (FR-3.6, FR-8.8)
+- **Minimum** market value for buy orders: **$1.00**
+- `notional` supports up to **2 decimal places**
+
+#### Limit Order
+
+```json
+{
+  "symbol": "AAPL",
+  "qty": "10",
+  "side": "buy",
+  "type": "limit",
+  "limit_price": "180.00",
+  "time_in_force": "gtc"
+}
+```
+
+- Limit orders (FR-8.7) use `qty` instead of `notional`
+- `time_in_force`: `day` (expires at market close) or `gtc` (good 'til canceled)
+
+#### After-Hours Queuing
+
+When markets are closed (FR-8.15):
+
+- Orders submitted with `time_in_force: day` will queue and execute at next market open
+- **Must display clear warnings** about potential price differences
+- Use `GET /v1/clock` — returns `is_open`, `next_open`, `next_close` timestamps
+
+### Order Status Updates (WebSocket)
+
+**Endpoint:** `wss://broker-api.alpaca.markets/stream`
+
+After placing an order, listen for `trade_updates` events:
+
+| Event | Meaning | Sevino Action |
+|---|---|---|
+| `new` | Order routed to exchange | Update order status in UI |
+| `fill` | Order completely filled (includes `fill_price`, `qty`, `position_qty`) | Render Trade Confirmation Card success state (FR-8.12) |
+| `partial_fill` | Some shares filled, more pending | Update card with partial fill details |
+| `canceled` | Order was canceled | Notify user |
+| `rejected` | Order rejected by exchange or Alpaca | Render error state on Trade Confirmation Card (FR-8.13) |
+| `pending_new` | Order received but not yet accepted | Show pending indicator |
+| `replaced` | Order was replaced with new parameters | Update card with new details |
+
+**Note:** Most market orders during market hours fill instantly — `fill` event typically arrives within milliseconds. Limit orders may remain open indefinitely.
+
+---
+
+## High-Yield Cash — FDIC Bank Sweep
+
+**PRD References:** FR-3.10–FR-3.15
+
+Alpaca's cash management program: uninvested USD cash earns interest while remaining fully liquid as buying power. **Revenue stream for Sevino** via partner take rate.
+
+### APR Tier Configuration
+
+APR Tiers are configured server-side by Alpaca during partner onboarding. Each tier defines:
+
+- `account_rate_bps` — interest rate the customer earns (e.g., 320 bps = 3.20% APY)
+- `correspondent_fee_bps` — Sevino's partner take rate (e.g., 10 bps = 0.10% APR)
+
+Updates to a tier apply to **all accounts** assigned to it. Self-service API tier creation is planned for a future Alpaca release; currently managed by Alpaca's team.
+
+### Enrollment Flow
+
+Auto-enroll upon account creation (FR-3.10):
+
+1. User completes account creation, signs Customer Agreement (revision ≥ 22.2024.08), is presented FDIC Bank Sweep Terms & Conditions.
+2. Backend monitors account status SSE stream for `ACTIVE` transition.
+3. Upon `ACTIVE`, backend enrolls by assigning APR Tier:
+
+**Endpoint:** `PATCH /v1/accounts/{account_id}`
+
+**Body:** Assign account to Sevino's preconfigured APR Tier ID.
+
+4. Eligible settled cash begins sweeping once daily (cutoff ~11:45 AM ET). Swept cash earns interest and remains available as buying power.
+
+### Reading Interest Data
+
+The account object includes a `cash_interest` object within the `USD` property containing:
+
+- Current APR tier assignment
+- Interest details
+
+**Endpoint:** `GET /v1/trading/accounts/{account_id}/account` (same account endpoint used elsewhere)
+
+Additionally, an EOD Cash Interest Details endpoint updates daily. Interest is booked on the last business day of each month and compounds automatically.
+
+### FDIC Insurance Coverage
+
+- Swept cash is FDIC pass-through insured up to **$2,500,000 per customer** (based on number of participating program banks, each providing up to $250,000)
+- Funds **in the brokerage account**: SIPC-insured (up to $500K, $250K cash sub-limit) but **NOT FDIC-insured**
+- Funds **swept to program banks**: intended to be FDIC-insured but **NOT SIPC-protected**
+- Coverage is "potentially eligible" and subject to conditions
+- Interest rate is variable, tied to federal funds rate (FR-3.15) — display with disclaimer
+
+---
+
+## Market Data Integration
+
+**PRD References:** FR-5.1, FR-6.2–FR-6.8, FR-7.1–FR-7.10
+
+### REST Market Data Endpoints
+
+| Endpoint | Returns | Use Case |
+|---|---|---|
+| `GET /v2/stocks/{symbol}/snapshot` | Latest trade, quote, minute bar, daily bar, prev daily bar | Stock Info Card — single call for current price, daily change, key data |
+| `GET /v2/stocks/snapshots?symbols=X,Y` | Multi-symbol snapshots | Comparison analysis, Radar Card pricing, batch quote fetches |
+| `GET /v2/stocks/{symbol}/bars` | Historical OHLCV bars (configurable timeframe) | Sparkline charts, Performance Chart Cards |
+| `GET /v2/stocks/{symbol}/trades/latest` | Most recent trade for a symbol | Latest price when snapshot not needed |
+| `GET /v2/stocks/{symbol}/quotes/latest` | Most recent quote (bid/ask) | Spread information for advanced users |
+
+The **snapshot endpoint is the most efficient** single call for Stock Info Cards — bundles current price, daily change, and previous close in one response.
+
+### Historical Bars for Charts — Time Range Mapping
+
+| UI Time Range | Bars `timeframe` | `start` | Notes |
+|---|---|---|---|
+| 1D | `5Min` | Market open today | Intraday chart, ~78 data points |
+| 1W | `15Min` | 5 trading days ago | Weekly detail |
+| 1M | `1Hour` | 1 month ago | Monthly overview |
+| 3M | `1Day` | 3 months ago | Daily bars |
+| 6M | `1Day` | 6 months ago | Daily bars |
+| 1Y | `1Day` | 1 year ago | Daily bars |
+| All | `1Week` or `1Month` | Earliest available | Long-term trend, coarser resolution |
+
+### Real-Time Market Data Stream (Deferred — Future Option)
+
+**Endpoint:** `wss://stream.data.alpaca.markets/v2/{feed}`
+
+Not needed for current chat-first architecture where all data is behind user-initiated modals. Available if a future feature (e.g., live trading screen) requires continuous price streaming.
+
+### Market Data Authentication (Broker API Partners)
+
+Broker API partners use the **Client Credentials flow**:
+
+1. Exchange credentials for a short-lived access token (valid **15 minutes**)
+2. Use that token to authenticate REST API requests
+
+---
+
+## AI Agent — Alpaca Data in Context
+
+**PRD References:** FR-4.1–FR-4.8, FR-5.1–FR-5.3
+
+Every AI response involving financial data **must be grounded in real Alpaca API data** retrieved via tool calls — never generated from training data (FR-4.8).
+
+### Context Injection on Conversation Start
+
+When a new conversation opens, the backend **pre-fetches** and injects into Claude's system prompt:
+
+| Data | Alpaca Endpoint | Purpose |
+|---|---|---|
+| Account summary (equity, cash, buying power, daily change) | `GET /v1/trading/.../account` | Greeting message (FR-4.7), general awareness |
+| Current positions (symbol, qty, market value, P/L) | `GET /v1/trading/.../positions` | Portfolio context for any question |
+| Account status (active, restricted, etc.) | `GET /v1/accounts/{id}` | Determines if trading is available |
+| FDIC Sweep interest data | Same account endpoint (`cash_interest`) | Interest rate references (FR-3.13) |
+
+This enables the static greeting without a tool call on first message.
+
+### Tool Calls for On-Demand Data
+
+When the user asks a question requiring fresh/specific data, the AI invokes tool calls that trigger Alpaca API requests from the backend:
+
+| User Query | Tool Call | Alpaca Endpoint(s) | UI Card |
+|---|---|---|---|
+| "Tell me about AAPL" | `get_stock_info(AAPL)` | `GET /v2/stocks/AAPL/snapshot` + `bars` | Stock Info Card |
+| "How's my portfolio doing?" | `get_portfolio_summary()` | `account` + `positions` + `portfolio/history` | Portfolio Summary Card |
+| "Buy $200 of TSLA" | `preview_trade({...})` | `GET /v2/stocks/TSLA/quotes/latest` | Trade Confirmation Card |
+| "Show me TSLA's chart" | `get_stock_chart(TSLA, 1M)` | `GET /v2/stocks/TSLA/bars?timeframe=1Day` | Performance Chart Card |
+| "How much interest am I earning?" | `get_account_info()` | `GET /v1/trading/.../account` | Text response with rate data |
+
+**Internet kill switch (FR-4.9):** When toggled off, disables tool calls. AI can still respond using training knowledge for general financial education but cannot retrieve real-time data or execute trades. Status bar continues updating independently.
+
+---
+
+## AI Radar Data Flow
+
+**PRD References:** FR-7.1–FR-7.10
+
+### Radar Generation (Daily Background Job)
+
+The daily backend job (FR-7.2):
+
+1. Retrieves user's Profile Card (goals, risk tolerance, time horizon, experience level)
+2. Fetches current market data via Alpaca REST (snapshots, daily bars for momentum/trend signals)
+3. Fetches user's current positions (diversification opportunities)
+4. Runs selection algorithm (profile alignment, risk match, sector relevance, market conditions)
+5. Generates context blurb per item via Claude — **educational/informational only** (FR-7.9)
+
+**Storage:** Radar items stored in **Sevino's database** (not Alpaca Watchlists) because they carry metadata Alpaca doesn't support: AI-generated blurb, 7-day expiry timer (FR-7.6), favorited flag (FR-7.7), profile-alignment reasoning.
+
+### Radar Data Flow on Modal Open
+
+Sevino's DB stores only **ticker symbols + AI metadata** (blurbs, expiry dates, favorited flags). **No price data is stored.**
+
+When user taps Radar icon (FR-7.4):
+
+**Endpoint:** `GET /v2/stocks/snapshots?symbols=VTI,AAPL,MSFT,...`
+
+Returns latest trade, quote, daily bar, prev daily bar for each symbol in one response. Backend merges price data with stored metadata and returns combined result. **Cached 30–60 seconds.**
+
+### Favorited Items / Watchlist
+
+Favorited Radar items (FR-7.7) persist in **Sevino's database**. Alpaca has a Watchlists API (`POST /v1/trading/accounts/{id}/watchlists`) but Sevino's own storage is preferred because favorites are tied to the Radar system and include unsupported metadata.
+
+---
+
+## Contextual Shortcuts — Market Awareness
+
+**PRD References:** FR-10.1–FR-10.6
+
+### Alpaca Data for Shortcut Logic
+
+| Shortcut Condition | Alpaca Data Source | Protocol |
+|---|---|---|
+| Pre-market / market hours / post-market | `GET /v1/clock` (`is_open`, `next_open`, `next_close`) | REST |
+| Market drop >2% | `GET /v2/stocks/SPY/snapshot` (checked on app open + during 5-min status bar refresh) | REST |
+| Post-earnings for held stocks | Account activities or external earnings calendar | REST + external |
+| User holds specific stocks | `GET /v1/trading/.../positions` | REST |
+
+The market clock endpoint is lightweight — call on app open or new conversation start.
+
+For "after >2% drop": check SPY's daily change during the status bar's 5-minute background refresh and flag when threshold is breached.
+
+---
+
+## Asset Lookup & Eligibility
+
+**PRD References:** FR-3.6, FR-3.7, FR-8.8, FR-8.9
+
+**Endpoint:** `GET /v1/assets` or `GET /v1/assets/{symbol}`
+
+**Returns:**
+
+- `symbol`, `name`, `exchange`, `status` (active/inactive)
+- `tradable` — whether the asset can be traded
+- `fractionable` — whether fractional trading is supported
+- `class` — asset class
+
+**Used for:**
+
+- **Symbol disambiguation** (FR-8.9): "Did you mean Apple Inc (AAPL) or Apple Hospitality REIT (APLE)?"
+- **Fractional share eligibility** (FR-8.8): check `fractionable` field
+- **Asset class filtering** (FR-3.7): Sevino only supports `us_equity` class — no crypto or options
+
+---
+
+## Error Handling & Edge Cases
+
+### API Error Responses
+
+| Status | Meaning | Sevino Handling |
+|---|---|---|
+| `400` | Bad request (invalid parameters) | Parse error message, surface to user via AI or UI |
+| `403` | Auth failed or account restricted | Check API key validity; check `trading_blocked` flag |
+| `404` | Resource not found (symbol, account, order) | Clear message: "I couldn't find that symbol" |
+| `422` | Unprocessable (insufficient funds, order < $1) | Surface specific reason: "You don't have enough buying power" |
+| `429` | Rate limit exceeded | Implement exponential backoff; queue and retry |
+| `500` | Server error | Retry with backoff; if persistent, surface error to user |
+
+### SSE Connection Management
+
+- Track last received `event_id` or timestamp
+- On reconnection, use `since_id` or `since` parameter to replay missed events
+- Implement exponential backoff for reconnection attempts
+- Deduplicate events by `event_id` when processing from both SSE and WebSocket channels
+
+### WebSocket Connection Management
+
+- **Ping/pong keepalive** to detect stale connections
+- **Authenticate within 10 seconds** of connecting
+- Automatic reconnection and re-listen to `trade_updates` stream on disconnect
+- Handle `406` "connection limit exceeded" error if another connection is already active
+
+### PDT (Pattern Day Trader) Considerations
+
+If a user's account gets flagged as a Pattern Day Trader:
+
+- Account may face **trading restrictions if equity falls below $25,000**
+- **FDIC Sweep enrollment is automatically revoked** (account unenrolled, swept balances return to brokerage account)
+- AI should detect and explain this if user asks about account status or missing interest
+
+---
+
+## Complete Endpoint Reference
+
+### Account Management
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/accounts` | `POST` | Create new brokerage account (KYC submission) |
+| `/v1/accounts/{id}` | `GET` | Retrieve account details and status |
+| `/v1/accounts/{id}` | `PATCH` | Update account (assign APR Tier for FDIC Sweep) |
+| `/v1/accounts/activities` | `GET` | Historical transaction activities (fills, dividends, etc.) |
+| `/v1/events/accounts/status` | `GET` (SSE) | Stream account status change events |
+
+### Funding & Transfers
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/accounts/{id}/ach_relationships` | `POST` | Create ACH relationship via Plaid processor token |
+| `/v1/accounts/{id}/ach_relationships` | `GET` | List existing ACH relationships |
+| `/v1/accounts/{id}/transfers` | `POST` | Initiate ACH deposit or withdrawal |
+| `/v1/accounts/{id}/transfers` | `GET` | List transfers and their statuses |
+| `/v1/events/transfers/status` | `GET` (SSE) | Stream transfer status change events |
+
+### Trading
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/trading/accounts/{id}/orders` | `POST` | Place a new order |
+| `/v1/trading/accounts/{id}/orders` | `GET` | List orders (open, closed, or all) |
+| `/v1/trading/accounts/{id}/orders/{order_id}` | `GET` | Get specific order details |
+| `/v1/trading/accounts/{id}/orders/{order_id}` | `PATCH` | Replace/modify an open order |
+| `/v1/trading/accounts/{id}/orders/{order_id}` | `DELETE` | Cancel an open order |
+| `/v1/trading/accounts/{id}/account` | `GET` | Account info (equity, cash, buying power, interest) |
+| `/v1/trading/accounts/{id}/positions` | `GET` | List all open positions |
+| `/v1/trading/accounts/{id}/positions/{symbol}` | `GET` | Get position for specific symbol |
+| `/v1/trading/accounts/{id}/account/portfolio/history` | `GET` | Portfolio history timeseries |
+| `/v1/events/trades` | `GET` (SSE) | Stream order status change events (future redundancy layer) |
+| `wss://broker-api.alpaca.markets/stream` | WebSocket | Real-time trade update events |
+
+### Market Data
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v2/stocks/{symbol}/snapshot` | `GET` | Latest trade, quote, bar, daily data for a symbol |
+| `/v2/stocks/snapshots?symbols=X,Y` | `GET` | Batch snapshots for multiple symbols |
+| `/v2/stocks/{symbol}/bars` | `GET` | Historical OHLCV bars (configurable timeframe) |
+| `/v2/stocks/{symbol}/trades/latest` | `GET` | Most recent trade for a symbol |
+| `/v2/stocks/{symbol}/quotes/latest` | `GET` | Most recent quote for a symbol |
+| `/v1/assets` | `GET` | List all tradable assets |
+| `/v1/assets/{symbol}` | `GET` | Asset details (fractionable, tradable, etc.) |
+| `/v1/clock` | `GET` | Market clock (is_open, next_open, next_close) |
+| `/v1/calendar` | `GET` | Market calendar (trading days) |
+| `wss://stream.data.alpaca.markets/v2/{feed}` | WebSocket | Real-time quotes, trades, bars stream (future option) |
+
+### Watchlists (Alpaca-native, optional — Sevino uses own DB instead)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/v1/trading/accounts/{id}/watchlists` | `POST` | Create a watchlist |
+| `/v1/trading/accounts/{id}/watchlists` | `GET` | List all watchlists |
+| `/v1/trading/accounts/{id}/watchlists/{wl_id}` | `PUT` | Update watchlist |
+| `/v1/trading/accounts/{id}/watchlists/{wl_id}` | `DELETE` | Delete watchlist |
+
+> **Note:** Sevino stores Radar and favorite data in its own database rather than Alpaca's Watchlists API because the Radar system requires metadata (AI blurbs, expiry timers, profile alignment) that Alpaca's schema does not support.
+
+---
+
+## Future Enhancements
+
+### SSE Trade Events as Redundancy Layer
+
+**Endpoint:** `GET /v1/events/trades`
+
+Listen to both the WebSocket and SSE trade events stream simultaneously. If WebSocket drops, SSE (with historical replay via `since_id`) ensures no order events are missed. Deduplicate by `event_id`.
+
+### Real-Time Market Data WebSocket
+
+**Endpoint:** `wss://stream.data.alpaca.markets/v2/{feed}`
+
+Replace on-demand REST for price data if a future feature requires continuously updating prices. Would involve managing persistent connections, symbol subscriptions across users, and a fan-out layer to push updates to individual mobile sessions.
+
+---
+
+## Implementation Quick Reference
+
+### Caching Strategy
+
+| Layer | TTL | Scope |
+|---|---|---|
+| Backend Redis | 30–60 seconds | Per user per endpoint |
+| Frontend in-memory | Until next navigation or explicit refresh | Per modal/screen |
+
+### Background Jobs
+
+| Job | Frequency | What It Does |
+|---|---|---|
+| Status bar refresh | Every 5 minutes (frontend, foreground only) | Calls account endpoint, updates equity display |
+| AI Radar generation | Daily | Generates personalized stock recommendations |
+| SSE listener | Persistent connection | Receives account status, transfer status events |
+| WebSocket listener | Persistent connection | Receives trade update events |
+
+### Rate Limit Protection
+
+- All Alpaca REST calls go through backend Redis cache (30–60s TTL)
+- On `429` response: exponential backoff with retry
+- Frontend in-memory cache prevents duplicate requests on rapid navigation
