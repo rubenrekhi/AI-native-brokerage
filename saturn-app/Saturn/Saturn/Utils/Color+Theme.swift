@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - Global Colour Palette
-
 extension Color {
     /// Primary background — light: #F9F8F6, dark: #000000
     static let saturnPrimary = adaptive(light: 0xF9F8F6, dark: 0x000000)
@@ -35,8 +33,6 @@ extension Color {
 
     /// Selection highlight text — #0088FF (same in both modes)
     static let saturnHighlightText = adaptive(light: 0x0088FF, dark: 0x0088FF)
-
-    // MARK: - Helpers
 
     private static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
