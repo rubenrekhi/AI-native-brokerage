@@ -36,10 +36,36 @@ struct ContentView: View {
                         colorSwatch(item)
                     }
                 }
+
+                Divider()
+                    .padding(.vertical, 8)
+
+                Text("Font Family")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Color.saturnSecondary)
+
+                VStack(alignment: .leading, spacing: 16) {
+                    fontSample("SF Pro Display (System)", font: .system(size: 24, weight: .regular))
+                    fontSample("SF Pro — Semibold", font: .system(size: 24, weight: .semibold))
+                    fontSample("SF Pro — Bold", font: .system(size: 24, weight: .bold))
+                    fontSample("DM Serif Text", font: .dmSerif(size: 24))
+                    fontSample("DM Serif Text Italic", font: .dmSerifItalic(size: 24))
+                }
             }
             .padding()
         }
         .background(Color.saturnPrimary)
+    }
+
+    private func fontSample(_ label: String, font: Font) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(font)
+                .foregroundStyle(Color.saturnSecondary)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Color.saturnGreyContrast)
+        }
     }
 
     private func colorSwatch(
