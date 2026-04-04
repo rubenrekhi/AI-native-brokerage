@@ -1,6 +1,12 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Colour Palette" : {
+
+    },
+    "Dark Mode" : {
+
+    },
     "general.app_name" : {
       "localizations" : {
         "en" : {
@@ -10,6 +16,9 @@
           }
         }
       }
+    },
+    "Light Mode" : {
+
     }
   },
   "version" : "1.0"
