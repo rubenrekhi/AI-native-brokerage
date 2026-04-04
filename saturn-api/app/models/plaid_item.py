@@ -1,5 +1,5 @@
 import uuid
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import ForeignKey, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -7,6 +7,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.user_profile import UserProfile
+
+if TYPE_CHECKING:
+    from app.models.ach_relationship import AchRelationship
 
 
 class PlaidItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -8,6 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.user_profile import UserProfile
+
+if TYPE_CHECKING:
+    from app.models.ach_relationship import AchRelationship
 
 
 class BrokerageAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):

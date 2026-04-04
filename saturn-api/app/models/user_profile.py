@@ -1,12 +1,22 @@
 import uuid
 from datetime import date, datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import Boolean, Date, DateTime, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from app.models.ach_relationship import AchRelationship
+    from app.models.brokerage_account import BrokerageAccount
+    from app.models.conversation import Conversation
+    from app.models.order_event import OrderEvent
+    from app.models.plaid_item import PlaidItem
+    from app.models.radar_item import RadarItem
+    from app.models.user_financial_profile import UserFinancialProfile
+    from app.models.user_settings import UserSettings
 
 
 class UserProfile(Base, TimestampMixin):

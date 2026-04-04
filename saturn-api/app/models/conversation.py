@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import DateTime, ForeignKey, Text, func
 from sqlalchemy.dialects.postgresql import UUID
@@ -8,6 +8,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.models.user_profile import UserProfile
+
+if TYPE_CHECKING:
+    from app.models.message import Message
+    from app.models.order_event import OrderEvent
 
 
 class Conversation(Base, UUIDPrimaryKeyMixin, TimestampMixin):
