@@ -51,6 +51,52 @@ struct ContentView: View {
                     fontSample("DM Serif Text", font: .dmSerif(size: 24))
                     fontSample("DM Serif Text Italic", font: .dmSerifItalic(size: 24))
                 }
+
+                Divider()
+                    .padding(.vertical, 8)
+
+                Text("Liquid Glass")
+                    .font(.largeTitle.bold())
+                    .foregroundStyle(Color.saturnSecondary)
+
+                VStack(spacing: 16) {
+                    Text("Card")
+                        .font(.headline)
+                        .foregroundStyle(Color.saturnSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                        .modifier(SaturnGlass.card)
+
+                    HStack(spacing: 12) {
+                        Text("Chip A")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.saturnSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .modifier(SaturnGlass.chip)
+
+                        Text("Chip B")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.saturnSecondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
+                            .modifier(SaturnGlass.chip)
+                    }
+
+                    Text("Button")
+                        .font(.headline.bold())
+                        .foregroundStyle(Color.saturnSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .modifier(SaturnGlass.button)
+
+                    Text("Nav Bar")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.saturnSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .modifier(SaturnGlass.nav)
+                }
             }
             .padding()
         }
