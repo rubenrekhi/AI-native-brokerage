@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @State private var authVM: AuthViewModel
 
     private let themeColors: [(name: String, color: Color, lightHex: String, darkHex: String)] = [
         ("primary", .saturnPrimary, "#F9F8F6", "#000000"),
@@ -17,7 +18,33 @@ struct ContentView: View {
         ("highlight-text", .saturnHighlightText, "#0088FF", "#0088FF"),
     ]
 
+    init(authVM: AuthViewModel = AuthViewModel()) {
+        self._authVM = State(initialValue: authVM)
+    }
+
     var body: some View {
+        Group {
+            if authVM.isAuthenticated {
+                NavigationStack {
+                    designSystemShowcase
+                        .navigationTitle(L10n.General.appName)
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                Button(L10n.Auth.signOut) {
+                                    Task { await authVM.signOut() }
+                                }
+                            }
+                        }
+                }
+            } else {
+                AuthView(authVM: authVM)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var designSystemShowcase: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("Colour Palette")
@@ -137,6 +164,10 @@ struct ContentView: View {
     }
 }
 
-#Preview {
+#Preview("Logged Out") {
+    ContentView()
+}
+
+#Preview("Logged In") {
     ContentView()
 }
