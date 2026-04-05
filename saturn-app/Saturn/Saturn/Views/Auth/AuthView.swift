@@ -5,7 +5,12 @@ struct AuthView: View {
 
     @State private var email = ""
     @State private var password = ""
-    @State private var isSignUp = false
+    @State private var isSignUp: Bool
+
+    init(authVM: AuthViewModel, isSignUp: Bool = false) {
+        self.authVM = authVM
+        self._isSignUp = State(initialValue: isSignUp)
+    }
 
     var body: some View {
         VStack(spacing: 24) {
