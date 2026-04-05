@@ -1,27 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Button" : {
-
-    },
-    "Card" : {
-
-    },
-    "Chip A" : {
-
-    },
-    "Chip B" : {
-
-    },
-    "Colour Palette" : {
-
-    },
-    "Dark Mode" : {
-
-    },
-    "Font Family" : {
-
-    },
     "general.app_name" : {
       "localizations" : {
         "en" : {
@@ -32,14 +11,228 @@
         }
       }
     },
-    "Light Mode" : {
+    "Saturn" : {
 
     },
-    "Liquid Glass" : {
-
+    "welcome.log_in" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log In"
+          }
+        }
+      }
     },
-    "Nav Bar" : {
-
+    "welcome.page1_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AI-powered investing for everyone."
+          }
+        }
+      }
+    },
+    "welcome.page1_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opening Wall Street’s Doors."
+          }
+        }
+      }
+    },
+    "welcome.page2_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Say ‘Buy 20 shares of AAPL’ and your AI handles the rest. Review the details, confirm with a tap, done."
+          }
+        }
+      }
+    },
+    "welcome.page2_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trade in plain English."
+          }
+        }
+      }
+    },
+    "welcome.page3_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask ‘What happened today with Tesla?’ and get the key takeaways in seconds — no digging through filings yourself."
+          }
+        }
+      }
+    },
+    "welcome.page3_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Research at the speed of thought."
+          }
+        }
+      }
+    },
+    "welcome.page4_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nothing happens without your say. Every trade requires your confirmation, and your money is protected by SIPC insurance up to $500,000."
+          }
+        }
+      }
+    },
+    "welcome.page4_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You’re always in control."
+          }
+        }
+      }
+    },
+    "welcome.portfolio_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+27.64%"
+          }
+        }
+      }
+    },
+    "welcome.portfolio_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Portfolio"
+          }
+        }
+      }
+    },
+    "welcome.portfolio_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "$210,150"
+          }
+        }
+      }
+    },
+    "welcome.protected_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "$500,000"
+          }
+        }
+      }
+    },
+    "welcome.research_query" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What happened today with Tesla?"
+          }
+        }
+      }
+    },
+    "welcome.sign_up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign Up"
+          }
+        }
+      }
+    },
+    "welcome.trade_ai_response" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Got it — 20 shares of Advanced Micro Devices. AMD is up 2.3% today at $119.42. Here’s your order:"
+          }
+        }
+      }
+    },
+    "welcome.trade_estimated_total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated Total"
+          }
+        }
+      }
+    },
+    "welcome.trade_estimated_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "$5,075.80"
+          }
+        }
+      }
+    },
+    "welcome.trade_hold_to_confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to confirm"
+          }
+        }
+      }
+    },
+    "welcome.trade_stock_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Advanced Micro Devices inc."
+          }
+        }
+      }
+    },
+    "welcome.trade_stock_ticker" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AMD | NYSE"
+          }
+        }
+      }
+    },
+    "welcome.trade_user_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buy 20 shares of AMD"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
