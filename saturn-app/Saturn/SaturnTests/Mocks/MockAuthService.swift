@@ -1,5 +1,7 @@
+import Observation
 @testable import Saturn
 
+@Observable
 final class MockAuthService: AuthServiceProtocol {
     var isAuthenticated = false
     var errorToThrow: Error?

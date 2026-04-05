@@ -1,6 +1,7 @@
 import XCTest
 @testable import Saturn
 
+@MainActor
 final class AuthViewModelTests: XCTestCase {
 
     private var mock: MockAuthService!
@@ -87,19 +88,17 @@ final class AuthViewModelTests: XCTestCase {
 
     // MARK: - Initial State
 
-    func testInitialStateReflectsAuthService() {
+    func testInitialStateReflectsAuthService() async {
         mock.isAuthenticated = true
-        let vm = AuthViewModel(authService: mock)
+        viewModel = AuthViewModel(authService: mock)
 
-        XCTAssertTrue(vm.isAuthenticated)
+        XCTAssertTrue(viewModel.isAuthenticated)
     }
 
     func testInitialStateWhenNotAuthenticated() {
-        let vm = AuthViewModel(authService: mock)
-
-        XCTAssertFalse(vm.isAuthenticated)
-        XCTAssertFalse(vm.isLoading)
-        XCTAssertFalse(vm.requiresEmailConfirmation)
-        XCTAssertNil(vm.authError)
+        XCTAssertFalse(viewModel.isAuthenticated)
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.requiresEmailConfirmation)
+        XCTAssertNil(viewModel.authError)
     }
 }

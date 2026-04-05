@@ -4,6 +4,7 @@ import Supabase
 
 /// Integration tests that hit real local Supabase (make infra must be running).
 /// These are skipped in CI — only run locally during development.
+@MainActor
 final class AuthServiceIntegrationTests: XCTestCase {
 
     private var client: SupabaseClient!
