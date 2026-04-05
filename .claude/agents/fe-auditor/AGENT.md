@@ -158,7 +158,7 @@ Use the output format at the bottom of this file.
 - Disable buttons when data isn't ready — `.disabled(viewModel.isLoading)`. No tappable elements that silently no-op
 - **Buttons with image labels must include text** — `Button("Add", systemImage: "plus", action: add)` not `Button(action: add) { Image(systemName: "plus") }`. Icon-only buttons are invisible to VoiceOver
 - **44x44 minimum tap target** — flag buttons or tappable elements with frames smaller than 44x44
-- **Never use `UIScreen.main.bounds`** — use `containerRelativeFrame()`, `visualEffect()`, or `GeometryReader` as last resort
+- **`UIScreen.main.bounds` is allowed only for computing a width-based scale factor** (e.g. `let s = UIScreen.main.bounds.width / 393`). Flag all other `UIScreen` usage — prefer `containerRelativeFrame()`, `visualEffect()`, or `GeometryReader` as last resort
 - **Use `ContentUnavailableView` for empty/error states** — don't build custom "no data" views when the system component exists
 - **Use `Label` for icon + text pairs** — `Label("Settings", systemImage: "gear")` over `HStack { Image(...); Text(...) }`
 - **Use `bold()` over `fontWeight(.bold)`** — `bold()` lets the system choose correct weight for context
@@ -216,7 +216,18 @@ Flag these deprecated patterns and suggest the modern replacement:
 
 ---
 
-### 12. Hygiene
+### 12. Responsive Layout
+
+- **All hardcoded sizes must scale with screen width** — fonts, padding, spacing, and frame dimensions must never be static pixel values. Define a width-based scale factor (`let s: CGFloat = UIScreen.main.bounds.width / 393`, iPhone 16 Pro as baseline) and multiply all point values by it. Flag any raw numeric literals passed to `.font(size:)`, `.padding()`, `.frame()`, or `.spacing` without scaling
+- **Font sizes must be visibly larger on Pro Max/Plus devices** — a 36pt title on iPhone 16 Pro should be ~39pt on Pro Max. Verify that text sizes use the scale factor
+- **Never use manual line breaks (`\n`) in display strings** — let text wrap dynamically based on available screen width. Flag hardcoded `\n` in user-facing `Text()` content (exempt: non-display strings like log messages)
+- **Use `.fixedSize(horizontal: false, vertical: true)` on multiline text** — ensures proper wrapping without vertical clipping in flexible layouts
+- **Center content in TabView pages with overlay, not Spacers** — dual `Spacer()` inside `.tabViewStyle(.page)` distributes space unpredictably. Use `Color.clear.frame(maxHeight: .infinity).overlay { content }` to reliably center content in the remaining vertical space
+- **Background images via `.background {}`, not root `ZStack`** — wrapping background images in a root `ZStack` with `GeometryReader` causes off-axis alignment. Apply images as `.background { Image(...).resizable().aspectRatio(contentMode: .fill).ignoresSafeArea() }` so they size to the content container
+
+---
+
+### 13. Hygiene
 
 - Never store sensitive data in `@AppStorage` / `UserDefaults` — passwords, tokens, API keys go in Keychain
 - Don't swallow user-facing errors — flag `print(error)` or `try?` in user-triggered actions. Surface errors via ViewModel properties
