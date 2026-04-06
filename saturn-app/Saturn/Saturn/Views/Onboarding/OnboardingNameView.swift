@@ -14,7 +14,6 @@ struct OnboardingNameView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16 * scale) {
-                // User prompt bubble
                 if showPrompt {
                     HStack {
                         Spacer()
@@ -31,7 +30,6 @@ struct OnboardingNameView: View {
                     .transition(.opacity.combined(with: .offset(y: 10)))
                 }
 
-                // Bot response — typed char by char
                 VStack(alignment: .leading, spacing: 12 * scale) {
                     if !typed1.isEmpty {
                         Text(typed1)
@@ -59,7 +57,6 @@ struct OnboardingNameView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Chat Input
 
     private var chatInput: some View {
         VStack(alignment: .leading, spacing: 12 * scale) {
@@ -86,7 +83,7 @@ struct OnboardingNameView: View {
                         .font(.system(size: 28 * scale))
                         .foregroundStyle(isNameValid ? Color.welcomeText : Color.welcomeTextDimmed)
                 }
-                .accessibilityLabel("Submit")
+                .accessibilityLabel(L10n.General.submit)
                 .disabled(!isNameValid)
             }
         }
@@ -105,7 +102,6 @@ struct OnboardingNameView: View {
         onContinue(name.trimmingCharacters(in: .whitespaces))
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {

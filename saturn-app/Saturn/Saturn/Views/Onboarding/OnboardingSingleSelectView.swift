@@ -75,7 +75,6 @@ struct OnboardingSingleSelectView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Options
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
@@ -105,7 +104,6 @@ struct OnboardingSingleSelectView: View {
         .padding(.top, 8 * scale)
     }
 
-    // MARK: - Continue Button
 
     private var continueButton: some View {
         Button { onContinue(selected ?? "") } label: {
@@ -124,7 +122,6 @@ struct OnboardingSingleSelectView: View {
         .padding(.bottom, 16 * scale)
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {

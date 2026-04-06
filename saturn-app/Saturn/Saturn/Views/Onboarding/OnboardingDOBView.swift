@@ -79,7 +79,6 @@ struct OnboardingDOBView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Date Fields
 
     private var dateFields: some View {
         HStack(spacing: 16 * scale) {
@@ -123,7 +122,6 @@ struct OnboardingDOBView: View {
         }
     }
 
-    // MARK: - Continue Button
 
     private var continueButton: some View {
         Button { onContinue("\(month)-\(day)-\(year)") } label: {
@@ -142,7 +140,6 @@ struct OnboardingDOBView: View {
         .padding(.bottom, 16 * scale)
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {

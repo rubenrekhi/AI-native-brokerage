@@ -75,7 +75,6 @@ struct OnboardingDisclaimerView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         let line1 = L10n.Onboarding.disclaimerResponse1

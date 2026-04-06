@@ -91,7 +91,6 @@ struct OnboardingGoalsReflectionView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {
@@ -131,7 +130,6 @@ struct OnboardingGoalsReflectionView: View {
     }
 }
 
-// MARK: - Variant Content
 
 private struct GoalsReflectionContent {
     let heading: String
