@@ -14,4 +14,5 @@ extension Color {
     static let welcomeOverlayBottom = Color(red: 0, green: 0, blue: 0).opacity(0.55)
     static let welcomeButtonDarkTint = Color(red: 0, green: 0, blue: 0)
     static let welcomeButtonLightTint = Color(red: 1, green: 1, blue: 1)
+    static let welcomeTradeConfirm = Color(red: 0.118, green: 0.541, blue: 0.376)
 }
