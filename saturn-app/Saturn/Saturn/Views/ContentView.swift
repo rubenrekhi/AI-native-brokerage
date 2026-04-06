@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var authVM: AuthViewModel
     @State private var authRoute: AuthRoute = .welcome
+    @State private var showPhoneSheet = false
     @State private var showOnboarding = false
 
     private enum AuthRoute {
@@ -23,19 +24,26 @@ struct ContentView: View {
         }
         .onChange(of: authVM.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated && authRoute == .signUp {
+                showPhoneSheet = true
                 showOnboarding = true
             }
         }
     }
 
     private var authenticatedView: some View {
-        VStack {
-            Text(L10n.General.appName)
-                .font(.largeTitle.bold())
-            Button(L10n.Auth.signOut, action: signOut)
+        Group {
+            if showOnboarding {
+                OnboardingContainerView(onComplete: { showOnboarding = false })
+            } else {
+                VStack {
+                    Text(L10n.General.appName)
+                        .font(.largeTitle.bold())
+                    Button(L10n.Auth.signOut, action: signOut)
+                }
+            }
         }
-        .sheet(isPresented: $showOnboarding) {
-            PhoneNumberView(onComplete: { showOnboarding = false })
+        .sheet(isPresented: $showPhoneSheet) {
+            PhoneNumberView(onComplete: { showPhoneSheet = false })
                 .interactiveDismissDisabled()
         }
     }
@@ -59,6 +67,7 @@ struct ContentView: View {
         Task {
             await authVM.signOut()
             authRoute = .welcome
+            showPhoneSheet = false
             showOnboarding = false
         }
     }
