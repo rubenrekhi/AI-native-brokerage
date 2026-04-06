@@ -34,7 +34,7 @@ final class AuthServiceIntegrationTests: XCTestCase {
             supabaseURL: URL(string: url)!,
             supabaseKey: serviceKey
         )
-        authService = AuthService(client: client)
+        authService = await MainActor.run { AuthService(client: client) }
 
         try await Task.sleep(for: .milliseconds(100))
     }
@@ -57,22 +57,26 @@ final class AuthServiceIntegrationTests: XCTestCase {
 
         try await authService.signOut()
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertFalse(authService.isAuthenticated)
+        var isAuth = authService.isAuthenticated
+        XCTAssertFalse(isAuth)
 
         try await authService.signIn(email: testEmail, password: testPassword)
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertTrue(authService.isAuthenticated)
+        isAuth = authService.isAuthenticated
+        XCTAssertTrue(isAuth)
     }
 
     func testSignOut() async throws {
         try await authService.signUp(email: testEmail, password: testPassword)
         createdUserID = try? await client.auth.session.user.id
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertTrue(authService.isAuthenticated)
+        var isAuth = authService.isAuthenticated
+        XCTAssertTrue(isAuth)
 
         try await authService.signOut()
         try await Task.sleep(for: .milliseconds(100))
-        XCTAssertFalse(authService.isAuthenticated)
+        isAuth = authService.isAuthenticated
+        XCTAssertFalse(isAuth)
     }
 
     func testSignInWithWrongPasswordThrows() async {
@@ -84,7 +88,8 @@ final class AuthServiceIntegrationTests: XCTestCase {
             try await authService.signIn(email: testEmail, password: "wrongpassword")
             XCTFail("Expected sign in to throw")
         } catch {
-            XCTAssertFalse(authService.isAuthenticated)
+            let isAuth = authService.isAuthenticated
+            XCTAssertFalse(isAuth)
         }
     }
 }
