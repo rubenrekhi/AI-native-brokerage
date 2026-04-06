@@ -18,7 +18,12 @@ struct ContentView: View {
             VStack {
                 Text(L10n.General.appName)
                     .font(.largeTitle.bold())
-                Button(L10n.Auth.signOut) { Task { await authVM.signOut() } }
+                Button(L10n.Auth.signOut) {
+                    Task {
+                        await authVM.signOut()
+                        authRoute = .welcome
+                    }
+                }
             }
         } else {
             switch authRoute {
