@@ -29,7 +29,7 @@ Categorize every changed file:
 Based on the classification:
 
 - **Frontend files only** — delegate to the `fe-auditor` agent. Pass the diff source (branch or PR reference) as the prompt.
-- **Backend files only** — delegate to the `be-auditor` agent. Pass the diff source as the prompt. *(If the be-auditor agent does not exist yet, tell the user: "Backend auditor not built yet — only frontend files will be reviewed." and skip.)*
+- **Backend files only** — delegate to the `be-auditor` agent. Pass the diff source as the prompt.
 - **Both frontend and backend files** — delegate to both agents sequentially. Run `fe-auditor` first, then `be-auditor` (if it exists). Combine both reports in the final output.
 - **No frontend or backend files** — tell the user: "No reviewable source files changed (only docs/config/CI)." and stop.
 
