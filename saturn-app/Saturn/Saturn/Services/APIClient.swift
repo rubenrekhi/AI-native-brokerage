@@ -5,10 +5,18 @@ final class APIClient {
 
     private let baseURL: String
     private let session: URLSession
+    private let tokenProvider: @Sendable () async -> String?
 
-    private init() {
-        self.baseURL = AppConfig.apiBaseURL
-        self.session = URLSession.shared
+    private init(
+        baseURL: String = AppConfig.apiBaseURL,
+        session: URLSession = .shared,
+        tokenProvider: @escaping @Sendable () async -> String? = {
+            await AuthService.shared.accessToken
+        }
+    ) {
+        self.baseURL = baseURL
+        self.session = session
+        self.tokenProvider = tokenProvider
     }
 
     func get<T: Decodable>(_ path: String) async throws -> T {
@@ -50,7 +58,7 @@ final class APIClient {
             urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
         }
 
-        if let token = await AuthService.shared.accessToken {
+        if let token = await tokenProvider() {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 

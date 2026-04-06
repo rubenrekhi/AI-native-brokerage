@@ -9,9 +9,17 @@ import SwiftUI
 
 @main
 struct SaturnApp: App {
+    private static let isTesting = ProcessInfo.processInfo.environment.keys.contains("XCTestBundlePath")
+
     var body: some Scene {
         WindowGroup {
-            WelcomeView()
+            if Self.isTesting {
+                // Avoid initializing AuthService.shared (and the Supabase
+                // connection) when the app is launched as a test host.
+                Text("Running tests…")
+            } else {
+                ContentView()
+            }
         }
     }
 }

@@ -11,6 +11,24 @@ enum SaturnGlass {
     }
 }
 
+struct SaturnGlassContainer<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        if #available(iOS 26, *) {
+            GlassEffectContainer {
+                content
+            }
+        } else {
+            content
+        }
+    }
+}
+
 struct CardGlass: ViewModifier {
     static let cornerRadius: CGFloat = 20
 

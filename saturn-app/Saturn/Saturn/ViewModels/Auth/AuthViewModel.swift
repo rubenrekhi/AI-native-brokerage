@@ -5,19 +5,27 @@ import Foundation
 
  The root view observes `isAuthenticated` to decide whether to show the
  auth flow or the main app. Delegates all auth logic to AuthService.
+
+ `isAuthenticated` is a computed property that reads directly from the
+ service. SwiftUI's observation tracking follows the access chain, so
+ when `AuthService.isAuthenticated` changes (via Supabase auth events),
+ any view reading this property re-renders automatically.
  */
 @Observable
 final class AuthViewModel {
     private let authService: AuthServiceProtocol
 
-    private(set) var isAuthenticated = false
+    var isAuthenticated: Bool { authService.isAuthenticated }
     private(set) var isLoading = false
     private(set) var requiresEmailConfirmation = false
-    var authError: String?
+    private(set) var authError: String?
 
     init(authService: AuthServiceProtocol = AuthService.shared) {
         self.authService = authService
-        self.isAuthenticated = authService.isAuthenticated
+    }
+
+    func clearError() {
+        authError = nil
     }
 
     func signUp(email: String, password: String) async {
@@ -40,7 +48,6 @@ final class AuthViewModel {
 
         do {
             try await authService.signIn(email: email, password: password)
-            isAuthenticated = true
         } catch {
             authError = error.localizedDescription
         }
@@ -51,7 +58,6 @@ final class AuthViewModel {
 
         do {
             try await authService.signOut()
-            isAuthenticated = false
             requiresEmailConfirmation = false
         } catch {
             authError = error.localizedDescription
