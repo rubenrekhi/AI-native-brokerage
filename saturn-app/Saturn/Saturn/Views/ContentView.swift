@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @State private var authVM: AuthViewModel
     @State private var authRoute: AuthRoute = .welcome
+    @State private var showOnboarding = false
 
     private enum AuthRoute {
         case welcome, signIn, signUp
@@ -20,14 +21,22 @@ struct ContentView: View {
                 unauthenticatedView
             }
         }
+        .onChange(of: authVM.isAuthenticated) { _, isAuthenticated in
+            if isAuthenticated && authRoute == .signUp {
+                showOnboarding = true
+            }
+        }
     }
 
     private var authenticatedView: some View {
-        // ROUTE TO HOME PAGE HERE
         VStack {
             Text(L10n.General.appName)
                 .font(.largeTitle.bold())
             Button(L10n.Auth.signOut, action: signOut)
+        }
+        .sheet(isPresented: $showOnboarding) {
+            PhoneNumberView(onComplete: { showOnboarding = false })
+                .interactiveDismissDisabled()
         }
     }
 
@@ -40,9 +49,9 @@ struct ContentView: View {
                 onSignUp: { authRoute = .signUp }
             )
         case .signIn:
-            AuthView(authVM: authVM, isSignUp: false)
+            AuthView(isSignUp: false, onBack: { authRoute = .welcome }, authVM: authVM)
         case .signUp:
-            AuthView(authVM: authVM, isSignUp: true)
+            AuthView(isSignUp: true, onBack: { authRoute = .welcome }, authVM: authVM)
         }
     }
 
@@ -50,6 +59,7 @@ struct ContentView: View {
         Task {
             await authVM.signOut()
             authRoute = .welcome
+            showOnboarding = false
         }
     }
 }
