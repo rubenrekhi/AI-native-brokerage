@@ -6,6 +6,7 @@ enum L10n {
     enum General {
         static let appName = String(localized: "general.app_name")
         static let back = String(localized: "general.back")
+        static let submit = String(localized: "general.submit")
     }
 
     enum Auth {
@@ -239,6 +240,68 @@ enum L10n {
         static let experienceRegular = String(localized: "onboarding.experience_regular")
         static let experienceActive = String(localized: "onboarding.experience_active")
         static let experienceAdvanced = String(localized: "onboarding.experience_advanced")
+
+        // MARK: - Alpaca Setup
+        static func alpacaIntroHeading(_ name: String) -> String {
+            String(format: String(localized: "onboarding.alpaca_intro_heading"), name)
+        }
+        static let alpacaIntroBody = String(localized: "onboarding.alpaca_intro_body")
+        static let alpacaIntroDisclaimer = String(localized: "onboarding.alpaca_intro_disclaimer")
+        static let alpacaIntroButton = String(localized: "onboarding.alpaca_intro_button")
+        static let alpacaNameUserPrompt = String(localized: "onboarding.alpaca_name_user_prompt")
+        static let alpacaNameResponse1 = String(localized: "onboarding.alpaca_name_response1")
+        static let alpacaNameResponse2 = String(localized: "onboarding.alpaca_name_response2")
+        static let alpacaNamePlaceholder = String(localized: "onboarding.alpaca_name_placeholder")
+        static let alpacaSsnResponse1 = String(localized: "onboarding.alpaca_ssn_response1")
+        static let alpacaSsnResponse2 = String(localized: "onboarding.alpaca_ssn_response2")
+        static let alpacaSsnPlaceholder = String(localized: "onboarding.alpaca_ssn_placeholder")
+        static let alpacaAddressResponse1 = String(localized: "onboarding.alpaca_address_response1")
+        static let alpacaAddressPlaceholder = String(localized: "onboarding.alpaca_address_placeholder")
+        static let alpacaCitizenshipResponse1 = String(localized: "onboarding.alpaca_citizenship_response1")
+        static let alpacaCitizenYes = String(localized: "onboarding.alpaca_citizen_yes")
+        static let alpacaCitizenResident = String(localized: "onboarding.alpaca_citizen_resident")
+        static let alpacaCitizenNo = String(localized: "onboarding.alpaca_citizen_no")
+        static let alpacaEmploymentResponse1 = String(localized: "onboarding.alpaca_employment_response1")
+        static let alpacaEmploymentResponse2 = String(localized: "onboarding.alpaca_employment_response2")
+        static let alpacaEmploymentStatusLabel = String(localized: "onboarding.alpaca_employment_status_label")
+        static let alpacaEmploymentSelectPlaceholder = String(localized: "onboarding.alpaca_employment_select_placeholder")
+        static let alpacaEmployerNameLabel = String(localized: "onboarding.alpaca_employer_name_label")
+        static let alpacaEmployerNamePlaceholder = String(localized: "onboarding.alpaca_employer_name_placeholder")
+        static let alpacaJobTitleLabel = String(localized: "onboarding.alpaca_job_title_label")
+        static let alpacaJobTitlePlaceholder = String(localized: "onboarding.alpaca_job_title_placeholder")
+        static let alpacaIndustryLabel = String(localized: "onboarding.alpaca_industry_label")
+        static let alpacaIndustryPlaceholder = String(localized: "onboarding.alpaca_industry_placeholder")
+        static let alpacaFundingResponse1 = String(localized: "onboarding.alpaca_funding_response1")
+        static let alpacaFundingResponse2 = String(localized: "onboarding.alpaca_funding_response2")
+        static let alpacaFundingEmployment = String(localized: "onboarding.alpaca_funding_employment")
+        static let alpacaFundingSavings = String(localized: "onboarding.alpaca_funding_savings")
+        static let alpacaFundingInvestments = String(localized: "onboarding.alpaca_funding_investments")
+        static let alpacaFundingBusiness = String(localized: "onboarding.alpaca_funding_business")
+        static let alpacaFundingFamily = String(localized: "onboarding.alpaca_funding_family")
+        static let alpacaFundingInheritance = String(localized: "onboarding.alpaca_funding_inheritance")
+        static let alpacaRegulatoryResponse1 = String(localized: "onboarding.alpaca_regulatory_response1")
+        static let alpacaRegulatorySeniorOfficer = String(localized: "onboarding.alpaca_regulatory_senior_officer")
+        static let alpacaRegulatoryBrokerAffiliated = String(localized: "onboarding.alpaca_regulatory_broker_affiliated")
+        static let alpacaRegulatoryPolitical = String(localized: "onboarding.alpaca_regulatory_political")
+        static let alpacaAgreementsHeading = String(localized: "onboarding.alpaca_agreements_heading")
+        static let alpacaAgreementsCheckbox = String(localized: "onboarding.alpaca_agreements_checkbox")
+        static let alpacaOpenAccount = String(localized: "onboarding.alpaca_open_account")
+        static let alpacaCompleteLoading = String(localized: "onboarding.alpaca_complete_loading")
+        static func alpacaCompleteHeading(_ name: String) -> String {
+            String(format: String(localized: "onboarding.alpaca_complete_heading"), name)
+        }
+        static let alpacaCompleteBody = String(localized: "onboarding.alpaca_complete_body")
+        static let alpacaCompleteCta = String(localized: "onboarding.alpaca_complete_cta")
+        static let alpacaCompleteButton = String(localized: "onboarding.alpaca_complete_button")
+        static let alpacaStatusEmployed = String(localized: "onboarding.alpaca_status_employed")
+        static let alpacaStatusSelfEmployed = String(localized: "onboarding.alpaca_status_self_employed")
+        static let alpacaStatusUnemployed = String(localized: "onboarding.alpaca_status_unemployed")
+        static let alpacaStatusStudent = String(localized: "onboarding.alpaca_status_student")
+        static let alpacaStatusRetired = String(localized: "onboarding.alpaca_status_retired")
+        static let alpacaOptionalLabel = String(localized: "onboarding.alpaca_optional_label")
+        static let alpacaAgreementCustomer = String(localized: "onboarding.alpaca_agreement_customer")
+        static let alpacaAgreementMargin = String(localized: "onboarding.alpaca_agreement_margin")
+        static let alpacaAgreementFdic = String(localized: "onboarding.alpaca_agreement_fdic")
     }
 
     enum Welcome {
