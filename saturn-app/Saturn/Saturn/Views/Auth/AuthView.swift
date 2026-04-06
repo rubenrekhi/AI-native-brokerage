@@ -55,15 +55,7 @@ struct AuthView: View {
             }
 
             // Primary action button
-            Button {
-                Task {
-                    if isSignUp {
-                        await authVM.signUp(email: email, password: password)
-                    } else {
-                        await authVM.signIn(email: email, password: password)
-                    }
-                }
-            } label: {
+            Button(action: submit) {
                 if authVM.isLoading {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -88,6 +80,16 @@ struct AuthView: View {
             Spacer()
         }
         .padding(.horizontal, 32)
+    }
+
+    private func submit() {
+        Task {
+            if isSignUp {
+                await authVM.signUp(email: email, password: password)
+            } else {
+                await authVM.signIn(email: email, password: password)
+            }
+        }
     }
 }
 
