@@ -9,6 +9,10 @@ enum SaturnGlass {
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
     }
+
+    static func conditionalChip(isSelected: Bool) -> ConditionalChipGlass {
+        ConditionalChipGlass(isSelected: isSelected)
+    }
 }
 
 struct SaturnGlassContainer<Content: View>: View {
@@ -30,7 +34,7 @@ struct SaturnGlassContainer<Content: View>: View {
 }
 
 struct CardGlass: ViewModifier {
-    static let cornerRadius: CGFloat = 20
+    static let cornerRadius: CGFloat = 28
 
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
@@ -91,6 +95,18 @@ struct NavGlass: ViewModifier {
                     .ultraThinMaterial,
                     in: RoundedRectangle(cornerRadius: Self.cornerRadius)
                 )
+        }
+    }
+}
+
+struct ConditionalChipGlass: ViewModifier {
+    let isSelected: Bool
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content.modifier(SaturnGlass.chip)
+        } else {
+            content
         }
     }
 }

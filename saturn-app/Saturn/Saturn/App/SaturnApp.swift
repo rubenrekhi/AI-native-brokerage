@@ -16,7 +16,7 @@ struct SaturnApp: App {
             if Self.isTesting {
                 // Avoid initializing AuthService.shared (and the Supabase
                 // connection) when the app is launched as a test host.
-                Text("Running tests…")
+                Text(verbatim: "Running tests…")
             } else {
                 ContentView()
             }
