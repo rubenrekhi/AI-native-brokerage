@@ -1,6 +1,26 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "auth.continue_with_apple" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Apple"
+          }
+        }
+      }
+    },
+    "auth.continue_with_google" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Google"
+          }
+        }
+      }
+    },
     "auth.email_confirmation" : {
       "localizations" : {
         "en" : {
@@ -21,6 +41,26 @@
         }
       }
     },
+    "auth.legal_disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "By creating an account, you agree to our [Investment Advisory Agreement](iac), [Terms of Service](tos) and [Privacy Policy](privacy). You also acknowledge that you have reviewed our [Form ADV Brochure](adv) and [Form CRS](crs)."
+          }
+        }
+      }
+    },
+    "auth.or_divider" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "or"
+          }
+        }
+      }
+    },
     "auth.password_placeholder" : {
       "localizations" : {
         "en" : {
@@ -31,12 +71,172 @@
         }
       }
     },
+    "auth.phone_country_code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "+1"
+          }
+        }
+      }
+    },
+    "auth.phone_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phone Number"
+          }
+        }
+      }
+    },
+    "auth.phone_next" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        }
+      }
+    },
+    "auth.phone_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "(555) 555-5555"
+          }
+        }
+      }
+    },
+    "auth.phone_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your phone number will help us keep your account safe"
+          }
+        }
+      }
+    },
+    "auth.phone_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "What's your phone number?"
+          }
+        }
+      }
+    },
+    "auth.req_contains_at" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contains @"
+          }
+        }
+      }
+    },
+    "auth.req_length" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "8 to 64 characters"
+          }
+        }
+      }
+    },
+    "auth.req_lowercase" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 lowercase"
+          }
+        }
+      }
+    },
+    "auth.req_no_spaces" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No spaces"
+          }
+        }
+      }
+    },
+    "auth.req_number" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 number"
+          }
+        }
+      }
+    },
+    "auth.req_special_char" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 special character"
+          }
+        }
+      }
+    },
+    "auth.req_uppercase" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 uppercase"
+          }
+        }
+      }
+    },
+    "auth.req_valid_domain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Valid domain"
+          }
+        }
+      }
+    },
     "auth.sign_in" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sign In"
+          }
+        }
+      }
+    },
+    "auth.sign_in_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Wall Street's doors and own your wealth."
+          }
+        }
+      }
+    },
+    "auth.sign_in_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welcome back"
           }
         }
       }
@@ -57,6 +257,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sign Up"
+          }
+        }
+      }
+    },
+    "auth.sign_up_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Wall Street's doors and own your wealth."
+          }
+        }
+      }
+    },
+    "auth.sign_up_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Let's get started"
           }
         }
       }
@@ -87,6 +307,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saturn"
+          }
+        }
+      }
+    },
+    "general.back" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back"
           }
         }
       }
