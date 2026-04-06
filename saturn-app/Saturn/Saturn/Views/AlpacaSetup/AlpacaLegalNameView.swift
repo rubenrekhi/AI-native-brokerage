@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct OnboardingNameView: View {
+struct AlpacaLegalNameView: View {
     let scale: CGFloat
     let animate: Bool
     let onContinue: (String) -> Void
@@ -17,7 +17,7 @@ struct OnboardingNameView: View {
                 if showPrompt {
                     HStack {
                         Spacer()
-                        Text(L10n.Onboarding.nameUserPrompt)
+                        Text(L10n.Onboarding.alpacaNameUserPrompt)
                             .font(.system(size: 15 * scale))
                             .foregroundStyle(Color.welcomeText)
                             .padding(.horizontal, 16 * scale)
@@ -63,7 +63,7 @@ struct OnboardingNameView: View {
             TextField(
                 "",
                 text: $name,
-                prompt: Text(L10n.Onboarding.namePlaceholder)
+                prompt: Text(L10n.Onboarding.alpacaNamePlaceholder)
                     .foregroundStyle(Color.welcomeTextDimmed)
             )
             .font(.system(size: 16 * scale))
@@ -81,10 +81,10 @@ struct OnboardingNameView: View {
                 Button(action: submit) {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 28 * scale))
-                        .foregroundStyle(isNameValid ? Color.welcomeText : Color.welcomeTextDimmed)
+                        .foregroundStyle(isValid ? Color.welcomeText : Color.welcomeTextDimmed)
                 }
                 .accessibilityLabel(L10n.General.submit)
-                .disabled(!isNameValid)
+                .disabled(!isValid)
             }
         }
         .padding(14 * scale)
@@ -93,12 +93,12 @@ struct OnboardingNameView: View {
         .padding(.bottom, 16 * scale)
     }
 
-    private var isNameValid: Bool {
+    private var isValid: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     private func submit() {
-        guard isNameValid else { return }
+        guard isValid else { return }
         onContinue(name.trimmingCharacters(in: .whitespaces))
     }
 
@@ -106,17 +106,17 @@ struct OnboardingNameView: View {
     private func animateIn() async {
         guard animate else {
             showPrompt = true
-            typed1 = L10n.Onboarding.nameResponse1
-            typed2 = L10n.Onboarding.nameResponse2
+            typed1 = L10n.Onboarding.alpacaNameResponse1
+            typed2 = L10n.Onboarding.alpacaNameResponse2
             showInput = true
             return
         }
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.nameResponse1) { typed1 = $0 }
+        await typeOut(L10n.Onboarding.alpacaNameResponse1) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.nameResponse2) { typed2 = $0 }
+        await typeOut(L10n.Onboarding.alpacaNameResponse2) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showInput = true }
     }
@@ -130,7 +130,7 @@ struct OnboardingNameView: View {
 }
 
 #Preview {
-    OnboardingNameView(scale: 1, animate: true, onContinue: { _ in })
+    AlpacaLegalNameView(scale: 1, animate: true, onContinue: { _ in })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }

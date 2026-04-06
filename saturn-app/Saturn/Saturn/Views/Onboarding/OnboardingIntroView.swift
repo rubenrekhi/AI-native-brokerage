@@ -68,7 +68,6 @@ struct OnboardingIntroView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {

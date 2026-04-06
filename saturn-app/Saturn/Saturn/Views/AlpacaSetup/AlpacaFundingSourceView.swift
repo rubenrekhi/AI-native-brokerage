@@ -1,21 +1,25 @@
 import SwiftUI
 
-struct OnboardingSingleSelectView: View {
+struct AlpacaFundingSourceView: View {
     let scale: CGFloat
     let userPromptText: String
-    let response1: String
-    let response2: String
-    var response3: String = ""
-    let options: [String]
     let animate: Bool
-    let onContinue: (String) -> Void
+    let onContinue: () -> Void
 
-    @State private var selected: String?
+    @State private var selected: Set<String> = []
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""
-    @State private var typed3 = ""
     @State private var showOptions = false
+
+    private let options = [
+        L10n.Onboarding.alpacaFundingEmployment,
+        L10n.Onboarding.alpacaFundingSavings,
+        L10n.Onboarding.alpacaFundingInvestments,
+        L10n.Onboarding.alpacaFundingBusiness,
+        L10n.Onboarding.alpacaFundingFamily,
+        L10n.Onboarding.alpacaFundingInheritance,
+    ]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -48,11 +52,6 @@ struct OnboardingSingleSelectView: View {
                                 .font(.system(size: 16 * scale))
                                 .foregroundStyle(Color.welcomeText)
                         }
-                        if !typed3.isEmpty {
-                            Text(typed3)
-                                .font(.system(size: 16 * scale))
-                                .foregroundStyle(Color.welcomeText)
-                        }
                     }
 
                     if showOptions {
@@ -75,13 +74,16 @@ struct OnboardingSingleSelectView: View {
         .task { await animateIn() }
     }
 
-
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
             ForEach(options, id: \.self) { option in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        selected = option
+                        if selected.contains(option) {
+                            selected.remove(option)
+                        } else {
+                            selected.insert(option)
+                        }
                     }
                 } label: {
                     Text(option)
@@ -92,7 +94,7 @@ struct OnboardingSingleSelectView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SaturnGlass.tintedButton(
-                            tint: selected == option
+                            tint: selected.contains(option)
                                 ? Color.saturnAccent
                                 : Color.clear,
                             cornerRadius: 16
@@ -104,9 +106,8 @@ struct OnboardingSingleSelectView: View {
         .padding(.top, 8 * scale)
     }
 
-
     private var continueButton: some View {
-        Button { onContinue(selected ?? "") } label: {
+        Button(action: onContinue) {
             Text(L10n.Onboarding.referralContinue)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -115,41 +116,32 @@ struct OnboardingSingleSelectView: View {
         }
         .buttonStyle(.plain)
         .modifier(SaturnGlass.tintedButton(
-            tint: selected != nil ? Color.onboardingButtonActive : Color.onboardingButtonInactive
+            tint: selected.isEmpty ? Color.onboardingButtonInactive : Color.onboardingButtonActive
         ))
-        .disabled(selected == nil)
+        .disabled(selected.isEmpty)
         .padding(.horizontal, 32 * scale)
         .padding(.bottom, 16 * scale)
     }
 
-
     private func animateIn() async {
         guard animate else {
             showPrompt = true
-            typed1 = response1
-            typed2 = response2
-            typed3 = response3
+            typed1 = L10n.Onboarding.alpacaFundingResponse1
+            typed2 = L10n.Onboarding.alpacaFundingResponse2
             showOptions = true
             return
         }
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(response1) { typed1 = $0 }
-        if !response2.isEmpty {
-            try? await Task.sleep(for: .milliseconds(200))
-            await typeOut(response2) { typed2 = $0 }
-        }
-        if !response3.isEmpty {
-            try? await Task.sleep(for: .milliseconds(200))
-            await typeOut(response3) { typed3 = $0 }
-        }
+        await typeOut(L10n.Onboarding.alpacaFundingResponse1) { typed1 = $0 }
+        try? await Task.sleep(for: .milliseconds(200))
+        await typeOut(L10n.Onboarding.alpacaFundingResponse2) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showOptions = true }
     }
 
     private func typeOut(_ text: String, update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
         for i in 1...text.count {
             try? await Task.sleep(for: .milliseconds(25))
             update(String(text.prefix(i)))
@@ -158,15 +150,7 @@ struct OnboardingSingleSelectView: View {
 }
 
 #Preview {
-    OnboardingSingleSelectView(
-        scale: 1,
-        userPromptText: "01-08-2004",
-        response1: "What's your annual income, before taxes?",
-        response2: "I use this to tailor guidance to your situation. No judgment — every number is a great starting point.",
-        options: ["Under $25K", "$25K – $50K", "$50K – $100K", "$100K – $200K", "$200K – $500K", "$500K+"],
-        animate: true,
-        onContinue: { _ in }
-    )
-    .background(Color.black)
-    .preferredColorScheme(.dark)
+    AlpacaFundingSourceView(scale: 1, userPromptText: "Employed", animate: true, onContinue: {})
+        .background(Color.black)
+        .preferredColorScheme(.dark)
 }

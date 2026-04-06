@@ -11,7 +11,6 @@ struct OnboardingCompoundView: View {
     @State private var displayedWait: Double = 0
     @State private var displayedSavings: Double = 0
 
-    // MARK: - Calculations
 
     private var startTodayValue: Double { futureValue(rate: 0.10, years: years) }
     private var wait5Value: Double { futureValue(rate: 0.10, years: max(years - 5, 0)) }
@@ -61,7 +60,6 @@ struct OnboardingCompoundView: View {
         .task { await runAnimations() }
     }
 
-    // MARK: - Chart Card
 
     private var chartCard: some View {
         SaturnGlassContainer {
@@ -142,7 +140,6 @@ struct OnboardingCompoundView: View {
         }
     }
 
-    // MARK: - Legend
 
     private var legendSection: some View {
         VStack(spacing: 20 * scale) {
@@ -169,7 +166,6 @@ struct OnboardingCompoundView: View {
         }
     }
 
-    // MARK: - Motivation
 
     private var motivationText: some View {
         VStack(spacing: 4 * scale) {
@@ -183,7 +179,6 @@ struct OnboardingCompoundView: View {
         .padding(.horizontal, 20 * scale)
     }
 
-    // MARK: - Formatting
 
     private func formatShort(_ value: Double) -> String {
         if value >= 1_000_000 {
@@ -211,7 +206,6 @@ struct OnboardingCompoundView: View {
         return ceil(value / (magnitude / 2)) * (magnitude / 2)
     }
 
-    // MARK: - Animation
 
     private func runAnimations() async {
         guard animate else {
@@ -224,12 +218,10 @@ struct OnboardingCompoundView: View {
 
         try? await Task.sleep(for: .milliseconds(600))
 
-        // Animate bars growing bottom-up
         withAnimation(.easeOut(duration: 1.2)) { barProgress = 1 }
 
         try? await Task.sleep(for: .milliseconds(400))
 
-        // Count up the legend numbers over ~1.5 seconds
         let totalSteps = 60
         for step in 1...totalSteps {
             let t = Double(step) / Double(totalSteps)
@@ -239,7 +231,6 @@ struct OnboardingCompoundView: View {
             displayedSavings = savingsValue * eased
             try? await Task.sleep(for: .milliseconds(25))
         }
-        // Snap to final values
         displayedStart = startTodayValue
         displayedWait = wait5Value
         displayedSavings = savingsValue

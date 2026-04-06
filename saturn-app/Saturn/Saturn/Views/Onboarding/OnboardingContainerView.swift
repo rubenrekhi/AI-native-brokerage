@@ -21,7 +21,7 @@ struct OnboardingContainerView: View {
     @State private var riskToleranceSelection = ""
     @State private var drawdownSelection = ""
     @State private var experienceSelection = ""
-    let onComplete: () -> Void
+    let onComplete: (_ userName: String) -> Void
 
     var body: some View {
         VStack(spacing: 0) {
@@ -49,7 +49,6 @@ struct OnboardingContainerView: View {
         }
     }
 
-    // MARK: - Background
 
     @ViewBuilder
     private var backgroundView: some View {
@@ -75,7 +74,6 @@ struct OnboardingContainerView: View {
         return max(65 - (currentYear - year), 1)
     }
 
-    // MARK: - Step Content
 
     @ViewBuilder
     private var stepContent: some View {
@@ -297,11 +295,10 @@ struct OnboardingContainerView: View {
     }
 
     private func completeOnboarding() {
-        onComplete()
+        onComplete(userName)
     }
 }
 
-// MARK: - Progress Bar
 
 private struct ProgressBar: View {
     let currentStep: Int
@@ -330,5 +327,5 @@ private struct ProgressBar: View {
 }
 
 #Preview {
-    OnboardingContainerView(onComplete: {})
+    OnboardingContainerView(onComplete: { _ in })
 }

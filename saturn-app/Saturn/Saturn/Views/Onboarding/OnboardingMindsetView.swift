@@ -33,7 +33,6 @@ struct OnboardingMindsetView: View {
                             .transition(.opacity.combined(with: .offset(y: 10)))
                     }
 
-                    // Bot response — typed char by char
                     VStack(alignment: .leading, spacing: 12 * scale) {
                         if !typed1.isEmpty {
                             Text(typed1)
@@ -47,7 +46,6 @@ struct OnboardingMindsetView: View {
                         }
                     }
 
-                    // Options
                     if showOptions {
                         optionsList
                             .transition(.opacity.combined(with: .offset(y: 16)))
@@ -68,7 +66,6 @@ struct OnboardingMindsetView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - User Prompt
 
     private var userPrompt: some View {
         HStack {
@@ -85,7 +82,6 @@ struct OnboardingMindsetView: View {
         }
     }
 
-    // MARK: - Options
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
@@ -115,7 +111,6 @@ struct OnboardingMindsetView: View {
         .padding(.top, 8 * scale)
     }
 
-    // MARK: - Continue Button
 
     private var continueButton: some View {
         Button { onContinue(selected) } label: {
@@ -134,7 +129,6 @@ struct OnboardingMindsetView: View {
         .padding(.bottom, 16 * scale)
     }
 
-    // MARK: - Helpers
 
     private func toggle(_ option: String) {
         if selected.contains(option) {
@@ -144,7 +138,6 @@ struct OnboardingMindsetView: View {
         }
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {

@@ -35,7 +35,6 @@ struct OnboardingReferralView: View {
                             .transition(.opacity.combined(with: .offset(y: 10)))
                     }
 
-                    // Bot response — typed char by char
                     VStack(alignment: .leading, spacing: 12 * scale) {
                         if !typed1.isEmpty {
                             Text(typed1)
@@ -54,7 +53,6 @@ struct OnboardingReferralView: View {
                         }
                     }
 
-                    // Options
                     if showOptions {
                         optionsGrid
                             .transition(.opacity.combined(with: .offset(y: 16)))
@@ -80,7 +78,6 @@ struct OnboardingReferralView: View {
         .task { await animateIn() }
     }
 
-    // MARK: - User Prompt
 
     private var userPrompt: some View {
         HStack {
@@ -97,7 +94,6 @@ struct OnboardingReferralView: View {
         }
     }
 
-    // MARK: - Options Grid
 
     private var optionsGrid: some View {
         LazyVGrid(
@@ -134,7 +130,6 @@ struct OnboardingReferralView: View {
         .padding(.top, 8 * scale)
     }
 
-    // MARK: - Extra Text Field
 
     private var extraTextField: some View {
         TextField(
@@ -155,7 +150,6 @@ struct OnboardingReferralView: View {
         .modifier(SaturnGlass.nav)
     }
 
-    // MARK: - Continue Button
 
     private var continueButton: some View {
         Button { onContinue(selectedSource ?? "", extraText.isEmpty ? nil : extraText) } label: {
@@ -174,7 +168,6 @@ struct OnboardingReferralView: View {
         .padding(.bottom, 16 * scale)
     }
 
-    // MARK: - Animation
 
     private func animateIn() async {
         guard animate else {
