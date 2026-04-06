@@ -132,21 +132,24 @@ struct WelcomeView: View {
                 }
             }
         }
-        .task(id: currentPage) {
-            await advancePage()
+        .task {
+            await autoAdvancePages()
         }
     }
 
-    private func advancePage() async {
-        try? await Task.sleep(for: .seconds(5))
-        let allKinds = WelcomePageKind.allCases
-        guard let idx = allKinds.firstIndex(of: currentPage) else { return }
-        let next = allKinds[(idx + 1) % allKinds.count]
-        if reduceMotion {
-            currentPage = next
-        } else {
-            withAnimation(.easeInOut(duration: 0.8)) {
+    private func autoAdvancePages() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled else { return }
+            let allKinds = WelcomePageKind.allCases
+            guard let idx = allKinds.firstIndex(of: currentPage) else { return }
+            let next = allKinds[(idx + 1) % allKinds.count]
+            if reduceMotion {
                 currentPage = next
+            } else {
+                withAnimation(.easeInOut(duration: 0.8)) {
+                    currentPage = next
+                }
             }
         }
     }
@@ -186,7 +189,7 @@ private struct WelcomePageContent: View {
 
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 32 * scale)
+        .padding(.horizontal, 20 * scale)
     }
 }
 
@@ -256,12 +259,7 @@ private struct TimeframeTabsView: View {
                     .foregroundStyle(isSelected ? Color.welcomeText : Color.welcomeTextDimmed)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6 * scale)
-                    .background {
-                        if isSelected {
-                            Capsule()
-                                .fill(Color.welcomeTabHighlight)
-                        }
-                    }
+                    .modifier(SaturnGlass.conditionalChip(isSelected: isSelected))
             }
         }
     }
@@ -285,30 +283,33 @@ private struct PortfolioCardView: View {
             Text(L10n.Welcome.portfolioLabel)
                 .font(.system(size: 13 * scale))
                 .foregroundStyle(Color.welcomeTextMuted)
+                .padding(.horizontal, 16 * scale)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+            HStack(spacing: 8 * scale) {
                 Text(L10n.Welcome.portfolioValue)
                     .font(.system(size: 28 * scale, weight: .bold))
                     .foregroundStyle(Color.welcomeText)
 
                 Text(L10n.Welcome.portfolioGain)
                     .font(.system(size: 14 * scale, weight: .semibold))
-                    .foregroundStyle(Color.saturnPositive)
+                    .foregroundStyle(Color.welcomeText)
             }
             .padding(.top, 4 * scale)
+            .padding(.horizontal, 16 * scale)
 
             AnimatedChartLine(
                 points: Self.chartPoints,
                 scale: scale,
-                height: 80,
+                height: 120,
                 progress: chartProgress
             )
             .padding(.top, 12 * scale)
 
             TimeframeTabsView(scale: scale, selected: .threeMonths)
                 .padding(.top, 12 * scale)
+                .padding(.horizontal, 8 * scale)
         }
-        .padding(16 * scale)
+        .padding(.vertical, 16 * scale)
         .modifier(SaturnGlass.card)
         .onAppear { animateChart() }
     }
@@ -350,45 +351,47 @@ private struct TradeCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 12 * scale)
 
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 10 * scale) {
-                        Image(decorative: "amd_logo")
-                            .resizable()
-                            .scaledToFill()
-                            .frame(width: 40 * scale, height: 40 * scale)
-                            .clipShape(RoundedRectangle(cornerRadius: 8 * scale))
+                SaturnGlassContainer {
+                    VStack(alignment: .leading, spacing: 0) {
+                        HStack(spacing: 10 * scale) {
+                            Image(decorative: "amd_logo")
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 40 * scale, height: 40 * scale)
+                                .clipShape(RoundedRectangle(cornerRadius: 8 * scale))
 
-                        VStack(alignment: .leading, spacing: 2 * scale) {
-                            Text(L10n.Welcome.tradeStockName)
-                                .font(.system(size: 14 * scale, weight: .semibold))
-                                .foregroundStyle(Color.welcomeText)
-                            Text(L10n.Welcome.tradeStockTicker)
-                                .font(.system(size: 12 * scale))
-                                .foregroundStyle(Color.welcomeTextDimmed)
+                            VStack(alignment: .leading, spacing: 2 * scale) {
+                                Text(L10n.Welcome.tradeStockName)
+                                    .font(.system(size: 14 * scale, weight: .semibold))
+                                    .foregroundStyle(Color.welcomeText)
+                                Text(L10n.Welcome.tradeStockTicker)
+                                    .font(.system(size: 12 * scale))
+                                    .foregroundStyle(Color.welcomeTextDimmed)
+                            }
                         }
-                    }
-                    .padding(.bottom, 12 * scale)
+                        .padding(.bottom, 12 * scale)
 
-                    HStack {
-                        Text(L10n.Welcome.tradeEstimatedTotal)
-                            .font(.system(size: 14 * scale))
-                            .foregroundStyle(Color.welcomeTextDimmed)
-                        Spacer()
-                        Text(L10n.Welcome.tradeEstimatedValue)
-                            .font(.system(size: 20 * scale, weight: .bold))
+                        HStack {
+                            Text(L10n.Welcome.tradeEstimatedTotal)
+                                .font(.system(size: 14 * scale))
+                                .foregroundStyle(Color.welcomeTextDimmed)
+                            Spacer()
+                            Text(L10n.Welcome.tradeEstimatedValue)
+                                .font(.system(size: 20 * scale, weight: .bold))
+                                .foregroundStyle(Color.welcomeText)
+                        }
+                        .padding(.bottom, 14 * scale)
+
+                        Text(L10n.Welcome.tradeHoldToConfirm)
+                            .font(.system(size: 14 * scale, weight: .semibold))
                             .foregroundStyle(Color.welcomeText)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 12 * scale)
+                            .background(Color.welcomeTradeConfirm, in: Capsule())
                     }
-                    .padding(.bottom, 14 * scale)
-
-                    Text(L10n.Welcome.tradeHoldToConfirm)
-                        .font(.system(size: 14 * scale, weight: .semibold))
-                        .foregroundStyle(Color.welcomeText)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12 * scale)
-                        .background(Color.saturnPositive, in: Capsule())
+                    .padding(12 * scale)
+                    .modifier(SaturnGlass.card)
                 }
-                .padding(12 * scale)
-                .modifier(SaturnGlass.card)
             }
             .padding(16 * scale)
             .modifier(SaturnGlass.card)
@@ -467,8 +470,9 @@ private struct ProtectedCardView: View {
             Text(L10n.Welcome.portfolioLabel)
                 .font(.system(size: 13 * scale))
                 .foregroundStyle(Color.welcomeTextMuted)
+                .padding(.horizontal, 16 * scale)
 
-            HStack(alignment: .firstTextBaseline, spacing: 8 * scale) {
+            HStack(spacing: 8 * scale) {
                 Text(L10n.Welcome.protectedValue)
                     .font(.system(size: 28 * scale, weight: .bold))
                     .foregroundStyle(Color.welcomeText)
@@ -479,16 +483,17 @@ private struct ProtectedCardView: View {
                     .accessibilityHidden(true)
             }
             .padding(.top, 4 * scale)
+            .padding(.horizontal, 16 * scale)
 
             AnimatedChartLine(
                 points: Self.chartPoints,
                 scale: scale,
-                height: 100,
+                height: 120,
                 progress: chartProgress
             )
             .padding(.top, 12 * scale)
         }
-        .padding(16 * scale)
+        .padding(.vertical, 16 * scale)
         .modifier(SaturnGlass.card)
         .onAppear { animateChart() }
     }
