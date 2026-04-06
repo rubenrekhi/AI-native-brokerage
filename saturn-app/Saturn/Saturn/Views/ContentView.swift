@@ -5,6 +5,8 @@ struct ContentView: View {
     @State private var authRoute: AuthRoute = .welcome
     @State private var showPhoneSheet = false
     @State private var showOnboarding = false
+    @State private var showAlpacaSetup = false
+    @State private var onboardingUserName = ""
 
     private enum AuthRoute {
         case welcome, signIn, signUp
@@ -32,8 +34,19 @@ struct ContentView: View {
 
     private var authenticatedView: some View {
         Group {
-            if showOnboarding {
-                OnboardingContainerView(onComplete: { showOnboarding = false })
+            if showPhoneSheet {
+                PhoneNumberView(onComplete: { showPhoneSheet = false })
+            } else if showOnboarding {
+                OnboardingContainerView { name in
+                    onboardingUserName = name
+                    showOnboarding = false
+                    showAlpacaSetup = true
+                }
+            } else if showAlpacaSetup {
+                AlpacaSetupContainerView(
+                    userName: onboardingUserName,
+                    onComplete: { showAlpacaSetup = false }
+                )
             } else {
                 VStack {
                     Text(L10n.General.appName)
@@ -41,10 +54,6 @@ struct ContentView: View {
                     Button(L10n.Auth.signOut, action: signOut)
                 }
             }
-        }
-        .sheet(isPresented: $showPhoneSheet) {
-            PhoneNumberView(onComplete: { showPhoneSheet = false })
-                .interactiveDismissDisabled()
         }
     }
 
@@ -69,6 +78,7 @@ struct ContentView: View {
             authRoute = .welcome
             showPhoneSheet = false
             showOnboarding = false
+            showAlpacaSetup = false
         }
     }
 }
