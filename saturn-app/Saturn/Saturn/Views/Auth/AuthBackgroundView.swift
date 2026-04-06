@@ -1,0 +1,23 @@
+import SwiftUI
+
+struct AuthBackgroundView: View {
+    var body: some View {
+        ZStack {
+            Image("signup_bg")
+                .resizable()
+                .aspectRatio(contentMode: .fill)
+                .accessibilityHidden(true)
+
+            LinearGradient(
+                stops: [
+                    .init(color: .welcomeOverlayTop, location: 0),
+                    .init(color: .welcomeOverlayMid, location: 0.45),
+                    .init(color: .welcomeOverlayBottom, location: 1),
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+    }
+}
