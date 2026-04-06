@@ -18,10 +18,14 @@ final class AuthViewModel {
     var isAuthenticated: Bool { authService.isAuthenticated }
     private(set) var isLoading = false
     private(set) var requiresEmailConfirmation = false
-    var authError: String?
+    private(set) var authError: String?
 
     init(authService: AuthServiceProtocol = AuthService.shared) {
         self.authService = authService
+    }
+
+    func clearError() {
+        authError = nil
     }
 
     func signUp(email: String, password: String) async {

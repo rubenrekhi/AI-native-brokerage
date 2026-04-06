@@ -28,13 +28,13 @@ struct AuthView: View {
                     .autocorrectionDisabled()
                     .textInputAutocapitalization(.never)
                     .padding()
-                    .background(.quaternary)
+                    .background(Color.saturnSettingsContrast)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
 
                 SecureField(L10n.Auth.passwordPlaceholder, text: $password)
                     .textContentType(isSignUp ? .newPassword : .password)
                     .padding()
-                    .background(.quaternary)
+                    .background(Color.saturnSettingsContrast)
                     .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
@@ -42,7 +42,7 @@ struct AuthView: View {
             if let error = authVM.authError {
                 Text(error)
                     .font(.footnote)
-                    .foregroundStyle(.red)
+                    .foregroundStyle(Color.saturnNegative)
                     .multilineTextAlignment(.center)
             }
 
@@ -50,7 +50,7 @@ struct AuthView: View {
             if authVM.requiresEmailConfirmation {
                 Text(L10n.Auth.emailConfirmation)
                     .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.saturnGreyContrast)
                     .multilineTextAlignment(.center)
             }
 
@@ -79,7 +79,7 @@ struct AuthView: View {
             // Toggle between sign in / sign up
             Button {
                 isSignUp.toggle()
-                authVM.authError = nil
+                authVM.clearError()
             } label: {
                 Text(isSignUp ? L10n.Auth.switchToSignIn : L10n.Auth.switchToSignUp)
                     .font(.footnote)
