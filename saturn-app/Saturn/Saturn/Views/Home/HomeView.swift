@@ -63,8 +63,6 @@ struct HomeView: View {
                 .frame(width: 36 * scale, height: 36 * scale)
         }
         .modifier(SaturnGlass.navCircle)
-        .padding(4 * scale)
-        .contentShape(.circle)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 
@@ -86,8 +84,7 @@ struct HomeView: View {
             .padding(.horizontal, 12 * scale)
             .padding(.vertical, 8 * scale)
         }
-        .modifier(SaturnGlass.nav)
-        .clipShape(.capsule)
+        .modifier(SaturnGlass.chip)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
     }
 
@@ -99,8 +96,6 @@ struct HomeView: View {
                 .frame(width: 36 * scale, height: 36 * scale)
         }
         .modifier(SaturnGlass.navCircle)
-        .padding(4 * scale)
-        .contentShape(.circle)
         .accessibilityLabel(label)
     }
 }
