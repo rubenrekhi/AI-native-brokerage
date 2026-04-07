@@ -62,10 +62,9 @@ struct HomeView: View {
                 .foregroundStyle(Color.saturnSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
         }
-        .modifier(SaturnGlass.nav)
-        .clipShape(.circle)
-        .contentShape(.rect)
-        .frame(minWidth: 44, minHeight: 44)
+        .modifier(SaturnGlass.navCircle)
+        .padding(4 * scale)
+        .contentShape(.circle)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 
@@ -99,10 +98,9 @@ struct HomeView: View {
                 .foregroundStyle(Color.saturnSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
         }
-        .modifier(SaturnGlass.nav)
-        .clipShape(.circle)
-        .contentShape(.rect)
-        .frame(minWidth: 44, minHeight: 44)
+        .modifier(SaturnGlass.navCircle)
+        .padding(4 * scale)
+        .contentShape(.circle)
         .accessibilityLabel(label)
     }
 }
