@@ -48,11 +48,7 @@ struct ContentView: View {
                     onComplete: { showAlpacaSetup = false }
                 )
             } else {
-                VStack {
-                    Text(L10n.General.appName)
-                        .font(.largeTitle.bold())
-                    Button(L10n.Auth.signOut, action: signOut)
-                }
+                HomeView()
             }
         }
     }

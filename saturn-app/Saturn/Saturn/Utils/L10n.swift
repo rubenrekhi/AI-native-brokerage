@@ -304,6 +304,32 @@ enum L10n {
         static let alpacaAgreementFdic = String(localized: "onboarding.alpaca_agreement_fdic")
     }
 
+    enum Home {
+        static let chatPlaceholder = String(localized: "home.chat_placeholder")
+        static let attachAccessibility = String(localized: "home.attach_accessibility")
+        static let micAccessibility = String(localized: "home.mic_accessibility")
+        static let sendAccessibility = String(localized: "home.send_accessibility")
+        static func greetingMorning(_ name: String) -> String {
+            String(format: String(localized: "home.greeting_morning"), name)
+        }
+        static func greetingAfternoon(_ name: String) -> String {
+            String(format: String(localized: "home.greeting_afternoon"), name)
+        }
+        static func greetingEvening(_ name: String) -> String {
+            String(format: String(localized: "home.greeting_evening"), name)
+        }
+        static let exploreButton = String(localized: "home.explore_button")
+        static let dismissExploreAccessibility = String(localized: "home.dismiss_explore_accessibility")
+        static let suggestionNews = String(localized: "home.suggestion_news")
+        static let suggestionPortfolio = String(localized: "home.suggestion_portfolio")
+        static let suggestionRadar = String(localized: "home.suggestion_radar")
+        static let sidebarAccessibility = String(localized: "home.sidebar_accessibility")
+        static let portfolioAccessibility = String(localized: "home.portfolio_accessibility")
+        static let fundingAccessibility = String(localized: "home.funding_accessibility")
+        static let watchlistAccessibility = String(localized: "home.watchlist_accessibility")
+        static let menuAccessibility = String(localized: "home.menu_accessibility")
+    }
+
     enum Welcome {
         static let page1Title = String(localized: "welcome.page1_title")
         static let page1Subtitle = String(localized: "welcome.page1_subtitle")

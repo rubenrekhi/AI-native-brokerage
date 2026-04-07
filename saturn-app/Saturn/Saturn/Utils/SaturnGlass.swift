@@ -5,6 +5,7 @@ enum SaturnGlass {
     static let chip = ChipGlass()
     static let button = ButtonGlass()
     static let nav = NavGlass()
+    static let navCircle = NavCircleGlass()
 
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
@@ -99,6 +100,18 @@ struct NavGlass: ViewModifier {
                     .ultraThinMaterial,
                     in: RoundedRectangle(cornerRadius: Self.cornerRadius)
                 )
+        }
+    }
+}
+
+struct NavCircleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(.regular, in: .circle)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Circle())
         }
     }
 }
