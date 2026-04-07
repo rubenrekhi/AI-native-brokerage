@@ -1,9 +1,9 @@
 import uuid
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import Boolean, Date, DateTime, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin
@@ -29,6 +29,39 @@ class UserProfile(Base, TimestampMixin):
     first_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     date_of_birth: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+
+    # Contact
+    phone_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Address
+    street_address: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(Text), nullable=True
+    )
+    city: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    state: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    postal_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Identity
+    middle_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    country_of_citizenship: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    country_of_birth: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    country_of_tax_residence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # KYC / Compliance
+    disclosures: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=True
+    )
+    agreements_signed: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=True
+    )
+    risk_disclosure_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    # Analytics
+    attribution_source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # Onboarding state
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )

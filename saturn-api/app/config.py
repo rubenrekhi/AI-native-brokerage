@@ -57,6 +57,12 @@ class Settings(BaseSettings):
         return self.environment != "prod"
 
     @property
+    def alpaca_base_url(self) -> str:
+        if self.environment == "prod":
+            return "https://broker-api.alpaca.markets"
+        return "https://broker-api.sandbox.alpaca.markets"
+
+    @property
     def cors_origins(self) -> list[str]:
         if self.environment == "dev":
             return ["*"]
