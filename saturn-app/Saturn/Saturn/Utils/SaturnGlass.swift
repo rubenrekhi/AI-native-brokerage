@@ -5,9 +5,14 @@ enum SaturnGlass {
     static let chip = ChipGlass()
     static let button = ButtonGlass()
     static let nav = NavGlass()
+    static let navCircle = NavCircleGlass()
 
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
+    }
+
+    static func tintedButton(tint: Color, cornerRadius: CGFloat) -> TintedButtonGlass {
+        TintedButtonGlass(tint: tint, cornerRadius: cornerRadius)
     }
 
     static func conditionalChip(isSelected: Bool) -> ConditionalChipGlass {
@@ -99,6 +104,18 @@ struct NavGlass: ViewModifier {
     }
 }
 
+struct NavCircleGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(.regular, in: .circle)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Circle())
+        }
+    }
+}
+
 struct ConditionalChipGlass: ViewModifier {
     let isSelected: Bool
 
@@ -113,23 +130,24 @@ struct ConditionalChipGlass: ViewModifier {
 
 struct TintedButtonGlass: ViewModifier {
     let tint: Color
+    var cornerRadius: CGFloat = CardGlass.cornerRadius
 
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content
                 .glassEffect(
                     .regular.tint(tint).interactive(),
-                    in: .rect(cornerRadius: CardGlass.cornerRadius)
+                    in: .rect(cornerRadius: cornerRadius)
                 )
         } else {
             content
                 .background(
                     tint.opacity(0.25),
-                    in: RoundedRectangle(cornerRadius: CardGlass.cornerRadius)
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
                 )
                 .background(
                     .ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: CardGlass.cornerRadius)
+                    in: RoundedRectangle(cornerRadius: cornerRadius)
                 )
         }
     }

@@ -3,7 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @State private var authVM: AuthViewModel
     @State private var authRoute: AuthRoute = .welcome
+    @State private var showPhoneSheet = false
     @State private var showOnboarding = false
+    @State private var showAlpacaSetup = false
+    @State private var onboardingUserName = ""
 
     private enum AuthRoute {
         case welcome, signIn, signUp
@@ -23,20 +26,30 @@ struct ContentView: View {
         }
         .onChange(of: authVM.isAuthenticated) { _, isAuthenticated in
             if isAuthenticated && authRoute == .signUp {
+                showPhoneSheet = true
                 showOnboarding = true
             }
         }
     }
 
     private var authenticatedView: some View {
-        VStack {
-            Text(L10n.General.appName)
-                .font(.largeTitle.bold())
-            Button(L10n.Auth.signOut, action: signOut)
-        }
-        .sheet(isPresented: $showOnboarding) {
-            PhoneNumberView(onComplete: { showOnboarding = false })
-                .interactiveDismissDisabled()
+        Group {
+            if showPhoneSheet {
+                PhoneNumberView(onComplete: { showPhoneSheet = false })
+            } else if showOnboarding {
+                OnboardingContainerView { name in
+                    onboardingUserName = name
+                    showOnboarding = false
+                    showAlpacaSetup = true
+                }
+            } else if showAlpacaSetup {
+                AlpacaSetupContainerView(
+                    userName: onboardingUserName,
+                    onComplete: { showAlpacaSetup = false }
+                )
+            } else {
+                HomeView()
+            }
         }
     }
 
@@ -59,7 +72,9 @@ struct ContentView: View {
         Task {
             await authVM.signOut()
             authRoute = .welcome
+            showPhoneSheet = false
             showOnboarding = false
+            showAlpacaSetup = false
         }
     }
 }

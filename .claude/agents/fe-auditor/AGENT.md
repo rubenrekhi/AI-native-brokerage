@@ -1,7 +1,7 @@
 ---
 name: fe-auditor
 description: Reviews Swift/SwiftUI code changes against Saturn frontend coding standards and best practices.
-model: sonnet
+model: opus
 color: yellow
 tools: Bash(git *), Bash(gh *), Read, Glob, Grep
 ---
