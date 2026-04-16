@@ -4,7 +4,7 @@ struct AlpacaEmploymentView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
-    let onContinue: () -> Void
+    let onContinue: (_ status: String, _ employerName: String, _ jobTitle: String) -> Void
 
     @State private var showPrompt = false
     @State private var typed1 = ""
@@ -206,7 +206,7 @@ struct AlpacaEmploymentView: View {
 
 
     private var continueButton: some View {
-        Button(action: onContinue) {
+        Button { onContinue(employmentStatus, employerName, jobTitle) } label: {
             Text(L10n.Onboarding.referralContinue)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -250,7 +250,7 @@ struct AlpacaEmploymentView: View {
 }
 
 #Preview {
-    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true, onContinue: {})
+    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true, onContinue: { _, _, _ in })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }

@@ -4,7 +4,7 @@ struct AlpacaFundingSourceView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
-    let onContinue: () -> Void
+    let onContinue: (_ sources: Set<String>) -> Void
 
     @State private var selected: Set<String> = []
     @State private var showPrompt = false
@@ -107,7 +107,7 @@ struct AlpacaFundingSourceView: View {
     }
 
     private var continueButton: some View {
-        Button(action: onContinue) {
+        Button { onContinue(selected) } label: {
             Text(L10n.Onboarding.referralContinue)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -150,7 +150,7 @@ struct AlpacaFundingSourceView: View {
 }
 
 #Preview {
-    AlpacaFundingSourceView(scale: 1, userPromptText: "Employed", animate: true, onContinue: {})
+    AlpacaFundingSourceView(scale: 1, userPromptText: "Employed", animate: true, onContinue: { _ in })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }

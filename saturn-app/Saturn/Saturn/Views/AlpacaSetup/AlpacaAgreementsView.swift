@@ -3,7 +3,7 @@ import SwiftUI
 struct AlpacaAgreementsView: View {
     let scale: CGFloat
     let animate: Bool
-    let onContinue: () -> Void
+    let onContinue: (_ agreed: Bool) -> Void
 
     @State private var typedHeading = ""
     @State private var showAgreements = false
@@ -91,7 +91,7 @@ struct AlpacaAgreementsView: View {
 
 
     private var openAccountButton: some View {
-        Button(action: onContinue) {
+        Button { onContinue(agreed) } label: {
             Text(L10n.Onboarding.alpacaOpenAccount)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -129,7 +129,7 @@ struct AlpacaAgreementsView: View {
 }
 
 #Preview {
-    AlpacaAgreementsView(scale: 1, animate: true, onContinue: {})
+    AlpacaAgreementsView(scale: 1, animate: true, onContinue: { _ in })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }

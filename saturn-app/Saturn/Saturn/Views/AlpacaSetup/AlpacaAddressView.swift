@@ -1,14 +1,23 @@
 import MapKit
 import SwiftUI
 
+struct ParsedAddress {
+    let streetAddress: String
+    let city: String
+    let state: String
+    let postalCode: String
+    let fullDisplay: String
+}
+
 struct AlpacaAddressView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
-    let onContinue: (String) -> Void
+    let onContinue: (ParsedAddress) -> Void
 
     @State private var query = ""
     @State private var selectedAddress = ""
+    @State private var selectedCompletion: MKLocalSearchCompletion?
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var showInput = false
@@ -148,13 +157,39 @@ struct AlpacaAddressView: View {
     private func selectResult(_ result: MKLocalSearchCompletion) {
         let full = result.subtitle.isEmpty ? result.title : "\(result.title), \(result.subtitle)"
         selectedAddress = full
+        selectedCompletion = result
         query = full
         completer.clear()
     }
 
     private func submit() {
-        guard !selectedAddress.isEmpty else { return }
-        onContinue(selectedAddress)
+        guard !selectedAddress.isEmpty, let completion = selectedCompletion else { return }
+        let fallback = ParsedAddress(
+            streetAddress: selectedAddress, city: "", state: "", postalCode: "", fullDisplay: selectedAddress
+        )
+        Task {
+            let request = MKLocalSearch.Request(completion: completion)
+            let search = MKLocalSearch(request: request)
+            do {
+                let response = try await search.start()
+                guard let placemark = response.mapItems.first?.placemark else {
+                    onContinue(fallback)
+                    return
+                }
+                let street = [placemark.subThoroughfare, placemark.thoroughfare]
+                    .compactMap { $0 }
+                    .joined(separator: " ")
+                onContinue(ParsedAddress(
+                    streetAddress: street.isEmpty ? selectedAddress : street,
+                    city: placemark.locality ?? "",
+                    state: placemark.administrativeArea ?? "",
+                    postalCode: placemark.postalCode ?? "",
+                    fullDisplay: selectedAddress
+                ))
+            } catch {
+                onContinue(fallback)
+            }
+        }
     }
 
 
@@ -182,7 +217,7 @@ struct AlpacaAddressView: View {
 }
 
 #Preview {
-    AlpacaAddressView(scale: 1, userPromptText: "XXX-XX-XXXX", animate: true, onContinue: { _ in })
+    AlpacaAddressView(scale: 1, userPromptText: "XXX-XX-XXXX", animate: true, onContinue: { _ in  })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }

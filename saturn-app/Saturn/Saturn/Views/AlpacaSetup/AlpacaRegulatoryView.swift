@@ -4,7 +4,7 @@ struct AlpacaRegulatoryView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
-    let onContinue: () -> Void
+    let onContinue: (_ isSeniorOfficer: Bool, _ isAffiliatedBroker: Bool, _ isPoliticalFigure: Bool) -> Void
 
     @State private var showPrompt = false
     @State private var typed1 = ""
@@ -93,7 +93,7 @@ struct AlpacaRegulatoryView: View {
 
 
     private var continueButton: some View {
-        Button(action: onContinue) {
+        Button { onContinue(isSeniorOfficer, isAffiliatedBroker, isPoliticalFigure) } label: {
             Text(L10n.Onboarding.referralContinue)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -131,7 +131,7 @@ struct AlpacaRegulatoryView: View {
 }
 
 #Preview {
-    AlpacaRegulatoryView(scale: 1, userPromptText: "Savings", animate: true, onContinue: {})
+    AlpacaRegulatoryView(scale: 1, userPromptText: "Savings", animate: true, onContinue: { _, _, _ in })
         .background(Color.black)
         .preferredColorScheme(.dark)
 }
