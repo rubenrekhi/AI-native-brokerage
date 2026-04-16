@@ -22,6 +22,7 @@ struct OnboardingContainerView: View {
     @State private var drawdownSelection = ""
     @State private var experienceSelection = ""
     let onComplete: (_ userName: String) -> Void
+    private let onboarding = OnboardingService.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -79,17 +80,20 @@ struct OnboardingContainerView: View {
     private var stepContent: some View {
         switch currentStep {
         case 1:
-            OnboardingIntroView(scale: scale, animate: animate, onContinue: advance)
+            OnboardingIntroView(scale: scale, animate: animate) {
+                saveAndAdvance(OnboardingPatchRequest(step: "welcome"))
+            }
         case 2:
             OnboardingNameView(scale: scale, animate: animate) { name in
                 userName = name
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "preferred_name", preferredName: name))
             }
         case 3:
             OnboardingReferralView(scale: scale, userName: userName, animate: animate) { source, extra in
                 referralSource = source
                 referralExtra = extra
-                advance()
+                let attribution = OnboardingDataMapper.buildAttribution(source: source, extra: extra)
+                saveAndAdvance(OnboardingPatchRequest(step: "attribution", attributionSource: attribution))
             }
         case 4:
             OnboardingMindsetView(
@@ -99,7 +103,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { selections in
                 mindsetSelections = selections
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "financial_worries", financialWorries: Array(selections)))
             }
         case 5:
             OnboardingReflectionView(
@@ -116,7 +120,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { selections in
                 goalSelections = selections
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "investment_goals", investmentGoals: Array(selections)))
             }
         case 7:
             OnboardingGoalsReflectionView(
@@ -133,7 +137,8 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { dob in
                 dobString = dob
-                advance()
+                let isoDate = OnboardingDataMapper.formatDateOfBirth(dob)
+                saveAndAdvance(OnboardingPatchRequest(step: "date_of_birth", dateOfBirth: isoDate))
             }
         case 9:
             OnboardingSingleSelectView(
@@ -145,7 +150,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 incomeSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "annual_income", annualIncome: value))
             }
         case 10:
             OnboardingSingleSelectView(
@@ -157,7 +162,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 netWorthSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "net_worth", netWorth: value))
             }
         case 11:
             OnboardingSingleSelectView(
@@ -169,7 +174,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 liquidCashSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "liquid_net_worth", liquidNetWorth: value))
             }
         case 12:
             OnboardingSingleSelectView(
@@ -186,7 +191,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 incomeStabilitySelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "income_stability", incomeStability: value))
             }
         case 13:
             OnboardingSingleSelectView(
@@ -198,7 +203,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 timeHorizonSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "time_horizon", timeHorizon: value))
             }
         case 14:
             OnboardingSingleSelectView(
@@ -217,7 +222,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 riskToleranceSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "risk_scenario", riskScenarioResponse: value))
             }
         case 15:
             OnboardingSingleSelectView(
@@ -235,7 +240,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 drawdownSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "max_loss_tolerance", maxLossTolerance: value))
             }
         case 16:
             OnboardingSingleSelectView(
@@ -253,7 +258,7 @@ struct OnboardingContainerView: View {
                 animate: animate
             ) { value in
                 experienceSelection = value
-                advance()
+                saveAndAdvance(OnboardingPatchRequest(step: "experience", experienceLevel: value))
             }
         case 17:
             OnboardingCompoundView(
@@ -266,9 +271,11 @@ struct OnboardingContainerView: View {
             OnboardingDisclaimerView(
                 scale: scale,
                 userPromptText: experienceSelection,
-                animate: animate,
-                onContinue: completeOnboarding
-            )
+                animate: animate
+            ) {
+                let now = OnboardingDataMapper.isoTimestamp()
+                saveAndAdvance(OnboardingPatchRequest(step: "risk_disclosure", riskDisclosureAcknowledgedAt: now))
+            }
         default:
             Spacer()
         }
@@ -291,6 +298,19 @@ struct OnboardingContainerView: View {
             }
         } else {
             completeOnboarding()
+        }
+    }
+
+    /// Save the step data to the backend, then advance. If the save fails, advance anyway
+    /// so the user isn't blocked — data can be re-sent on resume.
+    private func saveAndAdvance(_ request: OnboardingPatchRequest) {
+        Task {
+            do {
+                try await onboarding.saveStep(request)
+            } catch {
+                print("[Onboarding] Failed to save step \(request.step): \(error)")
+            }
+            advance()
         }
     }
 

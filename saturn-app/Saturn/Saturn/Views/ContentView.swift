@@ -35,7 +35,15 @@ struct ContentView: View {
     private var authenticatedView: some View {
         Group {
             if showPhoneSheet {
-                PhoneNumberView(onComplete: { showPhoneSheet = false })
+                PhoneNumberView { phoneNumber in
+                    Task {
+                        // Save phone number to backend
+                        try? await OnboardingService.shared.saveStep(
+                            OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
+                        )
+                    }
+                    showPhoneSheet = false
+                }
             } else if showOnboarding {
                 OnboardingContainerView { name in
                     onboardingUserName = name
