@@ -111,6 +111,24 @@ async def incomplete_onboarding_error_handler(
     )
 
 
+# --- Alpaca handlers ---
+
+async def alpaca_error_handler(
+    request: Request, exc: "AlpacaBrokerError"
+) -> JSONResponse:
+    logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
+    return error_response(
+        422, f"KYC submission failed: {exc.message}", "ALPACA_ERROR", detail=exc.detail
+    )
+
+
+async def alpaca_unavailable_handler(
+    request: Request, exc: "AlpacaBrokerUnavailableError"
+) -> JSONResponse:
+    logger.error("alpaca_unavailable", error=exc.message)
+    return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
+
+
 # --- SQLAlchemy handlers (registered before generic Exception) ---
 
 async def data_error_handler(
@@ -158,6 +176,10 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(NotFoundError, not_found_error_handler)
     app.add_exception_handler(ConflictError, conflict_error_handler)
     app.add_exception_handler(IncompleteOnboardingError, incomplete_onboarding_error_handler)
+    # Alpaca handlers
+    from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
+    app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
+    app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)
