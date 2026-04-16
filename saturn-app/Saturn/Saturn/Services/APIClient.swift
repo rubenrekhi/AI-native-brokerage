@@ -1,11 +1,31 @@
 import Foundation
 
-final class APIClient {
+protocol APIClientProtocol: Sendable {
+    func get<T: Decodable>(_ path: String) async throws -> T
+    func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
+    func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
+    func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
+    func delete<T: Decodable>(_ path: String) async throws -> T
+}
+
+final class APIClient: APIClientProtocol {
     static let shared = APIClient()
 
     private let baseURL: String
     private let session: URLSession
     private let tokenProvider: @Sendable () async -> String?
+
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.keyEncodingStrategy = .convertToSnakeCase
+        return e
+    }()
+
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        return d
+    }()
 
     private init(
         baseURL: String = AppConfig.apiBaseURL,
@@ -29,6 +49,10 @@ final class APIClient {
 
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
         try await request(path, method: "PUT", body: body)
+    }
+
+    func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
+        try await request(path, method: "PATCH", body: body)
     }
 
     func delete<T: Decodable>(_ path: String) async throws -> T {
@@ -62,9 +86,8 @@ final class APIClient {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        // Encode request body
         if let body {
-            urlRequest.httpBody = try JSONEncoder().encode(body)
+            urlRequest.httpBody = try encoder.encode(body)
         }
 
         let (data, response) = try await session.data(for: urlRequest)
@@ -74,13 +97,13 @@ final class APIClient {
         }
 
         guard (200...299).contains(httpResponse.statusCode) else {
-            if let apiError = try? JSONDecoder().decode(APIError.self, from: data) {
+            if let apiError = try? decoder.decode(APIError.self, from: data) {
                 throw apiError
             }
             throw APIError.unknown
         }
 
-        return try JSONDecoder().decode(T.self, from: data)
+        return try decoder.decode(T.self, from: data)
     }
 }
 

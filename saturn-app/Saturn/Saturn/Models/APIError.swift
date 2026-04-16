@@ -40,6 +40,9 @@ extension APIError {
         static let invalidData = "INVALID_DATA"
         static let httpError = "HTTP_ERROR"
         static let forbidden = "FORBIDDEN"
+        static let incompleteOnboarding = "INCOMPLETE_ONBOARDING"
+        static let alpacaError = "ALPACA_ERROR"
+        static let alpacaUnavailable = "ALPACA_UNAVAILABLE"
         static let unknown = "UNKNOWN"
     }
 }
