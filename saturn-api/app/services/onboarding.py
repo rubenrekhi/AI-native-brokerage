@@ -17,6 +17,7 @@ from app.schemas.onboarding import (
     OnboardingStatusResponse,
     ProfileData,
 )
+from app.exceptions import ConflictError, IncompleteOnboardingError, NotFoundError
 from app.services.alpaca_broker import AlpacaBrokerService
 
 logger = structlog.get_logger(__name__)
@@ -28,69 +29,70 @@ logger = structlog.get_logger(__name__)
 
 INCOME_RANGES: dict[str, tuple[str, str]] = {
     "Under $25K": ("0", "25000"),
-    "$25K-$50K": ("25000", "50000"),
-    "$50K-$100K": ("50000", "100000"),
-    "$100K-$200K": ("100000", "200000"),
-    "$200K-$500K": ("200000", "500000"),
+    "$25K \u2013 $50K": ("25000", "50000"),
+    "$50K \u2013 $100K": ("50000", "100000"),
+    "$100K \u2013 $200K": ("100000", "200000"),
+    "$200K \u2013 $500K": ("200000", "500000"),
     "$500K+": ("500000", "1000000"),
 }
 
 NET_WORTH_RANGES: dict[str, tuple[str, str]] = {
     "Under $10K": ("0", "10000"),
-    "$10K-$50K": ("10000", "50000"),
-    "$50K-$100K": ("50000", "100000"),
-    "$100K-$250K": ("100000", "250000"),
-    "$250K-$500K": ("250000", "500000"),
-    "$500K-$1M": ("500000", "1000000"),
+    "$10K \u2013 $50K": ("10000", "50000"),
+    "$50K \u2013 $100K": ("50000", "100000"),
+    "$100K \u2013 $250K": ("100000", "250000"),
+    "$250K \u2013 $500K": ("250000", "500000"),
+    "$500K \u2013 $1M": ("500000", "1000000"),
     "$1M+": ("1000000", "5000000"),
 }
 
 LIQUID_NET_WORTH_RANGES: dict[str, tuple[str, str]] = {
     "Under $10K": ("0", "10000"),
-    "$10K-$25K": ("10000", "25000"),
-    "$25K-$50K": ("25000", "50000"),
-    "$50K-$100K": ("50000", "100000"),
-    "$100K-$250K": ("100000", "250000"),
+    "$10K \u2013 $25K": ("10000", "25000"),
+    "$25K \u2013 $50K": ("25000", "50000"),
+    "$50K \u2013 $100K": ("50000", "100000"),
+    "$100K \u2013 $250K": ("100000", "250000"),
     "$250K+": ("250000", "1000000"),
 }
 
 TIME_HORIZON_MAP: dict[str, tuple[str, str]] = {
-    "Less than 2 years": ("SHORT", "very_important"),
-    "2-5 years": ("MODERATE", "somewhat_important"),
-    "5-10 years": ("LONG", "not_important"),
-    "10-20 years": ("LONG", "not_important"),
-    "20+ years": ("LONG", "not_important"),
+    "Less than 2 years": ("1_to_2_years", "very_important"),
+    "2 \u2013 5 years": ("3_to_5_years", "somewhat_important"),
+    "5 \u2013 10 years": ("6_to_10_years", "does_not_matter"),
+    "10 \u2013 20 years": ("more_than_10_years", "does_not_matter"),
+    "20+ years": ("more_than_10_years", "does_not_matter"),
 }
 
 GOAL_TO_OBJECTIVE: dict[str, str] = {
     "grow_wealth": "growth",
     "save_for_goal": "growth",
     "retirement": "growth",
-    "safety_net": "capital_preservation",
-    "learn_to_invest": "other",
-    "make_cash_work": "capital_preservation",
+    "safety_net": "preserve_wealth",
+    "learn_to_invest": "growth",
+    "make_cash_work": "preserve_wealth",
 }
 
 EXPERIENCE_MAP: dict[str, str] = {
     "never_invested": "none",
-    "invested_little": "limited",
-    "invest_regularly": "good",
-    "actively_manage": "extensive",
-    "advanced_strategies": "extensive",
+    "invested_little": "1_to_5_years",
+    "invest_regularly": "1_to_5_years",
+    "actively_manage": "over_5_years",
+    "advanced_strategies": "over_5_years",
 }
 
 EMPLOYMENT_STATUS_MAP: dict[str, str] = {
-    "employed": "EMPLOYED",
-    "self_employed": "SELF_EMPLOYED",
-    "unemployed": "UNEMPLOYED",
-    "student": "STUDENT",
-    "retired": "RETIRED",
+    "employed": "employed",
+    "self_employed": "employed",
+    "unemployed": "unemployed",
+    "student": "student",
+    "retired": "retired",
 }
 
 # Fields that belong to user_profiles vs user_financial_profiles
 _PROFILE_FIELDS = {
     "preferred_name",
     "date_of_birth",
+    "phone_number",
     "attribution_source",
     "risk_disclosure_acknowledged_at",
     "first_name",
@@ -149,7 +151,7 @@ def derive_risk_tolerance(scenario: str, max_loss: str) -> str:
     if scenario in ("hold", "not_sure"):
         return "conservative" if low_loss else "moderate"
     if scenario == "buy_more":
-        return "aggressive" if high_loss else "moderate"
+        return "significant_risk" if high_loss else "moderate"
     return "moderate"
 
 
@@ -172,7 +174,7 @@ def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]
 
 def map_time_horizon(time_horizon: str) -> tuple[str, str]:
     """Returns (investment_time_horizon, liquidity_needs)."""
-    return TIME_HORIZON_MAP.get(time_horizon, ("MODERATE", "somewhat_important"))
+    return TIME_HORIZON_MAP.get(time_horizon, ("3_to_5_years", "does_not_matter"))
 
 
 def map_experience(experience_level: str) -> str:
@@ -181,7 +183,7 @@ def map_experience(experience_level: str) -> str:
 
 def map_employment_status(employment_info: dict[str, Any]) -> str:
     raw_status = employment_info.get("employment_status", "").lower()
-    return EMPLOYMENT_STATUS_MAP.get(raw_status, "EMPLOYED")
+    return EMPLOYMENT_STATUS_MAP.get(raw_status, "employed")
 
 
 def build_agreements(agreements_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -267,20 +269,14 @@ class OnboardingService:
         """Build Alpaca payload from saved data + SSN, submit, create brokerage row."""
         existing = await BrokerageAccountRepository.get_by_user_id(db, user_id)
         if existing is not None:
-            from app.exceptions import ConflictError
-
             raise ConflictError("Brokerage account already exists for this user")
 
         profile = await UserProfileRepository.get_by_id(db, user_id)
         if profile is None:
-            from app.exceptions import NotFoundError
-
             raise NotFoundError("User profile not found")
 
         financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
         if financial is None:
-            from app.exceptions import IncompleteOnboardingError
-
             raise IncompleteOnboardingError(
                 "Financial profile not found — complete onboarding first"
             )
@@ -376,8 +372,6 @@ def validate_completeness(
         missing.append("employment_info")
 
     if missing:
-        from app.exceptions import IncompleteOnboardingError
-
         raise IncompleteOnboardingError(
             f"Missing required fields for KYC submission: {', '.join(missing)}",
             missing_fields=missing,

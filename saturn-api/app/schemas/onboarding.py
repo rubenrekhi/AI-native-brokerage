@@ -53,6 +53,7 @@ class OnboardingPatchRequest(BaseModel):
     # Phase 1 — user_profiles fields
     preferred_name: str | None = None
     date_of_birth: date | None = None
+    phone_number: str | None = None
     attribution_source: str | None = None
     risk_disclosure_acknowledged_at: datetime | None = None
 
