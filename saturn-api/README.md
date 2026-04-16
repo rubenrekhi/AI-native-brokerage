@@ -123,7 +123,7 @@ Both `pyproject.toml` and `uv.lock` are committed to git. The `.venv/` directory
 
 Pushing to `main` auto-deploys to **staging** on Railway. Production deployments are triggered manually. See [docs/architecture.md](docs/architecture.md) for the full deployment architecture.
 
-The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log`).
+The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips='*'`).
 
 ## Environment Variables
 
@@ -140,6 +140,7 @@ The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade 
 | `PLAID_CLIENT_ID` | Plaid client ID (sandbox) | From Plaid dashboard |
 | `PLAID_SECRET` | Plaid secret key (sandbox) | From Plaid dashboard |
 | `PLAID_ENV` | Plaid environment | `sandbox` |
+| `SENTRY_DSN` | Sentry DSN for error tracking. Optional — Sentry is disabled when empty. | _(empty — disabled)_ |
 
 ## API Key
 

@@ -70,11 +70,12 @@ Incremental save — called after every screen with user input. Accepts all prof
 **Request body** (all fields optional):
 ```python
 class OnboardingPatchRequest(BaseModel):
-    step: str                                    # current screen identifier
+    step: OnboardingStep                         # validated enum (see schemas/onboarding.py)
 
     # Phase 1 — user_profiles fields
     preferred_name: str | None = None
     date_of_birth: date | None = None
+    phone_number: str | None = None
     attribution_source: str | None = None
     risk_disclosure_acknowledged_at: datetime | None = None
 
@@ -200,13 +201,13 @@ When `POST /v1/onboarding/submit` is called, the service builds the Alpaca `POST
     "total_net_worth_max": "100000",
     "liquid_net_worth_min": "25000",
     "liquid_net_worth_max": "50000",
-    "investment_time_horizon": "SHORT",
-    "liquidity_needs": "not_important",
-    "investment_experience_with_stocks": "good",
+    "investment_time_horizon": "6_to_10_years",
+    "liquidity_needs": "does_not_matter",
+    "investment_experience_with_stocks": "1_to_5_years",
     "investment_experience_with_options": "none",
     "risk_tolerance": "moderate",
     "investment_objective": "growth",
-    "employment_status": "EMPLOYED"
+    "employment_status": "employed"
   },
   "disclosures": {
     "is_control_person": false,
@@ -281,11 +282,11 @@ From screen 13. Two Alpaca fields derived from one user selection.
 
 ```python
 TIME_HORIZON_MAP = {
-    "Less than 2 years": ("SHORT", "very_important"),
-    "2-5 years":         ("MODERATE", "somewhat_important"),
-    "5-10 years":        ("LONG", "not_important"),
-    "10-20 years":       ("LONG", "not_important"),
-    "20+ years":         ("LONG", "not_important"),
+    "Less than 2 years": ("1_to_2_years", "very_important"),
+    "2 – 5 years":       ("3_to_5_years", "somewhat_important"),
+    "5 – 10 years":      ("6_to_10_years", "does_not_matter"),
+    "10 – 20 years":     ("more_than_10_years", "does_not_matter"),
+    "20+ years":         ("more_than_10_years", "does_not_matter"),
 }
 
 def map_time_horizon(time_horizon: str) -> tuple[str, str]:
@@ -325,7 +326,7 @@ def derive_risk_tolerance(scenario: str, max_loss: str) -> str:
     | hold / not_sure            | 0-5% or 5-15%  | conservative     |
     | hold / not_sure            | 15-25% or above | moderate        |
     | buy_more                   | 0-5% to 15-25% | moderate         |
-    | buy_more                   | 25-40% or 40%+ | aggressive       |
+    | buy_more                   | 25-40% or 40%+ | significant_risk |
     """
     low_loss = max_loss in ("0-5%", "5-15%")
     high_loss = max_loss in ("25-40%", "40%+")
@@ -335,7 +336,7 @@ def derive_risk_tolerance(scenario: str, max_loss: str) -> str:
     elif scenario in ("hold", "not_sure"):
         return "conservative" if low_loss else "moderate"
     elif scenario == "buy_more":
-        return "aggressive" if high_loss else "moderate"
+        return "significant_risk" if high_loss else "moderate"
 
     return "moderate"  # fallback
 ```
@@ -358,17 +359,16 @@ def derive_investment_objective(goals: list[str]) -> str:
     From onboarding doc screen 6 → Alpaca investment_objective.
     Based on the FIRST selected goal (priority order).
 
-    Options 1, 2, 3 → "growth"
-    Options 4, 6     → "capital_preservation"
-    Option 5         → "other"
+    Options 1, 2, 3, 5 → "growth"
+    Options 4, 6       → "preserve_wealth"
     """
     GOAL_MAP = {
         "grow_wealth": "growth",
         "save_for_goal": "growth",
         "retirement": "growth",
-        "safety_net": "capital_preservation",
-        "learn_to_invest": "other",
-        "make_cash_work": "capital_preservation",
+        "safety_net": "preserve_wealth",
+        "learn_to_invest": "growth",
+        "make_cash_work": "preserve_wealth",
     }
     for goal in goals:
         if goal in GOAL_MAP:
@@ -390,10 +390,10 @@ From screen 16.
 ```python
 EXPERIENCE_MAP = {
     "never_invested": "none",
-    "invested_little": "limited",
-    "invest_regularly": "good",
-    "actively_manage": "extensive",
-    "advanced_strategies": "extensive",
+    "invested_little": "1_to_5_years",
+    "invest_regularly": "1_to_5_years",
+    "actively_manage": "over_5_years",
+    "advanced_strategies": "over_5_years",
 }
 ```
 
@@ -405,11 +405,11 @@ From screen 24. The `employment_info` JSONB stores the raw data. For Alpaca, we 
 
 ```python
 EMPLOYMENT_STATUS_MAP = {
-    "employed": "EMPLOYED",
-    "self_employed": "SELF_EMPLOYED",
-    "unemployed": "UNEMPLOYED",
-    "student": "STUDENT",
-    "retired": "RETIRED",
+    "employed": "employed",
+    "self_employed": "employed",
+    "unemployed": "unemployed",
+    "student": "student",
+    "retired": "retired",
 }
 ```
 
@@ -526,13 +526,14 @@ Pydantic models:
 
 ### `app/services/alpaca_broker.py`
 Alpaca Broker API client using `httpx`:
-- HTTP Basic auth (`ALPACA_API_KEY:ALPACA_SECRET_KEY`, base64-encoded)
+- OAuth2 Client Credentials auth via `authx.sandbox.alpaca.markets` (exchanges client ID + secret for Bearer token, cached ~15 min)
 - Sandbox: `https://broker-api.sandbox.alpaca.markets` (dev/staging)
 - Prod: `https://broker-api.alpaca.markets`
+- Persistent `httpx.AsyncClient` — created once in `lifecycle.py`, stored on `app.state.alpaca`
 - `create_account(payload: dict) → dict` — POST /v1/accounts
 - `get_account(account_id: str) → dict` — GET /v1/accounts/{id}
 - `update_account(account_id: str, payload: dict) → dict` — PATCH /v1/accounts/{id}
-- Error handling: maps Alpaca HTTP errors to our exception types
+- Defines `AlpacaBrokerError` (API errors) and `AlpacaBrokerUnavailableError` (network errors) — both caught by global exception handlers
 
 ### `app/services/onboarding.py`
 Orchestration service + all derivation logic. Calls repositories, never touches `db.execute()` directly.
@@ -546,15 +547,10 @@ Orchestration service + all derivation logic. Calls repositories, never touches 
 ### `app/routes/onboarding.py`
 FastAPI router with 3 endpoints. Depends on `get_current_user` + `get_db`. Calls service layer only — no direct DB access.
 
-### `app/tasks/kyc_status.py`
-ARQ cron task (every 2 min) that polls pending accounts:
-- Uses `BrokerageAccountRepository.get_pending()` to find accounts to check
-- For each: GET account from Alpaca via `AlpacaBrokerService`
-- Updates via `BrokerageAccountRepository.update_status()` and `UserProfileRepository.update_fields()`
-- On ACTIVE: set `onboarding_completed = true`, PATCH account with APR tier for FDIC enrollment
-
 ### `tests/fixtures/mock_responses/alpaca_account.json`
 Sample Alpaca `POST /v1/accounts` response.
+
+> **Note:** KYC status polling / SSE listener is out of scope for this branch. `onboarding_completed` remains `false` after submission — it will flip to `true` when the SSE listener is built and Alpaca approves the account.
 
 ---
 
@@ -564,8 +560,8 @@ Sample Alpaca `POST /v1/accounts` response.
 |---|---|
 | `app/models/user_profile.py` | Add 13 new columns (see Model Changes above) + new imports (ARRAY, JSONB, DateTime) |
 | `app/main.py` | `from app.routes.onboarding import router as onboarding_router` + `app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])` |
-| `app/worker.py` | Import + register `poll_kyc_status` in `functions` list and `cron_jobs` list |
-| `app/config.py` | Add `alpaca_base_url` property: returns sandbox URL for dev/staging, prod URL for prod |
+| `app/config.py` | Add `alpaca_base_url` and `alpaca_auth_url` properties (sandbox vs prod) |
+| `app/lifecycle.py` | Init `AlpacaBrokerService` on `app.state.alpaca` during startup |
 
 ### Migration
 `make migration msg="add onboarding fields to user_profiles"` — adds 13 new nullable columns. No data migration needed.

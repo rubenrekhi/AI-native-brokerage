@@ -68,11 +68,25 @@ Core user identity. `id` mirrors `auth.users.id` directly. One row per user.
 |---|---|---|
 | `id` **[PK]** | UUID | `= auth.users.id` |
 | `email` | TEXT | User's email address |
-| `first_name` | TEXT | First name |
-| `last_name` | TEXT | Last name |
-| `date_of_birth` | DATE | Date of birth |
+| `preferred_name` | TEXT | Display name chosen during onboarding (screen 2) |
+| `first_name` | TEXT | Legal first name (screen 20) |
+| `last_name` | TEXT | Legal last name (screen 20) |
+| `middle_name` | TEXT | Legal middle name (screen 20) |
+| `date_of_birth` | DATE | Date of birth (screen 8) |
+| `phone_number` | TEXT | Phone number from registration |
+| `street_address` | TEXT[] | Address lines, e.g. `["123 Main St", "Apt 4B"]` (screen 22) |
+| `city` | TEXT | City (screen 22) |
+| `state` | TEXT | 2-letter state code (screen 22) |
+| `postal_code` | TEXT | ZIP code (screen 22) |
+| `country_of_citizenship` | TEXT | e.g. `USA` (screen 23) |
+| `country_of_birth` | TEXT | e.g. `USA` (screen 23) |
+| `country_of_tax_residence` | TEXT | e.g. `USA` (screen 23) |
+| `disclosures` | JSONB | FINRA disclosure answers: `{is_control_person, is_affiliated_exchange_or_finra, is_politically_exposed, immediate_family_exposed}` (screen 26) |
+| `agreements_signed` | JSONB | Agreement records: `{customer_agreement, margin_agreement, signed_at, ip_address}` (screen 27) |
+| `risk_disclosure_acknowledged_at` | TIMESTAMPTZ | When user acknowledged the risk disclosure (screen 18). Compliance record. |
+| `attribution_source` | TEXT | How user found Sevino (screen 3). Internal analytics. |
 | `onboarding_completed` | BOOL | Whether the user has finished onboarding |
-| `onboarding_step` | TEXT | Current step in the onboarding flow |
+| `onboarding_step` | TEXT | Current step in the onboarding flow (validated against `OnboardingStep` enum) |
 | `last_active_at` | TIMESTAMPTZ | Last activity timestamp |
 | `created_at` | TIMESTAMPTZ | Row creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Auto-maintained by trigger |
@@ -86,12 +100,19 @@ Financial questionnaire answers collected during onboarding. Injected into AI co
 | `id` **[PK]** | UUID | Primary key |
 | `user_id` **[FK]** | UUID | FK → `user_profiles(id)` |
 | `date_of_birth` | DATE | Denormalized for AI context |
-| `annual_income` | TEXT | Enum bucket |
-| `net_worth` | TEXT | Enum bucket |
-| `risk_tolerance` | TEXT | `sell` / `hold` / `buy_more` |
-| `investment_goals` | TEXT[] | Multi-select array |
-| `time_horizon` | TEXT | `1_3y` / `3_7y` / `7_plus` |
-| `experience_level` | TEXT | `beginner` / `intermediate` / `advanced` |
+| `annual_income` | TEXT | Range string, e.g. `$50K – $100K` |
+| `net_worth` | TEXT | Range string, e.g. `$100K – $250K` |
+| `liquid_net_worth` | TEXT | Range string, e.g. `$25K – $50K` |
+| `risk_tolerance` | TEXT | Derived value for AI context |
+| `investment_goals` | TEXT[] | Multi-select array, e.g. `["grow_wealth", "retirement"]` |
+| `time_horizon` | TEXT | e.g. `5 – 10 years` |
+| `experience_level` | TEXT | Raw selection from screen 16 |
+| `financial_worries` | TEXT[] | Multi-select array from screen 4 |
+| `income_stability` | TEXT | Selection from screen 12 |
+| `risk_scenario_response` | TEXT | What user would do if portfolio dropped 25% (screen 14) |
+| `max_loss_tolerance` | TEXT | Max decline user can handle (screen 15) |
+| `employment_info` | JSONB | `{employment_status, employer_name, job_title}` (screen 24) |
+| `funding_sources` | TEXT[] | e.g. `["employment_income", "savings"]` (screen 25) |
 | `created_at` | TIMESTAMPTZ | Row creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Auto-maintained by trigger |
 
@@ -123,10 +144,11 @@ Alpaca brokerage account linked to a user. One per user at MVP (1:1 with `user_p
 | `id` **[PK]** | UUID | Primary key |
 | `user_id` **[FK]** | UUID | FK → `user_profiles(id)` |
 | `alpaca_account_id` | TEXT | Alpaca's account UUID. UNIQUE. |
-| `account_status` | TEXT | `SUBMITTED` → `ACTIVE` |
+| `account_status` | TEXT | `SUBMITTED` → `APPROVAL_PENDING` → `APPROVED` → `ACTIVE` (or `ACTION_REQUIRED` / `REJECTED`) |
 | `account_number` | TEXT | Alpaca account number |
 | `kyc_submitted_at` | TIMESTAMPTZ | When KYC was submitted |
 | `activated_at` | TIMESTAMPTZ | When account became active |
+| `kyc_results` | JSONB | Alpaca KYC response/status data |
 | `created_at` | TIMESTAMPTZ | Row creation timestamp |
 | `updated_at` | TIMESTAMPTZ | Auto-maintained by trigger |
 

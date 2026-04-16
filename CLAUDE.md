@@ -53,11 +53,15 @@ iOS App → FastAPI (Railway) → Supabase Postgres (async SQLAlchemy + Alembic)
 - `rate_limit.py` — slowapi `Limiter` with Redis backend; two tiers: `120/minute` per user (default), `10/minute` per IP (for auth endpoints via decorator)
 - `config.py` — Pydantic Settings loading env vars; normalizes `environment` to `dev`/`staging`/`prod`
 - `database.py` — Async SQLAlchemy engine + session factory; `get_db` dependency
-- `lifecycle.py` — FastAPI lifespan (startup/shutdown, ARQ pool init)
-- `exceptions.py` — Custom exceptions (`AuthenticationError`, `AuthorizationError`, `NotFoundError`) + global handlers including SQLAlchemy error mapping. Use `raise NotFoundError(...)` etc. instead of `HTTPException`
+- `lifecycle.py` — FastAPI lifespan (startup/shutdown, ARQ pool init, `AlpacaBrokerService` init on `app.state.alpaca`)
+- `exceptions.py` — Custom exceptions (`AuthenticationError`, `AuthorizationError`, `NotFoundError`, `ConflictError`, `IncompleteOnboardingError`, `AlpacaBrokerError`, `AlpacaBrokerUnavailableError`) + global handlers including SQLAlchemy error mapping. Use `raise NotFoundError(...)` etc. instead of `HTTPException`
 - `models/` — SQLAlchemy models (DeclarativeBase in `base.py`)
 - `routes/` — API route modules (included via `app.include_router`)
 - `services/` — Business logic and external API wrappers
+- `services/alpaca_broker.py` — `AlpacaBrokerService` using OAuth2 client credentials flow (via `authx.sandbox.alpaca.markets`); also defines `AlpacaBrokerError` and `AlpacaBrokerUnavailableError`
+- `services/onboarding.py` — `OnboardingService` orchestrates per-step saves and KYC submission to Alpaca
+- `repositories/` — Data access layer (`UserProfileRepository`, `FinancialProfileRepository`, `BrokerageAccountRepository`)
+- `schemas/onboarding.py` — Pydantic request/response models for onboarding endpoints
 - `tasks/` — ARQ background job definitions
 - `worker.py` — ARQ worker settings and cron job registration
 

@@ -90,8 +90,17 @@ saturn-api/
 │   │   └── logging.py      # Request/response access logging
 │   ├── models/             # SQLAlchemy ORM models
 │   │   └── base.py         # DeclarativeBase
+│   ├── repositories/       # data access layer (one class per model)
+│   │   ├── user_profile.py
+│   │   ├── financial_profile.py
+│   │   └── brokerage_account.py
+│   ├── schemas/            # Pydantic request/response models
+│   │   └── onboarding.py
 │   ├── routes/             # API endpoint handlers
+│   │   └── onboarding.py   # PATCH /v1/onboarding, POST /v1/onboarding/submit, GET /v1/onboarding/status
 │   ├── services/           # business logic, external API wrappers
+│   │   ├── alpaca_broker.py  # AlpacaBrokerService (OAuth2 client credentials)
+│   │   └── onboarding.py     # OnboardingService (step saves + KYC submission)
 │   ├── worker.py           # ARQ worker settings and config
 │   └── tasks/              # background task definitions
 │       └── health_ping.py  # placeholder cron task
@@ -140,9 +149,10 @@ Locally, the Supabase CLI (`supabase start`) also exposes a JWKS endpoint at `ht
 ### User data split
 
 - `auth.users` (managed by Supabase Auth) — credentials, email, auth metadata. We don't write to this directly.
-- `profiles` table (our SQLAlchemy model) — app-specific data: Alpaca account ID, onboarding status, risk preferences, etc. Foreign-keyed to `auth.users.id`.
+- `user_profiles` table (our SQLAlchemy model) — app-specific data: name, address, citizenship, disclosures, onboarding status, etc. Foreign-keyed to `auth.users.id`.
+- `brokerage_accounts` table — Alpaca account ID, account status, KYC results. Created on KYC submission.
 
-When a user signs up, a row in `profiles` is created with the same UUID, mapping the Supabase user to their Alpaca brokerage account.
+When a user signs up, a row in `user_profiles` is created with the same UUID, mapping the Supabase user to their onboarding and brokerage records.
 
 ### API security layers
 
@@ -159,7 +169,21 @@ When a user signs up, a row in `profiles` is created with the same UUID, mapping
 
 ### Structured error responses
 
-All errors return a consistent JSON shape: `{"error": "message", "code": "ERROR_CODE", "detail": {...}}`. Custom exceptions (`AuthenticationError`, `AuthorizationError`, `NotFoundError`) are raised in route/service code and mapped to HTTP status codes by global handlers registered in `app/exceptions.py`. SQLAlchemy errors (integrity, data, programming) are caught and mapped automatically.
+All errors return a consistent JSON shape: `{"error": "message", "code": "ERROR_CODE", "detail": {...}}`. Custom exceptions are raised in route/service code and mapped to HTTP status codes by global handlers registered in `app/exceptions.py`. SQLAlchemy errors (integrity, data, programming) are caught and mapped automatically.
+
+Custom exception classes and their HTTP status codes:
+
+| Exception | Code | HTTP |
+|-----------|------|------|
+| `AuthenticationError` | `AUTHENTICATION_ERROR` | 401 |
+| `AuthorizationError` | `AUTHORIZATION_ERROR` | 403 |
+| `NotFoundError` | `NOT_FOUND` | 404 |
+| `ConflictError` | `CONFLICT` | 409 |
+| `IncompleteOnboardingError` | `INCOMPLETE_ONBOARDING` | 422 |
+| `AlpacaBrokerError` | `ALPACA_ERROR` | 422 |
+| `AlpacaBrokerUnavailableError` | `ALPACA_UNAVAILABLE` | 503 |
+
+`AlpacaBrokerError` and `AlpacaBrokerUnavailableError` are defined in `app/services/alpaca_broker.py` and registered alongside the rest in `register_exception_handlers`.
 
 ### Request logging & correlation IDs
 
@@ -236,9 +260,9 @@ Alembic migrations form a chain — each migration points to its parent. When tw
 
 ### What lives in the database vs. what doesn't
 
-**In our database:** user profiles, Alpaca account ID mapping, AI conversation history, analysis results, user preferences, watchlists, notification settings.
+**In our database:** user profiles (name, address, citizenship, disclosures, onboarding step), financial profile (income, net worth, risk answers, employment), brokerage account record (Alpaca account ID, status, KYC results), AI conversation history, analysis results, user preferences, watchlists, notification settings.
 
-**NOT in our database:** portfolio positions, account balances, order history, transaction records, SSNs, government IDs, bank account numbers. All financial data is queried from Alpaca in real time. Sensitive KYC data is passed through to Alpaca and never persisted.
+**NOT in our database:** SSNs, government IDs, bank account numbers, portfolio positions, account balances, order history, transaction records. All live financial data is queried from Alpaca in real time. SSNs are forwarded directly to Alpaca during KYC submission and never stored.
 
 ### Row Level Security
 
@@ -248,16 +272,24 @@ RLS is NOT used. Since the Saturn API is the only client connecting to Postgres 
 
 Alpaca is the broker-dealer. It handles brokerage accounts, KYC verification, trade execution, custody of funds, and regulatory compliance. The user never interacts with Alpaca directly.
 
+### Authentication with Alpaca
+
+`AlpacaBrokerService` (in `app/services/alpaca_broker.py`) authenticates using the OAuth2 client credentials flow. On the first request (and when the cached token expires), it posts to `{ALPACA_AUTH_URL}/v1/oauth2/token` with `grant_type=client_credentials` using `ALPACA_API_KEY` and `ALPACA_SECRET_KEY`. The returned bearer token is cached in memory and attached as `Authorization: Bearer <token>` on all subsequent Alpaca requests. Token rotation is handled automatically — the service refreshes 60 seconds before expiry.
+
+In sandbox: `ALPACA_AUTH_URL` = `https://authx.sandbox.alpaca.markets`  
+In production: `ALPACA_AUTH_URL` = `https://authx.alpaca.markets`
+
+These URLs come from computed properties on `Settings` (`config.py`) — they are not env vars.
+
 ### Account creation & KYC
 
-1. The Saturn app collects personal info through an onboarding form (name, DOB, SSN, address, employment, investment experience, disclosures).
-2. The API sends this to Alpaca's `POST /v1/accounts` via `BrokerClient`.
+1. The Saturn app collects personal info through an onboarding flow. Each screen calls `PATCH /v1/onboarding` to incrementally save data (name, DOB, address, employment, investment experience, disclosures). The SSN is collected last and is never saved.
+2. On final submission, the app calls `POST /v1/onboarding/submit` with the SSN. `OnboardingService.submit_kyc` validates completeness, builds the Alpaca payload, and calls `POST /v1/accounts` via `AlpacaBrokerService`.
 3. Account status: `SUBMITTED` → Alpaca runs async KYC → `APPROVED` → `ACTIVE` (or `ACTION_REQUIRED` / `REJECTED`).
-4. Status updates received via Alpaca's Events API (SSE).
-5. The returned Alpaca account ID is stored in our `profiles` table.
-6. Once `ACTIVE`, the user can deposit funds and trade.
+4. The returned Alpaca account ID and initial status are stored in the `brokerage_accounts` table.
+5. Once `ACTIVE`, the user can deposit funds and trade.
 
-We do NOT store SSNs or any sensitive KYC data. The API is a passthrough — collect from frontend, send to Alpaca, discard.
+We do NOT store SSNs or any sensitive KYC data. The SSN is forwarded directly to Alpaca in the `POST /v1/onboarding/submit` request and discarded.
 
 ### Trading
 
@@ -331,7 +363,7 @@ Railway uses Nixpacks for zero-config builds. It detects `pyproject.toml`, runs 
 
 ```
 # Procfile
-web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log
+web: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips='*'
 worker: arq app.worker.WorkerSettings
 ```
 
