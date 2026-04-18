@@ -90,8 +90,8 @@ struct AlpacaSetupCompleteView: View {
         showLoading = false
 
         if submitFailed {
-            typedHeading = "Something went wrong"
-            typedBody = "We couldn't set up your account right now. Please try again later."
+            typedHeading = L10n.Onboarding.alpacaSubmitErrorHeading
+            typedBody = L10n.Onboarding.alpacaSubmitErrorBody
             try? await Task.sleep(for: .milliseconds(300))
             withAnimation(.easeOut(duration: 0.3)) { showButton = true }
             return

@@ -7,7 +7,7 @@ enum OnboardingDataMapper {
 
     /// Current timestamp in ISO 8601 format.
     static func isoTimestamp() -> String {
-        isoFormatter.string(from: Date())
+        isoFormatter.string(from: .now)
     }
 
     /// Convert DOB from "MM-DD-YYYY" (UI format) to "YYYY-MM-DD" (ISO / backend format).
@@ -35,10 +35,19 @@ enum OnboardingDataMapper {
         status.lowercased().replacingOccurrences(of: "-", with: "_")
     }
 
-    /// Normalize a funding source label for the backend.
-    /// "Employment Income" → "employment_income"
+    /// Map a funding source display label to Alpaca's accepted value.
+    /// See: https://docs.alpaca.markets/reference/createaccount
+    private static let fundingSourceMap: [String: String] = [
+        "Employment income": "employment_income",
+        "Savings": "savings",
+        "Existing investments": "investments",
+        "Business income": "business_income",
+        "Family": "family",
+        "Inheritance": "inheritance",
+    ]
+
     static func normalizeFundingSource(_ source: String) -> String {
-        source.lowercased().replacingOccurrences(of: " ", with: "_")
+        fundingSourceMap[source] ?? source.lowercased().replacingOccurrences(of: " ", with: "_")
     }
 
     /// Build the attribution string from referral source + optional extra text.
