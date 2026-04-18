@@ -467,3 +467,63 @@ class TestBuildAlpacaPayload:
         payload = build_alpaca_payload(profile, financial, "123-45-6789", "USA_SSN")
 
         assert payload["contact"]["phone_number"] == ""
+
+
+# ---------------------------------------------------------------------------
+# OnboardingSubmitRequest tax_id validation
+# ---------------------------------------------------------------------------
+
+
+class TestTaxIdValidation:
+
+    def test_valid_ssn_with_dashes(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        req = OnboardingSubmitRequest(tax_id="123-45-6789")
+        assert req.tax_id == "123-45-6789"
+
+    def test_valid_ssn_no_dashes(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        req = OnboardingSubmitRequest(tax_id="123456789")
+        assert req.tax_id == "123456789"
+
+    def test_too_few_digits(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="12345")
+
+    def test_too_many_digits(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="1234567890")
+
+    def test_area_number_000(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="000-45-6789")
+
+    def test_area_number_666(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="666-45-6789")
+
+    def test_area_number_900_plus(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="900-45-6789")
+
+    def test_group_number_00(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="123-00-6789")
+
+    def test_serial_number_0000(self):
+        from app.schemas.onboarding import OnboardingSubmitRequest
+        import pytest
+        with pytest.raises(Exception):
+            OnboardingSubmitRequest(tax_id="123-45-0000")

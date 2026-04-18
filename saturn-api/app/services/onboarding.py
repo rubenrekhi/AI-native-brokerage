@@ -17,6 +17,8 @@ from app.schemas.onboarding import (
     OnboardingStatusResponse,
     ProfileData,
 )
+from sqlalchemy.exc import IntegrityError
+
 from app.exceptions import ConflictError, IncompleteOnboardingError, NotFoundError
 from app.services.alpaca_broker import AlpacaBrokerService
 
@@ -291,14 +293,17 @@ class OnboardingService:
         alpaca_account_id = result["id"]
         account_status = result.get("status", "SUBMITTED")
 
-        await BrokerageAccountRepository.create(
-            db,
-            user_id=user_id,
-            alpaca_account_id=alpaca_account_id,
-            account_status=account_status,
-            account_number=result.get("account_number"),
-            kyc_results=result.get("kyc_results"),
-        )
+        try:
+            await BrokerageAccountRepository.create(
+                db,
+                user_id=user_id,
+                alpaca_account_id=alpaca_account_id,
+                account_status=account_status,
+                account_number=result.get("account_number"),
+                kyc_results=result.get("kyc_results"),
+            )
+        except IntegrityError:
+            raise ConflictError("Brokerage account already exists for this user")
 
         await UserProfileRepository.update_fields(
             db, user_id, onboarding_step="submitted"

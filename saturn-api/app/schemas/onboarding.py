@@ -1,8 +1,9 @@
+import re
 from datetime import date, datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class OnboardingStep(str, Enum):
@@ -95,6 +96,18 @@ class OnboardingSubmitRequest(BaseModel):
 
     tax_id: str
     tax_id_type: str = "USA_SSN"
+
+    @field_validator("tax_id")
+    @classmethod
+    def validate_tax_id(cls, v: str) -> str:
+        digits = re.sub(r"[^0-9]", "", v)
+        if len(digits) != 9:
+            raise ValueError("tax_id must contain exactly 9 digits")
+        if digits[:3] in ("000", "666") or digits[:3] >= "900":
+            raise ValueError("Invalid SSN area number")
+        if digits[3:5] == "00" or digits[5:] == "0000":
+            raise ValueError("Invalid SSN format")
+        return v
 
 
 # ---------------------------------------------------------------------------
