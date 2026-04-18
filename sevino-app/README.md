@@ -1,6 +1,6 @@
-# Saturn App
+# Sevino App
 
-iOS app for Saturn — an AI-native brokerage built by [Sevino](https://sevino.ai). Built with Swift and SwiftUI.
+iOS app for Sevino — an AI-native brokerage built by [Sevino](https://sevino.ai). Built with Swift and SwiftUI.
 
 ## Quick Start
 
@@ -9,11 +9,11 @@ iOS app for Saturn — an AI-native brokerage built by [Sevino](https://sevino.a
 - macOS with Xcode 16+
 - iOS 17+ deployment target
 - Supabase project credentials (URL + anon key)
-- Saturn API running locally or pointed at a dev environment
+- Sevino API running locally or pointed at a dev environment
 
 ### Setup
 
-1. Open `saturn-app/Saturn/Saturn.xcodeproj` in Xcode.
+1. Open `sevino-app/Sevino/Sevino.xcodeproj` in Xcode.
 2. Copy `Config.xcconfig.example` to create per-environment config files (all gitignored):
    - `Config.debug.xcconfig` — local development (Cmd+R)
    - `Config.staging.xcconfig` — TestFlight / staging builds
@@ -29,17 +29,17 @@ iOS app for Saturn — an AI-native brokerage built by [Sevino](https://sevino.a
    Note: Use `$()` in URLs to prevent `//` being parsed as an xcconfig comment.
 3. Build and run on the iOS Simulator (Cmd+R).
 
-For the full experience locally, you need the Saturn API running — see [saturn-api/README.md](../saturn-api/README.md).
+For the full experience locally, you need the Sevino API running — see [sevino-api/README.md](../sevino-api/README.md).
 
 ## Project Structure
 
 ```
-saturn-app/
-├── Saturn.xcodeproj
+sevino-app/
+├── Sevino.xcodeproj
 ├── Config.xcconfig.example       # Template for per-environment configs
-├── Saturn/
+├── Sevino/
 │   ├── App/
-│   │   └── SaturnApp.swift       # @main entry point
+│   │   └── SevinoApp.swift       # @main entry point
 │   ├── Views/                    # SwiftUI views (screens + components)
 │   │   ├── ContentView.swift     # Root view / navigation shell
 │   │   ├── Auth/                 # Login, sign-up, phone number screens
@@ -70,7 +70,7 @@ saturn-app/
 │       ├── AppConfig.swift           # Reads xcconfig values from Info.plist at runtime
 │       ├── AnyCodable.swift          # Type-erased Codable wrapper (for APIError.detail)
 │       └── OnboardingDataMapper.swift  # Pure functions: date formatting, name splitting, value normalization
-├── SaturnTests/
+├── SevinoTests/
 │   ├── Auth/
 │   │   ├── AuthViewModelTests.swift
 │   │   ├── AuthServiceIntegrationTests.swift
@@ -84,7 +84,7 @@ saturn-app/
 │   └── Mocks/
 │       ├── MockAuthService.swift
 │       └── MockAPIClient.swift   # Implements APIClientProtocol for test injection
-└── SaturnUITests/                # UI tests (critical flows only)
+└── SevinoUITests/                # UI tests (critical flows only)
 ```
 
 ## How It Connects to the Backend
@@ -113,18 +113,18 @@ Auth is handled by Supabase via the `supabase-swift` SDK:
 ### Plaid Link
 
 Bank account linking uses Plaid's native iOS SDK (LinkKit). The flow:
-1. App requests a `link_token` from the Saturn API.
+1. App requests a `link_token` from the Sevino API.
 2. App opens Plaid Link with the token — user selects their bank and authenticates.
 3. Plaid Link returns a `public_token` on success.
-4. App sends the `public_token` to the Saturn API, which handles the rest (token exchange → Alpaca ACH link).
+4. App sends the `public_token` to the Sevino API, which handles the rest (token exchange → Alpaca ACH link).
 
 ### Alpaca (indirect)
 
-The app never talks to Alpaca directly. All trading, portfolio, and account operations go through the Saturn API. The API returns data in app-friendly shapes — the app doesn't need to know about Alpaca's data models.
+The app never talks to Alpaca directly. All trading, portfolio, and account operations go through the Sevino API. The API returns data in app-friendly shapes — the app doesn't need to know about Alpaca's data models.
 
 ## Testing
 
-### Unit Tests (SaturnTests/)
+### Unit Tests (SevinoTests/)
 
 Tests for view models, services, data models, and business logic. Uses XCTest (built into Xcode).
 
@@ -132,7 +132,7 @@ Tests for view models, services, data models, and business logic. Uses XCTest (b
 
 Run in Xcode: Cmd+U or Product → Test.
 
-### UI Tests (SaturnUITests/)
+### UI Tests (SevinoUITests/)
 
 XCUITest for automated UI testing of critical flows. Use sparingly — these are slow and brittle. Focus on:
 - Onboarding / KYC flow
@@ -145,7 +145,7 @@ Once the UI design stabilizes, add `swift-snapshot-testing` to catch unintended 
 
 ## CI
 
-Frontend tests run in GitHub Actions on a macOS runner, triggered on changes to `saturn-app/**`.
+Frontend tests run in GitHub Actions on a macOS runner, triggered on changes to `sevino-app/**`.
 
 Workflow:
 1. Checkout repo.

@@ -75,37 +75,40 @@ git mv saturn-app sevino-app
 Largest chunk of work (~49 files).
 
 ### Xcode project + targets
-- [ ] Rename `.xcodeproj`: `Saturn.xcodeproj` → `Sevino.xcodeproj` (Xcode → click project name in navigator → rename, accept all prompts)
-- [ ] Rename primary target: `Saturn` → `Sevino`
-- [ ] Rename test targets: `SaturnTests` → `SevinoTests`, `SaturnUITests` → `SevinoUITests`
-- [ ] Rename scheme: `Saturn` → `Sevino`
-- [ ] Source folder rename on disk: `sevino-app/Sevino-tmp/` → `sevino-app/Sevino/` (and inner `Saturn/` → `Sevino/`); also rename `SaturnTests/` → `SevinoTests/`, `SaturnUITests/` → `SevinoUITests/`
+- [x] Rename `.xcodeproj`: `Saturn.xcodeproj` → `Sevino.xcodeproj` (Xcode in-app rename)
+- [x] Rename primary target: `Saturn` → `Sevino`
+- [x] Rename test targets: `SaturnTests` → `SevinoTests`, `SaturnUITests` → `SevinoUITests`
+- [x] Rename scheme file: `Saturn.xcscheme` → `Sevino.xcscheme`
+- [x] Source folder rename on disk: outer `Sevino-tmp/` → `Sevino/`, inner `Saturn/` → `Sevino/`, `SaturnTests/` → `SevinoTests/`, `SaturnUITests/` → `SevinoUITests/`
 
-### Build settings (project.pbxproj — most handled by Xcode rename)
-- [ ] `PRODUCT_NAME` → `Sevino`
-- [ ] `PRODUCT_MODULE_NAME` → `Sevino`
-- [ ] `PRODUCT_BUNDLE_IDENTIFIER` for main target → `ai.sevino.Sevino`
-- [ ] `PRODUCT_BUNDLE_IDENTIFIER` for SevinoTests → `ai.sevino.SevinoTests`
-- [ ] `PRODUCT_BUNDLE_IDENTIFIER` for SevinoUITests → `ai.sevino.SevinoUITests`
+### Build settings (project.pbxproj)
+- [x] `PRODUCT_NAME` → `Sevino` (via target rename)
+- [x] `PRODUCT_MODULE_NAME` → `Sevino`
+- [x] `PRODUCT_BUNDLE_IDENTIFIER` main target → `ai.sevino.Sevino`
+- [x] `PRODUCT_BUNDLE_IDENTIFIER` SevinoTests → `ai.sevino.SevinoTests`
+- [x] `PRODUCT_BUNDLE_IDENTIFIER` SevinoUITests → `ai.sevino.SevinoUITests`
+- [x] `PBXFileSystemSynchronizedRootGroup` paths updated to match renamed folders
+- [x] `TEST_TARGET_NAME`, `productName`, `remoteInfo` all updated
 
 ### Source code
-- [ ] `@testable import Saturn` → `@testable import Sevino` in `SevinoTests/Mocks/MockAPIClient.swift` (and anywhere else)
-- [ ] Literal UI copy: `Saturn` → `Sevino` in
-  - [ ] `HomeView.swift` (~17 refs)
-  - [ ] `WelcomeView.swift` (~9 refs)
-  - [ ] `Color+Theme.swift` (~11 design token names)
-- [ ] `sevino-app/README.md` (~17 refs)
-- [ ] `sevino-app/Sevino/CLAUDE.md` (9 refs)
+- [x] Swift file renames: `App/SaturnApp.swift` → `SevinoApp.swift`, `Utils/SaturnGlass.swift` → `SevinoGlass.swift`, `SevinoUITests/SaturnUITests.swift` → `SevinoUITests.swift`, `SaturnUITestsLaunchTests.swift` → `SevinoUITestsLaunchTests.swift`
+- [x] Type renames: `struct SaturnApp` → `SevinoApp`, `enum SaturnGlass` → `SevinoGlass`, `struct SaturnGlassContainer` → `SevinoGlassContainer`, UI test classes
+- [x] Color tokens in `Utils/Color+Theme.swift`: 11 `saturn*` tokens → `sevino*`; all ~28 caller files updated
+- [x] `@testable import Saturn` → `@testable import Sevino` across 10 test files
+- [x] UI copy in `HomeView.swift`, `WelcomeView.swift`, and elsewhere (literal swap)
+- [x] `Localizable.xcstrings` string values swapped
+- [x] `APIError.swift` doc comment updated
+- [x] `sevino-app/README.md`
+- [x] `sevino-app/Sevino/CLAUDE.md` (kept intentional lowercase `saturn` monorepo reference — repo root still named `saturn/`)
+- [x] `sevino-app/guide.md`
+- [x] xcconfig header comments
 
 ### Verify
-- [ ] Clean build folder (Cmd+Shift+K)
-- [ ] Full rebuild (Cmd+B)
-- [ ] Run tests (Cmd+U) — all pass
-- [ ] `grep -ri "saturn" sevino-app/` — zero matches expected
-- [ ] App launches in simulator with new name under the icon
+- [x] Clean build folder + full rebuild — succeeds
+- [x] `grep -ri "saturn" sevino-app/` — only expected leftovers remain: xcconfig `API_BASE_URL` domains (deferred to step 7), Xcode userdata files (auto-regenerate), and the intentional `saturn` monorepo path reference
 
 ### Commit + open PR
-- [ ] Commit the rename branch
+- [ ] Commit the iOS rename
 - [ ] Open PR but **do not merge yet** — wait for Railway + DNS prep below
 
 ---

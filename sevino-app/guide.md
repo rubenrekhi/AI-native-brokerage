@@ -42,7 +42,7 @@ You edit `.swift` files directly in Xcode's editor. Every SwiftUI view is a stru
 ```swift
 struct HomeView: View {
     var body: some View {
-        Text("Hello, Saturn")
+        Text("Hello, Sevino")
     }
 }
 
