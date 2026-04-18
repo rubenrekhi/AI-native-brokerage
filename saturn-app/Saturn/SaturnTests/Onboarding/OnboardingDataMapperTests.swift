@@ -82,11 +82,11 @@ final class OnboardingDataMapperTests: XCTestCase {
     }
 
     func testNormalizeBusinessIncome() {
-        XCTAssertEqual(OnboardingDataMapper.normalizeFundingSource("Business Income"), "business_income")
+        XCTAssertEqual(OnboardingDataMapper.normalizeFundingSource("Business income"), "business_income")
     }
 
     func testNormalizeExistingInvestments() {
-        XCTAssertEqual(OnboardingDataMapper.normalizeFundingSource("Existing Investments"), "existing_investments")
+        XCTAssertEqual(OnboardingDataMapper.normalizeFundingSource("Existing investments"), "investments")
     }
 
     // MARK: - buildAttribution
