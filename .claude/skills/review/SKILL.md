@@ -20,8 +20,8 @@ If no arguments (default — review current branch):
 ## Step 2: Classify changes
 
 Categorize every changed file:
-- **Frontend**: any file under `saturn-app/` or with a `.swift` extension
-- **Backend**: any file under `saturn-api/` or with a `.py` extension
+- **Frontend**: any file under `sevino-app/` or with a `.swift` extension
+- **Backend**: any file under `sevino-api/` or with a `.py` extension
 - **Other**: docs, CI, config — skip these (no auditor needed)
 
 ## Step 3: Route to auditor agents

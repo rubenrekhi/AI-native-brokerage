@@ -108,8 +108,8 @@ Largest chunk of work (~49 files).
 - [x] `grep -ri "saturn" sevino-app/` — only expected leftovers remain: xcconfig `API_BASE_URL` domains (deferred to step 7), Xcode userdata files (auto-regenerate), and the intentional `saturn` monorepo path reference
 
 ### Commit + open PR
-- [ ] Commit the iOS rename
-- [ ] Open PR but **do not merge yet** — wait for Railway + DNS prep below
+- [x] Commit the iOS rename (commits `8b9f4bb` + `7bbffd6`)
+- [x] Open PR: https://github.com/sevino-ai/sevino/pull/48 — do not merge yet
 
 ---
 
@@ -118,23 +118,23 @@ Largest chunk of work (~49 files).
 Constraint: non-premium Railway allows 2 custom domains at a time. Must remove old before adding new.
 
 ### Prod
-- [ ] Rename Railway project `saturn` → `sevino`
-- [ ] Rename `web` service if Saturn-named → `api`
-- [ ] Rename `worker` service if Saturn-named → `worker`
-- [ ] Rename Redis service if Saturn-named
-- [ ] Verify service is still connected to the renamed GitHub repo (usually auto-follows)
-- [ ] Update monorepo root path: `saturn-api/` → `sevino-api/` (both web and worker services)
-- [ ] Update watch paths to `sevino-api/**`
+- [x] Rename Railway project `saturn` → `sevino`
+- [x] Rename `web` service if Saturn-named → `api`
+- [x] Rename `worker` service if Saturn-named → `worker`
+- [x] Rename Redis service if Saturn-named
+- [x] Verify service is still connected to the renamed GitHub repo (usually auto-follows)
+- [x] Update monorepo root path: `saturn-api/` → `sevino-api/` (both web and worker services)
+- [x] Update watch paths to `sevino-api/**`
 
 ### Staging
-- [ ] Same renames on staging project
+- [x] Same renames on staging project
 
 ### Env vars (prod + staging, both services)
 - [ ] Update any env var with `saturn-api.sevino.ai` → `api.sevino.ai` (prod) / `staging-api.sevino.ai` (staging)
 - [ ] Check specifically: `BASE_URL`, `PUBLIC_API_URL`, any Supabase redirect override
 
 ### Slack/Discord
-- [ ] Update Railway → Slack notification routings if any channel names have Saturn
+- [x] Update Railway → Slack notification routings if any channel names have Saturn
 
 ---
 
@@ -168,59 +168,59 @@ Hard cutover due to Railway 2-domain cap.
 
 ## 8. Supabase
 
-- [ ] Project display name → `Sevino` (keep project ref / URL — don't migrate)
-- [ ] Auth → URL Configuration: update Site URL + any Redirect URLs pointing at old domain
-- [ ] Auth → Email Templates: replace "Saturn" copy
-- [ ] Auth → Providers: update OAuth redirect URIs
-- [ ] Database webhooks: update URLs pointing at old Railway domain
-- [ ] Project description / metadata in dashboard
-- [ ] Spot-check: storage buckets (unlikely), edge functions (unlikely)
+- [x] Project display name → `Sevino` (keep project ref / URL — don't migrate)
+- [x] Auth → URL Configuration: update Site URL + any Redirect URLs pointing at old domain
+- [x] Auth → Email Templates: replace "Saturn" copy
+- [x] Auth → Providers: update OAuth redirect URIs
+- [x] Database webhooks: update URLs pointing at old Railway domain
+- [x] Project description / metadata in dashboard
+- [x] Spot-check: storage buckets (unlikely), edge functions (unlikely)
 
 ---
 
 ## 9. Third-party webhook + dashboard updates
 
 ### Plaid dashboard
-- [ ] Application name → Sevino
-- [ ] Webhook URL → `https://api.sevino.ai/webhooks/plaid`
-- [ ] Link allowed redirect URIs
-- [ ] OAuth redirect URIs
-- [ ] Application logo / branding
+- [x] Application name → Sevino
+- [x] Webhook URL → `https://api.sevino.ai/webhooks/plaid`
+- [x] Link allowed redirect URIs
+- [x] OAuth redirect URIs
+- [x] Application logo / branding
 
 ### Alpaca Broker dashboard
-- [ ] Application name → Sevino
-- [ ] Webhook endpoints (account status SSE, ACH events) → `https://api.sevino.ai/...`
-- [ ] Allowlisted IPs/domains
-- [ ] OAuth callback URLs (if used)
-- [ ] API key labels (hygiene — optional)
+- [x] Application name → Sevino
+- [x] Webhook endpoints (account status SSE, ACH events) → `https://api.sevino.ai/...`
+- [x] Allowlisted IPs/domains
+- [x] OAuth callback URLs (if used)
+- [x] API key labels (hygiene — optional)
 
 ---
 
 ## 10. Linear
 
-- [ ] Rename initiative "Saturn MVP Launch" → "MVP Launch"
-- [ ] Rename any projects with "Saturn" in the name
+- [x] Rename initiative "Saturn MVP Launch" → "MVP Launch"
+- [x] Rename any projects with "Saturn" in the name
 - [ ] Update Linear → GitHub integration to new repo (else PR/branch linking breaks)
-- [ ] Search docs/labels/views for Saturn references
+- [x] Search docs/labels/views for Saturn references
 
 ---
 
 ## 11. Slack
 
-- [ ] Rename channels (`#saturn-dev`, `#saturn-alerts`, etc.) — Slack preserves history
-- [ ] Update GitHub / Railway / Linear Slack app channel routings
-- [ ] Pinned messages / canvases with old GitHub links
+- [x] Rename channels (`#saturn-dev`, `#saturn-alerts`, etc.) — Slack preserves history
+- [x] Update GitHub / Railway / Linear Slack app channel routings
+- [x] Pinned messages / canvases with old GitHub links
 
 ---
 
 ## 12. Docs + agent infra final pass
 
-- [ ] Root `README.md`
-- [ ] Root `CLAUDE.md`
-- [ ] `sevino-api/README.md`, `sevino-api/docs/blueprint.md`, `docs/architecture.md`, `docs/testing.md`
-- [ ] `sevino-app/README.md`, `sevino-app/Sevino/CLAUDE.md`
-- [ ] `.claude/agents/*`, `.claude/skills/*` — spot-check (audit found no "saturn" references but verify after folder rename)
-- [ ] Notion / internal wiki pages (external to repo)
+- [x] Root `README.md` (done in step 2)
+- [x] Root `CLAUDE.md` (done in step 2)
+- [x] `sevino-api/README.md`, `sevino-api/docs/blueprint.md`, `docs/architecture.md`, `docs/testing.md`, `docs/onboarding-backend-plan.md`, `docs/database/db_schema.html`, `CLAUDE.md` (done in step 3)
+- [x] `sevino-app/README.md`, `sevino-app/Sevino/CLAUDE.md`, `sevino-app/guide.md` (done in step 4)
+- [x] `.claude/agents/*` + `.claude/skills/review/SKILL.md` — 39 refs across `doc-writer/AGENT.md`, `be-auditor/AGENT.md`, `fe-auditor/AGENT.md`, `review/SKILL.md` updated. Skipped `.claude/settings.local.json` — personal settings with absolute paths that are still valid (outer `saturn/` folder not yet renamed)
+- [x] Notion / internal wiki pages (external to repo) — your call
 
 ---
 
