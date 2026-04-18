@@ -1,7 +1,7 @@
 [project]
-name = "saturn-api"
+name = "sevino-api"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sevino backend API"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

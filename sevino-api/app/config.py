@@ -35,8 +35,8 @@ def get_ssl_connect_args(environment: str) -> dict[str, Any]:
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "Saturn API"
-    APP_DESCRIPTION: str = "Backend API for the Saturn investment app by Sevino"
+    APP_NAME: str = "Sevino API"
+    APP_DESCRIPTION: str = "Backend API for the Sevino investment app"
     APP_VERSION: str = "0.1.0"
 
     environment: str = "dev"

@@ -2,7 +2,7 @@
 
 ## Context
 
-The Saturn iOS app has a 28-screen onboarding flow (documented in `saturn-api/docs/onboarding.md`) split into two phases:
+The Sevino iOS app has a 28-screen onboarding flow (documented in `sevino-api/docs/onboarding.md`) split into two phases:
 - **Phase 1 (screens 1-18):** Profile building — name, worries, goals, DOB, income, net worth, risk tolerance, experience.
 - **Phase 2 (screens 19-28):** KYC / Alpaca account creation — legal name, SSN, address, citizenship, employment, disclosures, agreements.
 

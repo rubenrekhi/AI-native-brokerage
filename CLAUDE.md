@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Overview
 
-Saturn is an AI-native brokerage app. This monorepo contains:
-- **saturn-api/** — FastAPI backend (Python 3.12, deployed on Railway)
-- **saturn-app/** — iOS app (Swift/SwiftUI, Xcode 16+, iOS 17+)
+Sevino is an AI-native brokerage app. This monorepo contains:
+- **sevino-api/** — FastAPI backend (Python 3.12, deployed on Railway)
+- **sevino-app/** — iOS app (Swift/SwiftUI, Xcode 16+, iOS 17+)
 
 ## Common Commands
 
-All commands run from `saturn-api/`:
+All commands run from `sevino-api/`:
 
 ```bash
 # Infrastructure
@@ -47,7 +47,7 @@ iOS App → FastAPI (Railway) → Supabase Postgres (async SQLAlchemy + Alembic)
                             → Redis + ARQ (background jobs)
 ```
 
-### Backend structure (`saturn-api/app/`)
+### Backend structure (`sevino-api/app/`)
 
 - `main.py` — FastAPI app creation, middleware stack (CORS, correlation ID, request logging, API key gate, rate limiting), root + health endpoints
 - `rate_limit.py` — slowapi `Limiter` with Redis backend; two tiers: `120/minute` per user (default), `10/minute` per IP (for auth endpoints via decorator)

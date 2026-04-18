@@ -102,7 +102,7 @@ app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding
 @app.get("/")
 @limiter.exempt
 async def root():
-    return {"message": "Saturn API (by Sevino)"}
+    return {"message": "Sevino API"}
 
 
 @app.get("/health")

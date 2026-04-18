@@ -59,19 +59,19 @@ async def test_different_requests_get_different_ids(client: AsyncClient):
 # ---------------------------------------------------------------------------
 
 async def test_request_is_logged(client: AsyncClient, caplog):
-    with caplog.at_level(logging.INFO, logger="saturn.access"):
+    with caplog.at_level(logging.INFO, logger="sevino.access"):
         resp = await client.get("/")
 
     assert resp.status_code == 200
-    access_records = [r for r in caplog.records if r.name == "saturn.access"]
+    access_records = [r for r in caplog.records if r.name == "sevino.access"]
     assert len(access_records) >= 1
 
 
 async def test_health_endpoint_is_logged(client: AsyncClient, caplog):
-    with caplog.at_level(logging.INFO, logger="saturn.access"):
+    with caplog.at_level(logging.INFO, logger="sevino.access"):
         await client.get("/health")
 
-    access_records = [r for r in caplog.records if r.name == "saturn.access"]
+    access_records = [r for r in caplog.records if r.name == "sevino.access"]
     assert len(access_records) >= 1
 
 

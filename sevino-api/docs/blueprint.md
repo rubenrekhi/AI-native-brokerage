@@ -1,4 +1,4 @@
-# Saturn Architecture
+# Sevino Architecture
 
 **Sevino — AI-Native Consumer Brokerage**
 **MVP / Closed Beta | March 2026 | Confidential**
@@ -76,7 +76,7 @@
 ### 1.1 Architecture Principles
 
 - **Alpaca is the system of record** for all brokerage data. Portfolio positions, balances, order history, and transaction records are never persisted in our database — they are fetched from Alpaca in real time (with optional Redis caching).
-- **No direct client → external service calls.** The iOS app talks exclusively to the Saturn API. All Alpaca, Plaid, and database interactions are server-side.
+- **No direct client → external service calls.** The iOS app talks exclusively to the Sevino API. All Alpaca, Plaid, and database interactions are server-side.
 - **Cache-first reads** for frequently accessed, slow-changing data. Redis sits between the API and Alpaca with defined TTLs per data type. When Alpaca confirms a state change via SSE (e.g., order fill, transfer completed), the corresponding cache keys are invalidated so the next read fetches fresh data from Alpaca. For ambient market data with no user-triggered event, cache expires naturally by TTL.
 - **Background jobs for async work.** Anything that takes >1s or doesn't need a synchronous response (SSE event processing, transfer polling, radar refresh) runs as an ARQ task on the worker service.
 - **Feature flags gate capabilities** without code deploys. Regulatory gating (ungated vs gray area vs RIA-required) is implemented as feature flags in the database.
@@ -84,12 +84,12 @@
 ### 1.2 Service Map
 
 ```
-Saturn App (iOS / Swift)
+Sevino App (iOS / Swift)
   │
   │  HTTPS + JWT (Authorization: Bearer <token>)
   │  X-API-Key header
   ▼
-Saturn API — FastAPI (Railway)
+Sevino API — FastAPI (Railway)
   │
   ├──▶ Supabase Postgres     — user profiles, conversations, app state, audit log
   ├──▶ Alpaca Broker API      — accounts, KYC, trading, portfolios, transfers, custody
@@ -100,7 +100,7 @@ Saturn API — FastAPI (Railway)
 
 ### 1.3 Tech Stack
 
-**Backend (saturn-api/)**
+**Backend (sevino-api/)**
 
 | Layer | Technology | Notes |
 |---|---|---|
@@ -119,7 +119,7 @@ Saturn API — FastAPI (Railway)
 | Config | Pydantic Settings | Reads from `.env`, validates and normalizes env vars |
 | Package Manager | uv | Fast Python package manager, lockfile committed |
 
-**iOS App (saturn-app/)**
+**iOS App (sevino-app/)**
 
 | Layer | Technology | Notes |
 |---|---|---|
@@ -127,7 +127,7 @@ Saturn API — FastAPI (Railway)
 | UI Framework | SwiftUI | MVVM architecture |
 | Auth SDK | supabase-swift (^2.0.0) | Handles signup/login, JWT lifecycle, token refresh |
 | Bank Linking SDK | Plaid LinkKit | Native iOS SDK for bank account linking |
-| Networking | URLSession | Standard iOS HTTP client for Saturn API calls |
+| Networking | URLSession | Standard iOS HTTP client for Sevino API calls |
 | Config | xcconfig files | Per-environment (debug/staging/release), gitignored |
 
 **Infrastructure**
@@ -146,12 +146,12 @@ Saturn API — FastAPI (Railway)
 
 ## 2. Authentication
 
-Authentication is handled by Supabase Auth. The iOS app manages signup/login and token lifecycle via the `supabase-swift` SDK. The Saturn API never handles credentials directly — it only verifies the JWT that Supabase issues.
+Authentication is handled by Supabase Auth. The iOS app manages signup/login and token lifecycle via the `supabase-swift` SDK. The Sevino API never handles credentials directly — it only verifies the JWT that Supabase issues.
 
 ### 2.1 End-to-End Auth Flow
 
 ```
-Saturn App (iOS)                    Supabase Auth                     Saturn API (FastAPI)
+Sevino App (iOS)                    Supabase Auth                     Sevino API (FastAPI)
      │                                   │                                  │
      │  1. signUp/signIn(email, pass)    │                                  │
      │ ─────────────────────────────────▶│                                  │
@@ -187,7 +187,7 @@ Saturn App (iOS)                    Supabase Auth                     Saturn API
 
 3. For every API request, `APIClient.swift` attaches two headers: the JWT as `Authorization: Bearer <token>` (retrieved from the Supabase SDK session), and the static API key as `X-API-Key`.
 
-4. The Saturn API's `get_current_user` dependency (`app/auth.py`) extracts the JWT from the Authorization header and fetches the public key from Supabase's JWKS endpoint to verify the signature.
+4. The Sevino API's `get_current_user` dependency (`app/auth.py`) extracts the JWT from the Authorization header and fetches the public key from Supabase's JWKS endpoint to verify the signature.
 
 5. The JWKS public key is cached in memory by `PyJWKClient`. It only refetches when it encounters an unknown key ID (e.g., after a key rotation), so there's no per-request latency to Supabase.
 
@@ -220,7 +220,7 @@ Key behaviors:
 
 **APIClient** (`APIClient.swift`):
 
-Every request to the Saturn API goes through `APIClient.shared`. Before sending, it calls `await AuthService.shared.accessToken` to get the current JWT and attaches it as `Authorization: Bearer <token>`. It also attaches the static API key as `X-API-Key`. Non-2xx responses are decoded as `APIError` (matching the backend's structured error format).
+Every request to the Sevino API goes through `APIClient.shared`. Before sending, it calls `await AuthService.shared.accessToken` to get the current JWT and attaches it as `Authorization: Bearer <token>`. It also attaches the static API key as `X-API-Key`. Non-2xx responses are decoded as `APIError` (matching the backend's structured error format).
 
 **Token lifecycle (handled by supabase-swift):**
 
@@ -305,7 +305,7 @@ Alembic is configured with `include_schemas=False` in `migrations/env.py` so it 
 
 **Scoping all queries to the authenticated user:**
 
-Every database query includes `WHERE user_id = <authenticated_user_id>`. The user ID comes from the verified JWT's `sub` claim via `get_current_user`. Never trust a user-supplied ID in request bodies — always use the ID from the token. Row Level Security (RLS) is NOT used — since the Saturn API is the only client connecting to Postgres (not end users directly), access control is enforced in the application layer via SQLAlchemy.
+Every database query includes `WHERE user_id = <authenticated_user_id>`. The user ID comes from the verified JWT's `sub` claim via `get_current_user`. Never trust a user-supplied ID in request bodies — always use the ID from the token. Row Level Security (RLS) is NOT used — since the Sevino API is the only client connecting to Postgres (not end users directly), access control is enforced in the application layer via SQLAlchemy.
 
 ### 2.5 API Security Layers
 
@@ -519,7 +519,7 @@ To fix: `alembic merge -m "merge migrations" <head1> <head2>` — creates a merg
 
 ## 4. Alpaca Integration
 
-Alpaca Securities LLC is the broker-dealer. It handles brokerage accounts, KYC/AML verification, trade execution, custody of funds, cash sweep, and regulatory compliance. The user never interacts with Alpaca directly — the Saturn API mediates all communication using Sevino's firm-level API keys.
+Alpaca Securities LLC is the broker-dealer. It handles brokerage accounts, KYC/AML verification, trade execution, custody of funds, cash sweep, and regulatory compliance. The user never interacts with Alpaca directly — the Sevino API mediates all communication using Sevino's firm-level API keys.
 
 For full endpoint-level detail, see the [Alpaca Broker API Integration Architecture](https://docs.google.com/document/d/1-QLGUONDjQgtmk-scjs59jgzM_tbln7BLfg-Hc5NPJw) doc. This section covers the architectural decisions and infrastructure requirements.
 
@@ -542,7 +542,7 @@ Alpaca provides three communication mechanisms. Sevino uses all three.
 
 **REST API (request/response):** The primary mechanism for reading data and initiating actions. Every account creation, order placement, position query, and market data lookup is a synchronous HTTP call. Used for on-demand data that doesn't require continuous updates.
 
-**Server-Sent Events (SSE):** Server-to-server event streaming for asynchronous state changes that happen outside the request/response cycle: account approvals, transfer completions, order fills. The Saturn API opens a persistent connection and receives pushed updates. SSE supports historical replay via `since`/`since_id` parameters for reconnection without gaps.
+**Server-Sent Events (SSE):** Server-to-server event streaming for asynchronous state changes that happen outside the request/response cycle: account approvals, transfer completions, order fills. The Sevino API opens a persistent connection and receives pushed updates. SSE supports historical replay via `since`/`since_id` parameters for reconnection without gaps.
 
 **WebSocket:** A single WebSocket connection (`wss://broker-api.alpaca.markets/stream`) for real-time order lifecycle events. When a user confirms a trade, the backend receives fill/cancel/reject events within milliseconds via this stream. This is faster than SSE for trade updates and powers the real-time Trade Confirmation Card status.
 
@@ -663,7 +663,7 @@ Plaid's role is narrow: bank authentication and account linking. That's it.
 Six steps across three actors. Steps 1–5 happen once per bank account. Step 6 repeats for every deposit/withdrawal.
 
 ```
-iOS App                    Saturn API                   Plaid API              Alpaca API
+iOS App                    Sevino API                   Plaid API              Alpaca API
   │                            │                           │                      │
   │  1. Request link_token     │                           │                      │
   │ ──────────────────────────▶│                           │                      │
@@ -829,7 +829,7 @@ Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
 
 1. **Prerequisite:** User has an ACTIVE brokerage account and at least one APPROVED ACH relationship (see §5.2 for the Plaid bank linking flow).
 2. User requests deposit/withdrawal from the iOS app (Settings > Funding) — specifies amount, direction, and which bank account.
-3. iOS sends request to Saturn API: `POST /v1/funding/transfer` with `{amount, direction, ach_relationship_id}`.
+3. iOS sends request to Sevino API: `POST /v1/funding/transfer` with `{amount, direction, ach_relationship_id}`.
 4. API validates: brokerage account is ACTIVE, ACH relationship is APPROVED, amount > 0. For withdrawals, API checks available cash via `GET /v1/trading/accounts/{id}/account` (no withdrawing more than available).
 5. API calls Alpaca: `POST /v1/accounts/{id}/transfers` with `{transfer_type: "ach", relationship_id, amount, direction: INCOMING|OUTGOING}`.
 6. Alpaca returns transfer object with `status: QUEUED`. API returns status to client.
@@ -852,7 +852,7 @@ Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
 
 **Sequence:**
 
-1. User asks about cash (via chat or Settings modal) → iOS calls Saturn API.
+1. User asks about cash (via chat or Settings modal) → iOS calls Sevino API.
 2. API checks Redis cache for `user:{id}:account` (60s TTL).
 3. Cache miss → API calls Alpaca: `GET /v1/trading/accounts/{id}/account`.
 4. Alpaca returns: `cash`, `buying_power`, `equity`, `last_equity`, and `cash_interest` object (APR tier, accrued interest details).
@@ -940,7 +940,7 @@ All portfolio and market data follows the same pattern: user action → API chec
 1. `GET /v2/stocks/snapshots?symbols=VTI,AAPL,MSFT,...` — single batch call for multiple symbols.
 
 **Status Bar Background Refresh:**
-The iOS app calls the Saturn API every 5 minutes while in the foreground to refresh the status bar portfolio value. This is a frontend-initiated background job, not a server-side polling loop. The API serves from cache when possible.
+The iOS app calls the Sevino API every 5 minutes while in the foreground to refresh the status bar portfolio value. This is a frontend-initiated background job, not a server-side polling loop. The API serves from cache when possible.
 
 **Key decisions:**
 
@@ -1090,7 +1090,7 @@ Railway uses Nixpacks for zero-config builds. The sequence on every deploy:
 | **Production** | Manual deploy from Railway dashboard | Instant rollback available. |
 | **PR Previews** | Auto-spin up when PRs are opened | Isolated instances with unique URLs. Share staging API key. Torn down on merge/close. |
 
-Monorepo scoping: Railway root directory is `saturn-api/`, watch path is `/saturn-api/**`. App-only PRs don't trigger API deploys.
+Monorepo scoping: Railway root directory is `sevino-api/`, watch path is `/sevino-api/**`. App-only PRs don't trigger API deploys.
 
 ### 8.4 Feature Flags
 

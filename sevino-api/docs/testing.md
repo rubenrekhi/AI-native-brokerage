@@ -1,6 +1,6 @@
 # Testing
 
-This document covers how to write and run tests for the Saturn API.
+This document covers how to write and run tests for the Sevino API.
 
 ## Stack
 
@@ -112,7 +112,7 @@ uv run pytest -v
 
 ## CI/CD
 
-Backend tests run in GitHub Actions on every PR that changes files in `saturn-api/`.
+Backend tests run in GitHub Actions on every PR that changes files in `sevino-api/`.
 
 ### Workflow (`.github/workflows/backend.yml`)
 
@@ -125,7 +125,7 @@ Backend tests run in GitHub Actions on every PR that changes files in `saturn-ap
 7. `uv run pytest` — run all tests.
 8. If tests pass and branch is `main`, Railway auto-deploys.
 
-The workflow only triggers on changes to `saturn-api/**` — app-only PRs don't run backend tests.
+The workflow only triggers on changes to `sevino-api/**` — app-only PRs don't run backend tests.
 
 ## What to Test for MVP
 

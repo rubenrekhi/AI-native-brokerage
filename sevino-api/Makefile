@@ -1,4 +1,4 @@
-# saturn-api/Makefile
+# sevino-api/Makefile
 
 # Start all infrastructure (run once when you sit down to work)
 infra:

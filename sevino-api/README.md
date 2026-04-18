@@ -1,6 +1,6 @@
-# Saturn API
+# Sevino API
 
-FastAPI backend for Saturn. Handles authentication, trading (via Alpaca), bank linking (via Plaid), AI agent orchestration, and background job processing.
+FastAPI backend for Sevino. Handles authentication, trading (via Alpaca), bank linking (via Plaid), AI agent orchestration, and background job processing.
 
 ## Quick Start
 
@@ -19,7 +19,7 @@ FastAPI backend for Saturn. Handles authentication, trading (via Alpaca), bank l
 
 ```bash
 # From the monorepo root
-cd saturn-api
+cd sevino-api
 
 # Install dependencies (creates .venv automatically)
 uv sync
@@ -150,7 +150,7 @@ Staging, production, and PR preview environments require an `X-API-Key` header o
 
 **Testing against staging or PR environments** (Swagger, curl, Postman, iOS app via TestFlight/dev builds):
 
-1. Go to [Railway](https://railway.app) → **Saturn Backend** project → select **Staging** environment → **Saturn** service → **Variables**
+1. Go to [Railway](https://railway.app) → **Sevino Backend** project → select **Staging** environment → **Sevino** service → **Variables**
 2. Copy the `API_KEY` value
 3. Include it as a header in your requests: `X-API-Key: <value>`
 

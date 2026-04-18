@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Saturn API is the FastAPI backend for an AI-native investment/brokerage app built by Sevino. It integrates with Supabase (auth + Postgres), Alpaca (trading), Plaid (banking), and ARQ/Redis (background jobs). Deployed on Railway.
+Sevino API is the FastAPI backend for an AI-native investment/brokerage app built by Sevino. It integrates with Supabase (auth + Postgres), Alpaca (trading), Plaid (banking), and ARQ/Redis (background jobs). Deployed on Railway.
 
 ## Commands
 
@@ -81,7 +81,7 @@ make migrate                           # apply pending migrations (alembic upgra
 
 - **Railway** with Procfile (`web:` uvicorn, `worker:` arq)
 - Release command runs `alembic upgrade head` before serving
-- Monorepo scoping: watch path `/saturn-api/**`, root dir `saturn-api/`
+- Monorepo scoping: watch path `/sevino-api/**`, root dir `sevino-api/`
 - Dual Postgres ports in prod: pooled (6543) for app, direct (5432) for migrations
 - PR preview environments enabled
 

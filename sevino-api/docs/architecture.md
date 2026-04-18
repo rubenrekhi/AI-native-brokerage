@@ -1,6 +1,6 @@
 # Architecture
 
-This document describes how the Saturn API works — the full stack, how services connect, how data flows, and how everything deploys.
+This document describes how the Sevino API works — the full stack, how services connect, how data flows, and how everything deploys.
 
 ## 📑 Table of Contents
 
@@ -43,14 +43,14 @@ This document describes how the Saturn API works — the full stack, how service
 
 ## 🌐 System Overview
 
-The backend is a FastAPI application that serves as the intermediary between the Saturn iOS app and all external services. The app never talks to Alpaca, Plaid, or the database directly — everything goes through this API.
+The backend is a FastAPI application that serves as the intermediary between the Sevino iOS app and all external services. The app never talks to Alpaca, Plaid, or the database directly — everything goes through this API.
 
 ```
-Saturn App (iOS)
+Sevino App (iOS)
   │
   │  HTTPS + JWT (Authorization: Bearer <token>)
   ▼
-Saturn API — FastAPI (Railway)
+Sevino API — FastAPI (Railway)
   │
   ├──▶ Supabase Postgres     — user profiles, AI data, app state
   ├──▶ Alpaca Broker API      — accounts, KYC, trading, portfolios, custody
@@ -62,7 +62,7 @@ Saturn API — FastAPI (Railway)
 ## 📁 Directory Structure
 
 ```
-saturn-api/
+sevino-api/
 ├── pyproject.toml          # dependencies (managed by uv)
 ├── uv.lock                 # pinned dependency versions
 ├── .python-version         # Python version pin (3.12), read by uv
@@ -114,11 +114,11 @@ saturn-api/
 
 ## 🔐 Authentication
 
-Authentication uses Supabase Auth. The Saturn app handles signup/login via the `supabase-swift` SDK and receives a JWT. Every request to the API includes this token.
+Authentication uses Supabase Auth. The Sevino app handles signup/login via the `supabase-swift` SDK and receives a JWT. Every request to the API includes this token.
 
 ### The flow
 
-1. User signs up or logs in on the Saturn app → Supabase Auth issues a JWT + refresh token.
+1. User signs up or logs in on the Sevino app → Supabase Auth issues a JWT + refresh token.
 2. The app stores tokens (Supabase SDK handles this) and attaches the JWT to every API request: `Authorization: Bearer <token>`.
 3. FastAPI's `get_current_user` dependency (in `app/auth.py`) runs on every protected route:
    - Extracts the token from the header.
@@ -158,7 +158,7 @@ When a user signs up, a row in `user_profiles` is created with the same UUID, ma
 
 1. **JWT authentication** (primary) — Supabase Auth tokens verified via JWKS on every request.
 2. **HTTPS** — Railway provides TLS automatically.
-3. **API key** — static key embedded in the Saturn app, sent as `X-API-Key` header. Checked by middleware. Prevents casual abuse.
+3. **API key** — static key embedded in the Sevino app, sent as `X-API-Key` header. Checked by middleware. Prevents casual abuse.
 4. **Rate limiting** — implemented via slowapi + Redis (`app/rate_limit.py`). Two tiers:
    - **Authenticated routes (default):** `120/minute` per user — keyed by `request.state.user_id` (set by `get_current_user`), falls back to client IP for unauthenticated requests.
    - **Auth endpoints (strict):** `10/minute` per IP — applied via `@limiter.limit("10/minute", key_func=get_remote_address)` decorator on login/signup routes.
@@ -266,7 +266,7 @@ Alembic migrations form a chain — each migration points to its parent. When tw
 
 ### Row Level Security
 
-RLS is NOT used. Since the Saturn API is the only client connecting to Postgres (not end users directly), access control is enforced in the application layer. Every query includes `WHERE user_id = <authenticated_user_id>` via SQLAlchemy.
+RLS is NOT used. Since the Sevino API is the only client connecting to Postgres (not end users directly), access control is enforced in the application layer. Every query includes `WHERE user_id = <authenticated_user_id>` via SQLAlchemy.
 
 ## 📈 Alpaca Integration
 
@@ -283,7 +283,7 @@ These URLs come from computed properties on `Settings` (`config.py`) — they ar
 
 ### Account creation & KYC
 
-1. The Saturn app collects personal info through an onboarding flow. Each screen calls `PATCH /v1/onboarding` to incrementally save data (name, DOB, address, employment, investment experience, disclosures). The SSN is collected last and is never saved.
+1. The Sevino app collects personal info through an onboarding flow. Each screen calls `PATCH /v1/onboarding` to incrementally save data (name, DOB, address, employment, investment experience, disclosures). The SSN is collected last and is never saved.
 2. On final submission, the app calls `POST /v1/onboarding/submit` with the SSN. `OnboardingService.submit_kyc` validates completeness, builds the Alpaca payload, and calls `POST /v1/accounts` via `AlpacaBrokerService`.
 3. Account status: `SUBMITTED` → Alpaca runs async KYC → `APPROVED` → `ACTIVE` (or `ACTION_REQUIRED` / `REJECTED`).
 4. The returned Alpaca account ID and initial status are stored in the `brokerage_accounts` table.
@@ -311,7 +311,7 @@ Plaid handles bank account linking for deposits and withdrawals.
 
 ### The flow
 
-1. Saturn app opens Plaid Link (native LinkKit SDK) → user authenticates with their bank.
+1. Sevino app opens Plaid Link (native LinkKit SDK) → user authenticates with their bank.
 2. App receives a `public_token` → sends to the API.
 3. API exchanges `public_token` for `access_token` via Plaid API.
 4. API calls Plaid's `/processor/token/create` with `"processor": "alpaca"` → gets a processor token.
@@ -341,11 +341,11 @@ All share the same environment variables and private networking.
 
 ### Job flow
 
-1. User triggers an action (e.g., "analyze my portfolio") → Saturn app sends request to the API.
+1. User triggers an action (e.g., "analyze my portfolio") → Sevino app sends request to the API.
 2. API creates a job, pushes to Redis via ARQ, responds immediately with a job ID.
 3. ARQ worker picks up the job, executes it (calls Alpaca, calls LLM, etc.).
 4. Worker stores the result in the database.
-5. Saturn app retrieves the result (via polling, WebSocket, or push notification).
+5. Sevino app retrieves the result (via polling, WebSocket, or push notification).
 
 ### Task definitions
 
@@ -380,8 +380,8 @@ Each Railway service uses a different process from the Procfile.
 - `main` branch auto-deploys to **staging** on Railway.
 - **Production** deployments are triggered manually from the Railway dashboard.
 - PR preview environments spin up automatically off the staging environment when PRs are opened — isolated instances with unique URLs. Torn down on merge/close.
-- Focused PR environments: Railway only deploys services affected by changed files. Root directory is set to `saturn-api/` so app-only PRs don't trigger API deploys.
-- Watch path `/saturn-api/**` can be set as additional scoping.
+- Focused PR environments: Railway only deploys services affected by changed files. Root directory is set to `sevino-api/` so app-only PRs don't trigger API deploys.
+- Watch path `/sevino-api/**` can be set as additional scoping.
 - Instant rollback available via Railway dashboard.
 - Railway supports auto PR environments for GitHub bots (Claude Code, Copilot, etc.).
 
@@ -400,6 +400,6 @@ Enables managing Railway infrastructure through Claude Code — create projects,
 
 ### Monorepo configuration
 
-The monorepo has `saturn-api/` and `saturn-app/` at the root. Railway is configured with:
-- **Root directory:** `saturn-api/` — Railway only builds from this folder.
-- **Watch path:** `/saturn-api/**` — only changes in this directory trigger deploys.
+The monorepo has `sevino-api/` and `sevino-app/` at the root. Railway is configured with:
+- **Root directory:** `sevino-api/` — Railway only builds from this folder.
+- **Watch path:** `/sevino-api/**` — only changes in this directory trigger deploys.
