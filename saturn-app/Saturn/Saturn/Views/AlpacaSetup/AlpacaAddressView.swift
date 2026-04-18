@@ -1,14 +1,6 @@
 import MapKit
 import SwiftUI
 
-struct ParsedAddress {
-    let streetAddress: String
-    let city: String
-    let state: String
-    let postalCode: String
-    let fullDisplay: String
-}
-
 struct AlpacaAddressView: View {
     let scale: CGFloat
     let userPromptText: String

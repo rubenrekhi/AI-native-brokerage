@@ -3,9 +3,18 @@ import SwiftUI
 struct OnboardingNameView: View {
     let scale: CGFloat
     let animate: Bool
+    let initialName: String
     let onContinue: (String) -> Void
 
-    @State private var name = ""
+    @State private var name: String
+
+    init(scale: CGFloat, animate: Bool, initialName: String = "", onContinue: @escaping (String) -> Void) {
+        self.scale = scale
+        self.animate = animate
+        self.initialName = initialName
+        self.onContinue = onContinue
+        _name = State(initialValue: initialName)
+    }
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""

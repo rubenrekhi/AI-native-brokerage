@@ -8,9 +8,33 @@ struct OnboardingSingleSelectView: View {
     var response3: String = ""
     let options: [String]
     let animate: Bool
+    let initialSelected: String?
     let onContinue: (String) -> Void
 
     @State private var selected: String?
+
+    init(
+        scale: CGFloat,
+        userPromptText: String,
+        response1: String,
+        response2: String,
+        response3: String = "",
+        options: [String],
+        animate: Bool,
+        initialSelected: String? = nil,
+        onContinue: @escaping (String) -> Void
+    ) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.response1 = response1
+        self.response2 = response2
+        self.response3 = response3
+        self.options = options
+        self.animate = animate
+        self.initialSelected = initialSelected
+        self.onContinue = onContinue
+        _selected = State(initialValue: initialSelected)
+    }
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""

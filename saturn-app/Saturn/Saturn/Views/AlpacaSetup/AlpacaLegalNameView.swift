@@ -5,7 +5,14 @@ struct AlpacaLegalNameView: View {
     let animate: Bool
     let onContinue: (String) -> Void
 
-    @State private var name = ""
+    @State private var name: String
+
+    init(scale: CGFloat, animate: Bool, initialName: String = "", onContinue: @escaping (String) -> Void) {
+        self.scale = scale
+        self.animate = animate
+        self.onContinue = onContinue
+        _name = State(initialValue: initialName)
+    }
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""

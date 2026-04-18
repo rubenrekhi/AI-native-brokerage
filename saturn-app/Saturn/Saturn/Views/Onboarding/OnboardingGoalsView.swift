@@ -6,7 +6,15 @@ struct OnboardingGoalsView: View {
     let animate: Bool
     let onContinue: (Set<String>) -> Void
 
-    @State private var selected: Set<String> = []
+    @State private var selected: Set<String>
+
+    init(scale: CGFloat, userPromptText: String, animate: Bool, initialSelected: Set<String> = [], onContinue: @escaping (Set<String>) -> Void) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.animate = animate
+        self.onContinue = onContinue
+        _selected = State(initialValue: initialSelected)
+    }
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""

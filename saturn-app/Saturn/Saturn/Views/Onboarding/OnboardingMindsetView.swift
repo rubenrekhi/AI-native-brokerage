@@ -7,7 +7,16 @@ struct OnboardingMindsetView: View {
     let animate: Bool
     let onContinue: (Set<String>) -> Void
 
-    @State private var selected: Set<String> = []
+    @State private var selected: Set<String>
+
+    init(scale: CGFloat, userName: String, referralSummary: String, animate: Bool, initialSelected: Set<String> = [], onContinue: @escaping (Set<String>) -> Void) {
+        self.scale = scale
+        self.userName = userName
+        self.referralSummary = referralSummary
+        self.animate = animate
+        self.onContinue = onContinue
+        _selected = State(initialValue: initialSelected)
+    }
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""

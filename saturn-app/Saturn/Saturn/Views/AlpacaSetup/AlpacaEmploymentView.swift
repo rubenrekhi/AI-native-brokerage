@@ -11,11 +11,29 @@ struct AlpacaEmploymentView: View {
     @State private var typed2 = ""
     @State private var showForm = false
 
-    @State private var employmentStatus = ""
+    @State private var employmentStatus: String
     @State private var showDropdown = false
-    @State private var employerName = ""
-    @State private var jobTitle = ""
+    @State private var employerName: String
+    @State private var jobTitle: String
     @State private var industry = ""
+
+    init(
+        scale: CGFloat,
+        userPromptText: String,
+        animate: Bool,
+        initialStatus: String = "",
+        initialEmployer: String = "",
+        initialJobTitle: String = "",
+        onContinue: @escaping (_ status: String, _ employerName: String, _ jobTitle: String) -> Void
+    ) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.animate = animate
+        self.onContinue = onContinue
+        _employmentStatus = State(initialValue: initialStatus)
+        _employerName = State(initialValue: initialEmployer)
+        _jobTitle = State(initialValue: initialJobTitle)
+    }
 
     private let statuses = [
         L10n.Onboarding.alpacaStatusEmployed,
@@ -250,7 +268,7 @@ struct AlpacaEmploymentView: View {
 }
 
 #Preview {
-    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true, onContinue: { _, _, _ in })
+    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true) { _, _, _ in }
         .background(Color.black)
         .preferredColorScheme(.dark)
 }
