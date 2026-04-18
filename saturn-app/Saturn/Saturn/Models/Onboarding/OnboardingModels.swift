@@ -1,5 +1,15 @@
 import Foundation
 
+// MARK: - Address
+
+struct ParsedAddress {
+    let streetAddress: String
+    let city: String
+    let state: String
+    let postalCode: String
+    let fullDisplay: String
+}
+
 // MARK: - Request Models
 
 /// Flexible request for PATCH /v1/onboarding — all fields optional except step.
@@ -73,40 +83,42 @@ struct OnboardingSubmitResponse: Decodable {
 
 /// Response from GET /v1/onboarding/status
 struct OnboardingStatusResponse: Decodable {
-    let onboardingCompleted: Bool
-    let onboardingStep: String?
-    let accountStatus: String?
-    let profile: ProfileData?
-    let financialProfile: FinancialProfileData?
+    var onboardingCompleted: Bool = false
+    var onboardingStep: String?
+    var accountStatus: String?
+    var profile: ProfileData?
+    var financialProfile: FinancialProfileData?
 }
 
 struct ProfileData: Decodable {
-    let preferredName: String?
-    let firstName: String?
-    let middleName: String?
-    let lastName: String?
-    let dateOfBirth: String?
-    let email: String?
-    let phoneNumber: String?
-    let streetAddress: [String]?
-    let city: String?
-    let state: String?
-    let postalCode: String?
-    let countryOfCitizenship: String?
-    let countryOfBirth: String?
-    let countryOfTaxResidence: String?
+    var preferredName: String?
+    var firstName: String?
+    var middleName: String?
+    var lastName: String?
+    var dateOfBirth: String?
+    var email: String?
+    var phoneNumber: String?
+    var attributionSource: String?
+    var streetAddress: [String]?
+    var city: String?
+    var state: String?
+    var postalCode: String?
+    var countryOfCitizenship: String?
+    var countryOfBirth: String?
+    var countryOfTaxResidence: String?
 }
 
 struct FinancialProfileData: Decodable {
-    let financialWorries: [String]?
-    let investmentGoals: [String]?
-    let annualIncome: String?
-    let netWorth: String?
-    let liquidNetWorth: String?
-    let incomeStability: String?
-    let timeHorizon: String?
-    let riskScenarioResponse: String?
-    let maxLossTolerance: String?
-    let experienceLevel: String?
-    let fundingSources: [String]?
+    var financialWorries: [String]?
+    var investmentGoals: [String]?
+    var annualIncome: String?
+    var netWorth: String?
+    var liquidNetWorth: String?
+    var incomeStability: String?
+    var timeHorizon: String?
+    var riskScenarioResponse: String?
+    var maxLossTolerance: String?
+    var experienceLevel: String?
+    var employmentInfo: [String: String]?
+    var fundingSources: [String]?
 }
