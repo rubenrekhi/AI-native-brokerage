@@ -16,6 +16,7 @@ from app.lifecycle import lifespan
 from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 from app.rate_limit import limiter
+from app.routes.onboarding import router as onboarding_router
 
 configure_logging(settings.environment)
 
@@ -95,6 +96,8 @@ app.add_middleware(
 )
 
 register_exception_handlers(app)
+
+app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
 
 @app.get("/")
 @limiter.exempt

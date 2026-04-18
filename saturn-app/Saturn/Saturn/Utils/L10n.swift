@@ -293,6 +293,8 @@ enum L10n {
         static let alpacaCompleteBody = String(localized: "onboarding.alpaca_complete_body")
         static let alpacaCompleteCta = String(localized: "onboarding.alpaca_complete_cta")
         static let alpacaCompleteButton = String(localized: "onboarding.alpaca_complete_button")
+        static let alpacaSubmitErrorHeading = String(localized: "onboarding.alpaca_submit_error_heading")
+        static let alpacaSubmitErrorBody = String(localized: "onboarding.alpaca_submit_error_body")
         static let alpacaStatusEmployed = String(localized: "onboarding.alpaca_status_employed")
         static let alpacaStatusSelfEmployed = String(localized: "onboarding.alpaca_status_self_employed")
         static let alpacaStatusUnemployed = String(localized: "onboarding.alpaca_status_unemployed")

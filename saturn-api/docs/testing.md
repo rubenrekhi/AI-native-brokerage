@@ -13,14 +13,21 @@ This document covers how to write and run tests for the Saturn API.
 
 ```
 tests/
-├── conftest.py              # shared fixtures (test DB, test client, mocks)
+├── conftest.py              # shared fixtures (mock_db, mock_arq, client, authenticated_client)
+├── integration/
+│   ├── conftest.py          # real Supabase Postgres fixtures (db_session, test_user, authenticated_db_client)
+│   ├── test_auth.py
+│   ├── test_error_handling.py
+│   ├── test_health.py
+│   ├── test_middleware.py
+│   ├── test_onboarding.py
+│   └── test_rate_limit.py
 ├── unit/                    # isolated business logic tests (no DB, no network)
-│   ├── test_trade_parser.py
-│   └── test_portfolio_utils.py
-├── integration/             # API endpoint tests (hits test DB, mocked externals)
-│   ├── test_auth_routes.py
-│   ├── test_trading_routes.py
-│   └── test_funding_routes.py
+│   ├── test_auth.py
+│   ├── test_config.py
+│   ├── test_exceptions.py
+│   ├── test_middleware.py
+│   └── test_onboarding_service.py
 └── fixtures/
     └── mock_responses/      # JSON fixtures for Alpaca/Plaid mock data
 ```
@@ -47,37 +54,35 @@ External APIs are never called in automated tests. Use `pytest-mock` to replace 
 
 ### Pattern
 
-Each external service has a wrapper in `app/services/` (e.g., `alpaca.py`, `plaid.py`). In tests, these wrappers are replaced with mocks via fixtures in `conftest.py`.
+Each external service has a wrapper in `app/services/` (e.g., `alpaca_broker.py`, `onboarding.py`). In tests, these wrappers are replaced with mocks by patching the service class or overriding FastAPI dependencies in `conftest.py`.
 
 Mock response data lives in `tests/fixtures/mock_responses/` as JSON files — actual response shapes copied from Alpaca/Plaid sandbox environments. This ensures mocks match real API behavior.
 
 ### What to mock
 
-- **Alpaca `BrokerClient`** — account creation, KYC status, positions, orders, portfolio history.
+- **`AlpacaBrokerService`** (`app/services/alpaca_broker.py`) — account creation, KYC status, account retrieval. The service is available via `app.state.alpaca`; in tests, patch `request.app.state.alpaca` or override the `get_alpaca` dependency.
 - **Plaid client** — token exchange, processor token creation.
 - **LLM provider** — AI agent inference responses.
 - **Redis/ARQ** — job enqueueing (verify jobs are created with correct parameters without actually processing them).
 
 ## Test Database
 
-### Recommended setup
+### Setup
 
-Use a real Postgres instance via Docker for integration tests. This guarantees tests run against the same database engine as production.
+Integration tests that hit the database run against the real local Supabase Postgres instance started by `make infra`. Tests are skipped automatically when Postgres is unavailable (no Docker running).
 
-**Option A — `testcontainers-python`:** Automatically spins up a Postgres Docker container when tests run and tears it down after. Zero manual setup.
+The DB fixtures live in `tests/integration/conftest.py`:
 
-**Option B — Static Docker container:** Run a dedicated test Postgres alongside your dev Postgres on a different port.
+- **`db_session`** — creates an `AsyncSession` connected directly to `localhost:54322`, overrides the `get_db` FastAPI dependency for the duration of the test, and rolls back all writes after each test. Flushed data is visible within the same session, so assertions can query the DB.
+- **`test_user`** — inserts a row into `auth.users` and `user_profiles` (mimicking the Supabase trigger) using `ON CONFLICT DO NOTHING`. Rolls back with `db_session`.
+- **`authenticated_db_client`** — `httpx.AsyncClient` with real DB session and mocked auth (`get_current_user` returns the test user's ID).
 
-### conftest.py fixtures
+The top-level `tests/conftest.py` provides mocked (non-DB) fixtures:
 
-The shared `conftest.py` provides:
-
-- **Test database session** — creates a test database, runs Alembic migrations, provides a session to each test, rolls back after each test for isolation.
-- **Authenticated test client** — FastAPI `httpx.AsyncClient` with a valid test JWT injected in the `Authorization` header.
-- **Mocked Alpaca client** — configurable per-test to return specific responses.
-- **Mocked Plaid client** — same pattern as Alpaca.
-- **Mocked LLM client** — for AI agent tests.
-- **Factory fixtures** — helpers to create test users, profiles, orders, etc. in the test database.
+- **`mock_db`** — `AsyncMock` SQLAlchemy session.
+- **`mock_arq`** — `AsyncMock` ARQ pool.
+- **`client`** — `httpx.AsyncClient` with `mock_db` and `mock_arq` injected.
+- **`authenticated_client`** — same as `client` but also overrides `get_current_user` with a fixed test user ID.
 
 ### Note on Supabase's pgTAP
 

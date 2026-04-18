@@ -11,9 +11,27 @@ struct OnboardingDOBView: View {
     @State private var typed2 = ""
     @State private var showFields = false
 
-    @State private var month = ""
-    @State private var day = ""
-    @State private var year = ""
+    @State private var month: String
+    @State private var day: String
+    @State private var year: String
+
+    init(scale: CGFloat, userPromptText: String, animate: Bool, initialDOB: String = "", onContinue: @escaping (String) -> Void) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.animate = animate
+        self.onContinue = onContinue
+        // Parse MM-DD-YYYY into components
+        let parts = initialDOB.split(separator: "-")
+        if parts.count == 3 {
+            _month = State(initialValue: String(parts[0]))
+            _day = State(initialValue: String(parts[1]))
+            _year = State(initialValue: String(parts[2]))
+        } else {
+            _month = State(initialValue: "")
+            _day = State(initialValue: "")
+            _year = State(initialValue: "")
+        }
+    }
     @FocusState private var focused: Field?
 
     private enum Field: Hashable {

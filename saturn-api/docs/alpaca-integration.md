@@ -30,7 +30,9 @@ The primary mechanism for reading data and initiating actions. Every account cre
 |---|---|
 | **Sandbox Base URL** | `https://broker-api.sandbox.alpaca.markets` |
 | **Production Base URL** | `https://broker-api.alpaca.markets` |
-| **Authentication** | HTTP Basic Auth — Sevino's firm API key + secret, base64-encoded |
+| **Authentication** | OAuth2 Client Credentials — exchange client ID + secret for a short-lived Bearer token (see below) |
+| **Auth Token URL (Sandbox)** | `https://authx.sandbox.alpaca.markets/v1/oauth2/token` |
+| **Auth Token URL (Production)** | `https://authx.alpaca.markets/v1/oauth2/token` |
 
 ### Server-Sent Events (SSE)
 
@@ -45,7 +47,8 @@ A single WebSocket connection for order lifecycle events.
 
 | Property | Value |
 |---|---|
-| **URL** | `wss://broker-api.alpaca.markets/stream` |
+| **URL (Live)** | `wss://api.alpaca.markets/stream` |
+| **URL (Sandbox)** | `wss://paper-api.alpaca.markets/stream` |
 | **Purpose** | Real-time order fill, cancel, and reject events |
 | **Management** | Server-side only (Sevino backend) |
 
@@ -110,9 +113,55 @@ After submission, the account enters `SUBMITTED` status. The SSE connection rece
 
 | Transition | Meaning | Sevino Action |
 |---|---|---|
-| `SUBMITTED → APPROVED → ACTIVE` | Happy path — account is fully operational | Notify user, trigger FDIC Sweep enrollment |
+| `SUBMITTED → APPROVAL_PENDING → APPROVED → ACTIVE` | Happy path — account is fully operational | Notify user, trigger FDIC Sweep enrollment |
 | `SUBMITTED → ACTION_REQUIRED` | KYC check returned issues | SSE event includes `kyc_results` with field-level details. Surface in Settings UI. |
 | `SUBMITTED → REJECTED` | Account denied | Display explanation and next steps |
+| `SUBMISSION_FAILED` | Submission itself failed before KYC ran | Retry or surface error |
+
+Full account status values: `INACTIVE`, `ONBOARDING`, `SUBMITTED`, `SUBMISSION_FAILED`, `ACTION_REQUIRED`, `ACCOUNT_UPDATED`, `APPROVAL_PENDING`, `APPROVED`, `REJECTED`, `ACTIVE`, `ACCOUNT_CLOSED`. See: https://docs.alpaca.markets/docs/accounts-statuses
+
+### Authentication Flow (OAuth2 Client Credentials)
+
+Alpaca supports OAuth2 Client Credentials for Broker API authentication. (HTTP Basic Auth is available as a legacy flow but OAuth2 is recommended for new integrations.)
+
+1. Exchange `client_id` + `client_secret` for an access token:
+   ```
+   POST https://authx.sandbox.alpaca.markets/v1/oauth2/token
+   Content-Type: application/x-www-form-urlencoded
+
+   grant_type=client_credentials&client_id=<ID>&client_secret=<SECRET>
+   ```
+2. Response: `{"access_token": "...", "expires_in": 899, "token_type": "Bearer"}`
+3. Use `Authorization: Bearer <token>` for all subsequent API calls
+4. Token expires in ~15 minutes — cache and refresh before expiry
+
+**Important:** Alpaca only supports `client_secret_post` (credentials in form body). They do NOT support `client_secret_basic` (credentials in Authorization header).
+
+Implementation: `app/services/alpaca_broker.py` — `AlpacaBrokerService` manages token caching and auto-refresh.
+
+### Alpaca API Accepted Enum Values
+
+> **CRITICAL:** Always verify field values against the official Alpaca API reference at
+> https://docs.alpaca.markets/reference/createaccount before changing any mapping constants.
+> Internal docs may contain outdated or incorrect values. The Alpaca API reference is the source of truth.
+
+These are the exact values accepted by `POST /v1/accounts` as of April 2026:
+
+| Field | Accepted Values |
+|---|---|
+| `investment_time_horizon` | `less_than_1_year`, `1_to_2_years`, `3_to_5_years`, `6_to_10_years`, `more_than_10_years` |
+| `risk_tolerance` | `conservative`, `moderate`, `significant_risk` |
+| `investment_objective` | `generate_income`, `preserve_wealth`, `market_speculation`, `growth`, `balance_preserve_wealth_with_growth` |
+| `liquidity_needs` | `very_important`, `important`, `somewhat_important`, `does_not_matter` |
+| `investment_experience_with_stocks` | `none`, `1_to_5_years`, `over_5_years` |
+| `investment_experience_with_options` | `none`, `1_to_5_years`, `over_5_years` |
+| `employment_status` | `unemployed`, `employed`, `student`, `retired` |
+| `funding_source` (array) | `employment_income`, `investments`, `inheritance`, `business_income`, `savings`, `family` |
+| `tax_id_type` | `USA_SSN`, `USA_ITIN`, and others (see API reference) |
+
+> **Deprecation note:** Alpaca marks the investor profile fields (`investment_time_horizon`, `risk_tolerance`,
+> `investment_objective`, `liquidity_needs`, `investment_experience_with_stocks`, `investment_experience_with_options`)
+> as deprecated. They still work as of April 2026 but may be removed in a future API version. Monitor Alpaca's changelog.
 
 ### Sandbox vs. Production
 
@@ -153,9 +202,11 @@ This is a one-time flow per bank account.
 
 **Response:** Returns immediately with `status: QUEUED`.
 
-**Transfer lifecycle:** `QUEUED → PENDING → COMPLETE` (or `REJECTED`)
+**Transfer lifecycle (simplified):** `QUEUED → PENDING → COMPLETE` (or `REJECTED`)
 
-**SSE Monitoring Endpoint:** `GET /v1/events/transfers/status`
+Full transfer status values: `QUEUED`, `APPROVAL_PENDING`, `PENDING`, `SENT_TO_CLEARING`, `APPROVED`, `SETTLED`, `COMPLETE`, `REJECTED`, `CANCELED`, `RETURNED`. Handle `RETURNED` (ACH chargebacks) as a critical failure path — notify user and restrict future instant funding.
+
+**SSE Monitoring Endpoint:** `GET /v2/events/funding/status` (note: `/v1/events/transfers/status` is deprecated)
 
 - ACH settlement: **1–3 business days**
 - When SSE reports `COMPLETE`, push notification to user confirming funds are available
@@ -420,7 +471,7 @@ Additionally, an EOD Cash Interest Details endpoint updates daily. Interest is b
 
 ### FDIC Insurance Coverage
 
-- Swept cash is FDIC pass-through insured up to **$2,500,000 per customer** (based on number of participating program banks, each providing up to $250,000)
+- Swept cash is FDIC pass-through insured up to **$1,000,000 per customer** (based on number of participating program banks, each providing up to $250,000). Note: verify current limits at https://docs.alpaca.markets/docs/fdic-sweep-program
 - Funds **in the brokerage account**: SIPC-insured (up to $500K, $250K cash sub-limit) but **NOT FDIC-insured**
 - Funds **swept to program banks**: intended to be FDIC-insured but **NOT SIPC-protected**
 - Coverage is "potentially eligible" and subject to conditions
@@ -433,6 +484,12 @@ Additionally, an EOD Cash Interest Details endpoint updates daily. Interest is b
 **PRD References:** FR-5.1, FR-6.2–FR-6.8, FR-7.1–FR-7.10
 
 ### REST Market Data Endpoints
+
+> **Base URL note:** Market data endpoints use a **different base URL** from the Broker API:
+> - Production: `https://data.alpaca.markets`
+> - Sandbox: `https://data.sandbox.alpaca.markets`
+>
+> The `/v2/stocks/...` paths below are relative to this base URL, not `broker-api.alpaca.markets`.
 
 | Endpoint | Returns | Use Case |
 |---|---|---|
@@ -635,7 +692,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 | `/v1/accounts/{id}/ach_relationships` | `GET` | List existing ACH relationships |
 | `/v1/accounts/{id}/transfers` | `POST` | Initiate ACH deposit or withdrawal |
 | `/v1/accounts/{id}/transfers` | `GET` | List transfers and their statuses |
-| `/v1/events/transfers/status` | `GET` (SSE) | Stream transfer status change events |
+| `/v2/events/funding/status` | `GET` (SSE) | Stream transfer status change events. Note: `/v1/events/transfers/status` is deprecated. |
 
 ### Trading
 
@@ -650,7 +707,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 | `/v1/trading/accounts/{id}/positions` | `GET` | List all open positions |
 | `/v1/trading/accounts/{id}/positions/{symbol}` | `GET` | Get position for specific symbol |
 | `/v1/trading/accounts/{id}/account/portfolio/history` | `GET` | Portfolio history timeseries |
-| `/v1/events/trades` | `GET` (SSE) | Stream order status change events (future redundancy layer) |
+| `/v2/events/trades` | `GET` (SSE) | Stream order status change events (future redundancy layer). Note: `/v1/events/trades` is deprecated. |
 | `wss://broker-api.alpaca.markets/stream` | WebSocket | Real-time trade update events |
 
 ### Market Data
@@ -685,7 +742,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 
 ### SSE Trade Events as Redundancy Layer
 
-**Endpoint:** `GET /v1/events/trades`
+**Endpoint:** `GET /v2/events/trades` (note: `/v1/events/trades` is deprecated for new partners)
 
 Listen to both the WebSocket and SSE trade events stream simultaneously. If WebSocket drops, SSE (with historical replay via `since_id`) ensures no order events are missed. Deduplicate by `event_id`.
 

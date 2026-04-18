@@ -113,8 +113,8 @@ Saturn API — FastAPI (Railway)
 | Rate Limiting | slowapi + Redis | Per-user and per-IP tiers |
 | Logging | structlog | Colored console (dev), JSON (prod) for Railway log aggregation |
 | Error Monitoring | Sentry (sentry-sdk) | Error tracking + performance monitoring |
-| HTTP Client | httpx | For any outbound HTTP calls not covered by SDKs |
-| Brokerage SDK | alpaca-py | Official Alpaca Broker API SDK |
+| HTTP Client | httpx | Alpaca Broker API calls via `AlpacaBrokerService` (OAuth2 client credentials) |
+| Brokerage SDK | alpaca-py | Official Alpaca SDK (available but not currently used — httpx used directly for Broker API) |
 | Bank Linking SDK | plaid-python | Official Plaid API SDK |
 | Config | Pydantic Settings | Reads from `.env`, validates and normalizes env vars |
 | Package Manager | uv | Fast Python package manager, lockfile committed |
@@ -401,7 +401,7 @@ Every new model should inherit from this base so the timestamps are consistent a
 
 | Table | Cardinality | Purpose |
 |---|---|---|
-| `user_profiles` | 1 per user | Core identity. `id = auth.users.id`. Created automatically by the `on_auth_user_created` trigger (see §2.4). |
+| `user_profiles` | 1 per user | Core identity + onboarding/KYC data. `id = auth.users.id`. Created automatically by the `on_auth_user_created` trigger (see §2.4). Includes contact info (phone, address), identity fields (citizenship, disclosures), compliance records (risk_disclosure_acknowledged_at, agreements_signed), and onboarding state (onboarding_step, onboarding_completed). |
 | `user_financial_profiles` | 1:1 with `user_profiles` | Questionnaire answers (income, net worth, risk tolerance, goals, time horizon, experience level). Injected into AI context for personalized responses. Created during onboarding. |
 | `user_settings` | 1:1 with `user_profiles` | App preferences (theme, text size, notifications, AI internet access toggle). Created during onboarding or on first settings access. |
 
@@ -409,7 +409,7 @@ Every new model should inherit from this base so the timestamps are consistent a
 
 | Table | Cardinality | Purpose |
 |---|---|---|
-| `brokerage_accounts` | 1:1 with `user_profiles` (at MVP) | Links a user to their Alpaca brokerage account. Stores `alpaca_account_id`, `account_status` (SUBMITTED → ACTIVE), and `account_number`. Does NOT store balances or positions. |
+| `brokerage_accounts` | 1:1 with `user_profiles` (at MVP) | Links a user to their Alpaca brokerage account. Stores `alpaca_account_id`, `account_status` (SUBMITTED → ACTIVE), `account_number`, `kyc_submitted_at`, `activated_at`, and `kyc_results` (JSONB). Does NOT store balances or positions. |
 | `plaid_items` | 1:M with `user_profiles` | Plaid-linked bank accounts. Stores `plaid_item_id`, `plaid_access_token` (encrypted at rest), institution name, account mask. One user can link multiple banks. |
 | `ach_relationships` | 1:M with `user_profiles` | ACH funding relationships linking a brokerage account to a bank. References both `brokerage_accounts` and optionally `plaid_items`. Stores `alpaca_relationship_id` and status (QUEUED → APPROVED). |
 
@@ -557,18 +557,18 @@ Alpaca provides three communication mechanisms. Sevino uses all three.
 
 ### 4.3 Broker API Authentication
 
-All Alpaca API calls use HTTP Basic authentication with Sevino's firm-level API key and secret (base64-encoded). Individual users do NOT have Alpaca credentials — the backend authenticates as Sevino and scopes requests to a specific `account_id`.
+All Alpaca API calls use **OAuth2 Client Credentials** authentication. The backend exchanges a client ID + secret for a short-lived Bearer token (~15 min), then uses that token for all requests. Individual users do NOT have Alpaca credentials — the backend authenticates as Sevino and scopes requests to a specific `account_id`.
 
-For Market Data API endpoints, Broker API partners use the Client Credentials flow: exchange firm credentials for a short-lived access token (valid 15 minutes), then use that token for REST requests.
+**Token exchange:** `POST https://authx.sandbox.alpaca.markets/v1/oauth2/token` with `grant_type=client_credentials`, `client_id`, `client_secret` (form-encoded). Returns `{"access_token": "...", "expires_in": 899}`. The token is cached on the `AlpacaBrokerService` instance (created during app lifespan, stored on `app.state.alpaca`) and auto-refreshed before expiry.
 
 **Environment URLs:**
 
-| Environment | Base URL |
-|---|---|
-| Sandbox | `https://broker-api.sandbox.alpaca.markets` |
-| Production | `https://broker-api.alpaca.markets` |
+| Environment | Broker API Base URL | Auth Token URL |
+|---|---|---|
+| Sandbox | `https://broker-api.sandbox.alpaca.markets` | `https://authx.sandbox.alpaca.markets/v1/oauth2/token` |
+| Production | `https://broker-api.alpaca.markets` | `https://authx.alpaca.markets/v1/oauth2/token` |
 
-Credentials are stored as `ALPACA_API_KEY` and `ALPACA_SECRET_KEY` in Railway env vars. The `alpaca-py` SDK handles authentication.
+Credentials are stored as `ALPACA_API_KEY` (client ID) and `ALPACA_SECRET_KEY` (client secret) in Railway env vars. Implementation: `app/services/alpaca_broker.py`.
 
 ### 4.4 SSE & WebSocket Infrastructure
 
@@ -749,27 +749,22 @@ The SSE and WebSocket listeners (§4.4) are long-running tasks that start when t
 
 ### 6.3 Task Registry
 
-**Persistent Listeners (started on worker boot):**
+**Currently implemented:**
 
-| Task | Connection | What it does | Cross-references |
+| Task | Schedule | What it does |
+|---|---|---|
+| Health ping | Every 5 minutes | Placeholder cron task. Verifies the worker is alive. |
+
+**Planned — not yet built:**
+
+| Task | Type | What it does | Cross-references |
 |---|---|---|---|
-| Alpaca SSE listener | SSE → Alpaca Events API | Listens for account status, transfer status, and trade events. Updates DB rows, invalidates cache, triggers downstream actions (FDIC enrollment on ACTIVE). | §4.4, §3.4 |
-| Alpaca WebSocket listener | WebSocket → `wss://broker-api.alpaca.markets/stream` | Listens for real-time order fill/cancel/reject events. Updates `order_events`, invalidates positions/account cache. Primary channel for trade status updates. | §4.4, §7.4 |
-
-**Scheduled / Cron Tasks:**
-
-| Task | Schedule | What it does | Cross-references |
-|---|---|---|---|
-| Radar refresh | Daily (time TBD) | For each user: AI generates new radar items based on profile + market conditions. Inserts `radar_items` rows with `expires_at = now + 7 days`. | §7.6 |
-| Radar expiry cleanup | Daily | Removes expired, non-favorited radar items (`WHERE expires_at < now AND is_favorited = false`). | §7.6 |
-| Health ping | Every 5 minutes | Placeholder cron task. Verifies the worker is alive. | — |
-
-**On-Demand Tasks (enqueued by API routes):**
-
-| Task | Trigger | What it does | Cross-references |
-|---|---|---|---|
-| AI conversation processing | User sends message | Runs the AI agent: sends message to Claude with context (profile card, portfolio data), processes tool calls, stores response in `messages` table. | §7.8 |
-| Conversation title generation | After N messages in a thread | AI generates a summary title for the conversation → updates `conversations.title`. | §7.8 |
+| Alpaca SSE listener | Persistent | Listens for account status (`/v1/events/accounts/status`), transfer status (`/v2/events/funding/status`), and trade events (`/v2/events/trades`). Updates DB rows, invalidates cache, triggers FDIC enrollment on ACTIVE. | §4.4, §3.4 |
+| Alpaca WebSocket listener | Persistent | Listens for real-time order fill/cancel/reject events via `wss://api.alpaca.markets/stream`. Updates `order_events`, invalidates cache. | §4.4, §7.4 |
+| Radar refresh | Daily cron | AI generates new radar items per user. | §7.6 |
+| Radar expiry cleanup | Daily cron | Removes expired, non-favorited radar items. | §7.6 |
+| AI conversation processing | On-demand | Runs Claude with context, processes tool calls, stores response. | §7.8 |
+| Conversation title generation | On-demand | AI generates summary title for a conversation. | §7.8 |
 
 This list will grow as features are built. Each new background task should be added here with its trigger and cross-reference.
 
@@ -796,26 +791,33 @@ Cross-references use `§` notation (e.g., "see §4.3 SSE Events Stream").
 Phase 1 — Profile Card (screens 1–18, ~3 min):
 1. iOS presents a scrolling chat-card UI. Each screen is a scripted AI message with a response area (not AI-generated — hardcoded for speed and consistency).
 2. User progresses through: name, attribution, financial worries, goals, DOB, income, net worth, liquid net worth, income stability, time horizon, risk tolerance (2 screens combined into a risk mapping), and investment experience. Interspersed with 3 personalized reflection/motivational screens.
-3. Each answer is stored locally on the device as the user progresses. Nothing is persisted to the backend until Phase 1 completes.
+3. After each screen, iOS calls `PATCH /v1/onboarding` to persist that screen's data to the backend. This allows mid-flow resume if the user closes the app. The `onboarding_step` field on `user_profiles` tracks which screen the user is on.
 4. Screen 17 (compounding chart bridge) uses the user's DOB to render a personalized chart showing the cost of waiting 5 years. This is the emotional conversion point.
-5. Screen 18 (risk disclosure) — user acknowledges investment risk before proceeding.
+5. Screen 18 (risk disclosure) — user acknowledges investment risk before proceeding. Timestamp saved to `risk_disclosure_acknowledged_at`.
 
-Phase 2 — KYC / Alpaca Account Creation (screens 19–29, ~4 min):
-6. Seamless visual transition — same UI style, tone shifts to practical. Collects legal name, SSN, address, phone, citizenship, employment, funding sources, FINRA disclosures.
-7. **SSN is transmitted directly to Alpaca and NEVER stored in our database** (see §2.4).
-8. Screen 28 — user signs Customer Agreement (revision 22.2024.08+ for FDIC eligibility), Margin Agreement, and FDIC Bank Sweep Terms.
-9. Screen 29 — iOS sends all collected data to the Saturn API in a single submission.
-10. API writes profile data to `user_profiles` + `user_financial_profiles`. KYC data is passed through to Alpaca via `POST /v1/accounts`. API stores the returned `alpaca_account_id` in `brokerage_accounts`.
-11. Alpaca runs async KYC → SSE listener (§4.4) receives status: SUBMITTED → ACTIVE (happy path), ACTION_REQUIRED, or REJECTED.
+Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
+6. Seamless visual transition — same UI style, tone shifts to practical. Collects legal name, SSN, address, citizenship, employment, funding sources, FINRA disclosures.
+7. Each screen (except SSN) calls `PATCH /v1/onboarding` to persist data — same per-step pattern as Phase 1.
+8. **SSN is held in the iOS app's memory only — NOT sent via PATCH.** It is transmitted directly to Alpaca via the submit endpoint and NEVER stored in our database.
+9. Screen 27 — user signs Customer Agreement (revision 22.2024.08+ for FDIC eligibility), Margin Agreement, and FDIC Bank Sweep Terms.
+10. Screen 28 (submit) — iOS calls `POST /v1/onboarding/submit` with only `{"tax_id": "..."}`. The backend loads all previously saved data from `user_profiles` + `user_financial_profiles`, derives Alpaca-specific field values (risk tolerance mapping matrix, income range brackets, etc.), builds the full Alpaca payload, and submits via `POST /v1/accounts`. The returned `alpaca_account_id` is stored in `brokerage_accounts`.
+11. Alpaca runs async KYC → SSE listener (§4.4, not yet built) will receive status: SUBMITTED → ACTIVE (happy path), ACTION_REQUIRED, or REJECTED.
 12. On ACTIVE: backend auto-enrolls in FDIC cash sweep by PATCHing the APR tier (§4.7). User is notified and can trade.
 13. iOS navigates to the main chat. AI sends first greeting with portfolio context.
 
+**API endpoints** (all require auth, prefix `/v1/onboarding`):
+- `PATCH /v1/onboarding` — incremental save, called after every screen. Accepts all profile + financial + KYC fields as optional. Routes fields to `user_profiles` or `user_financial_profiles` via the repository layer.
+- `POST /v1/onboarding/submit` — final KYC submission. Receives SSN, loads saved data, builds Alpaca payload, creates `brokerage_accounts` row.
+- `GET /v1/onboarding/status` — returns full onboarding state + all saved data for resume.
+
 **Key decisions:**
 
-- Profile Card fields map to both our `user_financial_profiles` table AND Alpaca's identity object. The onboarding doc has the complete field-to-Alpaca mapping. Risk tolerance is derived from two screens combined (scenario + max drop tolerance) using a mapping matrix.
-- `onboarding_step` on `user_profiles` tracks progress so users who abandon mid-flow can resume where they left off.
+- Profile Card fields map to both our `user_financial_profiles` table AND Alpaca's identity object. The onboarding doc has the complete field-to-Alpaca mapping. Risk tolerance is derived from two screens combined (scenario + max drop tolerance) using a mapping matrix. All derivation logic lives in `app/services/onboarding.py`.
+- `onboarding_step` on `user_profiles` tracks progress so users who abandon mid-flow can resume where they left off. Validated against an `OnboardingStep` enum in `app/schemas/onboarding.py`.
+- Data is persisted per-step (not in a single submission) for crash recovery and device-switch resilience.
 - Plaid bank linking is NOT part of the onboarding flow at MVP. Bank linking happens separately after the account is ACTIVE (see §7.2, §5.2). This may change in a future iteration.
 - KYC approval is async — user doesn't wait. They go straight to the chat. If KYC is pending, trading-dependent features are gated until ACTIVE.
+- SSE listener for KYC status updates is not yet built — `onboarding_completed` remains false after submission until this is implemented.
 
 ---
 

@@ -644,6 +644,26 @@
         }
       }
     },
+    "onboarding.alpaca_submit_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_submit_error_body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't set up your account right now. Please try again later."
+          }
+        }
+      }
+    },
     "onboarding.alpaca_complete_cta" : {
       "localizations" : {
         "en" : {

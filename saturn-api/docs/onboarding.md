@@ -794,6 +794,11 @@ In the meantime, let's start talking about your money.
 
 Complete mapping of every field in the `POST /v1/accounts` request body.
 
+> **Important:** For the exact accepted enum values for each field (e.g. `investment_time_horizon`, `risk_tolerance`, `employment_status`),
+> always refer to the official Alpaca API reference: https://docs.alpaca.markets/reference/createaccount
+> The mapping logic in `app/services/onboarding.py` translates our internal values to Alpaca's expected enums.
+> See also: `docs/alpaca-integration.md` § "Alpaca API Accepted Enum Values" for a quick reference table.
+
 ### Contact Object
 
 | Alpaca Field | Source | Screen |

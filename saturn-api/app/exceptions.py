@@ -44,6 +44,17 @@ class NotFoundError(Exception):
         self.message = message
 
 
+class ConflictError(Exception):
+    def __init__(self, message: str = "Resource already exists"):
+        self.message = message
+
+
+class IncompleteOnboardingError(Exception):
+    def __init__(self, message: str = "Onboarding data incomplete", missing_fields: list[str] | None = None):
+        self.message = message
+        self.missing_fields = missing_fields or []
+
+
 # ---------------------------------------------------------------------------
 # Exception handlers
 # ---------------------------------------------------------------------------
@@ -83,6 +94,39 @@ async def not_found_error_handler(
     request: Request, exc: NotFoundError
 ) -> JSONResponse:
     return error_response(404, exc.message, "NOT_FOUND")
+
+
+async def conflict_error_handler(
+    request: Request, exc: ConflictError
+) -> JSONResponse:
+    return error_response(409, exc.message, "CONFLICT")
+
+
+async def incomplete_onboarding_error_handler(
+    request: Request, exc: IncompleteOnboardingError
+) -> JSONResponse:
+    return error_response(
+        422, exc.message, "INCOMPLETE_ONBOARDING",
+        detail={"missing_fields": exc.missing_fields} if exc.missing_fields else None,
+    )
+
+
+# --- Alpaca handlers ---
+
+async def alpaca_error_handler(
+    request: Request, exc: "AlpacaBrokerError"
+) -> JSONResponse:
+    logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
+    return error_response(
+        422, f"KYC submission failed: {exc.message}", "ALPACA_ERROR", detail=exc.detail
+    )
+
+
+async def alpaca_unavailable_handler(
+    request: Request, exc: "AlpacaBrokerUnavailableError"
+) -> JSONResponse:
+    logger.error("alpaca_unavailable", error=exc.message)
+    return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
 
 
 # --- SQLAlchemy handlers (registered before generic Exception) ---
@@ -130,6 +174,12 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthenticationError, authentication_error_handler)
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(NotFoundError, not_found_error_handler)
+    app.add_exception_handler(ConflictError, conflict_error_handler)
+    app.add_exception_handler(IncompleteOnboardingError, incomplete_onboarding_error_handler)
+    # Alpaca handlers
+    from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
+    app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
+    app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)

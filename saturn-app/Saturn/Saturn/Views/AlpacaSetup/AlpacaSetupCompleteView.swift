@@ -3,6 +3,7 @@ import SwiftUI
 struct AlpacaSetupCompleteView: View {
     let scale: CGFloat
     let userName: String
+    let onSubmit: () async throws -> Void
     let onContinue: () -> Void
 
     @State private var showLoading = false
@@ -10,6 +11,7 @@ struct AlpacaSetupCompleteView: View {
     @State private var typedBody = ""
     @State private var typedCta = ""
     @State private var showButton = false
+    @State private var submitFailed = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,7 +79,23 @@ struct AlpacaSetupCompleteView: View {
         try? await Task.sleep(for: .milliseconds(400))
         showLoading = true
 
-        try? await Task.sleep(for: .milliseconds(2000))
+        // Submit KYC to Alpaca during the loading state
+        do {
+            try await onSubmit()
+        } catch {
+            print("[AlpacaSetup] Submit failed: \(error)")
+            submitFailed = true
+        }
+
+        showLoading = false
+
+        if submitFailed {
+            typedHeading = L10n.Onboarding.alpacaSubmitErrorHeading
+            typedBody = L10n.Onboarding.alpacaSubmitErrorBody
+            try? await Task.sleep(for: .milliseconds(300))
+            withAnimation(.easeOut(duration: 0.3)) { showButton = true }
+            return
+        }
 
         await typeOut(L10n.Onboarding.alpacaCompleteHeading(userName)) { typedHeading = $0 }
         try? await Task.sleep(for: .milliseconds(200))
@@ -98,5 +116,5 @@ struct AlpacaSetupCompleteView: View {
 }
 
 #Preview {
-    AlpacaSetupCompleteView(scale: 1, userName: "Riley", onContinue: {})
+    AlpacaSetupCompleteView(scale: 1, userName: "Riley", onSubmit: {}, onContinue: {})
 }

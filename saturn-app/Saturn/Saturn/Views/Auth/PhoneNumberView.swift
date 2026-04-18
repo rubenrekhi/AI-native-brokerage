@@ -5,11 +5,11 @@ struct PhoneNumberView: View {
     @State private var rawInput = ""
     @State private var scale: CGFloat = 1
 
-    let onComplete: () -> Void
+    let onComplete: (_ phoneNumber: String) -> Void
 
     init(
         phoneVM: PhoneNumberViewModel = PhoneNumberViewModel(),
-        onComplete: @escaping () -> Void
+        onComplete: @escaping (_ phoneNumber: String) -> Void
     ) {
         self._phoneVM = State(initialValue: phoneVM)
         self.onComplete = onComplete
@@ -83,7 +83,7 @@ struct PhoneNumberView: View {
     // MARK: - Next Button
 
     private var nextButton: some View {
-        Button(action: onComplete) {
+        Button { onComplete(phoneVM.phoneNumber) } label: {
             Text(L10n.Auth.phoneNext)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeButtonDarkTint)
@@ -122,5 +122,5 @@ private struct PhoneTitleView: View {
 }
 
 #Preview {
-    PhoneNumberView(onComplete: {})
+    PhoneNumberView(onComplete: { _ in })
 }

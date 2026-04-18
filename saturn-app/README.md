@@ -41,44 +41,63 @@ saturn-app/
 │   ├── App/
 │   │   └── SaturnApp.swift       # @main entry point
 │   ├── Views/                    # SwiftUI views (screens + components)
-│   │   ├── ContentView.swift     # Root view
-│   │   ├── Auth/
-│   │   ├── Trading/
-│   │   ├── Portfolio/
-│   │   ├── Funding/
-│   │   ├── Chat/
-│   │   └── Components/
+│   │   ├── ContentView.swift     # Root view / navigation shell
+│   │   ├── Auth/                 # Login, sign-up, phone number screens
+│   │   ├── Onboarding/           # Multi-step onboarding flow (phase 1)
+│   │   ├── AlpacaSetup/          # KYC / brokerage account setup (phase 2)
+│   │   ├── Home/                 # Home screen
+│   │   ├── Trading/              # (placeholder)
+│   │   ├── Portfolio/            # (placeholder)
+│   │   ├── Funding/              # (placeholder)
+│   │   ├── Chat/                 # (placeholder)
+│   │   └── Components/           # (placeholder)
 │   ├── ViewModels/
-│   │   └── Auth/
-│   │       └── AuthViewModel.swift   # Observable auth state for views
+│   │   ├── Auth/
+│   │   │   ├── AuthViewModel.swift       # Observable auth state for views
+│   │   │   └── PhoneNumberViewModel.swift
+│   │   └── Home/
+│   │       └── HomeViewModel.swift
 │   ├── Services/
-│   │   ├── APIClient.swift       # HTTP client for Saturn API
+│   │   ├── APIClient.swift       # HTTP client (conforms to APIClientProtocol); snake_case encoding/decoding; GET/POST/PUT/PATCH/DELETE
 │   │   ├── AuthService.swift     # Supabase Auth wrapper (protocol-backed)
+│   │   ├── OnboardingService.swift  # Calls PATCH /v1/onboarding, POST /v1/onboarding/submit, GET /v1/onboarding/status
 │   │   └── Supabase+Client.swift # SupabaseClient singleton
 │   ├── Models/
-│   │   └── APIError.swift        # Structured error model matching backend format
+│   │   ├── APIError.swift        # Structured error model matching backend format
+│   │   └── Onboarding/
+│   │       └── OnboardingModels.swift  # Request/response Codable types for onboarding API
 │   └── Utils/
-│       ├── AppConfig.swift       # Reads xcconfig values from Info.plist at runtime
-│       └── AnyCodable.swift      # Type-erased Codable wrapper (for APIError.detail)
+│       ├── AppConfig.swift           # Reads xcconfig values from Info.plist at runtime
+│       ├── AnyCodable.swift          # Type-erased Codable wrapper (for APIError.detail)
+│       └── OnboardingDataMapper.swift  # Pure functions: date formatting, name splitting, value normalization
 ├── SaturnTests/
 │   ├── Auth/
 │   │   ├── AuthViewModelTests.swift
-│   │   └── AuthServiceIntegrationTests.swift
+│   │   ├── AuthServiceIntegrationTests.swift
+│   │   └── PhoneNumberViewModelTests.swift
 │   ├── Models/
 │   │   ├── APIErrorTests.swift
 │   │   └── AnyCodableTests.swift
+│   ├── Onboarding/
+│   │   ├── OnboardingServiceTests.swift
+│   │   └── OnboardingDataMapperTests.swift
 │   └── Mocks/
-│       └── MockAuthService.swift
+│       ├── MockAuthService.swift
+│       └── MockAPIClient.swift   # Implements APIClientProtocol for test injection
 └── SaturnUITests/                # UI tests (critical flows only)
 ```
 
 ## How It Connects to the Backend
 
-All API communication goes through `Services/APIClient.swift`. Every request includes:
+All API communication goes through `Services/APIClient.swift`, which conforms to `APIClientProtocol`. Every request includes:
 - `Authorization: Bearer <jwt>` — Supabase Auth token, managed by `AuthService`.
 - `X-API-Key: <key>` — static API key for app identification.
 
+`APIClient` uses `JSONEncoder` with `.convertToSnakeCase` and `JSONDecoder` with `.convertFromSnakeCase`, so Swift camelCase model fields map automatically to the backend's snake_case JSON.
+
 The base URL (`API_BASE_URL`) points to `localhost:8000` in development and the Railway production URL in release builds. Non-2xx responses are decoded into a structured `APIError` model (with `error`, `code`, and `detail` fields matching the backend's error format).
+
+`APIClientProtocol` allows injecting `MockAPIClient` in unit tests without network calls.
 
 ## Authentication
 
@@ -109,7 +128,7 @@ The app never talks to Alpaca directly. All trading, portfolio, and account oper
 
 Tests for view models, services, data models, and business logic. Uses XCTest (built into Xcode).
 
-**Mocking pattern:** Define protocols for services (e.g., `AuthServiceProtocol`). In production, inject the real implementation. In tests, inject a mock that returns predetermined data (see `MockAuthService`). This also benefits SwiftUI previews.
+**Mocking pattern:** Define protocols for services (e.g., `AuthServiceProtocol`, `APIClientProtocol`). In production, inject the real implementation. In tests, inject a mock that returns predetermined data (see `MockAuthService`, `MockAPIClient`). This also benefits SwiftUI previews.
 
 Run in Xcode: Cmd+U or Product → Test.
 

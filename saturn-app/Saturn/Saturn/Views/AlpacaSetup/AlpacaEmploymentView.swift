@@ -4,18 +4,36 @@ struct AlpacaEmploymentView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
-    let onContinue: () -> Void
+    let onContinue: (_ status: String, _ employerName: String, _ jobTitle: String) -> Void
 
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var typed2 = ""
     @State private var showForm = false
 
-    @State private var employmentStatus = ""
+    @State private var employmentStatus: String
     @State private var showDropdown = false
-    @State private var employerName = ""
-    @State private var jobTitle = ""
+    @State private var employerName: String
+    @State private var jobTitle: String
     @State private var industry = ""
+
+    init(
+        scale: CGFloat,
+        userPromptText: String,
+        animate: Bool,
+        initialStatus: String = "",
+        initialEmployer: String = "",
+        initialJobTitle: String = "",
+        onContinue: @escaping (_ status: String, _ employerName: String, _ jobTitle: String) -> Void
+    ) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.animate = animate
+        self.onContinue = onContinue
+        _employmentStatus = State(initialValue: initialStatus)
+        _employerName = State(initialValue: initialEmployer)
+        _jobTitle = State(initialValue: initialJobTitle)
+    }
 
     private let statuses = [
         L10n.Onboarding.alpacaStatusEmployed,
@@ -206,7 +224,7 @@ struct AlpacaEmploymentView: View {
 
 
     private var continueButton: some View {
-        Button(action: onContinue) {
+        Button { onContinue(employmentStatus, employerName, jobTitle) } label: {
             Text(L10n.Onboarding.referralContinue)
                 .font(.system(size: 16 * scale, weight: .semibold))
                 .foregroundStyle(Color.welcomeText)
@@ -250,7 +268,7 @@ struct AlpacaEmploymentView: View {
 }
 
 #Preview {
-    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true, onContinue: {})
+    AlpacaEmploymentView(scale: 1, userPromptText: "Yes, US citizen", animate: true) { _, _, _ in }
         .background(Color.black)
         .preferredColorScheme(.dark)
 }
