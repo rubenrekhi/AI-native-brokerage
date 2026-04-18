@@ -22,7 +22,7 @@ struct HoldingsMorphingView: View {
         .padding(isExpanded ? 20 * scale : 0)
         .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
         .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
         .accessibilityAddTraits(.isButton)
@@ -45,7 +45,7 @@ struct HoldingsMorphingView: View {
     private var pillContent: some View {
         Image(systemName: "list.bullet")
             .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.saturnSecondary)
+            .foregroundStyle(Color.sevinoSecondary)
             .frame(width: 36 * scale, height: 36 * scale)
     }
 
@@ -70,7 +70,7 @@ struct HoldingsMorphingView: View {
         HStack {
             Text(L10n.Home.holdingsTitle)
                 .font(.system(size: 22 * scale, weight: .bold))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             Spacer()
 
@@ -82,11 +82,11 @@ struct HoldingsMorphingView: View {
                 HStack(spacing: 6 * scale) {
                     Text(displayOption.label)
                         .font(.system(size: 13 * scale))
-                        .foregroundStyle(Color.saturnGreyContrast)
+                        .foregroundStyle(Color.sevinoGreyContrast)
 
                     Image(systemName: "line.3.horizontal.decrease")
                         .font(.system(size: 13 * scale))
-                        .foregroundStyle(Color.saturnGreyContrast)
+                        .foregroundStyle(Color.sevinoGreyContrast)
                         .accessibilityHidden(true)
                 }
             }
@@ -105,7 +105,7 @@ private struct HoldingsFilterPopup: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(L10n.Home.filterDisplayBy)
                 .font(.system(size: 11 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnGreyContrast)
+                .foregroundStyle(Color.sevinoGreyContrast)
                 .padding(.bottom, 6 * scale)
 
             ForEach(HoldingsDisplayOption.allCases) { option in
@@ -116,12 +116,12 @@ private struct HoldingsFilterPopup: View {
             }
 
             Divider()
-                .foregroundStyle(Color.saturnGreyAccent.opacity(0.3))
+                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
                 .padding(.vertical, 8 * scale)
 
             Text(L10n.Home.filterSortBy)
                 .font(.system(size: 11 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnGreyContrast)
+                .foregroundStyle(Color.sevinoGreyContrast)
                 .padding(.bottom, 6 * scale)
 
             ForEach(HoldingsSortOption.allCases) { option in
@@ -133,8 +133,8 @@ private struct HoldingsFilterPopup: View {
         }
         .padding(12 * scale)
         .frame(width: 180 * scale)
-        .background(Color.saturnSettingsContrast, in: .rect(cornerRadius: 16 * scale))
-        .shadow(color: Color.saturnPrimary.opacity(0.3), radius: 12, y: 4)
+        .background(Color.sevinoSettingsContrast, in: .rect(cornerRadius: 16 * scale))
+        .shadow(color: Color.sevinoPrimary.opacity(0.3), radius: 12, y: 4)
     }
 
     private func filterRow(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
@@ -142,12 +142,12 @@ private struct HoldingsFilterPopup: View {
             HStack {
                 Text(label)
                     .font(.system(size: 13 * scale, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.saturnSecondary : Color.saturnGreyContrast)
+                    .foregroundStyle(isSelected ? Color.sevinoSecondary : Color.sevinoGreyContrast)
                 Spacer()
                 if isSelected {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11 * scale, weight: .bold))
-                        .foregroundStyle(Color.saturnSecondary)
+                        .foregroundStyle(Color.sevinoSecondary)
                 }
             }
             .padding(.vertical, 6 * scale)
@@ -183,7 +183,7 @@ private struct HoldingRow: View {
             if hasDetails {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 12 * scale, weight: .medium))
-                    .foregroundStyle(Color.saturnGreyContrast)
+                    .foregroundStyle(Color.sevinoGreyContrast)
                     .rotationEffect(.degrees(isDetailExpanded ? -180 : 0))
                     .accessibilityHidden(true)
             }
@@ -204,7 +204,7 @@ private struct HoldingRow: View {
             if holding.isCash {
                 Image(systemName: "dollarsign.circle.fill")
                     .font(.system(size: 28 * scale))
-                    .foregroundStyle(Color.saturnSecondary)
+                    .foregroundStyle(Color.sevinoSecondary)
                     .frame(width: 36 * scale, height: 36 * scale)
             } else {
                 StockLogoView(ticker: holding.ticker, size: 28 * scale)
@@ -216,12 +216,12 @@ private struct HoldingRow: View {
         VStack(alignment: .leading, spacing: 2 * scale) {
             Text(holding.ticker)
                 .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             if let shares = holding.shares {
                 Text(L10n.Home.holdingsShares(shares))
                     .font(.system(size: 12 * scale))
-                    .foregroundStyle(Color.saturnGreyContrast)
+                    .foregroundStyle(Color.sevinoGreyContrast)
             }
         }
     }
@@ -230,12 +230,12 @@ private struct HoldingRow: View {
         VStack(alignment: .trailing, spacing: 2 * scale) {
             Text(holding.value)
                 .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             if let gainLoss = holding.gainLossText, let isPositive = holding.isPositive {
                 Text(gainLoss)
                     .font(.system(size: 11 * scale))
-                    .foregroundStyle(isPositive ? Color.saturnPositive : Color.saturnNegative)
+                    .foregroundStyle(isPositive ? Color.sevinoPositive : Color.sevinoNegative)
             }
         }
     }
@@ -245,7 +245,7 @@ private struct HoldingRow: View {
             VStack(spacing: 0) {
                 Text(L10n.Home.holdingsMyHoldings)
                     .font(.system(size: 15 * scale, weight: .bold))
-                    .foregroundStyle(Color.saturnSecondary)
+                    .foregroundStyle(Color.sevinoSecondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.bottom, 8 * scale)
 
@@ -269,24 +269,24 @@ private struct HoldingRow: View {
                     VStack(alignment: .leading, spacing: 4 * scale) {
                         Text(L10n.Home.holdingsAverageCost)
                             .font(.system(size: 13 * scale))
-                            .foregroundStyle(Color.saturnGreyContrast)
+                            .foregroundStyle(Color.sevinoGreyContrast)
                         Text(avgCost)
                             .font(.system(size: 18 * scale, weight: .bold))
-                            .foregroundStyle(Color.saturnSecondary)
+                            .foregroundStyle(Color.sevinoSecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.top, 8 * scale)
                 }
             }
             .padding(12 * scale)
-            .background(Color.saturnGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
+            .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
 
             Button(L10n.Home.chatAboutThis, action: {})
                 .font(.system(size: 15 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
                 .padding(.horizontal, 20 * scale)
                 .padding(.vertical, 12 * scale)
-                .modifier(SaturnGlass.tintedButton(tint: Color.saturnAccent, cornerRadius: 24 * scale))
+                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 24 * scale))
         }
         .padding(.top, 8 * scale)
         .transition(.opacity)
@@ -296,11 +296,11 @@ private struct HoldingRow: View {
         HStack {
             Text(label)
                 .font(.system(size: 13 * scale))
-                .foregroundStyle(Color.saturnGreyContrast)
+                .foregroundStyle(Color.sevinoGreyContrast)
             Spacer()
             Text(value)
                 .font(.system(size: 13 * scale, weight: .medium))
-                .foregroundStyle(isPositive == true ? Color.saturnPositive : Color.saturnNegative)
+                .foregroundStyle(isPositive == true ? Color.sevinoPositive : Color.sevinoNegative)
         }
         .padding(.vertical, 6 * scale)
     }
@@ -308,7 +308,7 @@ private struct HoldingRow: View {
 
 #Preview("Dark") {
     ZStack {
-        Color.saturnPrimary.ignoresSafeArea()
+        Color.sevinoPrimary.ignoresSafeArea()
         HoldingsMorphingView(
             scale: 1,
             isExpanded: true,
@@ -328,7 +328,7 @@ private struct HoldingRow: View {
 
 #Preview("Light") {
     ZStack {
-        Color.saturnPrimary.ignoresSafeArea()
+        Color.sevinoPrimary.ignoresSafeArea()
         HoldingsMorphingView(
             scale: 1,
             isExpanded: true,

@@ -29,9 +29,9 @@ struct StockLogoView: View {
     private var fallbackIcon: some View {
         Text(String(ticker.prefix(1)))
             .font(.system(size: size * 0.45, weight: .bold))
-            .foregroundStyle(Color.saturnSecondary)
+            .foregroundStyle(Color.sevinoSecondary)
             .frame(width: size, height: size)
-            .background(Color.saturnGreyAccent.opacity(0.3))
+            .background(Color.sevinoGreyAccent.opacity(0.3))
     }
 }
 
@@ -43,5 +43,5 @@ struct StockLogoView: View {
         StockLogoView(ticker: "UNKNOWN", size: 40)
     }
     .padding()
-    .background(Color.saturnPrimary)
+    .background(Color.sevinoPrimary)
 }

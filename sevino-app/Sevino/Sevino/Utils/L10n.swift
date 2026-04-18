@@ -330,6 +330,63 @@ enum L10n {
         static let fundingAccessibility = String(localized: "home.funding_accessibility")
         static let watchlistAccessibility = String(localized: "home.watchlist_accessibility")
         static let menuAccessibility = String(localized: "home.menu_accessibility")
+        static let portfolioCurrency = String(localized: "home.portfolio_currency")
+        static let chatAboutThis = String(localized: "home.chat_about_this")
+        static let dismissAccessibility = String(localized: "home.dismiss_accessibility")
+        static let periodToday = String(localized: "home.period_today")
+        static let period7Days = String(localized: "home.period_7_days")
+        static let period30Days = String(localized: "home.period_30_days")
+        static let period3Months = String(localized: "home.period_3_months")
+        static let period6Months = String(localized: "home.period_6_months")
+        static let periodYtd = String(localized: "home.period_ytd")
+        static let periodYear = String(localized: "home.period_year")
+        static let periodAllTime = String(localized: "home.period_all_time")
+        static let uninvestedCash = String(localized: "home.uninvested_cash")
+        static func earningApy(_ apy: String) -> String {
+            String(format: String(localized: "home.earning_apy"), apy)
+        }
+        static let thisMonth = String(localized: "home.this_month")
+        static func daysAccrued(_ days: String) -> String {
+            String(format: String(localized: "home.days_accrued"), days)
+        }
+        static let lifetimeEarned = String(localized: "home.lifetime_earned")
+        static func sinceLabel(_ date: String) -> String {
+            String(format: String(localized: "home.since_label"), date)
+        }
+        static let currentApy = String(localized: "home.current_apy")
+        static let buyingPower = String(localized: "home.buying_power")
+        static let pendingDeposits = String(localized: "home.pending_deposits")
+        static let interestPaidOut = String(localized: "home.interest_paid_out")
+        static let fdicInsured = String(localized: "home.fdic_insured")
+        static let deposit = String(localized: "home.deposit")
+        static let withdraw = String(localized: "home.withdraw")
+        static let cashInterestInfo = String(localized: "home.cash_interest_info")
+        static let cashDisclaimer = String(localized: "home.cash_disclaimer")
+        static let holdingsTitle = String(localized: "home.holdings_title")
+        static let holdingsTotalValue = String(localized: "home.holdings_total_value")
+        static let holdingsMyHoldings = String(localized: "home.holdings_my_holdings")
+        static let holdingsDaysGain = String(localized: "home.holdings_days_gain")
+        static let holdingsTotalGain = String(localized: "home.holdings_total_gain")
+        static let holdingsAverageCost = String(localized: "home.holdings_average_cost")
+        static func holdingsShares(_ count: String) -> String {
+            String(format: String(localized: "home.holdings_shares"), count)
+        }
+        static let filterDisplayBy = String(localized: "home.filter_display_by")
+        static let filterAllTimeReturn = String(localized: "home.filter_all_time_return")
+        static let filterTodaysReturn = String(localized: "home.filter_todays_return")
+        static let filterTotalValue = String(localized: "home.filter_total_value")
+        static let filterPriceChange = String(localized: "home.filter_price_change")
+        static let filterSortBy = String(localized: "home.filter_sort_by")
+        static let filterHighToLow = String(localized: "home.filter_high_to_low")
+        static let filterLowToHigh = String(localized: "home.filter_low_to_high")
+        static let filterAlphabetical = String(localized: "home.filter_alphabetical")
+        static let radarTitle = String(localized: "home.radar_title")
+        static let radarSubtitle = String(localized: "home.radar_subtitle")
+        static let radarDisclaimer = String(localized: "home.radar_disclaimer")
+        static func radarExpires(_ time: String) -> String {
+            String(format: String(localized: "home.radar_expires"), time)
+        }
+        static let radarStarAccessibility = String(localized: "home.radar_star_accessibility")
     }
 
     enum Welcome {

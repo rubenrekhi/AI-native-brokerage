@@ -4,6 +4,16 @@
     "" : {
 
     },
+    "%@ %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ %2$@"
+          }
+        }
+      }
+    },
     "%lld of %lld" : {
       "localizations" : {
         "en" : {
@@ -354,6 +364,16 @@
         }
       }
     },
+    "home.chat_about_this" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chat about this?"
+          }
+        }
+      }
+    },
     "home.chat_placeholder" : {
       "localizations" : {
         "en" : {
@@ -380,6 +400,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Explore what's in Sevino"
+          }
+        }
+      }
+    },
+    "home.funding_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funding"
           }
         }
       }
@@ -414,62 +444,22 @@
         }
       }
     },
-    "home.mic_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input"
-          }
-        }
-      }
-    },
-    "home.suggestion_news" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "\u201CAny news today?\u201D"
-          }
-        }
-      }
-    },
-    "home.suggestion_portfolio" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "\u201CHow\u2019s my portfolio?\u201D"
-          }
-        }
-      }
-    },
-    "home.suggestion_radar" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "\u201CWhat stocks are on my radar?\u201D"
-          }
-        }
-      }
-    },
-    "home.funding_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Funding"
-          }
-        }
-      }
-    },
     "home.menu_accessibility" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Menu"
+          }
+        }
+      }
+    },
+    "home.mic_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input"
           }
         }
       }
@@ -484,12 +474,472 @@
         }
       }
     },
-    "home.watchlist_accessibility" : {
+    "home.portfolio_currency" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Watchlist"
+            "value" : "USD"
+          }
+        }
+      }
+    },
+    "home.dismiss_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.period_today" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "today"
+          }
+        }
+      }
+    },
+    "home.period_7_days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "past 7 days"
+          }
+        }
+      }
+    },
+    "home.period_30_days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "past 30 days"
+          }
+        }
+      }
+    },
+    "home.period_3_months" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "past 3 months"
+          }
+        }
+      }
+    },
+    "home.period_6_months" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "past 6 months"
+          }
+        }
+      }
+    },
+    "home.period_ytd" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "year to date"
+          }
+        }
+      }
+    },
+    "home.period_year" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "past year"
+          }
+        }
+      }
+    },
+    "home.period_all_time" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "all time"
+          }
+        }
+      }
+    },
+    "home.uninvested_cash" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uninvested Cash"
+          }
+        }
+      }
+    },
+    "home.earning_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earning %@ APY"
+          }
+        }
+      }
+    },
+    "home.this_month" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This month"
+          }
+        }
+      }
+    },
+    "home.days_accrued" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ days accrued"
+          }
+        }
+      }
+    },
+    "home.lifetime_earned" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lifetime earned"
+          }
+        }
+      }
+    },
+    "home.since_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Since %@"
+          }
+        }
+      }
+    },
+    "home.current_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current APY"
+          }
+        }
+      }
+    },
+    "home.buying_power" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buying power"
+          }
+        }
+      }
+    },
+    "home.pending_deposits" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending deposits"
+          }
+        }
+      }
+    },
+    "home.interest_paid_out" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interest paid out"
+          }
+        }
+      }
+    },
+    "home.fdic_insured" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FDIC insured up to"
+          }
+        }
+      }
+    },
+    "home.deposit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit"
+          }
+        }
+      }
+    },
+    "home.withdraw" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdraw"
+          }
+        }
+      }
+    },
+    "home.cash_interest_info" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How does my cash earn interest?"
+          }
+        }
+      }
+    },
+    "home.cash_disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rate is variable and tied to the federal funds rate. FDIC insurance provided through Alpaca Securities' bank sweep program. Cash remains fully liquid as buying power. Brokerage services provided by Alpaca Securities LLC, member FINRA/SIPC."
+          }
+        }
+      }
+    },
+    "home.holdings_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Holdings"
+          }
+        }
+      }
+    },
+    "home.holdings_total_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total value"
+          }
+        }
+      }
+    },
+    "home.holdings_my_holdings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Holdings"
+          }
+        }
+      }
+    },
+    "home.holdings_days_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day\u2019s Gain"
+          }
+        }
+      }
+    },
+    "home.holdings_total_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total Gain"
+          }
+        }
+      }
+    },
+    "home.holdings_average_cost" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Average Cost"
+          }
+        }
+      }
+    },
+    "home.holdings_shares" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ shares"
+          }
+        }
+      }
+    },
+    "home.filter_display_by" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display by"
+          }
+        }
+      }
+    },
+    "home.filter_all_time_return" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All time return"
+          }
+        }
+      }
+    },
+    "home.filter_todays_return" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today\u2019s return"
+          }
+        }
+      }
+    },
+    "home.filter_total_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total value"
+          }
+        }
+      }
+    },
+    "home.filter_price_change" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price change"
+          }
+        }
+      }
+    },
+    "home.filter_sort_by" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort by"
+          }
+        }
+      }
+    },
+    "home.filter_high_to_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High to low"
+          }
+        }
+      }
+    },
+    "home.filter_low_to_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low to high"
+          }
+        }
+      }
+    },
+    "home.filter_alphabetical" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alphabetical"
+          }
+        }
+      }
+    },
+    "home.radar_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radar"
+          }
+        }
+      }
+    },
+    "home.radar_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Curated for your profile"
+          }
+        }
+      }
+    },
+    "home.radar_disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For information purposes only. These are not recommendations to buy or sell."
+          }
+        }
+      }
+    },
+    "home.radar_expires" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expires in %@"
+          }
+        }
+      }
+    },
+    "home.radar_star_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save to watchlist"
+          }
+        }
+      }
+    },
+    "home.send_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Send message"
           }
         }
       }
@@ -504,12 +954,42 @@
         }
       }
     },
-    "home.send_accessibility" : {
+    "home.suggestion_news" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Send message"
+            "value" : "“Any news today?”"
+          }
+        }
+      }
+    },
+    "home.suggestion_portfolio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“How’s my portfolio?”"
+          }
+        }
+      }
+    },
+    "home.suggestion_radar" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“What stocks are on my radar?”"
+          }
+        }
+      }
+    },
+    "home.watchlist_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Watchlist"
           }
         }
       }

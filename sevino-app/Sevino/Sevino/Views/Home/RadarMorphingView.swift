@@ -18,7 +18,7 @@ struct RadarMorphingView: View {
         .padding(isExpanded ? 20 * scale : 0)
         .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
         .fixedSize(horizontal: !isExpanded, vertical: !isExpanded)
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
         .accessibilityAddTraits(.isButton)
@@ -28,7 +28,7 @@ struct RadarMorphingView: View {
     private var pillContent: some View {
         Image(systemName: "eye")
             .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.saturnSecondary)
+            .foregroundStyle(Color.sevinoSecondary)
             .frame(width: 36 * scale, height: 36 * scale)
     }
 
@@ -48,15 +48,15 @@ struct RadarMorphingView: View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             Text(L10n.Home.radarTitle)
                 .font(.system(size: 22 * scale, weight: .bold))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             Text(L10n.Home.radarSubtitle)
                 .font(.system(size: 14 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             Text(L10n.Home.radarDisclaimer)
                 .font(.system(size: 11 * scale))
-                .foregroundStyle(Color.saturnGreyContrast)
+                .foregroundStyle(Color.sevinoGreyContrast)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 2 * scale)
         }
@@ -76,11 +76,11 @@ private struct RadarItemRow: View {
                 VStack(alignment: .leading, spacing: 4 * scale) {
                     Text(item.ticker)
                         .font(.system(size: 16 * scale, weight: .bold))
-                        .foregroundStyle(Color.saturnSecondary)
+                        .foregroundStyle(Color.sevinoSecondary)
 
                     Text(item.description)
                         .font(.system(size: 12 * scale))
-                        .foregroundStyle(Color.saturnGreyContrast)
+                        .foregroundStyle(Color.sevinoGreyContrast)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -89,33 +89,33 @@ private struct RadarItemRow: View {
                 Button(L10n.Home.radarStarAccessibility, systemImage: item.isStarred ? "star.fill" : "star", action: onToggleStar)
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18 * scale))
-                    .foregroundStyle(item.isStarred ? Color.homeStarActive : Color.saturnGreyContrast)
+                    .foregroundStyle(item.isStarred ? Color.homeStarActive : Color.sevinoGreyContrast)
             }
 
             HStack(spacing: 8 * scale) {
                 Text(item.price)
                     .font(.system(size: 14 * scale, weight: .semibold))
-                    .foregroundStyle(Color.saturnSecondary)
+                    .foregroundStyle(Color.sevinoSecondary)
 
                 Text(item.changePercent)
                     .font(.system(size: 12 * scale, weight: .medium))
-                    .foregroundStyle(item.isPositive ? Color.saturnPositive : Color.saturnNegative)
+                    .foregroundStyle(item.isPositive ? Color.sevinoPositive : Color.sevinoNegative)
 
                 Spacer()
 
                 Text(L10n.Home.radarExpires(item.expiresIn))
                     .font(.system(size: 11 * scale))
-                    .foregroundStyle(Color.saturnGreyContrast)
+                    .foregroundStyle(Color.sevinoGreyContrast)
             }
         }
         .padding(12 * scale)
-        .background(Color.saturnGreyAccent.opacity(0.1), in: .rect(cornerRadius: 14 * scale))
+        .background(Color.sevinoGreyAccent.opacity(0.1), in: .rect(cornerRadius: 14 * scale))
     }
 }
 
 #Preview("Dark") {
     ZStack {
-        Color.saturnPrimary.ignoresSafeArea()
+        Color.sevinoPrimary.ignoresSafeArea()
         RadarMorphingView(
             scale: 1,
             isExpanded: true,
@@ -134,7 +134,7 @@ private struct RadarItemRow: View {
 
 #Preview("Light") {
     ZStack {
-        Color.saturnPrimary.ignoresSafeArea()
+        Color.sevinoPrimary.ignoresSafeArea()
         RadarMorphingView(
             scale: 1,
             isExpanded: true,

@@ -8,4 +8,7 @@ extension Color {
             ? UIColor(red: 0.80, green: 0.75, blue: 1.00, alpha: 1)  // #CCBEFF
             : UIColor(red: 0.16, green: 0.14, blue: 0.23, alpha: 1)  // #29243B
     })
+
+    /// Star/favourite yellow — #FFD60A
+    static let homeStarActive = Color(red: 1.0, green: 0.84, blue: 0.04)
 }

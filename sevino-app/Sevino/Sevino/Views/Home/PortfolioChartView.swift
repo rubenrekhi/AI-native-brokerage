@@ -17,14 +17,14 @@ struct PortfolioChartView: View {
                 AnimatableChartFill(points: displayPoints, size: geo.size)
                     .fill(
                         LinearGradient(
-                            colors: [Color.saturnPositive.opacity(0.3), Color.saturnPositive.opacity(0.02)],
+                            colors: [Color.sevinoPositive.opacity(0.3), Color.sevinoPositive.opacity(0.02)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
 
                 AnimatableChartLine(points: displayPoints, size: geo.size)
-                    .stroke(Color.saturnPositive, lineWidth: 2 * scale)
+                    .stroke(Color.sevinoPositive, lineWidth: 2 * scale)
 
                 if let idx = scrubIndex, idx < displayPoints.count, let label = scrubValue {
                     let step = width / CGFloat(displayPoints.count - 1)
@@ -33,23 +33,23 @@ struct PortfolioChartView: View {
                     let labelX = min(max(x, 40 * scale), width - 40 * scale)
 
                     Rectangle()
-                        .fill(Color.saturnGreyContrast.opacity(0.5))
+                        .fill(Color.sevinoGreyContrast.opacity(0.5))
                         .frame(width: 1 * scale)
                         .position(x: x, y: height / 2)
                         .accessibilityHidden(true)
 
                     Circle()
-                        .fill(Color.saturnPositive)
+                        .fill(Color.sevinoPositive)
                         .frame(width: 8 * scale, height: 8 * scale)
                         .position(x: x, y: y)
                         .accessibilityHidden(true)
 
                     Text(label)
                         .font(.system(size: 12 * scale, weight: .semibold))
-                        .foregroundStyle(Color.saturnSecondary)
+                        .foregroundStyle(Color.sevinoSecondary)
                         .padding(.horizontal, 8 * scale)
                         .padding(.vertical, 4 * scale)
-                        .modifier(SaturnGlass.nav)
+                        .modifier(SevinoGlass.nav)
                         .position(x: labelX, y: y - 20 * scale)
                 }
             }
@@ -183,5 +183,5 @@ private struct AnimatableChartFill: Shape {
     )
     .frame(height: 160)
     .padding()
-    .background(Color.saturnPrimary)
+    .background(Color.sevinoPrimary)
 }
