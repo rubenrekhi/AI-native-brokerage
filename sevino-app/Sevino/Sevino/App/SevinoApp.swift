@@ -1,6 +1,6 @@
 //
-//  SaturnApp.swift
-//  Saturn
+//  SevinoApp.swift
+//  Sevino
 //
 //  Created by Ruben Rekhi on 2026-03-24.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct SaturnApp: App {
+struct SevinoApp: App {
     private static let isTesting = ProcessInfo.processInfo.environment.keys.contains("XCTestBundlePath")
 
     var body: some Scene {

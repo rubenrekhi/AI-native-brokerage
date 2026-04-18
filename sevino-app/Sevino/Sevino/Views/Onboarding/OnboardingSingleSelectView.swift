@@ -54,7 +54,7 @@ struct OnboardingSingleSelectView: View {
                                 .padding(.horizontal, 16 * scale)
                                 .padding(.vertical, 10 * scale)
                                 .background(
-                                    Color.saturnGreyAccent.opacity(0.4),
+                                    Color.sevinoGreyAccent.opacity(0.4),
                                     in: RoundedRectangle(cornerRadius: 16 * scale)
                                 )
                         }
@@ -115,9 +115,9 @@ struct OnboardingSingleSelectView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
-                        .modifier(SaturnGlass.tintedButton(
+                        .modifier(SevinoGlass.tintedButton(
                             tint: selected == option
-                                ? Color.saturnAccent
+                                ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16
                         ))
@@ -138,7 +138,7 @@ struct OnboardingSingleSelectView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(
+        .modifier(SevinoGlass.tintedButton(
             tint: selected != nil ? Color.onboardingButtonActive : Color.onboardingButtonInactive
         ))
         .disabled(selected == nil)

@@ -1,5 +1,5 @@
 import XCTest
-@testable import Saturn
+@testable import Sevino
 
 final class APIErrorTests: XCTestCase {
 

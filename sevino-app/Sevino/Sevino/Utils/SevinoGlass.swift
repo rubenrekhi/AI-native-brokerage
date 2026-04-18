@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum SaturnGlass {
+enum SevinoGlass {
     static let card = CardGlass()
     static let chip = ChipGlass()
     static let button = ButtonGlass()
@@ -20,7 +20,7 @@ enum SaturnGlass {
     }
 }
 
-struct SaturnGlassContainer<Content: View>: View {
+struct SevinoGlassContainer<Content: View>: View {
     let content: Content
 
     init(@ViewBuilder content: () -> Content) {
@@ -74,7 +74,7 @@ struct ButtonGlass: ViewModifier {
         if #available(iOS 26, *) {
             content
                 .glassEffect(
-                    .regular.tint(Color.saturnAccent).interactive(),
+                    .regular.tint(Color.sevinoAccent).interactive(),
                     in: .rect(cornerRadius: Self.cornerRadius)
                 )
         } else {
@@ -121,7 +121,7 @@ struct ConditionalChipGlass: ViewModifier {
 
     func body(content: Content) -> some View {
         if isSelected {
-            content.modifier(SaturnGlass.chip)
+            content.modifier(SevinoGlass.chip)
         } else {
             content
         }

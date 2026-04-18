@@ -80,7 +80,7 @@ struct OnboardingGoalsReflectionView: View {
                         .padding(.vertical, 14 * scale)
                 }
                 .buttonStyle(.plain)
-                .modifier(SaturnGlass.tintedButton(tint: Color.onboardingButtonActive))
+                .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))
                 .padding(.horizontal, 32 * scale)
                 .padding(.bottom, 16 * scale)
                 .transition(.opacity.combined(with: .offset(y: 16)))

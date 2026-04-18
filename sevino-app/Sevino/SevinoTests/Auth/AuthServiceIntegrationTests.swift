@@ -1,6 +1,6 @@
 import XCTest
 import Supabase
-@testable import Saturn
+@testable import Sevino
 
 /// Integration tests that hit real local Supabase (make infra must be running).
 /// Skipped by default — set INTEGRATION_TESTS=1 plus the Supabase env vars to run.

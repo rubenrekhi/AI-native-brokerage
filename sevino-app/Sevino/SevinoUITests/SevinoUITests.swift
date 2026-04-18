@@ -1,13 +1,13 @@
 //
-//  SaturnUITests.swift
-//  SaturnUITests
+//  SevinoUITests.swift
+//  SevinoUITests
 //
 //  Created by Ruben Rekhi on 2026-03-24.
 //
 
 import XCTest
 
-final class SaturnUITests: XCTestCase {
+final class SevinoUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

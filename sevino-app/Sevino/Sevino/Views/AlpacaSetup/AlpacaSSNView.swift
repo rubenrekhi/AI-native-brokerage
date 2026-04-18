@@ -24,7 +24,7 @@ struct AlpacaSSNView: View {
                             .padding(.horizontal, 16 * scale)
                             .padding(.vertical, 10 * scale)
                             .background(
-                                Color.saturnGreyAccent.opacity(0.4),
+                                Color.sevinoGreyAccent.opacity(0.4),
                                 in: RoundedRectangle(cornerRadius: 16 * scale)
                             )
                     }
@@ -92,7 +92,7 @@ struct AlpacaSSNView: View {
             }
         }
         .padding(14 * scale)
-        .modifier(SaturnGlass.nav)
+        .modifier(SevinoGlass.nav)
         .padding(.horizontal, 8 * scale)
         .padding(.bottom, 16 * scale)
     }

@@ -65,7 +65,7 @@ struct AlpacaAgreementsView: View {
                 }
                 .padding(.horizontal, 16 * scale)
                 .padding(.vertical, 14 * scale)
-                .modifier(SaturnGlass.nav)
+                .modifier(SevinoGlass.nav)
             }
         }
     }
@@ -99,7 +99,7 @@ struct AlpacaAgreementsView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(
+        .modifier(SevinoGlass.tintedButton(
             tint: agreed ? Color.onboardingButtonActive : Color.onboardingButtonInactive
         ))
         .disabled(!agreed)

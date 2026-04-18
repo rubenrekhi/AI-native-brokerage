@@ -1,13 +1,13 @@
 //
-//  SaturnUITestsLaunchTests.swift
-//  SaturnUITests
+//  SevinoUITestsLaunchTests.swift
+//  SevinoUITests
 //
 //  Created by Ruben Rekhi on 2026-03-24.
 //
 
 import XCTest
 
-final class SaturnUITestsLaunchTests: XCTestCase {
+final class SevinoUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

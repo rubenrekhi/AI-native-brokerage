@@ -1,5 +1,5 @@
 import Foundation
-@testable import Saturn
+@testable import Sevino
 
 final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var lastPath: String?

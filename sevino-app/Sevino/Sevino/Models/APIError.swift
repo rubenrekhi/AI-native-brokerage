@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- Structured error returned by the Saturn API.
+ Structured error returned by the Sevino API.
  Every non-2xx response is decoded into this model. Use `code` to drive
  app logic (e.g., redirect to login, highlight a form field) and `error`
  as the user-facing message.

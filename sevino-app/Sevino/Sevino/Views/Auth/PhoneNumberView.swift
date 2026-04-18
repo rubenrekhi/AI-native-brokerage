@@ -60,7 +60,7 @@ struct PhoneNumberView: View {
                     .foregroundStyle(Color.welcomeText)
                     .padding(.horizontal, 14 * scale)
                     .padding(.vertical, 14 * scale)
-                    .modifier(SaturnGlass.card)
+                    .modifier(SevinoGlass.card)
 
                 TextField(L10n.Auth.phonePlaceholder, text: $rawInput)
                     .keyboardType(.numberPad)
@@ -69,7 +69,7 @@ struct PhoneNumberView: View {
                     .foregroundStyle(Color.welcomeText)
                     .padding(.horizontal, 16 * scale)
                     .padding(.vertical, 14 * scale)
-                    .modifier(SaturnGlass.card)
+                    .modifier(SevinoGlass.card)
                     .onChange(of: rawInput) { _, newValue in
                         phoneVM.updatePhoneNumber(newValue)
                         rawInput = phoneVM.phoneNumber
@@ -91,7 +91,7 @@ struct PhoneNumberView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
+        .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
         .disabled(!phoneVM.isPhoneValid)
         .opacity(phoneVM.isPhoneValid ? 1 : 0.6)
         .padding(.top, 20 * scale)

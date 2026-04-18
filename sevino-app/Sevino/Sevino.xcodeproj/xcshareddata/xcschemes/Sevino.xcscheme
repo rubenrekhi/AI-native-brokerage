@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "0B40D02B2F7346F400C0AB94"
-               BuildableName = "Saturn.app"
-               BlueprintName = "Saturn"
-               ReferencedContainer = "container:Saturn.xcodeproj">
+               BuildableName = "Sevino.app"
+               BlueprintName = "Sevino"
+               ReferencedContainer = "container:Sevino.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -36,9 +36,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "0B40D0382F7346F500C0AB94"
-               BuildableName = "SaturnTests.xctest"
-               BlueprintName = "SaturnTests"
-               ReferencedContainer = "container:Saturn.xcodeproj">
+               BuildableName = "SevinoTests.xctest"
+               BlueprintName = "SevinoTests"
+               ReferencedContainer = "container:Sevino.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
@@ -47,9 +47,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "0B40D0422F7346F500C0AB94"
-               BuildableName = "SaturnUITests.xctest"
-               BlueprintName = "SaturnUITests"
-               ReferencedContainer = "container:Saturn.xcodeproj">
+               BuildableName = "SevinoUITests.xctest"
+               BlueprintName = "SevinoUITests"
+               ReferencedContainer = "container:Sevino.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -69,9 +69,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0B40D02B2F7346F400C0AB94"
-            BuildableName = "Saturn.app"
-            BlueprintName = "Saturn"
-            ReferencedContainer = "container:Saturn.xcodeproj">
+            BuildableName = "Sevino.app"
+            BlueprintName = "Sevino"
+            ReferencedContainer = "container:Sevino.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
       <EnvironmentVariables>
@@ -108,9 +108,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "0B40D02B2F7346F400C0AB94"
-            BuildableName = "Saturn.app"
-            BlueprintName = "Saturn"
-            ReferencedContainer = "container:Saturn.xcodeproj">
+            BuildableName = "Sevino.app"
+            BlueprintName = "Sevino"
+            ReferencedContainer = "container:Sevino.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

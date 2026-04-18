@@ -1,5 +1,5 @@
 import XCTest
-@testable import Saturn
+@testable import Sevino
 
 @MainActor
 final class OnboardingResumeManagerTests: XCTestCase {

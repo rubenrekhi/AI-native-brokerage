@@ -58,7 +58,7 @@ struct OnboardingDOBView: View {
                             .padding(.horizontal, 16 * scale)
                             .padding(.vertical, 10 * scale)
                             .background(
-                                Color.saturnGreyAccent.opacity(0.4),
+                                Color.sevinoGreyAccent.opacity(0.4),
                                 in: RoundedRectangle(cornerRadius: 16 * scale)
                             )
                     }
@@ -132,7 +132,7 @@ struct OnboardingDOBView: View {
                 .focused($focused, equals: field)
                 .padding(.horizontal, 12 * scale)
                 .padding(.vertical, 14 * scale)
-                .modifier(SaturnGlass.nav)
+                .modifier(SevinoGlass.nav)
 
             Text(label)
                 .font(.system(size: 13 * scale))
@@ -150,7 +150,7 @@ struct OnboardingDOBView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(
+        .modifier(SevinoGlass.tintedButton(
             tint: isValid ? Color.onboardingButtonActive : Color.onboardingButtonInactive
         ))
         .disabled(!isValid)

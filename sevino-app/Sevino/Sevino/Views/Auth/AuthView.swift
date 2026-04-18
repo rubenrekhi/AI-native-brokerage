@@ -36,7 +36,7 @@ struct AuthView: View {
                     if let error = authVM.authError {
                         Text(error)
                             .font(.system(size: 13 * scale))
-                            .foregroundStyle(Color.saturnNegative)
+                            .foregroundStyle(Color.sevinoNegative)
                             .multilineTextAlignment(.center)
                             .padding(.top, 12 * scale)
                             .padding(.horizontal, 24 * scale)
@@ -155,7 +155,7 @@ private struct SocialButtonsView: View {
                 .padding(.vertical, 14 * scale)
             }
             .buttonStyle(.plain)
-            .modifier(SaturnGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
+            .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
 
             Button(action: onApple) {
                 HStack(spacing: 10 * scale) {
@@ -171,7 +171,7 @@ private struct SocialButtonsView: View {
                 .padding(.vertical, 14 * scale)
             }
             .buttonStyle(.plain)
-            .modifier(SaturnGlass.tintedButton(tint: .welcomeButtonDarkTint))
+            .modifier(SevinoGlass.tintedButton(tint: .welcomeButtonDarkTint))
         }
         .padding(.top, 24 * scale)
         .padding(.horizontal, 32 * scale)
@@ -222,7 +222,7 @@ private struct EmailSectionView: View {
                 .foregroundStyle(Color.welcomeText)
                 .padding(.horizontal, 16 * scale)
                 .padding(.vertical, 14 * scale)
-                .modifier(SaturnGlass.card)
+                .modifier(SevinoGlass.card)
 
             if isSignUp && !email.isEmpty {
                 EmailRequirementsView(email: email, scale: scale)
@@ -252,7 +252,7 @@ private struct PasswordSectionView: View {
                 .foregroundStyle(Color.welcomeText)
                 .padding(.horizontal, 16 * scale)
                 .padding(.vertical, 14 * scale)
-                .modifier(SaturnGlass.card)
+                .modifier(SevinoGlass.card)
 
             if isSignUp && !password.isEmpty {
                 PasswordRequirementsView(password: password, scale: scale)
@@ -316,7 +316,7 @@ private struct SubmitButtonView: View {
             .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(tint: .welcomeButtonDarkTint))
+        .modifier(SevinoGlass.tintedButton(tint: .welcomeButtonDarkTint))
         .disabled(isFormIncomplete || isLoading)
         .opacity((isFormIncomplete && !isLoading) ? 0.6 : 1)
         .padding(.top, 20 * scale)

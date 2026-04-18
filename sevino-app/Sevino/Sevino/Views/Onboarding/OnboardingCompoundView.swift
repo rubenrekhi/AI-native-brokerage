@@ -53,7 +53,7 @@ struct OnboardingCompoundView: View {
                     .padding(.vertical, 14 * scale)
             }
             .buttonStyle(.plain)
-            .modifier(SaturnGlass.tintedButton(tint: Color.onboardingButtonActive))
+            .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))
             .padding(.horizontal, 32 * scale)
             .padding(.bottom, 16 * scale)
         }
@@ -62,7 +62,7 @@ struct OnboardingCompoundView: View {
 
 
     private var chartCard: some View {
-        SaturnGlassContainer {
+        SevinoGlassContainer {
             VStack(spacing: 0) {
                 HStack(alignment: .bottom, spacing: 0) {
                     yAxis
@@ -77,7 +77,7 @@ struct OnboardingCompoundView: View {
                     .padding(.top, 8 * scale)
                     .padding(.bottom, 12 * scale)
             }
-            .modifier(SaturnGlass.nav)
+            .modifier(SevinoGlass.nav)
         }
         .padding(.horizontal, 20 * scale)
     }

@@ -69,7 +69,7 @@ struct AlpacaEmploymentView: View {
                                 .padding(.horizontal, 16 * scale)
                                 .padding(.vertical, 10 * scale)
                                 .background(
-                                    Color.saturnGreyAccent.opacity(0.4),
+                                    Color.sevinoGreyAccent.opacity(0.4),
                                     in: RoundedRectangle(cornerRadius: 16 * scale)
                                 )
                         }
@@ -138,7 +138,7 @@ struct AlpacaEmploymentView: View {
                     }
                     .padding(.horizontal, 14 * scale)
                     .padding(.vertical, 14 * scale)
-                    .modifier(SaturnGlass.nav)
+                    .modifier(SevinoGlass.nav)
                 }
                 .buttonStyle(.plain)
 
@@ -161,7 +161,7 @@ struct AlpacaEmploymentView: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .modifier(SaturnGlass.nav)
+                    .modifier(SevinoGlass.nav)
                     .transition(.opacity.combined(with: .offset(y: -8)))
                 }
             }
@@ -218,7 +218,7 @@ struct AlpacaEmploymentView: View {
             .textInputAutocapitalization(.words)
             .padding(.horizontal, 14 * scale)
             .padding(.vertical, 14 * scale)
-            .modifier(SaturnGlass.nav)
+            .modifier(SevinoGlass.nav)
         }
     }
 
@@ -232,7 +232,7 @@ struct AlpacaEmploymentView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(
+        .modifier(SevinoGlass.tintedButton(
             tint: isValid ? Color.onboardingButtonActive : Color.onboardingButtonInactive
         ))
         .disabled(!isValid)

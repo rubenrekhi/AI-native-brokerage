@@ -88,7 +88,7 @@ struct OnboardingReferralView: View {
                 .padding(.horizontal, 16 * scale)
                 .padding(.vertical, 10 * scale)
                 .background(
-                    Color.saturnGreyAccent.opacity(0.4),
+                    Color.sevinoGreyAccent.opacity(0.4),
                     in: RoundedRectangle(cornerRadius: 16 * scale)
                 )
         }
@@ -117,9 +117,9 @@ struct OnboardingReferralView: View {
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
-                        .modifier(SaturnGlass.tintedButton(
+                        .modifier(SevinoGlass.tintedButton(
                             tint: selectedSource == source
-                                ? Color.saturnAccent
+                                ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16
                         ))
@@ -147,7 +147,7 @@ struct OnboardingReferralView: View {
         .foregroundStyle(Color.welcomeText)
         .lineLimit(2...4)
         .padding(14 * scale)
-        .modifier(SaturnGlass.nav)
+        .modifier(SevinoGlass.nav)
     }
 
 
@@ -160,7 +160,7 @@ struct OnboardingReferralView: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(
+        .modifier(SevinoGlass.tintedButton(
             tint: selectedSource != nil ? Color.onboardingButtonActive : Color.onboardingButtonInactive
         ))
         .disabled(selectedSource == nil)

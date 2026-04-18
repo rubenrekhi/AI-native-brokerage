@@ -12,6 +12,6 @@ struct RequirementTagView: View {
             Text(label)
                 .font(.system(size: 12 * scale))
         }
-        .foregroundStyle(met ? Color.saturnPositive : Color.saturnNegative)
+        .foregroundStyle(met ? Color.sevinoPositive : Color.sevinoNegative)
     }
 }

@@ -1,5 +1,5 @@
 import Testing
-@testable import Saturn
+@testable import Sevino
 
 @Suite("PhoneNumberViewModel")
 struct PhoneNumberViewModelTests {

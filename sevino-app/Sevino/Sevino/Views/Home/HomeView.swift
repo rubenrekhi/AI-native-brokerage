@@ -7,7 +7,7 @@ struct HomeView: View {
     @State private var showExplore = true
 
     var body: some View {
-        SaturnGlassContainer {
+        SevinoGlassContainer {
             ZStack {
                 GreetingSection(
                     scale: scale,
@@ -59,10 +59,10 @@ struct HomeView: View {
         Button(action: {}) {
             Image(systemName: "sidebar.left")
                 .font(.system(size: 16 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
         }
-        .modifier(SaturnGlass.navCircle)
+        .modifier(SevinoGlass.navCircle)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 
@@ -71,20 +71,20 @@ struct HomeView: View {
             HStack(spacing: 8 * scale) {
                 Text(viewModel.portfolioDisplayValue)
                     .font(.system(size: 14 * scale, weight: .semibold))
-                    .foregroundStyle(Color.saturnSecondary)
+                    .foregroundStyle(Color.sevinoSecondary)
 
                 VStack(spacing: -2 * scale) {
                     Image(systemName: "chevron.down")
                     Image(systemName: "chevron.down")
                 }
                 .font(.system(size: 9 * scale, weight: .bold))
-                .foregroundStyle(Color.saturnNegative)
+                .foregroundStyle(Color.sevinoNegative)
                 .accessibilityHidden(true)
             }
             .padding(.horizontal, 12 * scale)
             .padding(.vertical, 8 * scale)
         }
-        .modifier(SaturnGlass.chip)
+        .modifier(SevinoGlass.chip)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
     }
 
@@ -92,10 +92,10 @@ struct HomeView: View {
         Button(action: {}) {
             Image(systemName: icon)
                 .font(.system(size: 16 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
         }
-        .modifier(SaturnGlass.navCircle)
+        .modifier(SevinoGlass.navCircle)
         .accessibilityLabel(label)
     }
 }
@@ -116,22 +116,22 @@ private struct GreetingSection: View {
 
             Text(greeting)
                 .font(.system(size: 28 * scale, weight: .medium))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
 
             if showExplore {
                 HStack(spacing: 8 * scale) {
                     Button(L10n.Home.exploreButton, action: {})
                         .font(.system(size: 15 * scale))
-                        .foregroundStyle(Color.saturnSecondary)
+                        .foregroundStyle(Color.sevinoSecondary)
 
                     Button(L10n.Home.dismissExploreAccessibility, systemImage: "xmark", action: dismissExplore)
                         .labelStyle(.iconOnly)
                         .font(.system(size: 12 * scale, weight: .medium))
-                        .foregroundStyle(Color.saturnGreyContrast)
+                        .foregroundStyle(Color.sevinoGreyContrast)
                 }
                 .padding(.horizontal, 20 * scale)
                 .padding(.vertical, 10 * scale)
-                .modifier(SaturnGlass.chip)
+                .modifier(SevinoGlass.chip)
             }
         }
     }
@@ -189,7 +189,7 @@ private struct ChatInputBar: View {
         VStack(spacing: 0) {
             TextField(L10n.Home.chatPlaceholder, text: $text, axis: .vertical)
                 .font(.system(size: 16 * scale))
-                .foregroundStyle(Color.saturnSecondary)
+                .foregroundStyle(Color.sevinoSecondary)
                 .lineLimit(1...5)
                 .focused($isFocused)
                 .padding(.horizontal, 16 * scale)
@@ -200,7 +200,7 @@ private struct ChatInputBar: View {
                 Button(L10n.Home.attachAccessibility, systemImage: "plus", action: {})
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18 * scale, weight: .medium))
-                    .foregroundStyle(Color.saturnGreyContrast)
+                    .foregroundStyle(Color.sevinoGreyContrast)
                     .frame(width: 44 * scale, height: 44 * scale)
 
                 Spacer()
@@ -208,13 +208,13 @@ private struct ChatInputBar: View {
                 Button(L10n.Home.micAccessibility, systemImage: "mic", action: {})
                     .labelStyle(.iconOnly)
                     .font(.system(size: 18 * scale, weight: .medium))
-                    .foregroundStyle(Color.saturnGreyContrast)
+                    .foregroundStyle(Color.sevinoGreyContrast)
                     .frame(width: 44 * scale, height: 44 * scale)
 
                 Button(L10n.Home.sendAccessibility, systemImage: "arrow.up", action: {})
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(hasText ? Color.saturnPrimary : Color.saturnGreyAccent)
+                    .foregroundStyle(hasText ? Color.sevinoPrimary : Color.sevinoGreyAccent)
                     .frame(width: 30 * scale, height: 30 * scale)
                     .background(hasText ? Color.homeSendActiveBg : .clear, in: .circle)
                     .frame(width: 44 * scale, height: 44 * scale)
@@ -222,7 +222,7 @@ private struct ChatInputBar: View {
             .padding(.horizontal, 4 * scale)
             .padding(.bottom, 4 * scale)
         }
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
     }
 }
 

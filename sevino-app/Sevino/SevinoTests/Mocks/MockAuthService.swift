@@ -1,5 +1,5 @@
 import Observation
-@testable import Saturn
+@testable import Sevino
 
 @Observable
 final class MockAuthService: AuthServiceProtocol {

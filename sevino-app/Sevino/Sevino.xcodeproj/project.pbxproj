@@ -16,40 +16,40 @@
 			containerPortal = 0B40D0242F7346F400C0AB94 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 0B40D02B2F7346F400C0AB94;
-			remoteInfo = Saturn;
+			remoteInfo = Sevino;
 		};
 		0B40D0442F7346F500C0AB94 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 0B40D0242F7346F400C0AB94 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = 0B40D02B2F7346F400C0AB94;
-			remoteInfo = Saturn;
+			remoteInfo = Sevino;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		0B40D02C2F7346F400C0AB94 /* Saturn.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Saturn.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		0B40D0392F7346F500C0AB94 /* SaturnTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaturnTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		0B40D0432F7346F500C0AB94 /* SaturnUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaturnUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B40D02C2F7346F400C0AB94 /* Sevino.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Sevino.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B40D0392F7346F500C0AB94 /* SevinoTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SevinoTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		0B40D0432F7346F500C0AB94 /* SevinoUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SevinoUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E14A3B032F73480000AABB03 /* Config.debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.debug.xcconfig; sourceTree = "<group>"; };
 		E14A3B042F73480000AABB04 /* Config.release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.release.xcconfig; sourceTree = "<group>"; };
 		E14A3B052F73480000AABB05 /* Config.staging.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Config.staging.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		0B40D02E2F7346F400C0AB94 /* Saturn */ = {
+		0B40D02E2F7346F400C0AB94 /* Sevino */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = Saturn;
+			path = Sevino;
 			sourceTree = "<group>";
 		};
-		0B40D03C2F7346F500C0AB94 /* SaturnTests */ = {
+		0B40D03C2F7346F500C0AB94 /* SevinoTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SaturnTests;
+			path = SevinoTests;
 			sourceTree = "<group>";
 		};
-		0B40D0462F7346F500C0AB94 /* SaturnUITests */ = {
+		0B40D0462F7346F500C0AB94 /* SevinoUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = SaturnUITests;
+			path = SevinoUITests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -83,9 +83,9 @@
 		0B40D0232F7346F400C0AB94 = {
 			isa = PBXGroup;
 			children = (
-				0B40D02E2F7346F400C0AB94 /* Saturn */,
-				0B40D03C2F7346F500C0AB94 /* SaturnTests */,
-				0B40D0462F7346F500C0AB94 /* SaturnUITests */,
+				0B40D02E2F7346F400C0AB94 /* Sevino */,
+				0B40D03C2F7346F500C0AB94 /* SevinoTests */,
+				0B40D0462F7346F500C0AB94 /* SevinoUITests */,
 				E14A3B032F73480000AABB03 /* Config.debug.xcconfig */,
 				E14A3B052F73480000AABB05 /* Config.staging.xcconfig */,
 				E14A3B042F73480000AABB04 /* Config.release.xcconfig */,
@@ -96,9 +96,9 @@
 		0B40D02D2F7346F400C0AB94 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				0B40D02C2F7346F400C0AB94 /* Saturn.app */,
-				0B40D0392F7346F500C0AB94 /* SaturnTests.xctest */,
-				0B40D0432F7346F500C0AB94 /* SaturnUITests.xctest */,
+				0B40D02C2F7346F400C0AB94 /* Sevino.app */,
+				0B40D0392F7346F500C0AB94 /* SevinoTests.xctest */,
+				0B40D0432F7346F500C0AB94 /* SevinoUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -106,9 +106,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		0B40D02B2F7346F400C0AB94 /* Saturn */ = {
+		0B40D02B2F7346F400C0AB94 /* Sevino */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0B40D04D2F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "Saturn" */;
+			buildConfigurationList = 0B40D04D2F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "Sevino" */;
 			buildPhases = (
 				0B40D0282F7346F400C0AB94 /* Sources */,
 				0B40D0292F7346F400C0AB94 /* Frameworks */,
@@ -119,19 +119,19 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				0B40D02E2F7346F400C0AB94 /* Saturn */,
+				0B40D02E2F7346F400C0AB94 /* Sevino */,
 			);
-			name = Saturn;
+			name = Sevino;
 			packageProductDependencies = (
 				E14A3B022F73480000AABB02 /* Supabase */,
 			);
-			productName = Saturn;
-			productReference = 0B40D02C2F7346F400C0AB94 /* Saturn.app */;
+			productName = Sevino;
+			productReference = 0B40D02C2F7346F400C0AB94 /* Sevino.app */;
 			productType = "com.apple.product-type.application";
 		};
-		0B40D0382F7346F500C0AB94 /* SaturnTests */ = {
+		0B40D0382F7346F500C0AB94 /* SevinoTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0B40D0502F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SaturnTests" */;
+			buildConfigurationList = 0B40D0502F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SevinoTests" */;
 			buildPhases = (
 				0B40D0352F7346F500C0AB94 /* Sources */,
 				0B40D0362F7346F500C0AB94 /* Frameworks */,
@@ -143,18 +143,18 @@
 				0B40D03B2F7346F500C0AB94 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				0B40D03C2F7346F500C0AB94 /* SaturnTests */,
+				0B40D03C2F7346F500C0AB94 /* SevinoTests */,
 			);
-			name = SaturnTests;
+			name = SevinoTests;
 			packageProductDependencies = (
 			);
-			productName = SaturnTests;
-			productReference = 0B40D0392F7346F500C0AB94 /* SaturnTests.xctest */;
+			productName = SevinoTests;
+			productReference = 0B40D0392F7346F500C0AB94 /* SevinoTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		0B40D0422F7346F500C0AB94 /* SaturnUITests */ = {
+		0B40D0422F7346F500C0AB94 /* SevinoUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0B40D0532F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SaturnUITests" */;
+			buildConfigurationList = 0B40D0532F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SevinoUITests" */;
 			buildPhases = (
 				0B40D03F2F7346F500C0AB94 /* Sources */,
 				0B40D0402F7346F500C0AB94 /* Frameworks */,
@@ -166,13 +166,13 @@
 				0B40D0452F7346F500C0AB94 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
-				0B40D0462F7346F500C0AB94 /* SaturnUITests */,
+				0B40D0462F7346F500C0AB94 /* SevinoUITests */,
 			);
-			name = SaturnUITests;
+			name = SevinoUITests;
 			packageProductDependencies = (
 			);
-			productName = SaturnUITests;
-			productReference = 0B40D0432F7346F500C0AB94 /* SaturnUITests.xctest */;
+			productName = SevinoUITests;
+			productReference = 0B40D0432F7346F500C0AB94 /* SevinoUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -198,7 +198,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 0B40D0272F7346F400C0AB94 /* Build configuration list for PBXProject "Saturn" */;
+			buildConfigurationList = 0B40D0272F7346F400C0AB94 /* Build configuration list for PBXProject "Sevino" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -216,9 +216,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				0B40D02B2F7346F400C0AB94 /* Saturn */,
-				0B40D0382F7346F500C0AB94 /* SaturnTests */,
-				0B40D0422F7346F500C0AB94 /* SaturnUITests */,
+				0B40D02B2F7346F400C0AB94 /* Sevino */,
+				0B40D0382F7346F500C0AB94 /* SevinoTests */,
+				0B40D0422F7346F500C0AB94 /* SevinoUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -274,12 +274,12 @@
 /* Begin PBXTargetDependency section */
 		0B40D03B2F7346F500C0AB94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 0B40D02B2F7346F400C0AB94 /* Saturn */;
+			target = 0B40D02B2F7346F400C0AB94 /* Sevino */;
 			targetProxy = 0B40D03A2F7346F500C0AB94 /* PBXContainerItemProxy */;
 		};
 		0B40D0452F7346F500C0AB94 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = 0B40D02B2F7346F400C0AB94 /* Saturn */;
+			target = 0B40D02B2F7346F400C0AB94 /* Sevino */;
 			targetProxy = 0B40D0442F7346F500C0AB94 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -429,7 +429,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Saturn;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Sevino;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -464,7 +464,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Saturn;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Sevino;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -486,7 +486,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnTests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -494,7 +494,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Saturn.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Saturn";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sevino.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sevino";
 			};
 			name = Debug;
 		};
@@ -508,7 +508,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnTests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -516,7 +516,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Saturn.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Saturn";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sevino.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sevino";
 			};
 			name = Release;
 		};
@@ -528,7 +528,7 @@
 				DEVELOPMENT_TEAM = A876FFJF55;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -536,7 +536,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Saturn;
+				TEST_TARGET_NAME = Sevino;
 			};
 			name = Debug;
 		};
@@ -548,7 +548,7 @@
 				DEVELOPMENT_TEAM = A876FFJF55;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -556,7 +556,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Saturn;
+				TEST_TARGET_NAME = Sevino;
 			};
 			name = Release;
 		};
@@ -640,7 +640,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Saturn;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.Sevino;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -662,7 +662,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 26.2;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnTests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -670,7 +670,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Saturn.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Saturn";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Sevino.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Sevino";
 			};
 			name = Staging;
 		};
@@ -682,7 +682,7 @@
 				DEVELOPMENT_TEAM = A876FFJF55;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SaturnUITests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.sevino.SevinoUITests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = NO;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -690,14 +690,14 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
-				TEST_TARGET_NAME = Saturn;
+				TEST_TARGET_NAME = Sevino;
 			};
 			name = Staging;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		0B40D0272F7346F400C0AB94 /* Build configuration list for PBXProject "Saturn" */ = {
+		0B40D0272F7346F400C0AB94 /* Build configuration list for PBXProject "Sevino" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0B40D04B2F7346F500C0AB94 /* Debug */,
@@ -707,7 +707,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0B40D04D2F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "Saturn" */ = {
+		0B40D04D2F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "Sevino" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0B40D04E2F7346F500C0AB94 /* Debug */,
@@ -717,7 +717,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0B40D0502F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SaturnTests" */ = {
+		0B40D0502F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SevinoTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0B40D0512F7346F500C0AB94 /* Debug */,
@@ -727,7 +727,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0B40D0532F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SaturnUITests" */ = {
+		0B40D0532F7346F500C0AB94 /* Build configuration list for PBXNativeTarget "SevinoUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				0B40D0542F7346F500C0AB94 /* Debug */,

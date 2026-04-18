@@ -259,7 +259,7 @@ private struct TimeframeTabsView: View {
                     .foregroundStyle(isSelected ? Color.welcomeText : Color.welcomeTextDimmed)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 6 * scale)
-                    .modifier(SaturnGlass.conditionalChip(isSelected: isSelected))
+                    .modifier(SevinoGlass.conditionalChip(isSelected: isSelected))
             }
         }
     }
@@ -310,7 +310,7 @@ private struct PortfolioCardView: View {
                 .padding(.horizontal, 8 * scale)
         }
         .padding(.vertical, 16 * scale)
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
         .onAppear { animateChart() }
     }
 
@@ -328,7 +328,7 @@ private struct TradeCardView: View {
     let scale: CGFloat
 
     var body: some View {
-        SaturnGlassContainer {
+        SevinoGlassContainer {
             VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Spacer()
@@ -351,7 +351,7 @@ private struct TradeCardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.bottom, 12 * scale)
 
-                SaturnGlassContainer {
+                SevinoGlassContainer {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 10 * scale) {
                             Image(decorative: "amd_logo")
@@ -390,11 +390,11 @@ private struct TradeCardView: View {
                             .background(Color.welcomeTradeConfirm, in: Capsule())
                     }
                     .padding(12 * scale)
-                    .modifier(SaturnGlass.card)
+                    .modifier(SevinoGlass.card)
                 }
             }
             .padding(16 * scale)
-            .modifier(SaturnGlass.card)
+            .modifier(SevinoGlass.card)
         }
     }
 }
@@ -448,7 +448,7 @@ private struct ResearchCardView: View {
             .padding(.vertical, 6 * scale)
         }
         .padding(.horizontal, 4 * scale)
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
     }
 }
 
@@ -494,7 +494,7 @@ private struct ProtectedCardView: View {
             .padding(.top, 12 * scale)
         }
         .padding(.vertical, 16 * scale)
-        .modifier(SaturnGlass.card)
+        .modifier(SevinoGlass.card)
         .onAppear { animateChart() }
     }
 
@@ -557,7 +557,7 @@ private struct WelcomeActionButtons: View {
                 .padding(.vertical, 14 * scale)
         }
         .buttonStyle(.plain)
-        .modifier(SaturnGlass.tintedButton(tint: tint))
+        .modifier(SevinoGlass.tintedButton(tint: tint))
     }
 }
 

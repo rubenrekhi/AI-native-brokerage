@@ -95,8 +95,8 @@ struct AlpacaSetupContainerView: View {
         } else {
             LinearGradient(
                 stops: [
-                    .init(color: Color.saturnAccent, location: 0),
-                    .init(color: Color.saturnPrimary, location: 0.2),
+                    .init(color: Color.sevinoAccent, location: 0),
+                    .init(color: Color.sevinoPrimary, location: 0.2),
                 ],
                 startPoint: .top,
                 endPoint: .bottom

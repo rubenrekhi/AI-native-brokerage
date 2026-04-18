@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Saturn is an AI-native brokerage iOS app (part of the `saturn` monorepo). The backend lives in `saturn-api/` — see its own CLAUDE.md for API details. This directory (`saturn-app/Saturn`) is the Xcode project root.
+Sevino is an AI-native brokerage iOS app (part of the `saturn` monorepo). The backend lives in `sevino-api/` — see its own CLAUDE.md for API details. This directory (`sevino-app/Sevino`) is the Xcode project root.
 
 **Stack**: Swift 5 / SwiftUI, Xcode 16+, iOS 17+ deployment target, SPM for dependencies.
 
@@ -12,13 +12,13 @@ Saturn is an AI-native brokerage iOS app (part of the `saturn` monorepo). The ba
 
 ```bash
 # Build & run from CLI
-xcodebuild -project Saturn.xcodeproj -scheme Saturn -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' build
+xcodebuild -project Sevino.xcodeproj -scheme Sevino -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16' build
 
 # Run unit tests
-xcodebuild test -project Saturn.xcodeproj -scheme Saturn -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project Sevino.xcodeproj -scheme Sevino -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16'
 
 # Run UI tests
-xcodebuild test -project Saturn.xcodeproj -scheme SaturnUITests -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project Sevino.xcodeproj -scheme SevinoUITests -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 16'
 ```
 
 Or in Xcode: `Cmd+R` (run), `Cmd+U` (test), `Cmd+Shift+K` (clean build).
@@ -31,7 +31,7 @@ Environment values are set in `Config.xcconfig` (gitignored). Copy from `Config.
 |-----|---------|
 | `SUPABASE_URL` | Supabase project URL (local: `http://127.0.0.1:54321`) |
 | `SUPABASE_ANON_KEY` | Supabase publishable anon key |
-| `API_BASE_URL` | Saturn API base URL (local: `http://127.0.0.1:8000`) |
+| `API_BASE_URL` | Sevino API base URL (local: `http://127.0.0.1:8000`) |
 
 These are exposed to Swift via Info.plist build settings.
 
@@ -44,15 +44,15 @@ These are exposed to Swift via Info.plist build settings.
 The project uses **MVVM** with SwiftUI:
 
 ```
-Saturn/           # App source
-  SaturnApp.swift     # @main entry point
+Sevino/           # App source
+  SevinoApp.swift     # @main entry point
   ContentView.swift   # Root view
   Views/              # SwiftUI view files (planned)
   ViewModels/         # ObservableObject view models (planned)
   Services/           # API client, auth wrapper (planned)
   Models/             # Codable data types (planned)
-SaturnTests/      # Unit tests (XCTest)
-SaturnUITests/    # UI tests (XCUITest)
+SevinoTests/      # Unit tests (XCTest)
+SevinoUITests/    # UI tests (XCUITest)
 ```
 
 ### Swift concurrency settings

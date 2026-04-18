@@ -31,7 +31,7 @@ struct AlpacaAddressView: View {
                             .padding(.horizontal, 16 * scale)
                             .padding(.vertical, 10 * scale)
                             .background(
-                                Color.saturnGreyAccent.opacity(0.4),
+                                Color.sevinoGreyAccent.opacity(0.4),
                                 in: RoundedRectangle(cornerRadius: 16 * scale)
                             )
                     }
@@ -67,7 +67,7 @@ struct AlpacaAddressView: View {
 
 
     private var suggestionsOverlay: some View {
-        SaturnGlassContainer {
+        SevinoGlassContainer {
             ScrollView {
                 VStack(spacing: 0) {
                     ForEach(completer.results.prefix(6), id: \.self) { result in
@@ -77,7 +77,7 @@ struct AlpacaAddressView: View {
                             HStack(spacing: 12 * scale) {
                                 Image(systemName: "mappin.circle.fill")
                                     .font(.system(size: 18 * scale))
-                                    .foregroundStyle(Color.saturnNegative)
+                                    .foregroundStyle(Color.sevinoNegative)
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(result.title)
                                         .font(.system(size: 14 * scale))
@@ -100,7 +100,7 @@ struct AlpacaAddressView: View {
                 }
             }
             .frame(maxHeight: 220 * scale)
-            .modifier(SaturnGlass.nav)
+            .modifier(SevinoGlass.nav)
         }
         .padding(.horizontal, 8 * scale)
         .padding(.bottom, 4 * scale)
@@ -141,7 +141,7 @@ struct AlpacaAddressView: View {
             }
         }
         .padding(14 * scale)
-        .modifier(SaturnGlass.nav)
+        .modifier(SevinoGlass.nav)
         .padding(.horizontal, 8 * scale)
         .padding(.bottom, 16 * scale)
     }
