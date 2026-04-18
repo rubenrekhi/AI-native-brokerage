@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sevino is an AI-native brokerage iOS app (part of the `saturn` monorepo). The backend lives in `sevino-api/` — see its own CLAUDE.md for API details. This directory (`sevino-app/Sevino`) is the Xcode project root.
+Sevino is an AI-native brokerage iOS app (part of the `sevino` monorepo). The backend lives in `sevino-api/` — see its own CLAUDE.md for API details. This directory (`sevino-app/Sevino`) is the Xcode project root.
 
 **Stack**: Swift 5 / SwiftUI, Xcode 16+, iOS 17+ deployment target, SPM for dependencies.
 
