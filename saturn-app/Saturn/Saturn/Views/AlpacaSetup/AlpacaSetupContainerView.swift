@@ -4,22 +4,51 @@ struct AlpacaSetupContainerView: View {
     static let totalSteps = 10 // steps 1-9 are form, step 10 is completion
 
     let userName: String
+    let initialStep: Int
+    let resumeData: OnboardingResumeManager.AlpacaResumeData?
     let onComplete: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var currentStep = 1
-    @State private var animate = true
+    @State private var currentStep: Int
+    @State private var animate: Bool
     @State private var scale: CGFloat = 1
-    @State private var legalName = ""
-    @State private var ssnDigits = ""
-    @State private var maskedSSN = ""
-    @State private var address = ""
-    @State private var citizenshipSelection = ""
-    @State private var employmentStatus = ""
-    @State private var employerName = ""
-    @State private var jobTitle = ""
-    @State private var fundingSources: Set<String> = []
-    private let onboarding = OnboardingService.shared
+    @State private var legalName: String
+    @State private var ssnDigits: String = ""
+    @State private var maskedSSN: String = ""
+    @State private var address: String
+    @State private var citizenshipSelection: String
+    @State private var employmentStatus: String
+    @State private var employerName: String
+    @State private var jobTitle: String
+    @State private var fundingSources: Set<String>
+    private let onboarding: any OnboardingServiceProtocol
+
+    init(
+        userName: String,
+        initialStep: Int = 1,
+        resumeData: OnboardingResumeManager.AlpacaResumeData? = nil,
+        onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
+        onComplete: @escaping () -> Void
+    ) {
+        self.userName = userName
+        self.initialStep = initialStep
+        self.resumeData = resumeData
+        self.onComplete = onComplete
+        self.onboarding = onboardingService
+
+        let data = resumeData ?? OnboardingResumeManager.AlpacaResumeData()
+        let isResuming = resumeData != nil && initialStep > 1
+
+        _currentStep = State(initialValue: initialStep)
+        _animate = State(initialValue: !isResuming)
+        _legalName = State(initialValue: data.legalName)
+        _address = State(initialValue: data.address)
+        _citizenshipSelection = State(initialValue: data.citizenshipSelection)
+        _employmentStatus = State(initialValue: data.employmentStatus)
+        _employerName = State(initialValue: data.employerName)
+        _jobTitle = State(initialValue: data.jobTitle)
+        _fundingSources = State(initialValue: data.fundingSources)
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -85,7 +114,7 @@ struct AlpacaSetupContainerView: View {
                 saveAndAdvance(OnboardingPatchRequest(step: "kyc_intro"))
             }
         case 2:
-            AlpacaLegalNameView(scale: scale, animate: animate) { name in
+            AlpacaLegalNameView(scale: scale, animate: animate, initialName: legalName) { name in
                 legalName = name
                 let (first, last) = OnboardingDataMapper.splitLegalName(name)
                 saveAndAdvance(OnboardingPatchRequest(step: "legal_name", firstName: first, lastName: last))
@@ -119,7 +148,8 @@ struct AlpacaSetupContainerView: View {
                     L10n.Onboarding.alpacaCitizenResident,
                     L10n.Onboarding.alpacaCitizenNo,
                 ],
-                animate: animate
+                animate: animate,
+                initialSelected: citizenshipSelection.isEmpty ? nil : citizenshipSelection
             ) { value in
                 citizenshipSelection = value
                 saveAndAdvance(OnboardingPatchRequest(
@@ -133,7 +163,10 @@ struct AlpacaSetupContainerView: View {
             AlpacaEmploymentView(
                 scale: scale,
                 userPromptText: citizenshipSelection,
-                animate: animate
+                animate: animate,
+                initialStatus: employmentStatus,
+                initialEmployer: employerName,
+                initialJobTitle: jobTitle
             ) { status, employer, title in
                 employmentStatus = status
                 employerName = employer
@@ -151,7 +184,8 @@ struct AlpacaSetupContainerView: View {
             AlpacaFundingSourceView(
                 scale: scale,
                 userPromptText: employmentStatus,
-                animate: animate
+                animate: animate,
+                initialSelected: fundingSources
             ) { sources in
                 fundingSources = sources
                 saveAndAdvance(OnboardingPatchRequest(
@@ -266,5 +300,5 @@ private struct ProgressBar: View {
 }
 
 #Preview {
-    AlpacaSetupContainerView(userName: "Riley", onComplete: {})
+    AlpacaSetupContainerView(userName: "Riley") {}
 }
