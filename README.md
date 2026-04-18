@@ -1,6 +1,6 @@
-# Saturn
+# Sevino
 
-Saturn is an AI-native brokerage app for US consumers, built by [Sevino](https://sevino.ai). Users trade stocks in natural language, get AI-driven trade and portfolio analysis, and manage their investments — all through a mobile-first experience.
+Sevino is an AI-native brokerage app for US consumers, built by [Sevino](https://sevino.ai). Users trade stocks in natural language, get AI-driven trade and portfolio analysis, and manage their investments — all through a mobile-first experience.
 
 ## How It Works
 
@@ -9,7 +9,7 @@ The iOS app is the user-facing interface. It communicates with a FastAPI backend
 ```
 ┌──────────────┐        HTTPS + JWT         ┌──────────────┐
 │              │  ────────────────────────▶ │              │
-│  Saturn App  │                            │  Saturn API  │
+│  Sevino App  │                            │  Sevino API  │
 │  (Swift/     │  ◀──────────────────────── │  (FastAPI)   │
 │   SwiftUI)   │        JSON responses      │              │
 └──────────────┘                            └──────┬───────┘
@@ -30,13 +30,13 @@ The iOS app is the user-facing interface. It communicates with a FastAPI backend
 ## Monorepo Structure
 
 ```
-saturn/
+sevino/
 ├── .claude/          # Claude Code configuration
 ├── .github/          # CI workflows (backend + frontend, triggered independently)
 ├── README.md         # ← you are here
-├── saturn-api/       # FastAPI backend (Python)
+├── sevino-api/       # FastAPI backend (Python)
 │   └── README.md     # Backend setup & dev guide
-└── saturn-app/       # iOS app (Swift/SwiftUI)
+└── sevino-app/       # iOS app (Swift/SwiftUI)
     └── README.md     # Frontend setup & dev guide
 ```
 

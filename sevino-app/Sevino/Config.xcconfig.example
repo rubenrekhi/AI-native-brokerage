@@ -1,0 +1,30 @@
+// Sevino – Environment configuration
+//
+// Copy this file three times and fill in real values:
+//   Config.debug.xcconfig    → local development (Cmd+R)
+//   Config.staging.xcconfig  → TestFlight / staging builds
+//   Config.release.xcconfig  → App Store / production builds
+//
+// All three are gitignored – do not commit secrets.
+// NOTE: Use $() in URLs to prevent // being parsed as a comment.
+//
+// ─── Debug (localhost) ──────────────────────────────────────────────
+//
+// SUPABASE_URL = http:/$()/127.0.0.1:54321
+// SUPABASE_ANON_KEY = your-local-anon-key
+// API_BASE_URL = http:/$()/127.0.0.1:8000
+// API_KEY =
+//
+// ─── Staging ────────────────────────────────────────────────────────
+//
+// SUPABASE_URL = https:/$()/your-staging-project.supabase.co
+// SUPABASE_ANON_KEY = your-staging-anon-key
+// API_BASE_URL = https:/$()/your-staging-api.example.com
+// API_KEY = your-staging-api-key
+//
+// ─── Release (production) ───────────────────────────────────────────
+//
+// SUPABASE_URL = https:/$()/your-project.supabase.co
+// SUPABASE_ANON_KEY = your-production-anon-key
+// API_BASE_URL = https:/$()/your-production-api.example.com
+// API_KEY = your-prod-api-key

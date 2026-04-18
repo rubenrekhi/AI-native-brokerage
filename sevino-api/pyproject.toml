@@ -1,0 +1,33 @@
+[project]
+name = "sevino-api"
+version = "0.1.0"
+description = "Sevino backend API"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
+    "pyjwt",
+    "cryptography",
+    "pydantic-settings",
+    "alpaca-py",
+    "plaid-python",
+    "arq",
+    "httpx",
+    "structlog>=25.5.0",
+    "slowapi>=0.1.9",
+    "sentry-sdk[fastapi]>=2.56.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-mock",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

@@ -1,8 +1,8 @@
 # GitHub Copilot Code Review Instructions
 
-Saturn is an AI-native brokerage app. This monorepo contains:
-- **saturn-api/** — FastAPI backend (Python 3.12)
-- **saturn-app/** — iOS app (Swift/SwiftUI, Xcode 16+, iOS 17+)
+Sevino is an AI-native brokerage app. This monorepo contains:
+- **sevino-api/** — FastAPI backend (Python 3.12)
+- **sevino-app/** — iOS app (Swift/SwiftUI, Xcode 16+, iOS 17+)
 
 When reviewing pull requests, enforce the rules below. Flag violations with exact file paths and line numbers. Provide a concrete fix for each violation. If code is clean, say so — don't invent problems.
 
@@ -10,7 +10,7 @@ When reviewing pull requests, enforce the rules below. Flag violations with exac
 
 ## Frontend (Swift/SwiftUI) Rules
 
-### 1. Design System — Saturn Tokens
+### 1. Design System — Sevino Tokens
 
 #### Localization
 - Never hardcode strings in views. Always use `L10n.*` keys.
@@ -18,7 +18,7 @@ When reviewing pull requests, enforce the rules below. Flag violations with exac
 - Exempt: SF Symbol names, format specifiers, and `#Preview` blocks.
 
 #### Colour Palette
-- Never use raw `Color` literals, hex values, or system colours (`.white`, `.black`, `.gray`) in views. Always use `Color.saturn*` tokens from `Color+Theme.swift`.
+- Never use raw `Color` literals, hex values, or system colours (`.white`, `.black`, `.gray`) in views. Always use `Color.sevino*` tokens from `Color+Theme.swift`.
 - Screen-specific colours go in a local scoped file, not in `Color+Theme.swift`.
 
 #### Font Family
@@ -27,8 +27,8 @@ When reviewing pull requests, enforce the rules below. Flag violations with exac
 - DM Serif Text should only appear in display/hero headings. Most text is SF Pro.
 
 #### Liquid Glass
-- Never call `.glassEffect(...)` or `.background(.ultraThinMaterial, ...)` directly. Always use `SaturnGlass.*` modifiers.
-- `.modifier(SaturnGlass.*)` must come AFTER layout modifiers (padding, frame, font, foregroundStyle).
+- Never call `.glassEffect(...)` or `.background(.ultraThinMaterial, ...)` directly. Always use `SevinoGlass.*` modifiers.
+- `.modifier(SevinoGlass.*)` must come AFTER layout modifiers (padding, frame, font, foregroundStyle).
 - Multiple glass elements must be wrapped in `GlassEffectContainer`.
 - Use `.buttonStyle(.glass)` or `.buttonStyle(.glassProminent)` for glass buttons.
 
