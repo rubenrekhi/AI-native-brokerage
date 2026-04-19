@@ -97,7 +97,12 @@ app.add_middleware(
 
 register_exception_handlers(app)
 
-app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
+
+def include_routers(app: FastAPI) -> None:
+    app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
+
+
+include_routers(app)
 
 @app.get("/")
 @limiter.exempt
