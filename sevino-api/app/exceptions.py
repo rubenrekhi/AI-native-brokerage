@@ -45,8 +45,15 @@ class NotFoundError(Exception):
 
 
 class ConflictError(Exception):
-    def __init__(self, message: str = "Resource already exists"):
+    def __init__(
+        self,
+        message: str = "Resource already exists",
+        code: str = "CONFLICT",
+        detail: dict[str, Any] | None = None,
+    ):
         self.message = message
+        self.code = code
+        self.detail = detail
 
 
 class IncompleteOnboardingError(Exception):
@@ -99,7 +106,7 @@ async def not_found_error_handler(
 async def conflict_error_handler(
     request: Request, exc: ConflictError
 ) -> JSONResponse:
-    return error_response(409, exc.message, "CONFLICT")
+    return error_response(409, exc.message, exc.code, detail=exc.detail)
 
 
 async def incomplete_onboarding_error_handler(
