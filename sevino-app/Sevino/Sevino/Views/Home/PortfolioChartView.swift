@@ -70,7 +70,7 @@ struct PortfolioChartView: View {
                 displayPoints = points
             }
         }
-        .onAppear { displayPoints = points }
+        .task { displayPoints = points }
     }
 
     private func updateScrub(at x: CGFloat, width: CGFloat) {

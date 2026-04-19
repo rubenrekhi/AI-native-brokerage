@@ -54,7 +54,7 @@ struct HoldingsMorphingView: View {
             headerRow
 
             ScrollView(.vertical) {
-                VStack(spacing: 12 * scale) {
+                LazyVStack(spacing: 12 * scale) {
                     ForEach(viewModel.holdings) { holding in
                         HoldingRow(holding: holding, scale: scale)
                     }
@@ -174,29 +174,30 @@ private struct HoldingRow: View {
     }
 
     private var mainRow: some View {
-        HStack(spacing: 10 * scale) {
-            holdingIcon
-            tickerInfo
-            Spacer()
-            valueInfo
-
-            if hasDetails {
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 12 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                    .rotationEffect(.degrees(isDetailExpanded ? -180 : 0))
-                    .accessibilityHidden(true)
-            }
-        }
-        .padding(.vertical, 8 * scale)
-        .contentShape(.rect)
-        .onTapGesture {
-            guard hasDetails else { return }
+        Button {
             withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
                 isDetailExpanded.toggle()
             }
+        } label: {
+            HStack(spacing: 10 * scale) {
+                holdingIcon
+                tickerInfo
+                Spacer()
+                valueInfo
+
+                if hasDetails {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                        .rotationEffect(.degrees(isDetailExpanded ? -180 : 0))
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.vertical, 8 * scale)
+            .contentShape(.rect)
         }
-        .accessibilityAddTraits(hasDetails ? .isButton : [])
+        .buttonStyle(.plain)
+        .disabled(!hasDetails)
     }
 
     private var holdingIcon: some View {
