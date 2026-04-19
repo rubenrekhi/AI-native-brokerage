@@ -1,5 +1,9 @@
 {
   "permissions": {
     "allow": ["Bash(git *)", "Bash(gh *)"]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }
