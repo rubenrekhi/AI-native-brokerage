@@ -2,6 +2,8 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app import worker as app_worker
 
@@ -38,6 +40,8 @@ class TestSafeCloseSwallowsCleanupErrors:
         [
             TimeoutError("Timeout connecting to server"),
             ConnectionError("Connection closed by server"),
+            RedisTimeoutError("Timeout connecting to server"),
+            RedisConnectionError("Connection closed by server"),
         ],
     )
     async def test_delete_health_check_key_swallowed(self, exc):
@@ -52,6 +56,8 @@ class TestSafeCloseSwallowsCleanupErrors:
         [
             TimeoutError(),
             ConnectionError(),
+            RedisTimeoutError(),
+            RedisConnectionError(),
         ],
     )
     async def test_pool_close_swallowed(self, exc):

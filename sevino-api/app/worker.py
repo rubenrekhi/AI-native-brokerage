@@ -6,6 +6,8 @@ import sentry_sdk
 import structlog
 from arq import worker as arq_worker
 from arq.cron import cron
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.config import get_redis_settings, settings
 from app.logging_config import configure_logging
@@ -19,10 +21,21 @@ logger = structlog.get_logger(__name__)
 # close). The two cleanup calls we wrap below fail predictably and aren't
 # actionable; everything else inside `close()` is still allowed to raise
 # so real errors (cancelled tasks, on_shutdown hook failures) stay visible.
+#
+# redis-py defines its own ConnectionError/TimeoutError that inherit from
+# RedisError(Exception) — NOT from the builtins — so we must catch both
+# variants explicitly. The builtin TimeoutError also covers
+# asyncio.TimeoutError (aliased since Py3.11).
+#
 # asyncio.CancelledError is NOT swallowed — it means the event loop itself
 # is asking the coroutine to stop, and silently catching it can cause the
 # outer supervisor (tests, timeouts, arq's signal handler) to hang.
-_SHUTDOWN_CLEANUP_ERRORS = (TimeoutError, ConnectionError)
+_SHUTDOWN_CLEANUP_ERRORS = (
+    TimeoutError,
+    ConnectionError,
+    RedisTimeoutError,
+    RedisConnectionError,
+)
 
 
 async def _safe_close(self: arq_worker.Worker) -> None:
