@@ -338,7 +338,7 @@ class TestPostOnboardingSubmit:
 
         response = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "bad-ssn"},
+            json={"tax_id": "123-45-6789"},
         )
 
         app.dependency_overrides.pop(get_alpaca, None)
