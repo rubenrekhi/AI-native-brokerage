@@ -119,12 +119,14 @@ async def not_found_error_handler(
 async def conflict_error_handler(
     request: Request, exc: ConflictError
 ) -> JSONResponse:
-    detail: dict[str, Any] = {}
-    if exc.resource:
-        detail["resource"] = exc.resource
-    if exc.field:
-        detail["field"] = exc.field
-    return error_response(409, exc.message, "CONFLICT", detail or None)
+    detail: dict[str, Any] | None = None
+    if exc.resource or exc.field:
+        detail = {}
+        if exc.resource:
+            detail["resource"] = exc.resource
+        if exc.field:
+            detail["field"] = exc.field
+    return error_response(409, exc.message, "CONFLICT", detail)
 
 
 async def incomplete_onboarding_error_handler(
@@ -189,11 +191,13 @@ def _extract_column(exc: Exception) -> str | None:
         stripped = constraint
         if table and stripped.startswith(f"{table}_"):
             stripped = stripped[len(table) + 1 :]
-        for suffix in ("_key", "_fkey", "_check", "_unique", "_idx"):
+        suffix_matched = False
+        for suffix in ("_key", "_fkey", "_pkey", "_check", "_unique", "_idx"):
             if stripped.endswith(suffix):
                 stripped = stripped[: -len(suffix)]
+                suffix_matched = True
                 break
-        if stripped and stripped != constraint:
+        if suffix_matched and stripped:
             return stripped
 
     return None

@@ -278,6 +278,18 @@ def test_extract_column_returns_none_without_orig():
     assert _extract_column(exc) is None
 
 
+def test_extract_column_returns_none_for_pkey_constraint():
+    orig = _FakePgError(
+        "duplicate key value violates unique constraint",
+        constraint_name="brokerage_accounts_pkey",
+        table_name="brokerage_accounts",
+    )
+    exc = _make_sa_exc(
+        IntegrityError, "duplicate key value violates unique constraint", orig=orig
+    )
+    assert _extract_column(exc) is None
+
+
 async def test_programming_error_returns_500():
     exc = _make_sa_exc(ProgrammingError)
     resp = await programming_error_handler(request, exc)
