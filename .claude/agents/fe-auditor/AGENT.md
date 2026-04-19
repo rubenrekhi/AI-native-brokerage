@@ -136,6 +136,57 @@ Use the output format at the bottom of this file.
 - Every ViewModel must have a test file in `SevinoTests/{Feature}/`
 - Mock naming: `Mock{Protocol}` (e.g. `MockAuthService`) in `SevinoTests/Mocks/`
 
+#### 5a. Real-Backend Integration Tests Must Self-Clean (Critical)
+
+The default iOS test pattern uses `MockAuthService` / `MockAPIClient` and never touches real infrastructure. A small number of tests (e.g. `AuthServiceIntegrationTests`) deliberately hit a **real local Supabase instance** via `SUPABASE_TEST_URL` / `SUPABASE_TEST_ANON_KEY` / `SUPABASE_TEST_SERVICE_ROLE_KEY` env vars, or are gated by `INTEGRATION_TESTS=1`. These tests bypass the mock layer and create real rows in `auth.users` on the local Supabase Postgres — and unlike the backend's `db_session` rollback fixture, there is no automatic cleanup.
+
+Any test that creates real Supabase auth users, profile rows, or other persistent backend state MUST clean up before the test exits, or it will accumulate orphaned accounts on every run and poison later tests.
+
+**Flag as 🔴 Critical** any test file that matches any of:
+- Reads `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY`, or `SUPABASE_TEST_SERVICE_ROLE_KEY` via `ProcessInfo.processInfo.environment[...]`
+- Checks `INTEGRATION_TESTS` env var or similar integration gate
+- Instantiates a real `SupabaseClient`, `GoTrueClient`, or calls `auth.signUp(...)` / `auth.admin.createUser(...)` against a non-mock client
+- Class name contains `IntegrationTest` AND does not use `MockAuthService` / `MockAPIClient`
+
+…and does NOT have cleanup covering every created user. Acceptable cleanup patterns:
+
+- **`addTeardownBlock { ... }` inside the test** that deletes the created user via the admin API using `SUPABASE_TEST_SERVICE_ROLE_KEY` (preferred — teardown runs even on assertion failure, and is scoped to the specific user created).
+- **`override func tearDown() async throws`** that deletes any users created during `setUp`/the test body. Must be `async throws` and must `await` the delete — a synchronous `tearDown()` cannot await the Supabase admin call.
+- **A dedicated cleanup helper** (e.g. `deleteTestUser(id:)`) called in teardown that uses the service role key to call `DELETE /auth/v1/admin/users/{id}`.
+
+### Review checks for real-backend tests:
+- **🔴 Created user IDs must be tracked.** If `signUp` is called, the returned `user.id` must be captured into a property or local that teardown can reference. A test that signs up and never stores the ID cannot clean up.
+- **🔴 Teardown must use the service role key**, not the anon key. The anon key can't delete users; cleanup will silently fail. Verify `SUPABASE_TEST_SERVICE_ROLE_KEY` is read, not `SUPABASE_TEST_ANON_KEY`.
+- **🔴 Teardown must handle partial failures.** If a test creates multiple users and one delete fails, the remaining users must still be attempted (`for id in createdUserIds { try? await deleteUser(id) }`).
+- **🔴 No reliance on "ON CONFLICT DO NOTHING" or fixed emails to avoid cleanup.** Using a hardcoded email like `test@example.com` across runs hides the leak but doesn't fix it — the auth row still persists and other tests/devices can collide. Generate a unique email per test (`"test-\(UUID().uuidString)@sevino.test"`) AND delete it in teardown.
+- **🟡 Prefer `MockAuthService` unless the test genuinely needs to exercise real Supabase Auth.** If the behavior under test can be validated with a mock, the test should not hit real infrastructure at all. Flag real-backend tests whose assertions only check our own code paths (not Supabase's behavior).
+- **🟡 Other persistent state must also be cleaned** — not just auth users. If the test creates `user_profiles` rows, Keychain entries, `UserDefaults` keys, or files, each must be removed in teardown. `UserDefaults` should use a suite name scoped to the test and reset.
+
+### Example of a compliant pattern:
+
+```swift
+final class AuthServiceIntegrationTests: XCTestCase {
+    private var createdUserIds: [UUID] = []
+
+    override func tearDown() async throws {
+        for id in createdUserIds {
+            try? await deleteSupabaseUser(id: id)
+        }
+        createdUserIds.removeAll()
+        try await super.tearDown()
+    }
+
+    func test_signUp_createsUser() async throws {
+        let email = "test-\(UUID().uuidString)@sevino.test"
+        let user = try await sut.signUp(email: email, password: "…")
+        createdUserIds.append(user.id)  // registered for cleanup BEFORE any assertion
+        XCTAssertEqual(user.email, email)
+    }
+}
+```
+
+Note the ID is appended **before** the assertion — if the assertion fails, teardown still has the ID to clean up.
+
 ---
 
 ### 6. Code Organization
