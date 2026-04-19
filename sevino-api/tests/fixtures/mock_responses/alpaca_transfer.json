@@ -1,0 +1,11 @@
+{
+  "id": "c1b7e07e-2b3c-4e7e-bb4a-3eabc1234567",
+  "relationship_id": "794c3c51-d831-4e8c-a0e1-0bad1a9f0123",
+  "account_id": "9d587d7a-1b4c-4b3a-95bb-0e8e0d5e7777",
+  "type": "ach",
+  "status": "QUEUED",
+  "amount": "500.00",
+  "direction": "INCOMING",
+  "timing": "immediate",
+  "created_at": "2026-04-18T18:05:00Z"
+}
