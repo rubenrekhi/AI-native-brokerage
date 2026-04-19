@@ -354,11 +354,7 @@ private struct TradeCardView: View {
                 SevinoGlassContainer {
                     VStack(alignment: .leading, spacing: 0) {
                         HStack(spacing: 10 * scale) {
-                            Image(decorative: "amd_logo")
-                                .resizable()
-                                .scaledToFill()
-                                .frame(width: 40 * scale, height: 40 * scale)
-                                .clipShape(RoundedRectangle(cornerRadius: 8 * scale))
+                            StockLogoView(ticker: "AMD", size: 20 * scale)
 
                             VStack(alignment: .leading, spacing: 2 * scale) {
                                 Text(L10n.Welcome.tradeStockName)
