@@ -21,7 +21,7 @@ class PlaidItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         index=True,
     )
-    plaid_item_id: Mapped[str] = mapped_column(Text, nullable=False)
+    plaid_item_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     plaid_access_token: Mapped[str] = mapped_column(Text, nullable=False)
     plaid_account_id: Mapped[str] = mapped_column(Text, nullable=False)
     institution_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
