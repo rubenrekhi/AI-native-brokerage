@@ -16,7 +16,8 @@ Resolves: [SEV-X](https://linear.app/sevino/issue/SEV-X/issue-name)
 
 ## ✅ Checklist
 
-- [ ] Tested manually
+- [ ] Tested manually on local developkent environment
+- [ ] Tested manually on railway PR environment
 - [ ] Unit tests pass (`make test`)
 - [ ] Added/updated tests for new behavior
 - [ ] Migrations included (if DB changes)
