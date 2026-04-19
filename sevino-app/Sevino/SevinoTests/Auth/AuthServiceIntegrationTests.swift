@@ -3,7 +3,8 @@ import Supabase
 @testable import Sevino
 
 /// Integration tests that hit real local Supabase (make infra must be running).
-/// Skipped by default — set INTEGRATION_TESTS=1 plus the Supabase env vars to run.
+/// Skipped unless INTEGRATION_TESTS=1 is set, the SUPABASE_TEST_* env vars are
+/// populated, and the Supabase URL is reachable.
 @MainActor
 final class AuthServiceIntegrationTests: XCTestCase {
 
@@ -22,21 +23,51 @@ final class AuthServiceIntegrationTests: XCTestCase {
             "Set INTEGRATION_TESTS=1 to run"
         )
 
-        let url = try XCTUnwrap(env["SUPABASE_TEST_URL"], "SUPABASE_TEST_URL not set")
-        let anonKey = try XCTUnwrap(env["SUPABASE_TEST_ANON_KEY"], "SUPABASE_TEST_ANON_KEY not set")
-        let serviceKey = try XCTUnwrap(env["SUPABASE_TEST_SERVICE_ROLE_KEY"], "SUPABASE_TEST_SERVICE_ROLE_KEY not set")
+        let urlString = env["SUPABASE_TEST_URL"]
+        let anonKey = env["SUPABASE_TEST_ANON_KEY"]
+        let serviceKey = env["SUPABASE_TEST_SERVICE_ROLE_KEY"]
 
-        client = SupabaseClient(
-            supabaseURL: URL(string: url)!,
-            supabaseKey: anonKey
+        try XCTSkipUnless(
+            urlString != nil && anonKey != nil && serviceKey != nil,
+            "SUPABASE_TEST_URL / SUPABASE_TEST_ANON_KEY / SUPABASE_TEST_SERVICE_ROLE_KEY must be set"
         )
-        serviceRoleClient = SupabaseClient(
-            supabaseURL: URL(string: url)!,
-            supabaseKey: serviceKey
-        )
+
+        let supabaseURL = try XCTUnwrap(URL(string: urlString!), "SUPABASE_TEST_URL is not a valid URL: \(urlString!)")
+
+        if let reason = await Self.unreachableReason(for: supabaseURL) {
+            throw XCTSkip("Local Supabase not reachable at \(supabaseURL): \(reason). Run `make infra` in sevino-api/ to start it.")
+        }
+
+        client = SupabaseClient(supabaseURL: supabaseURL, supabaseKey: anonKey!)
+        serviceRoleClient = SupabaseClient(supabaseURL: supabaseURL, supabaseKey: serviceKey!)
         authService = await MainActor.run { AuthService(client: client) }
 
         try await Task.sleep(for: .milliseconds(100))
+    }
+
+    /// Probes `<baseURL>/auth/v1/health`. Returns `nil` on 2xx (reachable) or a
+    /// human-readable reason string otherwise. Uses a short-timeout URLSession
+    /// so CI doesn't stall when Supabase isn't running.
+    private static func unreachableReason(for baseURL: URL) async -> String? {
+        let healthURL = baseURL.appendingPathComponent("auth/v1/health")
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 2.0
+        config.timeoutIntervalForResource = 2.0
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+
+        do {
+            let (_, response) = try await session.data(from: healthURL)
+            guard let http = response as? HTTPURLResponse else {
+                return "non-HTTP response"
+            }
+            guard (200..<300).contains(http.statusCode) else {
+                return "HTTP \(http.statusCode)"
+            }
+            return nil
+        } catch {
+            return "\(error.localizedDescription)"
+        }
     }
 
     override func tearDown() async throws {
