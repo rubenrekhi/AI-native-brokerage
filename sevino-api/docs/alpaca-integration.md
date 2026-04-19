@@ -180,7 +180,7 @@ Sevino uses **Plaid Link** on the mobile client to capture bank account info. Pl
 
 **Endpoint:** `POST /v1/accounts/{account_id}/ach_relationships`
 
-**Request body includes:** Plaid processor token
+**Request body (Plaid path):** `{"processor_token": "<plaid_processor_token>"}` — the processor token alone is sufficient. Alpaca retrieves the bank and routing numbers directly from Plaid using the token. (The non-Plaid path requires `account_owner_name`, `bank_account_type`, `bank_account_number`, and `bank_routing_number` instead, and is not used by Sevino.)
 
 **Response:** Returns a `relationship_id` — store this for subsequent transfers.
 
@@ -194,17 +194,23 @@ This is a one-time flow per bank account.
 
 ```json
 {
+  "transfer_type": "ach",
   "relationship_id": "<stored_relationship_id>",
   "amount": "500",
-  "direction": "INCOMING"  // INCOMING = deposit, OUTGOING = withdrawal
+  "direction": "INCOMING",  // INCOMING = deposit, OUTGOING = withdrawal
+  "timing": "immediate"
 }
 ```
+
+`timing` is required (`immediate` is the only currently supported value). `fee_payment_method` is optional (`"user"` | `"invoice"`, default `"invoice"`).
 
 **Response:** Returns immediately with `status: QUEUED`.
 
 **Transfer lifecycle (simplified):** `QUEUED → PENDING → COMPLETE` (or `REJECTED`)
 
-Full transfer status values: `QUEUED`, `APPROVAL_PENDING`, `PENDING`, `SENT_TO_CLEARING`, `APPROVED`, `SETTLED`, `COMPLETE`, `REJECTED`, `CANCELED`, `RETURNED`. Handle `RETURNED` (ACH chargebacks) as a critical failure path — notify user and restrict future instant funding.
+Full transfer status values: `QUEUED`, `APPROVAL_PENDING`, `PENDING`, `SENT_TO_CLEARING`, `APPROVED`, `COMPLETE`, `REJECTED`, `CANCELED`, `RETURNED`. Handle `RETURNED` (ACH chargebacks) as a critical failure path — notify user and restrict future instant funding.
+
+**Transfer record retention:** Transfer records are keyed by their own transfer `id`, not by `relationship_id`. Deleting an ACH relationship (`DELETE /v1/accounts/{id}/ach_relationships/{rel_id}`) marks it canceled but **does not delete the transfer history** — `GET /v1/accounts/{id}/transfers` still returns every transfer ever made, including those tied to since-deleted relationships. Our app mirrors this: never hard-delete `ach_relationships` or `plaid_items` rows; soft-delete via `status = 'CANCELED'` / `status = 'inactive'` so historical transfers can still be rendered with the correct bank nickname and mask. Full pattern in `docs/plaid-integration.md`.
 
 **SSE Monitoring Endpoint:** `GET /v2/events/funding/status` (note: `/v1/events/transfers/status` is deprecated)
 
@@ -690,6 +696,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 |---|---|---|
 | `/v1/accounts/{id}/ach_relationships` | `POST` | Create ACH relationship via Plaid processor token |
 | `/v1/accounts/{id}/ach_relationships` | `GET` | List existing ACH relationships |
+| `/v1/accounts/{id}/ach_relationships/{rel_id}` | `DELETE` | Unlink (cancel) an ACH relationship. Transfer history is retained. |
 | `/v1/accounts/{id}/transfers` | `POST` | Initiate ACH deposit or withdrawal |
 | `/v1/accounts/{id}/transfers` | `GET` | List transfers and their statuses |
 | `/v2/events/funding/status` | `GET` (SSE) | Stream transfer status change events. Note: `/v1/events/transfers/status` is deprecated. |

@@ -140,7 +140,7 @@ Before opening Plaid Link on the mobile app, the backend creates a short-lived `
 | `country_codes` | `["US"]` | US banks only |
 | `language` | `"en"` | English |
 
-**Response:** Contains a `link_token` (valid for **4 hours**). Send this token to the mobile app.
+**Response:** Contains a `link_token` (valid for **4 hours** in the initial-link flow; **30 minutes** when created for update mode). Send this token to the mobile app.
 
 ---
 
@@ -233,8 +233,8 @@ This is the **critical step**. Generate a processor token scoped specifically fo
 
 - It's a secure reference that lets Alpaca (and **only** Alpaca) retrieve the bank account and routing number from Plaid.
 - Sevino's backend never sees the actual bank account numbers — they flow directly from Plaid to Alpaca.
-- The processor token is **single-purpose** — it can only be used with the specified processor (Alpaca).
-- **Do NOT store** the processor token — it's consumed by Alpaca in Step 5 and not needed after that.
+- The processor token is **scoped to a single processor** (Alpaca) — it cannot be handed to any other processor.
+- The token does **not expire** and is technically reusable, but Sevino does not need to retain it after Step 5. Alpaca keeps its own reference to the token internally, and the ACH relationship is the only handle we need for subsequent transfers. The only reason to keep it on our side is if we later want to manage permissions via Plaid's `/processor/token/permissions/set` — not part of the current flow.
 
 ---
 
@@ -281,7 +281,8 @@ Once the ACH relationship exists, depositing or withdrawing is a single Alpaca R
   "transfer_type": "ach",
   "relationship_id": "<relationship_id_from_step_5>",
   "amount": "500.00",
-  "direction": "INCOMING"
+  "direction": "INCOMING",
+  "timing": "immediate"
 }
 ```
 
@@ -292,7 +293,8 @@ Once the ACH relationship exists, depositing or withdrawing is a single Alpaca R
   "transfer_type": "ach",
   "relationship_id": "<relationship_id_from_step_5>",
   "amount": "200.00",
-  "direction": "OUTGOING"
+  "direction": "OUTGOING",
+  "timing": "immediate"
 }
 ```
 
@@ -301,11 +303,13 @@ Once the ACH relationship exists, depositing or withdrawing is a single Alpaca R
 - The user **never re-authenticates** with Plaid for subsequent transfers
 - The ACH relationship persists until the user explicitly unlinks the bank account
 - `direction`: `INCOMING` = deposit into brokerage, `OUTGOING` = withdrawal to bank
+- `timing` is required; `immediate` is the only currently supported value
+- `fee_payment_method` is optional (`"user"` or `"invoice"`, defaults to `"invoice"`) — omit unless we explicitly want to bill the end user for transfer fees
 - Transfer response returns immediately with initial status
 
 **Transfer lifecycle:** `QUEUED → PENDING → COMPLETE` (or `REJECTED`)
 
-**Monitor via SSE:** `GET /v1/events/transfers/status`
+**Monitor via SSE:** `GET /v2/events/funding/status` (the legacy `/v1/events/transfers/status` is deprecated)
 
 - ACH settlement: **1–3 business days** (production)
 - Sandbox: **10–30 minutes** simulated delay
@@ -335,29 +339,52 @@ Once the ACH relationship exists, depositing or withdrawing is a single Alpaca R
 | Plaid `account_id` | **Yes** | The specific bank account the user selected. Needed alongside `access_token`. |
 | Plaid `item_id` | **Yes** | Represents the bank connection. Useful for handling Plaid webhooks (item errors, account updates). |
 | Alpaca `relationship_id` | **Yes** | The ACH relationship ID. Used for **all** deposit/withdrawal calls. |
-| `processor_token` | **No** | Already consumed by Alpaca in Step 5. Not needed after that. |
+| `processor_token` | **No** | Reusable and non-expiring in principle, but Sevino doesn't need it after Step 5 — Alpaca keeps its own internal reference. |
 | Bank account number | **No** | **Never touches your system.** Flows from Plaid to Alpaca directly. |
 | Routing number | **No** | **Never touches your system.** Flows from Plaid to Alpaca directly. |
 
-### Suggested Database Schema
+### Sevino Schema
 
-```sql
-CREATE TABLE linked_bank_accounts (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id         UUID NOT NULL REFERENCES users(id),
-  plaid_access_token  TEXT NOT NULL,       -- encrypted at rest
-  plaid_account_id    TEXT NOT NULL,
-  plaid_item_id       TEXT NOT NULL,
-  alpaca_relationship_id  TEXT NOT NULL,    -- used for all transfers
-  account_owner_name  TEXT,                -- from Alpaca response
-  nickname            TEXT,                -- e.g. "Bank of America Checking"
-  status              TEXT NOT NULL DEFAULT 'QUEUED',
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+Sevino splits the data into two tables (see `app/models/plaid_item.py` and `app/models/ach_relationship.py`) rather than a single `linked_bank_accounts` row. The split cleanly separates the Plaid side (one `PlaidItem` per bank connection, which can host multiple accounts in theory) from the Alpaca side (one `AchRelationship` per account at the broker):
 
-CREATE INDEX idx_linked_bank_accounts_user ON linked_bank_accounts(user_id);
-```
+- **`plaid_items`** — Plaid `item_id`, `access_token` (encrypted at rest via app-level Fernet), selected `account_id`, institution display metadata (`institution_name`, `account_mask`, `account_name`), and `status`.
+- **`ach_relationships`** — Alpaca `alpaca_relationship_id`, linked to both `brokerage_accounts` (hard reference) and optionally `plaid_items` (nullable, `SET NULL` on delete), plus display fields (`nickname`, `account_mask`, `account_type`) and `status`.
+
+This matches the one-to-many potential of a Plaid item and keeps the Alpaca side decoupled in case we ever add a manual (non-Plaid) ACH relationship path, which only needs `account_owner_name` + routing/account numbers and no `plaid_item` at all.
+
+---
+
+## Transfer History & Unlinking
+
+### Transfers persist on Alpaca regardless of relationship state
+
+Transfer records at Alpaca are keyed by their own transfer `id`, not by `relationship_id`. Two consequences:
+
+- When a user unlinks a bank (we call `DELETE /v1/accounts/{account_id}/ach_relationships/{rel_id}`), Alpaca marks the relationship as canceled but **retains every past transfer record** for record-keeping (ACH regulations require multi-year retention).
+- `GET /v1/accounts/{account_id}/transfers` returns every transfer the brokerage account has ever made — including transfers whose originating `relationship_id` has since been deleted. The user sees continuous history across bank changes.
+
+### Soft-delete on the Sevino side
+
+Because transfer records outlive the relationship on Alpaca's side, the bank display metadata (`nickname`, `account_mask`) must outlive it on our side too — otherwise historical transfers would render as "Deposit from Unknown Bank."
+
+**Rule: never hard-delete rows from `ach_relationships` or `plaid_items`.** Flip `status` instead:
+
+- `ach_relationships.status = 'CANCELED'` when the user unlinks a bank (after Alpaca confirms the `DELETE`)
+- `plaid_items.status = 'inactive'` when the underlying Plaid item is fully disconnected and not eligible for update-mode recovery
+
+This preserves the lookup when rendering a 3-month-old transfer as "Deposit from Bank of America ••1234" and mirrors Alpaca's own retain-and-mark-canceled behavior.
+
+### Update-mode edge case: different account at the same bank
+
+If a user re-authenticates via update mode and picks a **different account** within the same institution, we treat the new selection as a new linked account:
+
+1. Create a new `processor_token` (Step 4) for the new `account_id`
+2. Create a new ACH relationship at Alpaca (Step 5) → new `relationship_id`
+3. Delete the old ACH relationship at Alpaca (`DELETE /v1/accounts/{id}/ach_relationships/{rel_id}`)
+4. Soft-delete the old `ach_relationships` row in our DB (`status = 'CANCELED'`)
+5. **Keep the existing `plaid_items` row** — the `access_token` and `item_id` are unchanged by update mode. Just overwrite `plaid_account_id` and refresh the display metadata (`account_mask`, `account_name`) to point at the newly-selected account.
+
+Both the old and new `ach_relationships` rows stay in our DB. Historical transfers keep their original `relationship_id`, still resolvable to the right (canceled) row for display.
 
 ---
 
@@ -449,11 +476,21 @@ Same flow: create a `LinkTokenConfiguration`, launch the PlaidLink activity, han
 
 ### Plaid Link Re-authentication (Production)
 
-Bank connections can expire in production (bank rotates credentials, user changes password, MFA requirements change). When this happens:
+> **Sevino MVP scope:** For closed beta we implement only the **reactive** path — detect `ITEM_LOGIN_REQUIRED` on a failed Plaid/Alpaca call and prompt the user to re-auth via update mode. Pre-emptive detection via Plaid webhooks (`PENDING_DISCONNECT`, `PENDING_EXPIRATION`) and non-Plaid fallbacks (manual routing/account entry + micro-deposit verification) are explicitly deferred. Rationale: in competitive scans, Robinhood visibly implements only the reactive path at user-facing level, and that's sufficient for our 200–500-user beta. Wealthsimple-caliber multi-aggregator resiliency is not an MVP requirement.
 
-1. Plaid sends an `ITEM_LOGIN_REQUIRED` error
+Bank connections can expire in production (bank rotates credentials, user changes password, MFA requirements change) or require a new consent (Plaid adds accounts). Triggers we should listen for:
+
+- `ITEM_LOGIN_REQUIRED` error from a Plaid API call or webhook — the main re-auth case
+- `PENDING_DISCONNECT` webhook (US/CA) or `PENDING_EXPIRATION` webhook (UK/EU) — early warning before the item fully disconnects
+- `ACCESS_NOT_GRANTED` or `NO_AUTH_ACCOUNTS` errors — user didn't grant Auth access
+- `NEW_ACCOUNTS_AVAILABLE` webhook — only if we start requesting access to newly-opened accounts
+
+Handling:
+
+1. Plaid sends one of the triggers above
 2. Re-launch Plaid Link in **"update mode"** — pass the existing `access_token` to Plaid Link so the user re-authenticates without creating a new connection
-3. The processor token and ACH relationship **remain valid** after re-authentication
+3. **If the user re-authenticates the same account:** the existing processor token and ACH relationship remain valid — no backend changes needed
+4. **If the user picks a different account within the same institution:** we must create a new processor token (Step 4) and a new ACH relationship (Step 5). The old relationship should be deleted at Alpaca
 
 **To create a link token for update mode:**
 
@@ -544,7 +581,7 @@ Bypasses the Plaid Link UI entirely. Gives you a `public_token` you can exchange
 | `/v1/accounts/{id}/ach_relationships/{rel_id}` | `DELETE` | Remove a linked bank account | User unlinks bank |
 | `/v1/accounts/{id}/transfers` | `POST` | Initiate deposit or withdrawal | User requests transfer |
 | `/v1/accounts/{id}/transfers` | `GET` | List transfer history and statuses | Settings UI |
-| `/v1/events/transfers/status` | `GET` (SSE) | Stream transfer status updates | Backend listener |
+| `/v2/events/funding/status` | `GET` (SSE) | Stream transfer status updates (legacy `/v1/events/transfers/status` is deprecated) | Backend listener |
 
 ### Plaid Link Mobile SDKs
 
@@ -562,10 +599,10 @@ Bypasses the Plaid Link UI entirely. Gives you a `public_token` you can exchange
 
 | Token | Created By | Lifespan | Stored? |
 |---|---|---|---|
-| `link_token` | Sevino backend (via Plaid) | 4 hours | No — ephemeral, passed to mobile app |
+| `link_token` | Sevino backend (via Plaid) | 4 hours (initial); 30 min (update mode) | No — ephemeral, passed to mobile app |
 | `public_token` | Plaid Link SDK (mobile) | Minutes — exchange immediately | No — ephemeral, exchanged in Step 3 |
 | `access_token` | Plaid (via token exchange) | Permanent (until connection expires) | **Yes — encrypted in DB** |
-| `processor_token` | Plaid (via processor endpoint) | Single use | No — consumed by Alpaca in Step 5 |
+| `processor_token` | Plaid (via processor endpoint) | Reusable; does not expire | No — not needed after Step 5; Alpaca retains its own reference |
 | `relationship_id` | Alpaca (via ACH creation) | Permanent (until user unlinks) | **Yes — in DB** |
 
 ### Backend Service Methods (Suggested)
