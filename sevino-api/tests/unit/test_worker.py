@@ -38,7 +38,6 @@ class TestSafeCloseSwallowsCleanupErrors:
         [
             TimeoutError("Timeout connecting to server"),
             ConnectionError("Connection closed by server"),
-            asyncio.CancelledError(),
         ],
     )
     async def test_delete_health_check_key_swallowed(self, exc):
@@ -53,7 +52,6 @@ class TestSafeCloseSwallowsCleanupErrors:
         [
             TimeoutError(),
             ConnectionError(),
-            asyncio.CancelledError(),
         ],
     )
     async def test_pool_close_swallowed(self, exc):
@@ -86,6 +84,21 @@ class TestSafeClosePropagatesRealErrors:
         worker.pool.close.assert_not_awaited()
 
 
+class TestSafeClosePropagatesCancellation:
+    async def test_cancelled_during_delete_reraises(self):
+        worker = _FakeWorker(delete_side_effect=asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await _run_close(worker)
+        # pool.close should NOT run when delete was cancelled
+        worker.pool.close.assert_not_awaited()
+
+    async def test_cancelled_during_pool_close_reraises(self):
+        worker = _FakeWorker(close_side_effect=asyncio.CancelledError())
+        with pytest.raises(asyncio.CancelledError):
+            await _run_close(worker)
+        worker.pool.close.assert_awaited_once_with(close_connection_pool=True)
+
+
 class TestSafeCloseHappyPath:
     async def test_all_steps_execute_in_order(self):
         calls = []
@@ -111,8 +124,15 @@ class TestSafeCloseHappyPath:
         worker.pool.close.assert_not_awaited()
 
 
-class TestMonkeyPatchInstalled:
-    def test_arq_worker_close_replaced(self):
+class TestInstall:
+    def test_install_patches_arq_worker_close(self):
         from arq import worker as arq_worker
 
+        assert arq_worker.Worker.close is app_worker._safe_close
+
+    def test_install_is_idempotent(self):
+        from arq import worker as arq_worker
+
+        app_worker._install()
+        app_worker._install()
         assert arq_worker.Worker.close is app_worker._safe_close

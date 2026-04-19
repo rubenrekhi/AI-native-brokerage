@@ -1,5 +1,6 @@
 import asyncio
 import signal
+import time
 
 import sentry_sdk
 import structlog
@@ -10,50 +11,74 @@ from app.config import get_redis_settings, settings
 from app.logging_config import configure_logging
 from app.tasks.health_ping import health_ping
 
-configure_logging(settings.environment)
 logger = structlog.get_logger(__name__)
 
 
 # On Railway, Redis is already gone by the time arq runs `Worker.close()`
 # (SIGTERM during deploys/restarts/scale-downs races the upstream socket
-# close). The two cleanup calls below fail predictably and aren't
+# close). The two cleanup calls we wrap below fail predictably and aren't
 # actionable; everything else inside `close()` is still allowed to raise
 # so real errors (cancelled tasks, on_shutdown hook failures) stay visible.
-_SHUTDOWN_CLEANUP_ERRORS = (
-    TimeoutError,
-    ConnectionError,
-    asyncio.CancelledError,
-)
+# asyncio.CancelledError is NOT swallowed — it means the event loop itself
+# is asking the coroutine to stop, and silently catching it can cause the
+# outer supervisor (tests, timeouts, arq's signal handler) to hang.
+_SHUTDOWN_CLEANUP_ERRORS = (TimeoutError, ConnectionError)
 
 
 async def _safe_close(self: arq_worker.Worker) -> None:
+    # Mirrors arq 0.27.0 Worker.close (worker.py:864-874). Re-verify on arq upgrade.
     if not self._handle_signals:
         self.handle_sig(signal.SIGUSR1)
     if not self._pool:
         return
     await asyncio.gather(*self.tasks.values())
+
+    start = time.perf_counter()
     try:
         await self.pool.delete(self.health_check_key)
+    except asyncio.CancelledError:
+        logger.warning(
+            "arq_health_check_cleanup_cancelled",
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+        raise
     except _SHUTDOWN_CLEANUP_ERRORS as exc:
-        logger.info(
+        logger.warning(
             "arq_health_check_cleanup_skipped",
             exc_type=type(exc).__name__,
             error=str(exc),
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
         )
+
     if self.on_shutdown:
         await self.on_shutdown(self.ctx)
+
+    start = time.perf_counter()
     try:
         await self.pool.close(close_connection_pool=True)
+    except asyncio.CancelledError:
+        logger.warning(
+            "arq_pool_close_cancelled",
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+        raise
     except _SHUTDOWN_CLEANUP_ERRORS as exc:
-        logger.info(
+        logger.warning(
             "arq_pool_close_skipped",
             exc_type=type(exc).__name__,
             error=str(exc),
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
         )
     self._pool = None
 
 
-arq_worker.Worker.close = _safe_close
+def _install() -> None:
+    """Wire logging + patch arq.Worker.close. Idempotent."""
+    configure_logging(settings.environment)
+    arq_worker.Worker.close = _safe_close  # type: ignore[assignment]
+
+
+_install()
 
 
 async def startup(ctx: dict) -> None:
