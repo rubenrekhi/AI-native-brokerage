@@ -271,11 +271,14 @@ class OnboardingService:
         """Build Alpaca payload from saved data + SSN, submit, create brokerage row."""
         existing = await BrokerageAccountRepository.get_by_user_id(db, user_id)
         if existing is not None:
-            raise ConflictError("Brokerage account already exists for this user")
+            raise ConflictError(
+                "Brokerage account already exists for this user",
+                resource="brokerage_account",
+            )
 
         profile = await UserProfileRepository.get_by_id(db, user_id)
         if profile is None:
-            raise NotFoundError("User profile not found")
+            raise NotFoundError("User profile not found", resource="user_profile")
 
         financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
         if financial is None:
@@ -303,7 +306,10 @@ class OnboardingService:
                 kyc_results=result.get("kyc_results"),
             )
         except IntegrityError:
-            raise ConflictError("Brokerage account already exists for this user")
+            raise ConflictError(
+                "Brokerage account already exists for this user",
+                resource="brokerage_account",
+            )
 
         await UserProfileRepository.update_fields(
             db, user_id, onboarding_step="submitted"

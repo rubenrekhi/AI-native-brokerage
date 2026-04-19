@@ -22,7 +22,10 @@ class UserProfileRepository:
     ) -> UserProfile:
         profile = await UserProfileRepository.get_by_id(db, user_id)
         if profile is None:
-            raise NotFoundError(f"User profile not found for user_id={user_id}")
+            raise NotFoundError(
+                f"User profile not found for user_id={user_id}",
+                resource="user_profile",
+            )
         for key, value in fields.items():
             if hasattr(profile, key):
                 setattr(profile, key, value)

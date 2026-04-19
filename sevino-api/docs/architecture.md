@@ -171,6 +171,22 @@ When a user signs up, a row in `user_profiles` is created with the same UUID, ma
 
 All errors return a consistent JSON shape: `{"error": "message", "code": "ERROR_CODE", "detail": {...}}`. Custom exceptions are raised in route/service code and mapped to HTTP status codes by global handlers registered in `app/exceptions.py`. SQLAlchemy errors (integrity, data, programming) are caught and mapped automatically.
 
+### Detail payloads
+
+The `detail` field is optional and code-specific. Handlers populate it where a structured hint helps the client:
+
+| Code | `detail` shape | Notes |
+|---|---|---|
+| `VALIDATION_ERROR` | `{"fields": [{"field": "body.email", "message": "...", "type": "..."}, ...]}` | Always present. |
+| `NOT_FOUND` | `{"resource": "user_profile"}` | Only when the raiser passes `resource=`. |
+| `CONFLICT` (raised) | `{"resource": "brokerage_account"}` or `{"field": "..."}` | Only when the raiser passes `resource=`/`field=`. |
+| `DUPLICATE_ENTRY` / `CONFLICT` (DB) | `{"field": "email"}` | Best-effort column extraction from asyncpg (`column_name` → `Key (col)=` in `detail` → parsed `constraint_name`). Omitted when nothing can be safely extracted. |
+| `INVALID_DATA` | `{"field": "..."}` | Same extraction path as above. |
+| `INCOMPLETE_ONBOARDING` | `{"missing_fields": [...]}` | Populated by `IncompleteOnboardingError`. |
+| `ALPACA_ERROR` | Alpaca's raw error body. | Passed through from `AlpacaBrokerError.detail`. |
+
+Column/resource names are the only schema information ever exposed — raw SQL, constraint names, and offending values are never leaked to the client.
+
 Custom exception classes and their HTTP status codes:
 
 | Exception | Code | HTTP |

@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import structlog
@@ -7,6 +8,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DataError, IntegrityError, ProgrammingError
 
 logger = structlog.get_logger(__name__)
+
+# asyncpg embeds the offending column in the error `detail` string, e.g.
+#   Key (email)=(x@y.com) already exists.
+_PG_DETAIL_KEY_RE = re.compile(r"Key \(([^)]+)\)=")
 
 
 # ---------------------------------------------------------------------------
@@ -40,13 +45,27 @@ class AuthorizationError(Exception):
 
 
 class NotFoundError(Exception):
-    def __init__(self, message: str = "Resource not found"):
+    def __init__(
+        self,
+        message: str = "Resource not found",
+        *,
+        resource: str | None = None,
+    ):
         self.message = message
+        self.resource = resource
 
 
 class ConflictError(Exception):
-    def __init__(self, message: str = "Resource already exists"):
+    def __init__(
+        self,
+        message: str = "Resource already exists",
+        *,
+        resource: str | None = None,
+        field: str | None = None,
+    ):
         self.message = message
+        self.resource = resource
+        self.field = field
 
 
 class IncompleteOnboardingError(Exception):
@@ -93,13 +112,19 @@ async def authorization_error_handler(
 async def not_found_error_handler(
     request: Request, exc: NotFoundError
 ) -> JSONResponse:
-    return error_response(404, exc.message, "NOT_FOUND")
+    detail = {"resource": exc.resource} if exc.resource else None
+    return error_response(404, exc.message, "NOT_FOUND", detail)
 
 
 async def conflict_error_handler(
     request: Request, exc: ConflictError
 ) -> JSONResponse:
-    return error_response(409, exc.message, "CONFLICT")
+    detail: dict[str, Any] = {}
+    if exc.resource:
+        detail["resource"] = exc.resource
+    if exc.field:
+        detail["field"] = exc.field
+    return error_response(409, exc.message, "CONFLICT", detail or None)
 
 
 async def incomplete_onboarding_error_handler(
@@ -131,11 +156,56 @@ async def alpaca_unavailable_handler(
 
 # --- SQLAlchemy handlers (registered before generic Exception) ---
 
+def _extract_column(exc: Exception) -> str | None:
+    """Extract the offending column name from an asyncpg-wrapped SQLAlchemy error.
+
+    Tries in order:
+    1. `exc.orig.column_name` (set for NOT NULL / FK / CHECK violations).
+    2. Regex match on `exc.orig.detail` (set for unique-key violations,
+       e.g. ``Key (email)=(x@y.com) already exists.``).
+    3. Stripping ``<table>_`` prefix and ``_key``/``_fkey``/``_check`` suffix
+       from `exc.orig.constraint_name` when the conventional naming is used.
+
+    Never returns raw SQL, table names, or values — only a column identifier.
+    """
+    orig = getattr(exc, "orig", None)
+    if orig is None:
+        return None
+
+    column = getattr(orig, "column_name", None)
+    if column:
+        return column
+
+    detail = getattr(orig, "detail", None)
+    if detail:
+        match = _PG_DETAIL_KEY_RE.search(detail)
+        if match:
+            # Keys can be composite: "(a, b)". Return the first column only.
+            return match.group(1).split(",")[0].strip()
+
+    constraint = getattr(orig, "constraint_name", None)
+    table = getattr(orig, "table_name", None)
+    if constraint:
+        stripped = constraint
+        if table and stripped.startswith(f"{table}_"):
+            stripped = stripped[len(table) + 1 :]
+        for suffix in ("_key", "_fkey", "_check", "_unique", "_idx"):
+            if stripped.endswith(suffix):
+                stripped = stripped[: -len(suffix)]
+                break
+        if stripped and stripped != constraint:
+            return stripped
+
+    return None
+
+
 async def data_error_handler(
     request: Request, exc: DataError
 ) -> JSONResponse:
     logger.warning("sqlalchemy_data_error", error=str(exc))
-    return error_response(422, "Invalid data provided", "INVALID_DATA")
+    column = _extract_column(exc)
+    detail = {"field": column} if column else None
+    return error_response(422, "Invalid data provided", "INVALID_DATA", detail)
 
 
 async def integrity_error_handler(
@@ -143,9 +213,13 @@ async def integrity_error_handler(
 ) -> JSONResponse:
     logger.warning("sqlalchemy_integrity_error", error=str(exc))
     msg = str(exc.orig) if exc.orig else str(exc)
+    column = _extract_column(exc)
+    detail = {"field": column} if column else None
     if "unique" in msg.lower() or "duplicate" in msg.lower():
-        return error_response(409, "A record with this value already exists", "DUPLICATE_ENTRY")
-    return error_response(409, "Data conflicts with existing records", "CONFLICT")
+        return error_response(
+            409, "A record with this value already exists", "DUPLICATE_ENTRY", detail
+        )
+    return error_response(409, "Data conflicts with existing records", "CONFLICT", detail)
 
 
 async def programming_error_handler(
