@@ -50,7 +50,12 @@ class Settings(BaseSettings):
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
+    plaid_fernet_key: str = ""
     sentry_dsn: str = ""
+
+    @property
+    def plaid_fernet_keys(self) -> list[str]:
+        return [k.strip() for k in self.plaid_fernet_key.split(",") if k.strip()]
 
     @property
     def show_docs(self) -> bool:
