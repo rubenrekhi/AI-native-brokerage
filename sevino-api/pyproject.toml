@@ -15,7 +15,7 @@ dependencies = [
     "pydantic-settings",
     "alpaca-py",
     "plaid-python",
-    "arq",
+    "arq==0.27.0",
     "httpx",
     "structlog>=25.5.0",
     "slowapi>=0.1.9",
