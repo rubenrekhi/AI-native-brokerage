@@ -139,6 +139,16 @@ class TestInstall:
     def test_install_is_idempotent(self):
         from arq import worker as arq_worker
 
-        app_worker._install()
-        app_worker._install()
+        app_worker._patch_arq_worker_close()
+        app_worker._patch_arq_worker_close()
         assert arq_worker.Worker.close is app_worker._safe_close
+
+    async def test_calling_arq_worker_close_routes_through_patch(self):
+        """End-to-end: invoking Worker.close on the real arq class uses _safe_close."""
+        from arq import worker as arq_worker
+
+        fake = _FakeWorker(delete_side_effect=RedisTimeoutError("server gone"))
+        await arq_worker.Worker.close(fake)
+        fake.pool.delete.assert_awaited_once()
+        fake.pool.close.assert_awaited_once_with(close_connection_pool=True)
+        assert fake._pool is None

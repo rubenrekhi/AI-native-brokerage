@@ -85,13 +85,18 @@ async def _safe_close(self: arq_worker.Worker) -> None:
     self._pool = None
 
 
-def _install() -> None:
-    """Wire logging + patch arq.Worker.close. Idempotent."""
+def _configure_worker_logging() -> None:
+    """Wire structlog for the worker process. Idempotent."""
     configure_logging(settings.environment)
+
+
+def _patch_arq_worker_close() -> None:
+    """Replace arq.Worker.close with _safe_close. Idempotent."""
     arq_worker.Worker.close = _safe_close  # type: ignore[assignment]
 
 
-_install()
+_configure_worker_logging()
+_patch_arq_worker_close()
 
 
 async def startup(ctx: dict) -> None:
