@@ -23,12 +23,32 @@ from app.models import (  # noqa: F401, E402
     OrderEvent,
     PlaidItem,
     RadarItem,
+    SseCheckpoint,
     UserFinancialProfile,
     UserProfile,
     UserSettings,
 )
 
 target_metadata = Base.metadata
+
+
+# Names of schema objects that live in the DB but intentionally aren't declared
+# on any ORM model. Without this filter, `alembic revision --autogenerate`
+# would generate a DROP for them every single run.
+#
+# `fk_user_profiles_auth_users` is the cross-schema FK from
+# `user_profiles.id` → `auth.users.id`. It's created via raw SQL in the
+# initial migration because `auth.users` is Supabase-managed and we
+# deliberately keep it out of the SQLAlchemy models.
+_AUTOGEN_IGNORED_NAMES: dict[str, set[str]] = {
+    "foreign_key_constraint": {"fk_user_profiles_auth_users"},
+}
+
+
+def _include_object(object_, name, type_, reflected, compare_to):
+    if name in _AUTOGEN_IGNORED_NAMES.get(type_, set()):
+        return False
+    return True
 
 
 def _get_url() -> str:
@@ -44,13 +64,18 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        include_object=_include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        include_object=_include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
