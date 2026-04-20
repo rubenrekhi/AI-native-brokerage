@@ -8,13 +8,15 @@ This document describes how the Sevino API works — the full stack, how service
 - [📁 Directory Structure](#-directory-structure)
 - [🔐 Authentication](#-authentication)
   - [The flow](#the-flow)
+  - [JWT verification details](#jwt-verification-details)
   - [User data split](#user-data-split)
   - [API security layers](#api-security-layers)
 - [🔍 Error Handling & Logging](#-error-handling--logging)
   - [Structured error responses](#structured-error-responses)
+  - [Detail payloads](#detail-payloads)
   - [Request logging & correlation IDs](#request-logging--correlation-ids)
   - [Log output format](#log-output-format)
-- [🗄️ Database](#️-database)
+- [🗄️ Database](#-database)
   - [Connection setup](#connection-setup)
   - [Local Supabase setup](#local-supabase-setup)
   - [Dual port setup (production only)](#dual-port-setup-production-only)
@@ -23,14 +25,23 @@ This document describes how the Sevino API works — the full stack, how service
   - [What lives in the database vs. what doesn't](#what-lives-in-the-database-vs-what-doesnt)
   - [Row Level Security](#row-level-security)
 - [📈 Alpaca Integration](#-alpaca-integration)
+  - [Authentication with Alpaca](#authentication-with-alpaca)
   - [Account creation & KYC](#account-creation--kyc)
   - [Trading](#trading)
   - [Portfolio data](#portfolio-data)
+- [📡 Real-Time Events (SSE & WebSocket)](#-real-time-events-sse--websocket)
+  - [Connections](#connections)
+  - [How SSE works](#how-sse-works)
+  - [Checkpoint & resume strategy](#checkpoint--resume-strategy)
+  - [Event handlers](#event-handlers)
+  - [Deduplication](#deduplication)
+  - [Out-of-order protection](#out-of-order-protection)
+  - [Worker integration](#worker-integration)
 - [🏦 Plaid Integration](#-plaid-integration)
   - [The flow](#the-flow-1)
-- [⚙️ Background Jobs (ARQ + Redis)](#️-background-jobs-arq--redis)
+- [⚙️ Background Jobs (ARQ + Redis)](#-background-jobs-arq--redis)
   - [Why background jobs](#why-background-jobs)
-  - [Architecture](#architecture)
+  - [Worker architecture](#worker-architecture)
   - [Job flow](#job-flow)
   - [Task definitions](#task-definitions)
 - [🚀 Deployment](#-deployment)
@@ -321,6 +332,118 @@ Alpaca is the source of truth. The API calls Alpaca on every request:
 
 We do not store this data in our database. Redis is available for caching with short TTLs if performance becomes an issue.
 
+## 📡 Real-Time Events (SSE & WebSocket)
+
+The ARQ worker maintains persistent connections to Alpaca's event APIs. Events update existing DB rows (not an append-only event log). The FastAPI web server never touches these connections — it just reads the DB/cache when the iOS app asks.
+
+### Connections
+
+Four persistent connections, maintained by the ARQ worker (not the web process), regardless of how many users exist:
+
+| # | Protocol | Endpoint | Purpose |
+|---|----------|----------|---------|
+| 1 | SSE | `GET /v1/events/accounts/status` | KYC lifecycle (SUBMITTED → ACTIVE, ACTION_REQUIRED, REJECTED) |
+| 2 | SSE | `GET /v1/events/transfers/status` | ACH lifecycle (QUEUED → PENDING → COMPLETE, REJECTED, RETURNED) |
+| 3 | SSE | `GET /v1/events/trades` | Order fills, cancels, rejects (redundancy layer) |
+| 4 | WebSocket | `wss://broker-api.alpaca.markets/stream` | Order fills, cancels, rejects (primary, millisecond latency) |
+
+All Sevino users' events arrive on the same connections. Each event payload includes `account_id` to match to the right user in the database. One SSE connection per stream, one WebSocket — Alpaca enforces this limit per API key.
+
+### How SSE works
+
+SSE (Server-Sent Events) is a one-way streaming protocol over plain HTTP. The worker makes a `GET` request to Alpaca; Alpaca never closes the response. Instead it keeps writing text lines in a defined format:
+
+```
+event: account_status
+id: evt_123
+data: {"account_id": "abc", "status_from": "SUBMITTED", "status_to": "ACTIVE"}
+
+event: account_status
+id: evt_124
+data: {"account_id": "def", "status_from": "SUBMITTED", "status_to": "REJECTED"}
+```
+
+The connection stays open indefinitely. Each block is a discrete event pushed whenever something happens. If the connection drops, the worker reconnects with `?since_id=<last_id>` and Alpaca replays everything missed. SSE has built-in replay; WebSocket does not.
+
+Why both SSE and WebSocket for trade events: WebSocket gives millisecond latency for the real-time Trade Confirmation Card UX. SSE gives historical replay capability via `since_id` if the WebSocket drops. Together they ensure no order event is ever missed.
+
+### Checkpoint & resume strategy
+
+Each SSE stream's last processed event ID is stored in a Postgres table (`sse_checkpoints`): one row per stream (`stream_name` PK, `last_event_id`, `updated_at`). Updated after each event is successfully processed.
+
+| Scenario | Behavior |
+|----------|----------|
+| First-ever deploy | No checkpoint row → connect without `since_id` → stream from now |
+| Worker restart / redeploy | Read `last_event_id` from Postgres → reconnect with `since_id` → Alpaca replays missed events |
+| Checkpoint lost | Connect without `since_id` → stream from now; backfill gaps via Alpaca REST if needed |
+
+No Redis is needed for checkpointing — Postgres is the durable store and it survives restarts, redeploys, and worker crashes.
+
+### Event handlers
+
+All handlers UPDATE existing rows, not INSERT new ones. The operation is always "find the row by Alpaca ID, update its status."
+
+**Account status** (SSE only):
+1. Look up `brokerage_accounts` by `alpaca_account_id`.
+2. Set `account_status` to the new value.
+3. If status is `ACTIVE`: trigger FDIC sweep enrollment via Alpaca REST, set `activated_at`.
+4. Invalidate relevant cache keys.
+
+**Transfer status** (SSE only):
+1. Invalidate balance/account cache so the next app read sees updated funds.
+2. Future: send push notification to user.
+
+**Trade events** (SSE + WebSocket — both call the same handler function):
+1. Look up `order_events` by `alpaca_order_id`.
+2. Update `status`, `filled_avg_price`, `filled_qty`, `filled_at`.
+3. Invalidate positions/account cache.
+
+### Deduplication
+
+Since both the SSE and WebSocket channels deliver trade events, the same fill/cancel could arrive twice. No explicit dedup mechanism is needed because the handlers perform UPDATEs, which are naturally idempotent — writing the same status and fill data to the same row twice produces the same result. No Redis dedup keys, no unique constraint tricks.
+
+Account status and transfer status are SSE-only (single channel), so duplication is not a concern.
+
+### Out-of-order protection
+
+Only applies to trade events where two channels (SSE + WebSocket) could deliver events in different order. A slower channel could deliver a stale intermediate status after the faster channel already wrote the final status:
+
+```
+Actual lifecycle:   new → accepted → partially_filled → filled
+WebSocket delivers: filled           (fast, writes immediately)
+SSE delivers:       partially_filled (slow, arrives after — would regress the status)
+```
+
+The handler checks a status ordering map before writing: only update if the incoming status is "later" in the lifecycle than the current status. If not, skip. This prevents stale events from overwriting newer data.
+
+Not needed for SSE-only streams (account status, transfer status) — a single SSE connection delivers events sequentially, so they always arrive in order.
+
+### Worker integration
+
+The SSE listeners and WebSocket listener run as `asyncio.Task`s spawned in the ARQ worker's `startup` hook and cancelled in `shutdown`. They are persistent loops (not cron jobs) with internal reconnection logic using exponential backoff on connection failure.
+
+```python
+async def startup(ctx: dict):
+    ctx["sse_account"] = asyncio.create_task(listen_account_status(ctx))
+    ctx["sse_transfer"] = asyncio.create_task(listen_transfer_status(ctx))
+    ctx["sse_trade"] = asyncio.create_task(listen_trade_events(ctx))
+    ctx["ws_trade"] = asyncio.create_task(listen_ws_trade_updates(ctx))
+
+async def shutdown(ctx: dict):
+    for key in ("sse_account", "sse_transfer", "sse_trade", "ws_trade"):
+        task = ctx.get(key)
+        if task:
+            task.cancel()
+```
+
+The web server (FastAPI) is unaware of these connections. The iOS app calls API endpoints, which read from Postgres (and optionally Redis cache). The data is already up to date because the worker processed the events in the background.
+
+Example flow for KYC:
+1. User submits KYC → API sends `POST /v1/accounts` to Alpaca → stores `account_status = "SUBMITTED"`.
+2. Alpaca runs async KYC (minutes to hours).
+3. SSE pushes `{"status_to": "ACTIVE"}` → worker updates `brokerage_accounts` row.
+4. User opens app → iOS calls API → reads `account_status = "ACTIVE"` → trading unlocked.
+
 ## 🏦 Plaid Integration
 
 Plaid handles bank account linking for deposits and withdrawals.
@@ -343,7 +466,7 @@ The API handles steps 3-6. The app handles steps 1-2 (Plaid Link UI) and can tri
 
 Some operations are too slow for a synchronous API response: LLM inference for trade analysis (5-30 seconds), multi-step AI agent flows, pulling data from multiple sources, and scheduled tasks (e.g., daily portfolio summary notifications).
 
-### Architecture
+### Worker architecture
 
 Three Railway services in the same project:
 
