@@ -2,9 +2,11 @@ import SwiftUI
 
 struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     @State private var viewModel = HomeViewModel()
     @State private var messageText = ""
-    @State private var scale: CGFloat = 1
+    @State private var baseScale: CGFloat = 1
+    private var scale: CGFloat { baseScale * textSizeMultiplier }
     @State private var showExplore = true
     @State private var showPortfolio = false
     @State private var showFunding = false
@@ -135,7 +137,7 @@ struct HomeView: View {
         .background {
             GeometryReader { geo in
                 Color.clear.onAppear {
-                    scale = geo.size.width / 393
+                    baseScale = geo.size.width / 393
                 }
             }
         }
@@ -154,7 +156,13 @@ struct HomeView: View {
         }
         .offset(x: showSidebar ? 300 * scale : 0)
         .background {
-            SidebarPanelView(scale: scale, viewModel: viewModel)
+            SidebarPanelView(
+                scale: scale,
+                chats: viewModel.mockChats,
+                founderPhoneURL: viewModel.founderPhoneURL(),
+                founderTextURL: viewModel.founderTextURL(),
+                contactEmailURL: viewModel.contactEmailURL()
+            )
         }
         .task { viewModel.loadGreeting() }
     }
@@ -240,11 +248,15 @@ private struct SidebarPanelView: View {
     @Environment(\.openURL) private var openURL
 
     let scale: CGFloat
-    let viewModel: HomeViewModel
+    let chats: [ChatItem]
+    let founderPhoneURL: URL?
+    let founderTextURL: URL?
+    let contactEmailURL: URL?
 
     @State private var searchText = ""
     @State private var showContactOptions = false
     @State private var showFounderContact = false
+    @State private var showSettings = false
 
     var body: some View {
         ZStack {
@@ -285,9 +297,9 @@ private struct SidebarPanelView: View {
                     .foregroundStyle(Color.sevinoSecondary)
                     .padding(.bottom, 6 * scale)
 
-                ForEach(viewModel.mockChats, id: \.self) { chat in
+                ForEach(chats) { chat in
                     Button(action: {}) {
-                        Text(chat)
+                        Text(chat.title)
                             .font(.system(size: 16 * scale))
                             .foregroundStyle(Color.sevinoSecondary)
                             .lineLimit(1)
@@ -295,7 +307,7 @@ private struct SidebarPanelView: View {
                             .padding(.vertical, 11 * scale)
                             .padding(.horizontal, 12 * scale)
                             .background(
-                                chat == viewModel.mockChats.first
+                                chat.id == chats.first?.id
                                     ? Color.sevinoGreyAccent.opacity(0.3)
                                     : .clear,
                                 in: .rect(cornerRadius: 8 * scale)
@@ -307,7 +319,7 @@ private struct SidebarPanelView: View {
                 Spacer()
 
                 HStack {
-                    Button(action: {}) {
+                    Button(action: { showSettings = true }) {
                         HStack(spacing: 6 * scale) {
                             Text(L10n.Sidebar.userName)
                                 .font(.system(size: 15 * scale, weight: .medium))
@@ -322,7 +334,9 @@ private struct SidebarPanelView: View {
                         .padding(.vertical, 10 * scale)
                     }
                     .modifier(SevinoGlass.chip)
-                    .disabled(true)
+                    .fullScreenCover(isPresented: $showSettings) {
+                        SettingsView()
+                    }
 
                     Spacer()
 
@@ -361,17 +375,17 @@ private struct SidebarPanelView: View {
     }
 
     private func callFounders() {
-        guard let url = viewModel.founderPhoneURL() else { return }
+        guard let url = founderPhoneURL else { return }
         openURL(url)
     }
 
     private func textFounders() {
-        guard let url = viewModel.founderTextURL() else { return }
+        guard let url = founderTextURL else { return }
         openURL(url)
     }
 
     private func openEmail() {
-        guard let url = viewModel.contactEmailURL() else { return }
+        guard let url = contactEmailURL else { return }
         openURL(url)
     }
 }

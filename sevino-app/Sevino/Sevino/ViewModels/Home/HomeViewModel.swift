@@ -30,11 +30,11 @@ final class HomeViewModel {
     // MARK: - Sidebar mock chats
     // TODO: Replace with real chat history from backend
     private(set) var mockChats = [
-        "How was Tesla's most recent e...",
-        "Help me balance my portfolio",
-        "What happened with AMD this...",
-        "What is an option?",
-        "How much would I have made ...",
+        ChatItem(title: "How was Tesla's most recent e..."),
+        ChatItem(title: "Help me balance my portfolio"),
+        ChatItem(title: "What happened with AMD this..."),
+        ChatItem(title: "What is an option?"),
+        ChatItem(title: "How much would I have made ..."),
     ]
 
     // MARK: - Contact URLs
