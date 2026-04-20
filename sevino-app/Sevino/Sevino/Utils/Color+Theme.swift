@@ -28,6 +28,15 @@ extension Color {
     /// Negative/red — #991C1E (same in both modes)
     static let sevinoNegative = adaptive(light: 0x991C1E, dark: 0x991C1E)
 
+    /// Info/in-progress blue — #2D7FF9 (same in both modes)
+    static let sevinoInfo = adaptive(light: 0x2D7FF9, dark: 0x2D7FF9)
+
+    /// Avatar gradient start — #AF52DE (same in both modes)
+    static let sevinoAvatarPurple = adaptive(light: 0xAF52DE, dark: 0xAF52DE)
+
+    /// Warning/action-required orange — #E08A00 (same in both modes)
+    static let sevinoWarning = adaptive(light: 0xE08A00, dark: 0xE08A00)
+
     /// Selection highlight background — #C9DAF0 (same in both modes)
     static let sevinoHighlightBg = adaptive(light: 0xC9DAF0, dark: 0xC9DAF0)
 
