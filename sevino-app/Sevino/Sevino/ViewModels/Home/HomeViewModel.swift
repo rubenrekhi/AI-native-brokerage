@@ -27,6 +27,22 @@ final class HomeViewModel {
     // MARK: - Radar mock data
     private(set) var radarItems: [RadarItem] = []
 
+    // MARK: - Sidebar mock chats
+    // TODO: Replace with real chat history from backend
+    private(set) var mockChats = [
+        "How was Tesla's most recent e...",
+        "Help me balance my portfolio",
+        "What happened with AMD this...",
+        "What is an option?",
+        "How much would I have made ...",
+    ]
+
+    // MARK: - Contact URLs
+
+    func founderPhoneURL() -> URL? { URL(string: "tel:4169189713") }
+    func founderTextURL() -> URL? { URL(string: "sms:4169189713") }
+    func contactEmailURL() -> URL? { URL(string: "mailto:admin@sevino.ai") }
+
     func loadGreeting() {
         let hour = Calendar.current.component(.hour, from: Date.now)
         let name = "Riley"
