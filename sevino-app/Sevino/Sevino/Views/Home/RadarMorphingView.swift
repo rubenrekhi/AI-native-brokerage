@@ -107,6 +107,7 @@ private struct RadarItemRow: View {
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
+            .padding(.leading, (28 + 10) * scale)
         }
         .padding(12 * scale)
         .background(Color.sevinoGreyAccent.opacity(0.1), in: .rect(cornerRadius: 14 * scale))
