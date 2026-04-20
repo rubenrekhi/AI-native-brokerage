@@ -490,6 +490,13 @@ All share the same environment variables and private networking.
 
 Tasks are async Python functions in `app/tasks/`. They're registered in `app/worker.py` (ARQ worker settings). They have access to the same database, services, and configuration as the web app.
 
+Current tasks:
+
+| Task | Type | Cadence | Purpose |
+|------|------|---------|---------|
+| `health_ping` | cron | every 5 min | Placeholder heartbeat — remove once more real tasks exist |
+| `check_listener_liveness` | cron | every 5 min | Reads `last_message_received_at` on every registered SSE/WebSocket listener. If any has been silent longer than its per-stream threshold, emits `sentry_sdk.capture_message(level="warning")` naming the stream. This is how we get paged when a listener silently drops (e.g., Alpaca stops sending during market hours). See §Real-Time Events for thresholds per stream. |
+
 ## 🚀 Deployment
 
 ### Hosting
@@ -513,6 +520,16 @@ Each Railway service uses a different process from the Procfile.
 1. **Build:** Nixpacks detects Python, installs dependencies via `uv sync`.
 2. **Release command:** `alembic upgrade head` — runs migrations before the new version serves traffic.
 3. **Start:** Runs the appropriate Procfile command for each service.
+
+### Worker topology
+
+The `worker` Railway service is the sole host for every long-running Alpaca listener (account status SSE, transfer status SSE, trade events SSE, trade updates WebSocket). The `web` service never opens these connections.
+
+**Deploy-time invariant: the `worker` service MUST run with `replicas=1`.**
+
+Alpaca enforces one SSE connection per stream and one WebSocket per API key. That per-API-key limit is what guarantees single-consumer semantics across the fleet — we do not run leader election, we rely on Railway keeping replica count pinned to 1. Running a second worker replica would cause the second connection to displace the first (or be rejected), and handler invocations would duplicate.
+
+Listeners are spawned as `asyncio.Task`s inside the existing ARQ worker's `on_startup` hook and cancelled in `on_shutdown`. Liveness is surfaced via a cron task (`check_listener_liveness`) that reads each listener's `last_message_received_at` against a per-listener silence threshold and emits a Sentry `capture_message` when a stream has gone silent longer than expected. No separate health-check endpoint is needed — alerting bubbles up through Sentry.
 
 ### Environments & PR previews
 
