@@ -187,7 +187,7 @@ private struct BankLogoView: View {
     let size: CGFloat
 
     var body: some View {
-        AsyncImage(url: URL(string: "https://logo.clearbit.com/\(domain)")) { phase in
+        AsyncImage(url: URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=128")) { phase in
             switch phase {
             case .success(let image):
                 image

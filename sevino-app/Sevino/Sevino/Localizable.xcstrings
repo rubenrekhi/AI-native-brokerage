@@ -34,9 +34,6 @@
         }
       }
     },
-    "A" : {
-
-    },
     "auth.continue_with_apple" : {
       "localizations" : {
         "en" : {
@@ -3156,9 +3153,6 @@
           }
         }
       }
-    },
-    "RR" : {
-
     },
     "settings.acceptable_use" : {
       "localizations" : {
