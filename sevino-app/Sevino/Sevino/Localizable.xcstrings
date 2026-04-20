@@ -1,3369 +1,3467 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "" : {
-
+  "sourceLanguage": "en",
+  "strings": {
+    "": {},
+    "%@ %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@"
+          }
+        }
+      }
+    },
+    "%lld of %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "auth.continue_with_apple": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue with Apple"
+          }
+        }
+      }
+    },
+    "auth.continue_with_google": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue with Google"
+          }
+        }
+      }
+    },
+    "auth.email_confirmation": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Check your email to confirm your account."
+          }
+        }
+      }
+    },
+    "auth.email_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Email"
+          }
+        }
+      }
+    },
+    "auth.legal_disclaimer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "By creating an account, you agree to our [Investment Advisory Agreement](iac), [Terms of Service](tos) and [Privacy Policy](privacy). You also acknowledge that you have reviewed our [Form ADV Brochure](adv) and [Form CRS](crs)."
+          }
+        }
+      }
+    },
+    "auth.or_divider": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "or"
+          }
+        }
+      }
+    },
+    "auth.password_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Password"
+          }
+        }
+      }
+    },
+    "auth.phone_country_code": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+1"
+          }
+        }
+      }
     },
-    "%@ %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$@"
+    "auth.phone_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Phone Number"
           }
         }
       }
     },
-    "%lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld"
+    "auth.phone_next": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
           }
         }
       }
     },
-    "auth.continue_with_apple" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue with Apple"
+    "auth.phone_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(555) 555-5555"
           }
         }
       }
     },
-    "auth.continue_with_google" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue with Google"
+    "auth.phone_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your phone number will help us keep your account safe"
           }
         }
       }
     },
-    "auth.email_confirmation" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Check your email to confirm your account."
+    "auth.phone_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your phone number?"
           }
         }
       }
     },
-    "auth.email_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Email"
+    "auth.req_contains_at": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contains @"
           }
         }
       }
     },
-    "auth.legal_disclaimer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "By creating an account, you agree to our [Investment Advisory Agreement](iac), [Terms of Service](tos) and [Privacy Policy](privacy). You also acknowledge that you have reviewed our [Form ADV Brochure](adv) and [Form CRS](crs)."
+    "auth.req_length": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 to 64 characters"
           }
         }
       }
     },
-    "auth.or_divider" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "or"
+    "auth.req_lowercase": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 lowercase"
           }
         }
       }
     },
-    "auth.password_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Password"
+    "auth.req_no_spaces": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No spaces"
           }
         }
       }
     },
-    "auth.phone_country_code" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+1"
+    "auth.req_number": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 number"
           }
         }
       }
     },
-    "auth.phone_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Phone Number"
+    "auth.req_special_char": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 special character"
           }
         }
       }
     },
-    "auth.phone_next" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Next"
+    "auth.req_uppercase": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 uppercase"
           }
         }
       }
     },
-    "auth.phone_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "(555) 555-5555"
+    "auth.req_valid_domain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Valid domain"
           }
         }
       }
     },
-    "auth.phone_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your phone number will help us keep your account safe"
+    "auth.sign_in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign In"
           }
         }
       }
     },
-    "auth.phone_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your phone number?"
+    "auth.sign_in_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Wall Street's doors and own your wealth."
           }
         }
       }
     },
-    "auth.req_contains_at" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contains @"
+    "auth.sign_in_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome back"
           }
         }
       }
     },
-    "auth.req_length" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "8 to 64 characters"
+    "auth.sign_out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Out"
           }
         }
       }
     },
-    "auth.req_lowercase" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 lowercase"
+    "auth.sign_up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Up"
           }
         }
       }
     },
-    "auth.req_no_spaces" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No spaces"
+    "auth.sign_up_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Wall Street's doors and own your wealth."
           }
         }
       }
     },
-    "auth.req_number" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 number"
+    "auth.sign_up_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's get started"
           }
         }
       }
     },
-    "auth.req_special_char" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 special character"
+    "auth.switch_to_sign_in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Already have an account? Sign in"
           }
         }
       }
     },
-    "auth.req_uppercase" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 uppercase"
+    "auth.switch_to_sign_up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Don't have an account? Sign up"
           }
         }
       }
     },
-    "auth.req_valid_domain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Valid domain"
+    "general.app_name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sevino"
           }
         }
       }
     },
-    "auth.sign_in" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign In"
+    "general.back": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
           }
         }
       }
     },
-    "auth.sign_in_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Wall Street's doors and own your wealth."
+    "general.submit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Submit"
           }
         }
       }
     },
-    "auth.sign_in_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Welcome back"
+    "home.attach_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Attach"
           }
         }
       }
     },
-    "auth.sign_out" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign Out"
+    "home.chat_about_this": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat about this?"
           }
         }
       }
     },
-    "auth.sign_up" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign Up"
+    "home.chat_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What can I help you with?"
           }
         }
       }
     },
-    "auth.sign_up_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Wall Street's doors and own your wealth."
+    "home.dismiss_explore_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
           }
         }
       }
     },
-    "auth.sign_up_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let's get started"
+    "home.explore_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Explore what's in Sevino"
           }
         }
       }
     },
-    "auth.switch_to_sign_in" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Already have an account? Sign in"
+    "home.funding_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funding"
           }
         }
       }
     },
-    "auth.switch_to_sign_up" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Don't have an account? Sign up"
+    "home.greeting_afternoon": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good afternoon, %@"
           }
         }
       }
     },
-    "general.app_name" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sevino"
+    "home.greeting_evening": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good evening, %@"
           }
         }
       }
     },
-    "general.back" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Back"
+    "home.greeting_morning": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good morning, %@"
           }
         }
       }
     },
-    "general.submit" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Submit"
+    "home.menu_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Menu"
           }
         }
       }
     },
-    "home.attach_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Attach"
+    "home.mic_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice input"
           }
         }
       }
     },
-    "home.chat_about_this" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chat about this?"
+    "home.portfolio_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portfolio"
           }
         }
       }
     },
-    "home.chat_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What can I help you with?"
+    "home.portfolio_currency": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "USD"
           }
         }
       }
     },
-    "home.dismiss_explore_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
+    "home.dismiss_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dismiss"
           }
         }
       }
     },
-    "home.explore_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explore what's in Sevino"
+    "home.period_today": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "today"
           }
         }
       }
     },
-    "home.funding_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Funding"
+    "home.period_7_days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "past 7 days"
           }
         }
       }
     },
-    "home.greeting_afternoon" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Good afternoon, %@"
+    "home.period_30_days": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "past 30 days"
           }
         }
       }
     },
-    "home.greeting_evening" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Good evening, %@"
+    "home.period_3_months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "past 3 months"
           }
         }
       }
     },
-    "home.greeting_morning" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Good morning, %@"
+    "home.period_6_months": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "past 6 months"
           }
         }
       }
     },
-    "home.menu_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Menu"
+    "home.period_ytd": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "year to date"
           }
         }
       }
     },
-    "home.mic_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input"
+    "home.period_year": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "past year"
           }
         }
       }
     },
-    "home.portfolio_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Portfolio"
+    "home.period_all_time": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "all time"
           }
         }
       }
     },
-    "home.portfolio_currency" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "USD"
+    "home.uninvested_cash": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uninvested Cash"
           }
         }
       }
     },
-    "home.dismiss_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
+    "home.earning_apy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Earning %@ APY"
           }
         }
       }
     },
-    "home.period_today" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "today"
+    "home.this_month": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This month"
           }
         }
       }
     },
-    "home.period_7_days" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 7 days"
+    "home.days_accrued": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ days accrued"
           }
         }
       }
     },
-    "home.period_30_days" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 30 days"
+    "home.lifetime_earned": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lifetime earned"
           }
         }
       }
     },
-    "home.period_3_months" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 3 months"
+    "home.since_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Since %@"
           }
         }
       }
     },
-    "home.period_6_months" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 6 months"
+    "home.current_apy": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Current APY"
           }
         }
       }
     },
-    "home.period_ytd" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "year to date"
+    "home.buying_power": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buying power"
           }
         }
       }
     },
-    "home.period_year" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past year"
+    "home.pending_deposits": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending deposits"
           }
         }
       }
     },
-    "home.period_all_time" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "all time"
+    "home.interest_paid_out": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interest paid out"
           }
         }
       }
     },
-    "home.uninvested_cash" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Uninvested Cash"
+    "home.fdic_insured": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FDIC insured up to"
           }
         }
       }
     },
-    "home.earning_apy" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Earning %@ APY"
+    "home.deposit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deposit"
           }
         }
       }
     },
-    "home.this_month" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This month"
+    "home.withdraw": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Withdraw"
           }
         }
       }
     },
-    "home.days_accrued" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ days accrued"
+    "home.cash_interest_info": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How does my cash earn interest?"
           }
         }
       }
     },
-    "home.lifetime_earned" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lifetime earned"
+    "home.cash_disclaimer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Rate is variable and tied to the federal funds rate. FDIC insurance provided through Alpaca Securities' bank sweep program. Cash remains fully liquid as buying power. Brokerage services provided by Alpaca Securities LLC, member FINRA/SIPC."
           }
         }
       }
     },
-    "home.since_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Since %@"
+    "home.holdings_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Holdings"
           }
         }
       }
     },
-    "home.current_apy" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Current APY"
+    "home.holdings_total_value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total value"
           }
         }
       }
     },
-    "home.buying_power" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buying power"
+    "home.holdings_my_holdings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Holdings"
           }
         }
       }
     },
-    "home.pending_deposits" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pending deposits"
+    "home.holdings_days_gain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Day’s Gain"
           }
         }
       }
     },
-    "home.interest_paid_out" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Interest paid out"
+    "home.holdings_total_gain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total Gain"
           }
         }
       }
     },
-    "home.fdic_insured" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FDIC insured up to"
+    "home.holdings_average_cost": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Average Cost"
           }
         }
       }
     },
-    "home.deposit" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deposit"
+    "home.holdings_shares": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ shares"
           }
         }
       }
     },
-    "home.withdraw" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Withdraw"
+    "home.filter_display_by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Display by"
           }
         }
       }
     },
-    "home.cash_interest_info" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "How does my cash earn interest?"
+    "home.filter_all_time_return": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All time return"
           }
         }
       }
     },
-    "home.cash_disclaimer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rate is variable and tied to the federal funds rate. FDIC insurance provided through Alpaca Securities' bank sweep program. Cash remains fully liquid as buying power. Brokerage services provided by Alpaca Securities LLC, member FINRA/SIPC."
+    "home.filter_todays_return": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Today’s return"
           }
         }
       }
     },
-    "home.holdings_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Holdings"
+    "home.filter_total_value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Total value"
           }
         }
       }
     },
-    "home.holdings_total_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total value"
+    "home.filter_price_change": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Price change"
           }
         }
       }
     },
-    "home.holdings_my_holdings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "My Holdings"
+    "home.filter_sort_by": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sort by"
           }
         }
       }
     },
-    "home.holdings_days_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Day\u2019s Gain"
+    "home.filter_high_to_low": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "High to low"
           }
         }
       }
     },
-    "home.holdings_total_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total Gain"
+    "home.filter_low_to_high": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Low to high"
           }
         }
       }
     },
-    "home.holdings_average_cost" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Average Cost"
+    "home.filter_alphabetical": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alphabetical"
           }
         }
       }
     },
-    "home.holdings_shares" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ shares"
+    "home.radar_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Radar"
           }
         }
       }
     },
-    "home.filter_display_by" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Display by"
+    "home.radar_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Curated for your profile"
           }
         }
       }
     },
-    "home.filter_all_time_return" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All time return"
+    "home.radar_disclaimer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For information purposes only. These are not recommendations to buy or sell."
           }
         }
       }
     },
-    "home.filter_todays_return" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Today\u2019s return"
+    "home.radar_expires": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Expires in %@"
           }
         }
       }
     },
-    "home.filter_total_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total value"
+    "home.radar_star_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save to watchlist"
           }
         }
       }
     },
-    "home.filter_price_change" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Price change"
+    "home.send_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send message"
           }
         }
       }
     },
-    "home.filter_sort_by" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sort by"
+    "home.sidebar_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sidebar"
           }
         }
       }
     },
-    "home.filter_high_to_low" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "High to low"
+    "home.suggestion_news": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“Any news today?”"
           }
         }
       }
     },
-    "home.filter_low_to_high" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Low to high"
+    "home.suggestion_portfolio": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“How’s my portfolio?”"
           }
         }
       }
     },
-    "home.filter_alphabetical" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alphabetical"
+    "home.suggestion_radar": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“What stocks are on my radar?”"
           }
         }
       }
     },
-    "home.radar_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Radar"
+    "home.watchlist_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watchlist"
           }
         }
       }
     },
-    "home.radar_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Curated for your profile"
+    "onboarding.alpaca_address_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please enter your mailing address"
           }
         }
       }
     },
-    "home.radar_disclaimer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "For information purposes only. These are not recommendations to buy or sell."
+    "onboarding.alpaca_address_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your home address?"
           }
         }
       }
     },
-    "home.radar_expires" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Expires in %@"
+    "onboarding.alpaca_agreement_customer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Customer Agreement"
           }
         }
       }
     },
-    "home.radar_star_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save to watchlist"
+    "onboarding.alpaca_agreement_fdic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "FDIC Bank Sweep Program Terms & Conditions"
           }
         }
       }
     },
-    "home.send_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send message"
+    "onboarding.alpaca_agreement_margin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Margin Agreement"
           }
         }
       }
     },
-    "home.sidebar_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sidebar"
+    "onboarding.alpaca_agreements_checkbox": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I agree and acknowledge receipt of the documents listed above"
           }
         }
       }
     },
-    "home.suggestion_news" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“Any news today?”"
+    "onboarding.alpaca_agreements_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last step — review and sign your account agreements."
           }
         }
       }
     },
-    "home.suggestion_portfolio" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“How’s my portfolio?”"
+    "onboarding.alpaca_citizen_no": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No (non-US)"
           }
         }
       }
     },
-    "home.suggestion_radar" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“What stocks are on my radar?”"
+    "onboarding.alpaca_citizen_resident": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, US permanent resident"
           }
         }
       }
     },
-    "home.watchlist_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Watchlist"
+    "onboarding.alpaca_citizen_yes": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yes, US citizen"
           }
         }
       }
     },
-    "onboarding.alpaca_address_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please enter your mailing address"
+    "onboarding.alpaca_citizenship_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you a US citizen or permanent resident?"
           }
         }
       }
     },
-    "onboarding.alpaca_address_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your home address?"
+    "onboarding.alpaca_complete_body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your brokerage account is being verified. This usually takes a few minutes — we'll let you know the moment it's ready."
           }
         }
       }
     },
-    "onboarding.alpaca_agreement_customer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Customer Agreement"
+    "onboarding.alpaca_complete_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start my first conversation →"
           }
         }
       }
     },
-    "onboarding.alpaca_agreement_fdic" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FDIC Bank Sweep Program Terms & Conditions"
+    "onboarding.alpaca_submit_error_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong"
           }
         }
       }
     },
-    "onboarding.alpaca_agreement_margin" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Margin Agreement"
+    "onboarding.alpaca_submit_error_body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "We couldn't set up your account right now. Please try again later."
           }
         }
       }
     },
-    "onboarding.alpaca_agreements_checkbox" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I agree and acknowledge receipt of the documents listed above"
+    "onboarding.alpaca_complete_cta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In the meantime, let's start talking about your money."
           }
         }
       }
     },
-    "onboarding.alpaca_agreements_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Last step — review and sign your account agreements."
+    "onboarding.alpaca_complete_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're all set, %@."
           }
         }
       }
     },
-    "onboarding.alpaca_citizen_no" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No (non-US)"
+    "onboarding.alpaca_complete_loading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Setting up your account…"
           }
         }
       }
     },
-    "onboarding.alpaca_citizen_resident" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yes, US permanent resident"
+    "onboarding.alpaca_employer_name_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Employer Name"
           }
         }
       }
     },
-    "onboarding.alpaca_citizen_yes" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yes, US citizen"
+    "onboarding.alpaca_employer_name_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Company name"
           }
         }
       }
     },
-    "onboarding.alpaca_citizenship_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Are you a US citizen or permanent resident?"
+    "onboarding.alpaca_employment_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell me about your work."
           }
         }
       }
     },
-    "onboarding.alpaca_complete_body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your brokerage account is being verified. This usually takes a few minutes — we'll let you know the moment it's ready."
+    "onboarding.alpaca_employment_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Required by regulation — just a few quick fields."
           }
         }
       }
     },
-    "onboarding.alpaca_complete_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start my first conversation →"
+    "onboarding.alpaca_employment_select_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select an option"
           }
         }
       }
     },
-    "onboarding.alpaca_submit_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Something went wrong"
+    "onboarding.alpaca_employment_status_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Employment Status:"
           }
         }
       }
     },
-    "onboarding.alpaca_submit_error_body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't set up your account right now. Please try again later."
+    "onboarding.alpaca_funding_business": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Business income"
           }
         }
       }
     },
-    "onboarding.alpaca_complete_cta" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In the meantime, let's start talking about your money."
+    "onboarding.alpaca_funding_employment": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Employment income"
           }
         }
       }
     },
-    "onboarding.alpaca_complete_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You're all set, %@."
+    "onboarding.alpaca_funding_family": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Family"
           }
         }
       }
     },
-    "onboarding.alpaca_complete_loading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Setting up your account…"
+    "onboarding.alpaca_funding_inheritance": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inheritance"
           }
         }
       }
     },
-    "onboarding.alpaca_employer_name_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Employer Name"
+    "onboarding.alpaca_funding_investments": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Existing investments"
           }
         }
       }
     },
-    "onboarding.alpaca_employer_name_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Company name"
+    "onboarding.alpaca_funding_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Where does the money you'll invest come from?"
           }
         }
       }
     },
-    "onboarding.alpaca_employment_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tell me about your work."
+    "onboarding.alpaca_funding_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select all that apply."
           }
         }
       }
     },
-    "onboarding.alpaca_employment_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Required by regulation — just a few quick fields."
+    "onboarding.alpaca_funding_savings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings"
           }
         }
       }
     },
-    "onboarding.alpaca_employment_select_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select an option"
+    "onboarding.alpaca_industry_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Industry"
           }
         }
       }
     },
-    "onboarding.alpaca_employment_status_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Employment Status:"
+    "onboarding.alpaca_industry_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "e.g. Technology, Finance"
           }
         }
       }
     },
-    "onboarding.alpaca_funding_business" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Business income"
+    "onboarding.alpaca_intro_body": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'll need some legal information — your name, address, and a few details. This is all required by federal law to verify your identity."
           }
         }
       }
     },
-    "onboarding.alpaca_funding_employment" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Employment income"
+    "onboarding.alpaca_intro_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's do it →"
           }
         }
       }
     },
-    "onboarding.alpaca_funding_family" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Family"
+    "onboarding.alpaca_intro_disclaimer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your SSN is sent directly to Alpaca Securities and is never stored on Sevino's servers."
           }
         }
       }
     },
-    "onboarding.alpaca_funding_inheritance" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Inheritance"
+    "onboarding.alpaca_intro_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Great, %@. Now let's open your brokerage account. This takes about 3 minutes."
           }
         }
       }
     },
-    "onboarding.alpaca_funding_investments" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Existing investments"
+    "onboarding.alpaca_job_title_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Job Title"
           }
         }
       }
     },
-    "onboarding.alpaca_funding_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Where does the money you'll invest come from?"
+    "onboarding.alpaca_job_title_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your role"
           }
         }
       }
     },
-    "onboarding.alpaca_funding_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Select all that apply."
+    "onboarding.alpaca_name_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please enter your name"
           }
         }
       }
     },
-    "onboarding.alpaca_funding_savings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Savings"
+    "onboarding.alpaca_name_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your full legal name?"
           }
         }
       }
     },
-    "onboarding.alpaca_industry_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Industry"
+    "onboarding.alpaca_name_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This needs to match your government ID exactly."
           }
         }
       }
     },
-    "onboarding.alpaca_industry_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "e.g. Technology, Finance"
+    "onboarding.alpaca_name_user_prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's open an account"
           }
         }
       }
     },
-    "onboarding.alpaca_intro_body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I'll need some legal information — your name, address, and a few details. This is all required by federal law to verify your identity."
+    "onboarding.alpaca_open_account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open my account →"
           }
         }
       }
     },
-    "onboarding.alpaca_intro_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let's do it →"
+    "onboarding.alpaca_optional_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(optional)"
           }
         }
       }
     },
-    "onboarding.alpaca_intro_disclaimer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your SSN is sent directly to Alpaca Securities and is never stored on Sevino's servers."
+    "onboarding.alpaca_regulatory_broker_affiliated": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you or a family member employed by or affiliated with a stock exchange, FINRA, or a broker-dealer?"
           }
         }
       }
     },
-    "onboarding.alpaca_intro_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Great, %@. Now let's open your brokerage account. This takes about 3 minutes."
+    "onboarding.alpaca_regulatory_political": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you or an immediate family member a current or former senior political figure?"
           }
         }
       }
     },
-    "onboarding.alpaca_job_title_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Job Title"
+    "onboarding.alpaca_regulatory_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A few regulatory questions — most people breeze through these."
           }
         }
       }
     },
-    "onboarding.alpaca_job_title_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your role"
+    "onboarding.alpaca_regulatory_senior_officer": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Are you or a family member a senior officer, director, or 10%+ shareholder of a publicly traded company?"
           }
         }
       }
     },
-    "onboarding.alpaca_name_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please enter your name"
+    "onboarding.alpaca_ssn_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please enter your SSN"
           }
         }
       }
     },
-    "onboarding.alpaca_name_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your full legal name?"
+    "onboarding.alpaca_ssn_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your Social Security Number?"
           }
         }
       }
     },
-    "onboarding.alpaca_name_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This needs to match your government ID exactly."
+    "onboarding.alpaca_ssn_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Encrypted and sent directly to Alpaca Securities for identity verification. Sevino never stores your SSN."
           }
         }
       }
     },
-    "onboarding.alpaca_name_user_prompt" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let's open an account"
+    "onboarding.alpaca_status_employed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Employed"
           }
         }
       }
     },
-    "onboarding.alpaca_open_account" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open my account →"
+    "onboarding.alpaca_status_retired": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Retired"
           }
         }
       }
     },
-    "onboarding.alpaca_optional_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "(optional)"
+    "onboarding.alpaca_status_self_employed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Self-employed"
           }
         }
       }
     },
-    "onboarding.alpaca_regulatory_broker_affiliated" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Are you or a family member employed by or affiliated with a stock exchange, FINRA, or a broker-dealer?"
+    "onboarding.alpaca_status_student": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Student"
           }
         }
       }
     },
-    "onboarding.alpaca_regulatory_political" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Are you or an immediate family member a current or former senior political figure?"
+    "onboarding.alpaca_status_unemployed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unemployed"
           }
         }
       }
     },
-    "onboarding.alpaca_regulatory_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "A few regulatory questions — most people breeze through these."
+    "onboarding.compound_chart_savings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "savings acct."
           }
         }
       }
     },
-    "onboarding.alpaca_regulatory_senior_officer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Are you or a family member a senior officer, director, or 10%+ shareholder of a publicly traded company?"
+    "onboarding.compound_chart_start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "start today"
           }
         }
       }
     },
-    "onboarding.alpaca_ssn_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please enter your SSN"
+    "onboarding.compound_chart_wait": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wait 5 years"
           }
         }
       }
     },
-    "onboarding.alpaca_ssn_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your Social Security Number?"
+    "onboarding.compound_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You have %lld years of compounding ahead."
           }
         }
       }
     },
-    "onboarding.alpaca_ssn_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Encrypted and sent directly to Alpaca Securities for identity verification. Sevino never stores your SSN."
+    "onboarding.compound_legend_savings": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Savings Account · 0.5%"
           }
         }
       }
     },
-    "onboarding.alpaca_status_employed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Employed"
+    "onboarding.compound_legend_start": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start Today · 10%"
           }
         }
       }
     },
-    "onboarding.alpaca_status_retired" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Retired"
+    "onboarding.compound_legend_wait": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wait 5 Years · 10%"
           }
         }
       }
     },
-    "onboarding.alpaca_status_self_employed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Self-employed"
+    "onboarding.compound_motivation1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Those 5 years? They're worth %@."
           }
         }
       }
     },
-    "onboarding.alpaca_status_student" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Student"
+    "onboarding.compound_motivation2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The best time to start was years ago."
           }
         }
       }
     },
-    "onboarding.alpaca_status_unemployed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unemployed"
+    "onboarding.compound_motivation3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The second best time is right now."
           }
         }
       }
     },
-    "onboarding.compound_chart_savings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "savings acct."
+    "onboarding.disclaimer_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I understand, let's continue →"
           }
         }
       }
     },
-    "onboarding.compound_chart_start" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "start today"
+    "onboarding.disclaimer_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One important thing before we set up your account."
           }
         }
       }
     },
-    "onboarding.compound_chart_wait" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "wait 5 years"
+    "onboarding.disclaimer_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Investing involves risk, including the possible loss of money. Past performance doesn't guarantee future results. Sevino is not a registered investment adviser — the AI provides information and education, not personalized investment advice."
           }
         }
       }
     },
-    "onboarding.compound_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You have %lld years of compounding ahead."
+    "onboarding.disclaimer_response3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Brokerage services are provided by Alpaca Securities LLC, member FINRA/SIPC. Your investments are protected by SIPC up to $500,000 (including $250,000 cash)."
           }
         }
       }
     },
-    "onboarding.compound_legend_savings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Savings Account · 0.5%"
+    "onboarding.dob_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When were you born?"
           }
         }
       }
     },
-    "onboarding.compound_legend_start" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start Today · 10%"
+    "onboarding.dob_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This helps me personalize your investment timeline."
           }
         }
       }
     },
-    "onboarding.compound_legend_wait" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wait 5 Years · 10%"
+    "onboarding.drawdown_0_5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "0 – 5% decline"
           }
         }
       }
     },
-    "onboarding.compound_motivation1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Those 5 years? They're worth %@."
+    "onboarding.drawdown_5_15": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 – 15% decline"
           }
         }
       }
     },
-    "onboarding.compound_motivation2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The best time to start was years ago."
+    "onboarding.drawdown_15_25": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "15 – 25% decline"
           }
         }
       }
     },
-    "onboarding.compound_motivation3" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The second best time is right now."
+    "onboarding.drawdown_25_40": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "25 – 40% decline"
           }
         }
       }
     },
-    "onboarding.disclaimer_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I understand, let's continue →"
+    "onboarding.drawdown_40_plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "40%+ decline"
           }
         }
       }
     },
-    "onboarding.disclaimer_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "One important thing before we set up your account."
+    "onboarding.drawdown_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How much of a drop could you handle without losing sleep?"
           }
         }
       }
     },
-    "onboarding.disclaimer_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Investing involves risk, including the possible loss of money. Past performance doesn't guarantee future results. Sevino is not a registered investment adviser — the AI provides information and education, not personalized investment advice."
+    "onboarding.experience_active": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I actively manage my portfolio and follow markets"
           }
         }
       }
     },
-    "onboarding.disclaimer_response3" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Brokerage services are provided by Alpaca Securities LLC, member FINRA/SIPC. Your investments are protected by SIPC up to $500,000 (including $250,000 cash)."
+    "onboarding.experience_advanced": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I've tried advanced strategies like options or crypto"
           }
         }
       }
     },
-    "onboarding.dob_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When were you born?"
+    "onboarding.experience_little": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I've invested a little, but not actively"
           }
         }
       }
     },
-    "onboarding.dob_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This helps me personalize your investment timeline."
+    "onboarding.experience_never": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I've never really invested"
           }
         }
       }
     },
-    "onboarding.drawdown_0_5" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "0 – 5% decline"
+    "onboarding.experience_regular": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I invest regularly in stocks or funds"
           }
         }
       }
     },
-    "onboarding.drawdown_5_15" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "5 – 15% decline"
+    "onboarding.experience_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Which sounds most like you?"
           }
         }
       }
     },
-    "onboarding.drawdown_15_25" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "15 – 25% decline"
+    "onboarding.goal_big_goal": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save for a big goal (house, wedding, etc.)"
           }
         }
       }
     },
-    "onboarding.drawdown_25_40" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "25 – 40% decline"
+    "onboarding.goal_cash_harder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Make my cash work harder"
           }
         }
       }
     },
-    "onboarding.drawdown_40_plus" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "40%+ decline"
+    "onboarding.goal_grow_wealth": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Grow my wealth over time"
           }
         }
       }
     },
-    "onboarding.drawdown_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "How much of a drop could you handle without losing sleep?"
+    "onboarding.goal_learn": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Learn to invest with real money"
           }
         }
       }
     },
-    "onboarding.experience_active" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I actively manage my portfolio and follow markets"
+    "onboarding.goal_retirement": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get on track for retirement"
           }
         }
       }
     },
-    "onboarding.experience_advanced" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I've tried advanced strategies like options or crypto"
+    "onboarding.goal_safety_net": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Build a safety net beyond savings"
           }
         }
       }
     },
-    "onboarding.experience_little" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I've invested a little, but not actively"
+    "onboarding.goals_reflection_a_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's the single most important thing in investing."
           }
         }
       }
     },
-    "onboarding.experience_never" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I've never really invested"
+    "onboarding.goals_reflection_a_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not picking the right stock — having the patience to let time do the heavy lifting."
           }
         }
       }
     },
-    "onboarding.experience_regular" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I invest regularly in stocks or funds"
+    "onboarding.goals_reflection_a_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Good. You're thinking long-term."
           }
         }
       }
     },
-    "onboarding.experience_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Which sounds most like you?"
+    "onboarding.goals_reflection_a_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Historical S&P 500 average annual return, ~10%. Simulated results are hypothetical."
           }
         }
       }
     },
-    "onboarding.goal_big_goal" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save for a big goal (house, wedding, etc.)"
+    "onboarding.goals_reflection_a_stat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$500/month invested consistently over 20 years at historical market returns could grow to over $300,000."
           }
         }
       }
     },
-    "onboarding.goal_cash_harder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Make my cash work harder"
+    "onboarding.goals_reflection_a_tagline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time is the cheat code."
           }
         }
       }
     },
-    "onboarding.goal_grow_wealth" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Grow my wealth over time"
+    "onboarding.goals_reflection_b_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your money should be working as hard as you do."
           }
         }
       }
     },
-    "onboarding.goal_learn" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Learn to invest with real money"
+    "onboarding.goals_reflection_b_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Right now, most of it probably isn't. We'll fix that."
           }
         }
       }
     },
-    "onboarding.goal_retirement" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Get on track for retirement"
+    "onboarding.goals_reflection_b_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Smart move, %@."
           }
         }
       }
     },
-    "onboarding.goal_safety_net" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Build a safety net beyond savings"
+    "onboarding.goals_reflection_b_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Sevino cash program rates. Rates subject to change."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "That's the single most important thing in investing."
+    "onboarding.goals_reflection_b_stat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "3.20% APY — That's what uninvested cash earns in Sevino's FDIC-insured high-yield cash program vs 0.01% at most checking accounts."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not picking the right stock — having the patience to let time do the heavy lifting."
+    "onboarding.goals_reflection_c_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading about investing and actually doing it are completely different."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Good. You're thinking long-term."
+    "onboarding.goals_reflection_c_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You don't need to know everything to start — you just need to start, and learn as you go."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Historical S&P 500 average annual return, ~10%. Simulated results are hypothetical."
+    "onboarding.goals_reflection_c_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's the best way to learn."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_stat" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$500/month invested consistently over 20 years at historical market returns could grow to over $300,000."
+    "onboarding.goals_reflection_c_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Sevino platform minimum investment."
           }
         }
       }
     },
-    "onboarding.goals_reflection_a_tagline" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Time is the cheat code."
+    "onboarding.goals_reflection_c_stat": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$1 — That's the minimum to buy your first investment on Sevino."
           }
         }
       }
     },
-    "onboarding.goals_reflection_b_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your money should be working as hard as you do."
+    "onboarding.goals_reflection_c_tagline": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start small. Learn fast."
           }
         }
       }
     },
-    "onboarding.goals_reflection_b_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Right now, most of it probably isn't. We'll fix that."
+    "onboarding.goals_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What are you hoping to build toward?"
           }
         }
       }
     },
-    "onboarding.goals_reflection_b_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Smart move, %@."
+    "onboarding.goals_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick what matters most. (Up to 3)"
           }
         }
       }
     },
-    "onboarding.goals_reflection_b_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Sevino cash program rates. Rates subject to change."
+    "onboarding.horizon_2_5": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2 – 5 years"
           }
         }
       }
     },
-    "onboarding.goals_reflection_b_stat" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "3.20% APY — That's what uninvested cash earns in Sevino's FDIC-insured high-yield cash program vs 0.01% at most checking accounts."
+    "onboarding.horizon_5_10": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "5 – 10 years"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reading about investing and actually doing it are completely different."
+    "onboarding.horizon_10_20": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "10 – 20 years"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You don't need to know everything to start — you just need to start, and learn as you go."
+    "onboarding.horizon_20_plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "20+ years"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "That's the best way to learn."
+    "onboarding.horizon_under_2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Less than 2 years"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Sevino platform minimum investment."
+    "onboarding.income_25k_50k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$25K – $50K"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_stat" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$1 — That's the minimum to buy your first investment on Sevino."
+    "onboarding.income_50k_100k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$50K – $100K"
           }
         }
       }
     },
-    "onboarding.goals_reflection_c_tagline" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start small. Learn fast."
+    "onboarding.income_100k_200k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$100K – $200K"
           }
         }
       }
     },
-    "onboarding.goals_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What are you hoping to build toward?"
+    "onboarding.income_200k_500k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$200K – $500K"
           }
         }
       }
     },
-    "onboarding.goals_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick what matters most. (Up to 3)"
+    "onboarding.income_500k_plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$500K+"
           }
         }
       }
     },
-    "onboarding.horizon_2_5" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "2 – 5 years"
+    "onboarding.income_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your annual income, before taxes?"
           }
         }
       }
     },
-    "onboarding.horizon_5_10" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "5 – 10 years"
+    "onboarding.income_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I use this to tailor guidance to your situation. No judgment — every number is a great starting point."
           }
         }
       }
     },
-    "onboarding.horizon_10_20" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "10 – 20 years"
+    "onboarding.income_stability_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How steady is your income right now?"
           }
         }
       }
     },
-    "onboarding.horizon_20_plus" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "20+ years"
+    "onboarding.income_under_25k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under $25K"
           }
         }
       }
     },
-    "onboarding.horizon_under_2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Less than 2 years"
+    "onboarding.intro_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'm your AI investing partner."
           }
         }
       }
     },
-    "onboarding.income_25k_50k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$25K – $50K"
+    "onboarding.intro_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No dashboards to learn. No charts to decode."
           }
         }
       }
     },
-    "onboarding.income_50k_100k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$50K – $100K"
+    "onboarding.intro_body3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Just a conversation about your money — and an AI that actually does something about it."
           }
         }
       }
     },
-    "onboarding.income_100k_200k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$100K – $200K"
+    "onboarding.intro_button": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's go →"
           }
         }
       }
     },
-    "onboarding.income_200k_500k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$200K – $500K"
+    "onboarding.intro_cta": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Let's get to know each other."
           }
         }
       }
     },
-    "onboarding.income_500k_plus" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$500K+"
+    "onboarding.intro_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hi, I'm Sevino."
           }
         }
       }
     },
-    "onboarding.income_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your annual income, before taxes?"
+    "onboarding.liquid_10k_25k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$10K – $25K"
           }
         }
       }
     },
-    "onboarding.income_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I use this to tailor guidance to your situation. No judgment — every number is a great starting point."
+    "onboarding.liquid_25k_50k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$25K – $50K"
           }
         }
       }
     },
-    "onboarding.income_stability_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "How steady is your income right now?"
+    "onboarding.liquid_50k_100k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$50K – $100K"
           }
         }
       }
     },
-    "onboarding.income_under_25k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Under $25K"
+    "onboarding.liquid_100k_250k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$100K – $250K"
           }
         }
       }
     },
-    "onboarding.intro_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I'm your AI investing partner."
+    "onboarding.liquid_250k_plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$250K+"
           }
         }
       }
     },
-    "onboarding.intro_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No dashboards to learn. No charts to decode."
+    "onboarding.liquid_cash_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "And how much cash do you have that you could use right now?"
           }
         }
       }
     },
-    "onboarding.intro_body3" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Just a conversation about your money — and an AI that actually does something about it."
+    "onboarding.liquid_cash_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Think bank accounts, savings accounts, money market — anything you could move or invest this week. Don't count your home, car, or retirement accounts."
           }
         }
       }
     },
-    "onboarding.intro_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let's go →"
+    "onboarding.liquid_under_10k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under $10K"
           }
         }
       }
     },
-    "onboarding.intro_cta" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Let's get to know each other."
+    "onboarding.mindset_behind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Feeling like I'm falling behind"
           }
         }
       }
     },
-    "onboarding.intro_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hi, I'm Sevino."
+    "onboarding.mindset_better_tools": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I know what I'm doing — I just want better tools"
           }
         }
       }
     },
-    "onboarding.liquid_10k_25k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$10K – $25K"
+    "onboarding.mindset_idle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Watching my money sit there doing nothing"
           }
         }
       }
     },
-    "onboarding.liquid_25k_50k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$25K – $50K"
+    "onboarding.mindset_overwhelmed": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overwhelmed by all the options"
           }
         }
       }
     },
-    "onboarding.liquid_50k_100k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$50K – $100K"
+    "onboarding.mindset_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, what's on your mind when it comes to money?"
           }
         }
       }
     },
-    "onboarding.liquid_100k_250k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$100K – $250K"
+    "onboarding.mindset_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pick the ones that hit home. (Up to 3)"
           }
         }
       }
     },
-    "onboarding.liquid_250k_plus" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$250K+"
+    "onboarding.mindset_saving": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sure I'm saving enough"
           }
         }
       }
     },
-    "onboarding.liquid_cash_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "And how much cash do you have that you could use right now?"
+    "onboarding.mindset_want_more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I want to do more but don't know how"
           }
         }
       }
     },
-    "onboarding.liquid_cash_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Think bank accounts, savings accounts, money market — anything you could move or invest this week. Don't count your home, car, or retirement accounts."
+    "onboarding.name_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please enter your name"
           }
         }
       }
     },
-    "onboarding.liquid_under_10k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Under $10K"
+    "onboarding.name_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's amazing!"
           }
         }
       }
     },
-    "onboarding.mindset_behind" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Feeling like I'm falling behind"
+    "onboarding.name_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "But first things first — what should I call you?"
           }
         }
       }
     },
-    "onboarding.mindset_better_tools" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I know what I'm doing — I just want better tools"
+    "onboarding.name_user_prompt": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'm ready to get started with Sevino!"
           }
         }
       }
     },
-    "onboarding.mindset_idle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Watching my money sit there doing nothing"
+    "onboarding.net_worth_1m_plus": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$1M+"
           }
         }
       }
     },
-    "onboarding.mindset_overwhelmed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Overwhelmed by all the options"
+    "onboarding.net_worth_10k_50k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$10K – $50K"
           }
         }
       }
     },
-    "onboarding.mindset_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@, what's on your mind when it comes to money?"
+    "onboarding.net_worth_50k_100k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$50K – $100K"
           }
         }
       }
     },
-    "onboarding.mindset_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pick the ones that hit home. (Up to 3)"
+    "onboarding.net_worth_100k_250k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$100K – $250K"
           }
         }
       }
     },
-    "onboarding.mindset_saving" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not sure I'm saving enough"
+    "onboarding.net_worth_250k_500k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$250K – $500K"
           }
         }
       }
     },
-    "onboarding.mindset_want_more" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I want to do more but don't know how"
+    "onboarding.net_worth_500k_1m": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$500K – $1M"
           }
         }
       }
     },
-    "onboarding.name_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please enter your name"
+    "onboarding.net_worth_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What's your total net worth?"
           }
         }
       }
     },
-    "onboarding.name_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "That's amazing!"
+    "onboarding.net_worth_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The big picture — add up everything you own (savings, investments, retirement accounts, property) and subtract any debts."
           }
         }
       }
     },
-    "onboarding.name_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "But first things first — what should I call you?"
+    "onboarding.net_worth_under_10k": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Under $10K"
           }
         }
       }
     },
-    "onboarding.name_user_prompt" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I'm ready to get started with Sevino!"
+    "onboarding.referral_ai_tool": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Tool"
           }
         }
       }
     },
-    "onboarding.net_worth_1m_plus" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$1M+"
+    "onboarding.referral_article": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Article"
           }
         }
       }
     },
-    "onboarding.net_worth_10k_50k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$10K – $50K"
+    "onboarding.referral_continue": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continue →"
           }
         }
       }
     },
-    "onboarding.net_worth_50k_100k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$50K – $100K"
+    "onboarding.referral_friend": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Friend"
           }
         }
       }
     },
-    "onboarding.net_worth_100k_250k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$100K – $250K"
+    "onboarding.referral_friend_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter your friend's name here — we'd love to send them a gift!"
           }
         }
       }
     },
-    "onboarding.net_worth_250k_500k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$250K – $500K"
+    "onboarding.referral_google": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google"
           }
         }
       }
     },
-    "onboarding.net_worth_500k_1m" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$500K – $1M"
+    "onboarding.referral_instagram": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Instagram"
           }
         }
       }
     },
-    "onboarding.net_worth_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What's your total net worth?"
+    "onboarding.referral_linkedin": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LinkedIn"
           }
         }
       }
     },
-    "onboarding.net_worth_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The big picture — add up everything you own (savings, investments, retirement accounts, property) and subtract any debts."
+    "onboarding.referral_other": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Other"
           }
         }
       }
     },
-    "onboarding.net_worth_under_10k" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Under $10K"
+    "onboarding.referral_other_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell us how you found Sevino"
           }
         }
       }
     },
-    "onboarding.referral_ai_tool" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI Tool"
+    "onboarding.referral_reddit": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reddit"
           }
         }
       }
     },
-    "onboarding.referral_article" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Article"
+    "onboarding.referral_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nice to meet you, %@."
           }
         }
       }
     },
-    "onboarding.referral_continue" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continue →"
+    "onboarding.referral_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before we dive in — how did you find Sevino?"
           }
         }
       }
     },
-    "onboarding.referral_friend" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Friend"
+    "onboarding.referral_response3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This helps us reach more people like you."
           }
         }
       }
     },
-    "onboarding.referral_friend_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter your friend's name here — we'd love to send them a gift!"
+    "onboarding.referral_tiktok": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TikTok"
           }
         }
       }
     },
-    "onboarding.referral_google" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Google"
+    "onboarding.referral_twitter": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "X / Twitter"
           }
         }
       }
     },
-    "onboarding.referral_instagram" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Instagram"
+    "onboarding.reflection_a_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Most people your age haven't started investing at all."
           }
         }
       }
     },
-    "onboarding.referral_linkedin" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LinkedIn"
+    "onboarding.reflection_a_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The fact that you're here means you're already ahead of the curve."
           }
         }
       }
     },
-    "onboarding.referral_other" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Other"
+    "onboarding.reflection_a_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're not behind, %@. You're early."
           }
         }
       }
     },
-    "onboarding.referral_other_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tell us how you found Sevino"
+    "onboarding.reflection_a_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Investopedia, 2023"
           }
         }
       }
     },
-    "onboarding.referral_reddit" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reddit"
+    "onboarding.reflection_a_stat_desc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of young Americans say they want to invest but don't know where to start. You're about to solve that."
           }
         }
       }
     },
-    "onboarding.referral_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nice to meet you, %@."
+    "onboarding.reflection_a_stat_number": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "73%"
           }
         }
       }
     },
-    "onboarding.referral_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Before we dive in — how did you find Sevino?"
+    "onboarding.reflection_b_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cash in a savings account feels safe. But it's quietly losing ground."
           }
         }
       }
     },
-    "onboarding.referral_response3" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This helps us reach more people like you."
+    "onboarding.reflection_b_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your instinct to put your money to work? That's a good one."
           }
         }
       }
     },
-    "onboarding.referral_tiktok" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TikTok"
+    "onboarding.reflection_b_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're right to feel that way."
           }
         }
       }
     },
-    "onboarding.referral_twitter" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "X / Twitter"
+    "onboarding.reflection_b_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Bureau of Labor Statistics CPI data"
           }
         }
       }
     },
-    "onboarding.reflection_a_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Most people your age haven't started investing at all."
+    "onboarding.reflection_b_stat_desc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in purchasing power lost every year when $10,000 sits in a savings account. Invested, it could be growing."
           }
         }
       }
     },
-    "onboarding.reflection_a_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "The fact that you're here means you're already ahead of the curve."
+    "onboarding.reflection_b_stat_number": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$200–$400"
           }
         }
       }
     },
-    "onboarding.reflection_a_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You're not behind, %@. You're early."
+    "onboarding.reflection_c_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "There are over 4,000 stocks on the market, thousands of ETFs, and a million opinions online. It's a lot."
           }
         }
       }
     },
-    "onboarding.reflection_a_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Investopedia, 2023"
+    "onboarding.reflection_c_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's exactly why you won't be doing this alone."
           }
         }
       }
     },
-    "onboarding.reflection_a_stat_desc" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "of young Americans say they want to invest but don't know where to start. You're about to solve that."
+    "onboarding.reflection_c_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Totally fair, %@."
           }
         }
       }
     },
-    "onboarding.reflection_a_stat_number" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "73%"
+    "onboarding.reflection_c_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: Gallup/FINRA Foundation, 2022"
           }
         }
       }
     },
-    "onboarding.reflection_b_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cash in a savings account feels safe. But it's quietly losing ground."
+    "onboarding.reflection_c_stat_desc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of non-investors say they feel overwhelmed by the process. The problem isn't you — it's that nobody made this simple enough."
           }
         }
       }
     },
-    "onboarding.reflection_b_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your instinct to put your money to work? That's a good one."
+    "onboarding.reflection_c_stat_number": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "44%"
           }
         }
       }
     },
-    "onboarding.reflection_b_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You're right to feel that way."
+    "onboarding.reflection_d_body1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You don't need the basics explained. You need an AI that can pull real data, analyze your portfolio, and help you move faster."
           }
         }
       }
     },
-    "onboarding.reflection_b_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Bureau of Labor Statistics CPI data"
+    "onboarding.reflection_d_body2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That's what this is."
           }
         }
       }
     },
-    "onboarding.reflection_b_stat_desc" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "in purchasing power lost every year when $10,000 sits in a savings account. Invested, it could be growing."
+    "onboarding.reflection_d_heading": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Respect."
           }
         }
       }
     },
-    "onboarding.reflection_b_stat_number" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$200–$400"
+    "onboarding.reflection_d_source": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Source: S&P Global SPIVA, 2024"
           }
         }
       }
     },
-    "onboarding.reflection_c_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "There are over 4,000 stocks on the market, thousands of ETFs, and a million opinions online. It's a lot."
+    "onboarding.reflection_d_stat_desc": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "of actively managed funds underperformed the S&P 500 over 15 years. Having the right analytical edge matters."
           }
         }
       }
     },
-    "onboarding.reflection_c_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "That's exactly why you won't be doing this alone."
+    "onboarding.reflection_d_stat_number": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "88%"
           }
         }
       }
     },
-    "onboarding.reflection_c_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Totally fair, %@."
+    "onboarding.risk_buy_more": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buy more — Take advantage of the dip"
           }
         }
       }
     },
-    "onboarding.reflection_c_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: Gallup/FINRA Foundation, 2022"
+    "onboarding.risk_hold": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold and do nothing — Wait for recovery"
           }
         }
       }
     },
-    "onboarding.reflection_c_stat_desc" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "of non-investors say they feel overwhelmed by the process. The problem isn't you — it's that nobody made this simple enough."
+    "onboarding.risk_not_sure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not sure — I honestly don't know what I'd do"
           }
         }
       }
     },
-    "onboarding.reflection_c_stat_number" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "44%"
+    "onboarding.risk_sell_all": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sell all immediately — Prevent further losses"
           }
         }
       }
     },
-    "onboarding.reflection_d_body1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You don't need the basics explained. You need an AI that can pull real data, analyze your portfolio, and help you move faster."
+    "onboarding.risk_sell_some": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sell some — Lock in remaining capital"
           }
         }
       }
     },
-    "onboarding.reflection_d_body2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "That's what this is."
+    "onboarding.risk_tolerance_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imagine you invested $10,000 and the market dropped 25% — your balance shows $7,500."
           }
         }
       }
     },
-    "onboarding.reflection_d_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Respect."
+    "onboarding.risk_tolerance_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What would you do?"
           }
         }
       }
     },
-    "onboarding.reflection_d_source" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Source: S&P Global SPIVA, 2024"
+    "onboarding.risk_tolerance_response3": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Be honest — there's no right answer."
           }
         }
       }
     },
-    "onboarding.reflection_d_stat_desc" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "of actively managed funds underperformed the S&P 500 over 15 years. Having the right analytical edge matters."
+    "onboarding.setup_account": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up my account →"
           }
         }
       }
     },
-    "onboarding.reflection_d_stat_number" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "88%"
+    "onboarding.stability_mostly_stable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mostly stable — But things could change"
           }
         }
       }
     },
-    "onboarding.risk_buy_more" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buy more — Take advantage of the dip"
+    "onboarding.stability_solid": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solid — Steady job and reliable paycheck"
           }
         }
       }
     },
-    "onboarding.risk_hold" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hold and do nothing — Wait for recovery"
+    "onboarding.stability_unpredictable": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unpredictable — Changes a lot month to month"
           }
         }
       }
     },
-    "onboarding.risk_not_sure" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not sure — I honestly don't know what I'd do"
+    "onboarding.stability_very_secure": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Very secure — Multiple income sources"
           }
         }
       }
     },
-    "onboarding.risk_sell_all" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sell all immediately — Prevent further losses"
+    "onboarding.time_horizon_response1": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "How soon will you need most of the money you invest?"
           }
         }
       }
     },
-    "onboarding.risk_sell_some" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sell some — Lock in remaining capital"
+    "onboarding.time_horizon_response2": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No wrong answer — this helps me calibrate how much risk makes sense."
           }
         }
       }
     },
-    "onboarding.risk_tolerance_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Imagine you invested $10,000 and the market dropped 25% — your balance shows $7,500."
+    "welcome.log_in": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Log In"
           }
         }
       }
     },
-    "onboarding.risk_tolerance_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What would you do?"
+    "welcome.page1_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI-powered investing for everyone."
           }
         }
       }
     },
-    "onboarding.risk_tolerance_response3" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Be honest — there's no right answer."
+    "welcome.page1_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Opening Wall Street's Doors."
           }
         }
       }
     },
-    "onboarding.setup_account" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Set up my account →"
+    "welcome.page2_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Say 'Buy 20 shares of AAPL' and your AI handles the rest. Review the details, confirm with a tap, done."
           }
         }
       }
     },
-    "onboarding.stability_mostly_stable" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mostly stable — But things could change"
+    "welcome.page2_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trade in plain English."
           }
         }
       }
     },
-    "onboarding.stability_solid" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Solid — Steady job and reliable paycheck"
+    "welcome.page3_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ask 'What happened today with Tesla?' and get the key takeaways in seconds — no digging through filings yourself."
           }
         }
       }
     },
-    "onboarding.stability_unpredictable" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unpredictable — Changes a lot month to month"
+    "welcome.page3_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Research at the speed of thought."
           }
         }
       }
     },
-    "onboarding.stability_very_secure" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Very secure — Multiple income sources"
+    "welcome.page4_subtitle": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nothing happens without your say. Every trade requires your confirmation, and your money is protected by SIPC insurance up to $500,000."
           }
         }
       }
     },
-    "onboarding.time_horizon_response1" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "How soon will you need most of the money you invest?"
+    "welcome.page4_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You're always in control."
           }
         }
       }
     },
-    "onboarding.time_horizon_response2" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No wrong answer — this helps me calibrate how much risk makes sense."
+    "welcome.portfolio_gain": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "+27.64%"
           }
         }
       }
     },
-    "welcome.log_in" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Log In"
+    "welcome.portfolio_label": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "My Portfolio"
           }
         }
       }
     },
-    "welcome.page1_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AI-powered investing for everyone."
+    "welcome.portfolio_value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$210,150"
           }
         }
       }
     },
-    "welcome.page1_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Opening Wall Street's Doors."
+    "welcome.protected_value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$500,000"
           }
         }
       }
     },
-    "welcome.page2_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Say 'Buy 20 shares of AAPL' and your AI handles the rest. Review the details, confirm with a tap, done."
+    "welcome.research_query": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "What happened today with Tesla?"
           }
         }
       }
     },
-    "welcome.page2_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Trade in plain English."
+    "welcome.sign_up": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sign Up"
           }
         }
       }
     },
-    "welcome.page3_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ask 'What happened today with Tesla?' and get the key takeaways in seconds — no digging through filings yourself."
+    "welcome.trade_ai_response": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Got it — 20 shares of Advanced Micro Devices. AMD is up 2.3% today at $119.42. Here's your order:"
           }
         }
       }
     },
-    "welcome.page3_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Research at the speed of thought."
+    "welcome.trade_estimated_total": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Estimated Total"
           }
         }
       }
     },
-    "welcome.page4_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nothing happens without your say. Every trade requires your confirmation, and your money is protected by SIPC insurance up to $500,000."
+    "welcome.trade_estimated_value": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "$5,075.80"
           }
         }
       }
     },
-    "welcome.page4_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "You're always in control."
+    "welcome.trade_hold_to_confirm": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hold to confirm"
           }
         }
       }
     },
-    "welcome.portfolio_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "+27.64%"
+    "welcome.trade_stock_name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Advanced Micro Devices inc."
           }
         }
       }
     },
-    "welcome.portfolio_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "My Portfolio"
+    "welcome.trade_stock_ticker": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AMD | NYSE"
           }
         }
       }
     },
-    "welcome.portfolio_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$210,150"
+    "welcome.trade_user_message": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Buy 20 shares of AMD"
           }
         }
       }
     },
-    "welcome.protected_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$500,000"
+    "sidebar.chat_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         }
       }
     },
-    "welcome.research_query" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "What happened today with Tesla?"
+    "sidebar.contact_title": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get in touch"
           }
         }
       }
     },
-    "welcome.sign_up" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sign Up"
+    "sidebar.talk_to_founders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Talk to the founders"
           }
         }
       }
     },
-    "welcome.trade_ai_response" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Got it — 20 shares of Advanced Micro Devices. AMD is up 2.3% today at $119.42. Here's your order:"
+    "sidebar.contact_us": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Contact us"
           }
         }
       }
     },
-    "welcome.trade_estimated_total" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Estimated Total"
+    "sidebar.call_founders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Call"
           }
         }
       }
     },
-    "welcome.trade_estimated_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "$5,075.80"
+    "sidebar.text_founders": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text"
           }
         }
       }
     },
-    "welcome.trade_hold_to_confirm" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hold to confirm"
+    "sidebar.search_placeholder": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Search"
           }
         }
       }
     },
-    "welcome.trade_stock_name" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Advanced Micro Devices inc."
+    "sidebar.chats_header": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats"
           }
         }
       }
     },
-    "welcome.trade_stock_ticker" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "AMD | NYSE"
+    "sidebar.user_name": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Riley"
           }
         }
       }
     },
-    "welcome.trade_user_message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buy 20 shares of AMD"
+    "sidebar.new_chat_accessibility": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New chat"
           }
         }
       }
     }
   },
-  "version" : "1.1"
+  "version": "1.1"
 }

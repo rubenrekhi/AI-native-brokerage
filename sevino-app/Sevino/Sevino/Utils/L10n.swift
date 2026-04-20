@@ -389,6 +389,19 @@ enum L10n {
         static let radarStarAccessibility = String(localized: "home.radar_star_accessibility")
     }
 
+    enum Sidebar {
+        static let chatAccessibility = String(localized: "sidebar.chat_accessibility")
+        static let contactTitle = String(localized: "sidebar.contact_title")
+        static let talkToFounders = String(localized: "sidebar.talk_to_founders")
+        static let contactUs = String(localized: "sidebar.contact_us")
+        static let callFounders = String(localized: "sidebar.call_founders")
+        static let textFounders = String(localized: "sidebar.text_founders")
+        static let searchPlaceholder = String(localized: "sidebar.search_placeholder")
+        static let chatsHeader = String(localized: "sidebar.chats_header")
+        static let userName = String(localized: "sidebar.user_name")
+        static let newChatAccessibility = String(localized: "sidebar.new_chat_accessibility")
+    }
+
     enum Welcome {
         static let page1Title = String(localized: "welcome.page1_title")
         static let page1Subtitle = String(localized: "welcome.page1_subtitle")
