@@ -133,17 +133,17 @@ struct FundingMorphingView: View {
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
                 .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
-
-            Button(L10n.Home.withdraw, action: {})
-                .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
+
+            Button(L10n.Home.withdraw, action: {})
+                .font(.system(size: 15 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14 * scale)
+                .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
         }
     }
 

@@ -277,7 +277,7 @@ private struct SidebarPanelView: View {
                 }
                 .padding(.horizontal, 14 * scale)
                 .padding(.vertical, 12 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.3), in: .rect(cornerRadius: 12 * scale))
+                .background(Color.sevinoGreyAccent.opacity(0.3), in: .capsule)
                 .padding(.bottom, 20 * scale)
 
                 Text(L10n.Sidebar.chatsHeader)
