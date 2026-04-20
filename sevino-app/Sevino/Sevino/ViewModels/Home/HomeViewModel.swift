@@ -28,7 +28,7 @@ final class HomeViewModel {
     private(set) var radarItems: [RadarItem] = []
 
     // MARK: - Funding (real state)
-    let funding = FundingViewModel()
+    var funding = FundingViewModel()
 
     func loadGreeting() {
         let hour = Calendar.current.component(.hour, from: Date.now)

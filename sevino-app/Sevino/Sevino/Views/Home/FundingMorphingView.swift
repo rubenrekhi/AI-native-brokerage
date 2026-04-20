@@ -3,7 +3,7 @@ import SwiftUI
 struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    @Bindable var viewModel: HomeViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -34,13 +34,46 @@ struct FundingMorphingView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 16 * scale) {
+            if let message = viewModel.funding.displayedError {
+                Text(message)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(Color.sevinoNegative)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .transition(.opacity)
+            }
             headerSection
             earningsBadge
             statCards
             detailsTable
-            actionButtons
+            actionRow
             infoRow
             disclaimer
+        }
+        .task(id: isExpanded) {
+            if isExpanded {
+                await viewModel.funding.loadRelationships()
+            }
+        }
+        .sheet(isPresented: $viewModel.funding.isShowingPlaidLink) {
+            if let token = viewModel.funding.linkToken {
+                PlaidLinkSheet(
+                    linkToken: token,
+                    onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
+                        Task {
+                            await viewModel.funding.onPlaidSuccess(
+                                publicToken: publicToken,
+                                accountId: accountId,
+                                institutionName: institutionName,
+                                accountMask: accountMask,
+                                accountName: accountName
+                            )
+                        }
+                    },
+                    onExit: { error in
+                        viewModel.funding.onPlaidExit(error: error)
+                    }
+                )
+            }
         }
     }
 
@@ -129,6 +162,15 @@ struct FundingMorphingView: View {
         }
     }
 
+    @ViewBuilder
+    private var actionRow: some View {
+        if viewModel.funding.hasLinkedBank {
+            actionButtons
+        } else {
+            linkBankButton
+        }
+    }
+
     private var actionButtons: some View {
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
@@ -145,6 +187,20 @@ struct FundingMorphingView: View {
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
         }
+    }
+
+    private var linkBankButton: some View {
+        Button {
+            Task { await viewModel.funding.startBankLink() }
+        } label: {
+            Text("Link a bank account")
+                .font(.system(size: 15 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14 * scale)
+                .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
+        }
+        .disabled(viewModel.funding.isLoading)
     }
 
     private var infoRow: some View {
