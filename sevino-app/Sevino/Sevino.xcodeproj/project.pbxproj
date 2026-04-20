@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E14A3B022F73480000AABB02 /* Supabase */; };
+		C4ACE3252F96D5F100CC0FEF /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = C4ACE3242F96D5F100CC0FEF /* LinkKit */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */,
+				C4ACE3252F96D5F100CC0FEF /* LinkKit in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -89,6 +91,7 @@
 				E14A3B032F73480000AABB03 /* Config.debug.xcconfig */,
 				E14A3B052F73480000AABB05 /* Config.staging.xcconfig */,
 				E14A3B042F73480000AABB04 /* Config.release.xcconfig */,
+				C4ACE3232F96D5F100CC0FEF /* Frameworks */,
 				0B40D02D2F7346F400C0AB94 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -101,6 +104,13 @@
 				0B40D0432F7346F500C0AB94 /* SevinoUITests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		C4ACE3232F96D5F100CC0FEF /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -124,6 +134,7 @@
 			name = Sevino;
 			packageProductDependencies = (
 				E14A3B022F73480000AABB02 /* Supabase */,
+				C4ACE3242F96D5F100CC0FEF /* LinkKit */,
 			);
 			productName = Sevino;
 			productReference = 0B40D02C2F7346F400C0AB94 /* Sevino.app */;
@@ -759,6 +770,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		C4ACE3242F96D5F100CC0FEF /* LinkKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */;
+			productName = LinkKit;
+		};
 		E14A3B022F73480000AABB02 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */;
