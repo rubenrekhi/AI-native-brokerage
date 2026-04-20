@@ -27,6 +27,9 @@ final class HomeViewModel {
     // MARK: - Radar mock data
     private(set) var radarItems: [RadarItem] = []
 
+    // MARK: - Funding (real state)
+    let funding = FundingViewModel()
+
     func loadGreeting() {
         let hour = Calendar.current.component(.hour, from: Date.now)
         let name = "Riley"
