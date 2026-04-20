@@ -36,9 +36,16 @@ struct FundingMorphingView: View {
         VStack(spacing: 16 * scale) {
             if let message = viewModel.funding.displayedError {
                 Text(message)
-                    .font(.system(size: 13 * scale))
+                    .font(.system(size: 13 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoNegative)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 10 * scale)
+                    .padding(.horizontal, 12 * scale)
+                    .background(
+                        Color.sevinoNegative.opacity(0.12),
+                        in: .rect(cornerRadius: 12 * scale)
+                    )
                     .transition(.opacity)
             }
             headerSection

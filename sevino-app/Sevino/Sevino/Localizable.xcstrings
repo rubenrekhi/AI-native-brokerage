@@ -364,6 +364,36 @@
         }
       }
     },
+    "home.buying_power" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buying power"
+          }
+        }
+      }
+    },
+    "home.cash_disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rate is variable and tied to the federal funds rate. FDIC insurance provided through Alpaca Securities' bank sweep program. Cash remains fully liquid as buying power. Brokerage services provided by Alpaca Securities LLC, member FINRA/SIPC."
+          }
+        }
+      }
+    },
+    "home.cash_interest_info" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "How does my cash earn interest?"
+          }
+        }
+      }
+    },
     "home.chat_about_this" : {
       "localizations" : {
         "en" : {
@@ -384,6 +414,46 @@
         }
       }
     },
+    "home.current_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current APY"
+          }
+        }
+      }
+    },
+    "home.days_accrued" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ days accrued"
+          }
+        }
+      }
+    },
+    "home.deposit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit"
+          }
+        }
+      }
+    },
+    "home.dismiss_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
     "home.dismiss_explore_accessibility" : {
       "localizations" : {
         "en" : {
@@ -394,12 +464,122 @@
         }
       }
     },
+    "home.earning_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earning %@ APY"
+          }
+        }
+      }
+    },
     "home.explore_button" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Explore what's in Sevino"
+          }
+        }
+      }
+    },
+    "home.fdic_insured" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "FDIC insured up to"
+          }
+        }
+      }
+    },
+    "home.filter_all_time_return" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All time return"
+          }
+        }
+      }
+    },
+    "home.filter_alphabetical" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alphabetical"
+          }
+        }
+      }
+    },
+    "home.filter_display_by" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display by"
+          }
+        }
+      }
+    },
+    "home.filter_high_to_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High to low"
+          }
+        }
+      }
+    },
+    "home.filter_low_to_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low to high"
+          }
+        }
+      }
+    },
+    "home.filter_price_change" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price change"
+          }
+        }
+      }
+    },
+    "home.filter_sort_by" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sort by"
+          }
+        }
+      }
+    },
+    "home.filter_todays_return" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today’s return"
+          }
+        }
+      }
+    },
+    "home.filter_total_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total value"
           }
         }
       }
@@ -444,6 +624,96 @@
         }
       }
     },
+    "home.holdings_average_cost" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Average Cost"
+          }
+        }
+      }
+    },
+    "home.holdings_days_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day’s Gain"
+          }
+        }
+      }
+    },
+    "home.holdings_my_holdings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "My Holdings"
+          }
+        }
+      }
+    },
+    "home.holdings_shares" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ shares"
+          }
+        }
+      }
+    },
+    "home.holdings_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Holdings"
+          }
+        }
+      }
+    },
+    "home.holdings_total_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total Gain"
+          }
+        }
+      }
+    },
+    "home.holdings_total_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Total value"
+          }
+        }
+      }
+    },
+    "home.interest_paid_out" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Interest paid out"
+          }
+        }
+      }
+    },
+    "home.lifetime_earned" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lifetime earned"
+          }
+        }
+      }
+    },
     "home.menu_accessibility" : {
       "localizations" : {
         "en" : {
@@ -464,62 +734,12 @@
         }
       }
     },
-    "home.portfolio_accessibility" : {
+    "home.pending_deposits" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Portfolio"
-          }
-        }
-      }
-    },
-    "home.portfolio_currency" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "USD"
-          }
-        }
-      }
-    },
-    "home.dismiss_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        }
-      }
-    },
-    "home.period_today" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "today"
-          }
-        }
-      }
-    },
-    "home.period_7_days" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 7 days"
-          }
-        }
-      }
-    },
-    "home.period_30_days" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "past 30 days"
+            "value" : "Pending deposits"
           }
         }
       }
@@ -544,22 +764,22 @@
         }
       }
     },
-    "home.period_ytd" : {
+    "home.period_7_days" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "year to date"
+            "value" : "past 7 days"
           }
         }
       }
     },
-    "home.period_year" : {
+    "home.period_30_days" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "past year"
+            "value" : "past 30 days"
           }
         }
       }
@@ -574,332 +794,52 @@
         }
       }
     },
-    "home.uninvested_cash" : {
+    "home.period_today" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Uninvested Cash"
+            "value" : "today"
           }
         }
       }
     },
-    "home.earning_apy" : {
+    "home.period_year" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Earning %@ APY"
+            "value" : "past year"
           }
         }
       }
     },
-    "home.this_month" : {
+    "home.period_ytd" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "This month"
+            "value" : "year to date"
           }
         }
       }
     },
-    "home.days_accrued" : {
+    "home.portfolio_accessibility" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%@ days accrued"
+            "value" : "Portfolio"
           }
         }
       }
     },
-    "home.lifetime_earned" : {
+    "home.portfolio_currency" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Lifetime earned"
-          }
-        }
-      }
-    },
-    "home.since_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Since %@"
-          }
-        }
-      }
-    },
-    "home.current_apy" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Current APY"
-          }
-        }
-      }
-    },
-    "home.buying_power" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Buying power"
-          }
-        }
-      }
-    },
-    "home.pending_deposits" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pending deposits"
-          }
-        }
-      }
-    },
-    "home.interest_paid_out" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Interest paid out"
-          }
-        }
-      }
-    },
-    "home.fdic_insured" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "FDIC insured up to"
-          }
-        }
-      }
-    },
-    "home.deposit" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deposit"
-          }
-        }
-      }
-    },
-    "home.withdraw" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Withdraw"
-          }
-        }
-      }
-    },
-    "home.cash_interest_info" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "How does my cash earn interest?"
-          }
-        }
-      }
-    },
-    "home.cash_disclaimer" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rate is variable and tied to the federal funds rate. FDIC insurance provided through Alpaca Securities' bank sweep program. Cash remains fully liquid as buying power. Brokerage services provided by Alpaca Securities LLC, member FINRA/SIPC."
-          }
-        }
-      }
-    },
-    "home.holdings_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Holdings"
-          }
-        }
-      }
-    },
-    "home.holdings_total_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total value"
-          }
-        }
-      }
-    },
-    "home.holdings_my_holdings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "My Holdings"
-          }
-        }
-      }
-    },
-    "home.holdings_days_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Day\u2019s Gain"
-          }
-        }
-      }
-    },
-    "home.holdings_total_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total Gain"
-          }
-        }
-      }
-    },
-    "home.holdings_average_cost" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Average Cost"
-          }
-        }
-      }
-    },
-    "home.holdings_shares" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ shares"
-          }
-        }
-      }
-    },
-    "home.filter_display_by" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Display by"
-          }
-        }
-      }
-    },
-    "home.filter_all_time_return" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All time return"
-          }
-        }
-      }
-    },
-    "home.filter_todays_return" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Today\u2019s return"
-          }
-        }
-      }
-    },
-    "home.filter_total_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Total value"
-          }
-        }
-      }
-    },
-    "home.filter_price_change" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Price change"
-          }
-        }
-      }
-    },
-    "home.filter_sort_by" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sort by"
-          }
-        }
-      }
-    },
-    "home.filter_high_to_low" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "High to low"
-          }
-        }
-      }
-    },
-    "home.filter_low_to_high" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Low to high"
-          }
-        }
-      }
-    },
-    "home.filter_alphabetical" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alphabetical"
-          }
-        }
-      }
-    },
-    "home.radar_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Radar"
-          }
-        }
-      }
-    },
-    "home.radar_subtitle" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Curated for your profile"
+            "value" : "USD"
           }
         }
       }
@@ -934,6 +874,26 @@
         }
       }
     },
+    "home.radar_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Curated for your profile"
+          }
+        }
+      }
+    },
+    "home.radar_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Radar"
+          }
+        }
+      }
+    },
     "home.send_accessibility" : {
       "localizations" : {
         "en" : {
@@ -950,6 +910,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sidebar"
+          }
+        }
+      }
+    },
+    "home.since_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Since %@"
           }
         }
       }
@@ -984,6 +954,26 @@
         }
       }
     },
+    "home.this_month" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This month"
+          }
+        }
+      }
+    },
+    "home.uninvested_cash" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uninvested Cash"
+          }
+        }
+      }
+    },
     "home.watchlist_accessibility" : {
       "localizations" : {
         "en" : {
@@ -993,6 +983,20 @@
           }
         }
       }
+    },
+    "home.withdraw" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdraw"
+          }
+        }
+      }
+    },
+    "Link a bank account" : {
+      "comment" : "A button that links a user's bank account.",
+      "isCommentAutoGenerated" : true
     },
     "onboarding.alpaca_address_placeholder" : {
       "localizations" : {
@@ -1120,26 +1124,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Start my first conversation →"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_submit_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Something went wrong"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_submit_error_body" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't set up your account right now. Please try again later."
           }
         }
       }
@@ -1570,6 +1554,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Unemployed"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_submit_error_body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't set up your account right now. Please try again later."
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_submit_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong"
           }
         }
       }
