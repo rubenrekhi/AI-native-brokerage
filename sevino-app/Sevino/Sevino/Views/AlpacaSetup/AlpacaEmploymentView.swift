@@ -35,13 +35,13 @@ struct AlpacaEmploymentView: View {
         _jobTitle = State(initialValue: initialJobTitle)
     }
 
-    private let statuses = [
+    private let statuses: [IdentifiableOption] = [
         L10n.Onboarding.alpacaStatusEmployed,
         L10n.Onboarding.alpacaStatusSelfEmployed,
         L10n.Onboarding.alpacaStatusUnemployed,
         L10n.Onboarding.alpacaStatusStudent,
         L10n.Onboarding.alpacaStatusRetired,
-    ]
+    ].asIdentifiableOptions
 
     private var showEmployerFields: Bool {
         employmentStatus == L10n.Onboarding.alpacaStatusEmployed
@@ -144,14 +144,14 @@ struct AlpacaEmploymentView: View {
 
                 if showDropdown {
                     VStack(spacing: 0) {
-                        ForEach(statuses, id: \.self) { status in
+                        ForEach(statuses) { status in
                             Button {
                                 withAnimation(.easeInOut(duration: 0.2)) {
-                                    employmentStatus = status
+                                    employmentStatus = status.value
                                     showDropdown = false
                                 }
                             } label: {
-                                Text(status)
+                                Text(status.value)
                                     .font(.system(size: 16 * scale))
                                     .foregroundStyle(Color.welcomeText)
                                     .frame(maxWidth: .infinity, alignment: .leading)

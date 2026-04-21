@@ -20,14 +20,14 @@ struct OnboardingGoalsView: View {
     @State private var typed2 = ""
     @State private var showOptions = false
 
-    private let options = [
+    private let options: [IdentifiableOption] = [
         L10n.Onboarding.goalGrowWealth,
         L10n.Onboarding.goalBigGoal,
         L10n.Onboarding.goalRetirement,
         L10n.Onboarding.goalSafetyNet,
         L10n.Onboarding.goalLearn,
         L10n.Onboarding.goalCashHarder,
-    ]
+    ].asIdentifiableOptions
 
     private let maxSelections = 3
 
@@ -87,13 +87,13 @@ struct OnboardingGoalsView: View {
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
-            ForEach(options, id: \.self) { option in
+            ForEach(options) { option in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        toggle(option)
+                        toggle(option.value)
                     }
                 } label: {
-                    Text(option)
+                    Text(option.value)
                         .font(.system(size: 15 * scale, weight: .medium))
                         .foregroundStyle(Color.welcomeText)
                         .multilineTextAlignment(.center)
@@ -101,7 +101,7 @@ struct OnboardingGoalsView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SevinoGlass.tintedButton(
-                            tint: selected.contains(option)
+                            tint: selected.contains(option.value)
                                 ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16

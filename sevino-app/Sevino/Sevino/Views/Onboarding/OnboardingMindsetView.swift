@@ -22,14 +22,14 @@ struct OnboardingMindsetView: View {
     @State private var typed2 = ""
     @State private var showOptions = false
 
-    private let options = [
+    private let options: [IdentifiableOption] = [
         L10n.Onboarding.mindsetSaving,
         L10n.Onboarding.mindsetIdle,
         L10n.Onboarding.mindsetBehind,
         L10n.Onboarding.mindsetOverwhelmed,
         L10n.Onboarding.mindsetWantMore,
         L10n.Onboarding.mindsetBetterTools,
-    ]
+    ].asIdentifiableOptions
 
     private let maxSelections = 3
 
@@ -94,13 +94,13 @@ struct OnboardingMindsetView: View {
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
-            ForEach(options, id: \.self) { option in
+            ForEach(options) { option in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        toggle(option)
+                        toggle(option.value)
                     }
                 } label: {
-                    Text(option)
+                    Text(option.value)
                         .font(.system(size: 15 * scale, weight: .medium))
                         .foregroundStyle(Color.welcomeText)
                         .multilineTextAlignment(.center)
@@ -108,7 +108,7 @@ struct OnboardingMindsetView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SevinoGlass.tintedButton(
-                            tint: selected.contains(option)
+                            tint: selected.contains(option.value)
                                 ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16

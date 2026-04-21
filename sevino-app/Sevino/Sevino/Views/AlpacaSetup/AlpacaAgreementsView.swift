@@ -9,11 +9,11 @@ struct AlpacaAgreementsView: View {
     @State private var showAgreements = false
     @State private var agreed = false
 
-    private let agreements = [
+    private let agreements: [IdentifiableOption] = [
         L10n.Onboarding.alpacaAgreementCustomer,
         L10n.Onboarding.alpacaAgreementMargin,
         L10n.Onboarding.alpacaAgreementFdic,
-    ]
+    ].asIdentifiableOptions
 
     var body: some View {
         VStack(spacing: 0) {
@@ -53,9 +53,9 @@ struct AlpacaAgreementsView: View {
 
     private var agreementLinks: some View {
         VStack(spacing: 12 * scale) {
-            ForEach(agreements, id: \.self) { agreement in
+            ForEach(agreements) { agreement in
                 HStack {
-                    Text(agreement)
+                    Text(agreement.value)
                         .font(.system(size: 15 * scale))
                         .foregroundStyle(Color.welcomeText)
                     Spacer()

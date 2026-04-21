@@ -86,7 +86,7 @@ struct OnboardingCompoundView: View {
         let maxVal = ceilToNice(startTodayValue)
         let steps = 5
         return VStack(alignment: .trailing, spacing: 0) {
-            ForEach((0...steps).reversed(), id: \.self) { i in
+            ForEach(Array((0...steps).reversed()), id: \.self) { i in
                 Text(formatShort(maxVal * Double(i) / Double(steps)))
                     .font(.system(size: 10 * scale))
                     .foregroundStyle(Color.welcomeTextDimmed)
