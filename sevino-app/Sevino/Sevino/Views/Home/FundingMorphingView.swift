@@ -8,20 +8,22 @@ struct FundingMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
-            if isExpanded {
-                expandedContent
-            } else {
-                pillContent
+        Button(action: onTap) {
+            VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
+                if isExpanded {
+                    expandedContent
+                } else {
+                    pillContent
+                }
             }
+            .padding(isExpanded ? 20 * scale : 0)
+            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
+            .fixedSize(horizontal: !isExpanded, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(.plain)
+        .disabled(isExpanded)
         .accessibilityLabel(L10n.Home.fundingAccessibility)
     }
 
