@@ -519,5 +519,13 @@ enum L10n {
         static let researchQuery = String(localized: "welcome.research_query")
         static let logIn = String(localized: "welcome.log_in")
         static let signUp = String(localized: "welcome.sign_up")
+        static let timeframe1D = String(localized: "welcome.timeframe_1d")
+        static let timeframe1W = String(localized: "welcome.timeframe_1w")
+        static let timeframe1M = String(localized: "welcome.timeframe_1m")
+        static let timeframe3M = String(localized: "welcome.timeframe_3m")
+        static let timeframe6M = String(localized: "welcome.timeframe_6m")
+        static let timeframeYTD = String(localized: "welcome.timeframe_ytd")
+        static let timeframe1Y = String(localized: "welcome.timeframe_1y")
+        static let timeframeAll = String(localized: "welcome.timeframe_all")
     }
 }
