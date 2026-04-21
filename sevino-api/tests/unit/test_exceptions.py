@@ -8,9 +8,12 @@ from sqlalchemy.exc import DataError, IntegrityError, ProgrammingError
 from app.exceptions import (
     AuthenticationError,
     AuthorizationError,
+    ConflictError,
     NotFoundError,
+    _extract_column,
     authentication_error_handler,
     authorization_error_handler,
+    conflict_error_handler,
     data_error_handler,
     generic_exception_handler,
     http_exception_handler,
@@ -100,15 +103,68 @@ async def test_not_found_error_returns_404():
     assert resp.status_code == 404
     assert body["code"] == "NOT_FOUND"
     assert body["error"] == "User not found"
+    assert "detail" not in body
+
+
+async def test_not_found_error_includes_resource_in_detail():
+    resp = await not_found_error_handler(
+        request, NotFoundError("User profile not found", resource="user_profile")
+    )
+    body = _body(resp)
+
+    assert resp.status_code == 404
+    assert body["detail"] == {"resource": "user_profile"}
+
+
+async def test_conflict_error_includes_resource_in_detail():
+    resp = await conflict_error_handler(
+        request,
+        ConflictError(
+            "Brokerage account already exists", resource="brokerage_account"
+        ),
+    )
+    body = _body(resp)
+
+    assert resp.status_code == 409
+    assert body["code"] == "CONFLICT"
+    assert body["detail"] == {"resource": "brokerage_account"}
+
+
+async def test_conflict_error_without_detail_omits_it():
+    resp = await conflict_error_handler(request, ConflictError())
+    body = _body(resp)
+
+    assert resp.status_code == 409
+    assert "detail" not in body
 
 
 # ---------------------------------------------------------------------------
 # SQLAlchemy exceptions
 # ---------------------------------------------------------------------------
 
-def _make_sa_exc(cls, message="some db error"):
+class _FakePgError(Exception):
+    """Stand-in for an asyncpg PostgresError with the attributes our handler reads."""
+
+    def __init__(
+        self,
+        message: str = "",
+        *,
+        column_name: str | None = None,
+        constraint_name: str | None = None,
+        table_name: str | None = None,
+        detail: str | None = None,
+    ):
+        super().__init__(message)
+        self.column_name = column_name
+        self.constraint_name = constraint_name
+        self.table_name = table_name
+        self.detail = detail
+
+
+def _make_sa_exc(cls, message="some db error", orig: Exception | None = None):
     """Build a SQLAlchemy exception with an .orig attribute."""
-    orig = Exception(message)
+    if orig is None:
+        orig = Exception(message)
     return cls("statement", {}, orig)
 
 
@@ -119,6 +175,16 @@ async def test_data_error_returns_422():
 
     assert resp.status_code == 422
     assert body["code"] == "INVALID_DATA"
+    assert "detail" not in body
+
+
+async def test_data_error_includes_field_when_available():
+    orig = _FakePgError("invalid input syntax", column_name="age")
+    exc = _make_sa_exc(DataError, "invalid input syntax", orig=orig)
+    resp = await data_error_handler(request, exc)
+    body = _body(resp)
+
+    assert body["detail"] == {"field": "age"}
 
 
 async def test_integrity_error_unique_returns_duplicate_entry():
@@ -130,6 +196,36 @@ async def test_integrity_error_unique_returns_duplicate_entry():
     assert body["code"] == "DUPLICATE_ENTRY"
 
 
+async def test_integrity_error_unique_extracts_field_from_detail():
+    orig = _FakePgError(
+        "duplicate key value violates unique constraint",
+        detail="Key (email)=(x@y.com) already exists.",
+    )
+    exc = _make_sa_exc(
+        IntegrityError, "duplicate key value violates unique constraint", orig=orig
+    )
+    resp = await integrity_error_handler(request, exc)
+    body = _body(resp)
+
+    assert body["code"] == "DUPLICATE_ENTRY"
+    assert body["detail"] == {"field": "email"}
+
+
+async def test_integrity_error_unique_extracts_field_from_constraint_name():
+    orig = _FakePgError(
+        "duplicate key value violates unique constraint",
+        constraint_name="brokerage_accounts_alpaca_account_id_key",
+        table_name="brokerage_accounts",
+    )
+    exc = _make_sa_exc(
+        IntegrityError, "duplicate key value violates unique constraint", orig=orig
+    )
+    resp = await integrity_error_handler(request, exc)
+    body = _body(resp)
+
+    assert body["detail"] == {"field": "alpaca_account_id"}
+
+
 async def test_integrity_error_other_returns_conflict():
     exc = _make_sa_exc(IntegrityError, "foreign key constraint violated")
     resp = await integrity_error_handler(request, exc)
@@ -137,6 +233,61 @@ async def test_integrity_error_other_returns_conflict():
 
     assert resp.status_code == 409
     assert body["code"] == "CONFLICT"
+    assert "detail" not in body
+
+
+async def test_integrity_error_fk_includes_field():
+    orig = _FakePgError(
+        "insert or update on table violates foreign key constraint",
+        column_name="user_id",
+    )
+    exc = _make_sa_exc(
+        IntegrityError,
+        "insert or update on table violates foreign key constraint",
+        orig=orig,
+    )
+    resp = await integrity_error_handler(request, exc)
+    body = _body(resp)
+
+    assert body["code"] == "CONFLICT"
+    assert body["detail"] == {"field": "user_id"}
+
+
+# ---------------------------------------------------------------------------
+# _extract_column helper
+# ---------------------------------------------------------------------------
+
+
+def test_extract_column_prefers_column_name():
+    exc = _make_sa_exc(
+        IntegrityError, orig=_FakePgError(column_name="email", constraint_name="xyz")
+    )
+    assert _extract_column(exc) == "email"
+
+
+def test_extract_column_parses_composite_key_detail():
+    exc = _make_sa_exc(
+        IntegrityError,
+        orig=_FakePgError(detail="Key (user_id, token)=(1, abc) already exists."),
+    )
+    assert _extract_column(exc) == "user_id"
+
+
+def test_extract_column_returns_none_without_orig():
+    exc = _make_sa_exc(IntegrityError, orig=Exception("plain"))
+    assert _extract_column(exc) is None
+
+
+def test_extract_column_returns_none_for_pkey_constraint():
+    orig = _FakePgError(
+        "duplicate key value violates unique constraint",
+        constraint_name="brokerage_accounts_pkey",
+        table_name="brokerage_accounts",
+    )
+    exc = _make_sa_exc(
+        IntegrityError, "duplicate key value violates unique constraint", orig=orig
+    )
+    assert _extract_column(exc) is None
 
 
 async def test_programming_error_returns_500():

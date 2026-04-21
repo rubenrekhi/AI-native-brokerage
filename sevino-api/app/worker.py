@@ -1,11 +1,125 @@
-from arq.cron import cron
+import asyncio
+import logging
+import signal
+import time
+
 import sentry_sdk
+import structlog
+from arq import worker as arq_worker
+from arq.cron import cron
+from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import TimeoutError as RedisTimeoutError
+
 from app.config import get_redis_settings, settings
+from app.listeners.registry import build_listeners
+from app.logging_config import configure_logging
+from app.services.alpaca_broker import AlpacaBrokerService
 from app.tasks.health_ping import health_ping
+from app.tasks.listener_liveness import check_listener_liveness
+
+logger = structlog.get_logger(__name__)
+
+
+# Max seconds we'll wait for all listener tasks to exit after their
+# cancellation is requested. Railway's SIGTERM → SIGKILL window is ~30s in
+# practice, so keep this well under that.
+_LISTENER_SHUTDOWN_TIMEOUT_SECONDS = 10.0
+
+
+# On Railway, Redis is already gone by the time arq runs `Worker.close()`
+# (SIGTERM during deploys/restarts/scale-downs races the upstream socket
+# close). The two cleanup calls we wrap below fail predictably and aren't
+# actionable; everything else inside `close()` is still allowed to raise
+# so real errors (cancelled tasks, on_shutdown hook failures) stay visible.
+#
+# redis-py defines its own ConnectionError/TimeoutError that inherit from
+# RedisError(Exception) — NOT from the builtins — so we must catch both
+# variants explicitly. The builtin TimeoutError also covers
+# asyncio.TimeoutError (aliased since Py3.11).
+#
+# asyncio.CancelledError is NOT swallowed — it means the event loop itself
+# is asking the coroutine to stop, and silently catching it can cause the
+# outer supervisor (tests, timeouts, arq's signal handler) to hang.
+_SHUTDOWN_CLEANUP_ERRORS = (
+    TimeoutError,
+    ConnectionError,
+    RedisTimeoutError,
+    RedisConnectionError,
+)
+
+
+async def _safe_close(self: arq_worker.Worker) -> None:
+    # Mirrors arq 0.27.0 Worker.close (worker.py:864-874). Re-verify on arq upgrade.
+    if not self._handle_signals:
+        self.handle_sig(signal.SIGUSR1)
+    if not self._pool:
+        return
+    await asyncio.gather(*self.tasks.values())
+
+    start = time.perf_counter()
+    try:
+        await self.pool.delete(self.health_check_key)
+    except asyncio.CancelledError:
+        logger.warning(
+            "arq_health_check_cleanup_cancelled",
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+        raise
+    except _SHUTDOWN_CLEANUP_ERRORS as exc:
+        logger.warning(
+            "arq_health_check_cleanup_skipped",
+            exc_type=type(exc).__name__,
+            error=str(exc),
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+
+    if self.on_shutdown:
+        await self.on_shutdown(self.ctx)
+
+    start = time.perf_counter()
+    try:
+        await self.pool.close(close_connection_pool=True)
+    except asyncio.CancelledError:
+        logger.warning(
+            "arq_pool_close_cancelled",
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+        raise
+    except _SHUTDOWN_CLEANUP_ERRORS as exc:
+        logger.warning(
+            "arq_pool_close_skipped",
+            exc_type=type(exc).__name__,
+            error=str(exc),
+            duration_ms=round((time.perf_counter() - start) * 1000, 1),
+        )
+    self._pool = None
+
+
+def _configure_worker_logging() -> None:
+    """Wire structlog for the worker process. Idempotent."""
+    configure_logging(settings.environment)
+
+
+def _patch_arq_worker_close() -> None:
+    """Replace arq.Worker.close with _safe_close. Idempotent."""
+    arq_worker.Worker.close = _safe_close  # type: ignore[assignment]
+
+
+_configure_worker_logging()
+_patch_arq_worker_close()
 
 
 async def startup(ctx: dict) -> None:
-    """Called when the worker starts. Initialize shared resources."""
+    """Called when the worker starts. Initialize shared resources and spawn
+    long-running listener tasks."""
+    # arq's CLI applies `default_log_config(...)` between module import and
+    # this hook, which installs its own handler on the 'arq' logger. Combined
+    # with our root handler (set by configure_logging), every arq log record
+    # prints twice — once in arq's "HH:MM:SS: msg" format, once in ours.
+    # Clear arq's handlers so its logs propagate up to our root structlog
+    # formatter only.
+    logging.getLogger("arq").handlers.clear()
+
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
@@ -14,15 +128,67 @@ async def startup(ctx: dict) -> None:
         )
         sentry_sdk.set_tag("process", "worker")
 
+    broker = AlpacaBrokerService()
+    listeners = build_listeners(broker)
+    listener_tasks = [
+        asyncio.create_task(listener.run(), name=f"sse-{listener.stream_name}")
+        for listener in listeners
+    ]
+
+    ctx["alpaca"] = broker
+    ctx["listeners"] = listeners
+    ctx["listener_tasks"] = listener_tasks
+
+    logger.info("worker_listeners_started", count=len(listeners))
+
 
 async def shutdown(ctx: dict) -> None:
-    """Called when the worker shuts down. Clean up shared resources."""
-    pass
+    """Called when the worker shuts down. Cancel listeners, close shared
+    resources. Cleanup failures are logged but never re-raised — we don't
+    want shutdown to hang on a stuck listener."""
+    listener_tasks: list[asyncio.Task] = ctx.get("listener_tasks", [])
+    for task in listener_tasks:
+        task.cancel()
+    if listener_tasks:
+        # Bounded wait so a handler that's ignoring cancellation (stuck DB
+        # transaction, slow Alpaca REST call, etc.) doesn't hang the whole
+        # worker shutdown and block a Railway redeploy.
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*listener_tasks, return_exceptions=True),
+                timeout=_LISTENER_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+            logger.info("worker_listeners_stopped", count=len(listener_tasks))
+        except asyncio.TimeoutError:
+            logger.warning(
+                "worker_listeners_shutdown_timeout",
+                count=len(listener_tasks),
+                timeout_seconds=_LISTENER_SHUTDOWN_TIMEOUT_SECONDS,
+            )
+            # Operationally notable: a listener ignored cancellation and the
+            # worker had to walk away. Capture as a Sentry alert so it's
+            # visible without digging through Railway logs.
+            sentry_sdk.capture_message(
+                f"Worker shutdown timed out waiting for {len(listener_tasks)} "
+                f"listener(s) to stop (timeout: "
+                f"{_LISTENER_SHUTDOWN_TIMEOUT_SECONDS}s)",
+                level="warning",
+            )
+
+    broker: AlpacaBrokerService | None = ctx.get("alpaca")
+    if broker is not None:
+        try:
+            await broker.close()
+        except Exception as exc:
+            logger.warning("worker_alpaca_close_failed", error=str(exc))
 
 
 class WorkerSettings:
-    functions = [health_ping]
-    cron_jobs = [cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55})]
+    functions = [health_ping, check_listener_liveness]
+    cron_jobs = [
+        cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+        cron(check_listener_liveness, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
+    ]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = get_redis_settings()

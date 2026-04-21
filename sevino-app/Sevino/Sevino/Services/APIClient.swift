@@ -31,7 +31,7 @@ final class APIClient: APIClientProtocol {
         baseURL: String = AppConfig.apiBaseURL,
         session: URLSession = .shared,
         tokenProvider: @escaping @Sendable () async -> String? = {
-            await AuthService.shared.accessToken
+            await (AuthService.shared as AuthServiceProtocol).accessToken
         }
     ) {
         self.baseURL = baseURL

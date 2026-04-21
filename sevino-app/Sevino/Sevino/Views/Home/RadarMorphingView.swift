@@ -8,19 +8,22 @@ struct RadarMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
-            if isExpanded {
-                expandedContent
-            } else {
-                pillContent
+        Button(action: onTap) {
+            VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
+                if isExpanded {
+                    expandedContent
+                } else {
+                    pillContent
+                }
             }
+            .padding(isExpanded ? 20 * scale : 0)
+            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
+            .fixedSize(horizontal: !isExpanded, vertical: !isExpanded)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
-        .fixedSize(horizontal: !isExpanded, vertical: !isExpanded)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
+        .buttonStyle(.plain)
+        .disabled(isExpanded)
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.Home.watchlistAccessibility)
     }
@@ -107,6 +110,7 @@ private struct RadarItemRow: View {
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
+            .padding(.leading, (28 + 10) * scale)
         }
         .padding(12 * scale)
         .background(Color.sevinoGreyAccent.opacity(0.1), in: .rect(cornerRadius: 14 * scale))

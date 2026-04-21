@@ -8,20 +8,22 @@ struct FundingMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
-            if isExpanded {
-                expandedContent
-            } else {
-                pillContent
+        Button(action: onTap) {
+            VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
+                if isExpanded {
+                    expandedContent
+                } else {
+                    pillContent
+                }
             }
+            .padding(isExpanded ? 20 * scale : 0)
+            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
+            .fixedSize(horizontal: !isExpanded, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
-        .accessibilityAddTraits(.isButton)
+        .buttonStyle(.plain)
+        .disabled(isExpanded)
         .accessibilityLabel(L10n.Home.fundingAccessibility)
     }
 
@@ -182,17 +184,17 @@ struct FundingMorphingView: View {
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
                 .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
-
-            Button(L10n.Home.withdraw, action: {})
-                .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
+
+            Button(L10n.Home.withdraw, action: {})
+                .font(.system(size: 15 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14 * scale)
+                .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
         }
     }
 

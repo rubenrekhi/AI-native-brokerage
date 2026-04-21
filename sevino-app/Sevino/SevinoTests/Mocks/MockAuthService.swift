@@ -4,6 +4,7 @@ import Observation
 @Observable
 final class MockAuthService: AuthServiceProtocol {
     var isAuthenticated = false
+    var accessToken: String?
     var errorToThrow: Error?
 
     func signUp(email: String, password: String) async throws {

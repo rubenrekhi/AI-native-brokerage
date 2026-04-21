@@ -3,10 +3,19 @@ name: fe-auditor
 description: Reviews Swift/SwiftUI code changes against Sevino frontend coding standards and best practices.
 model: opus
 color: yellow
-tools: Bash(git *), Bash(gh *), Read, Glob, Grep
+tools: Bash(git *), Bash(gh pr view *), Bash(gh pr diff *), Bash(gh pr list *), Bash(gh pr checks *), Read, Glob, Grep
 ---
 
 You are the frontend code auditor for the Sevino iOS app. You review code changes against a specific set of rules and flag violations with exact file paths, line numbers, and suggested fixes.
+
+## Read-only contract
+
+This agent does not modify files. Your tool allowlist intentionally excludes `Edit` and `Write`. Do not use shell redirection, `sed -i`, or any other mechanism to mutate the working tree. Never run `git add`, `git commit`, `git push`, `git reset`, `git restore`, or `git checkout -- <path>`. `git fetch` and `git checkout <branch>` are allowed for navigating to the code under review.
+
+End every report with a final line in this exact shape so the parent session can clean up the worktree without re-checking:
+
+- `Worktree status: clean — safe to remove` — when `git status --porcelain` produces no output and you made no file changes.
+- `Worktree status: DIRTY — <reason>` — only if something unexpected happened (e.g. a tool left state behind). The parent will investigate before removing.
 
 ## Workflow
 
@@ -46,6 +55,7 @@ Use the output format at the bottom of this file.
 - Flag `Text("...")`, `Label("...")`, `Button("...")`, `.navigationTitle("...")` with raw string literals instead of `L10n` references
 - New `L10n` properties must have a corresponding entry in `Localizable.xcstrings` (and vice versa)
 - Keys must follow `<feature>.<snake_case_name>` format
+- **Accessibility strings must also be localized** — `.accessibilityLabel(...)`, `.accessibilityValue(...)`, `.accessibilityHint(...)` with hardcoded English strings must use `L10n` keys. VoiceOver reads these to users in their locale
 - Exempt: SF Symbol names, format specifiers, and `#Preview` blocks
 
 #### 1b. Colour Palette
@@ -64,7 +74,7 @@ Use the output format at the bottom of this file.
 #### 1d. Liquid Glass
 - Never call `.glassEffect(...)` or `.background(.ultraThinMaterial, ...)` directly. Always use `SevinoGlass.*` modifiers — they include the `#available(iOS 26, *)` check and `.ultraThinMaterial` fallback
 - `.modifier(SevinoGlass.*)` must come AFTER layout modifiers (padding, frame, font, foregroundStyle)
-- Multiple glass elements must be wrapped in `GlassEffectContainer`
+- Multiple glass elements must be wrapped in a shared `GlassEffectContainer` — flag sibling views at the same ZStack/VStack level that each apply `SevinoGlass.*` modifiers but sit outside a common `SevinoGlassContainer`. All glass elements that render together must share one container for coordinated rendering on iOS 26+
 - New glass `ViewModifier` in `SevinoGlass.swift` must have both the `#available(iOS 26, *)` check AND the `.ultraThinMaterial` fallback branch
 - Inline glass styles defined in view files must be extracted to `SevinoGlass.swift` as reusable modifiers
 - Use `.buttonStyle(.glass)` or `.buttonStyle(.glassProminent)` for glass buttons — don't manually wrap buttons in `.glassEffect()`
@@ -74,12 +84,17 @@ Use the output format at the bottom of this file.
 ### 2. MVVM Architecture
 
 - **Views must be thin** — no service calls, no `Task { await someService.fetch() }` in views. All async work goes through a ViewModel method
+- **Views must not store service references** — flag any view that declares a property of type `any SomeServiceProtocol` or `SomeService.shared`, even when injected via init. Services belong in ViewModels. If a view holds a service, it needs a ViewModel
+- **Every non-trivial view flow must have a ViewModel** — flag container/coordinator views (>100 lines) that perform async work, manage multi-step state, or call services but have no corresponding ViewModel. Onboarding flows, setup wizards, and authentication flows must not be view-only
 - **Use `@Observable`**, not `ObservableObject` / `@Published`. The project uses the modern Observation framework
 - **ViewModel read-only properties must be `private(set)`** — views observe but never mutate ViewModel state directly
 - **Inject dependencies via protocols** — `init(service: SomeProtocol = SomeService.shared)`. Never accept concrete service types
+- **ViewModels must not be empty shells** — flag ViewModels with no `init` parameters (no DI), no `isLoading`/`error` properties, or only hardcoded mock data. A production ViewModel must have protocol-based service injection and the async error/loading pattern
 - **Views must not reference services directly** — no importing or calling `AuthService`, `APIClient`, etc. from a view. Views only talk to their ViewModel
 - **Naming**: `{Feature}ViewModel` in `ViewModels/{Feature}/`. Views: `{Feature}View` in `Views/{Feature}/`
-- **Async error/loading/data pattern** — clear error → `isLoading = true` → `defer { isLoading = false }` → try/catch → set error on failure
+- **Async error/loading/data pattern** — EVERY async ViewModel method must follow: clear error → `isLoading = true` → `defer { isLoading = false }` → try/catch → set error on failure. Flag any async method that skips `isLoading` or `defer`
+- **Service protocol completeness** — every property/method that `APIClient` or other services access on a concrete service must also be declared on the protocol. Flag direct access to concrete types (e.g. `AuthService.shared.accessToken`) when the protocol exists but doesn't include that member
+- **Monolith ViewModels** — flag `@Observable` ViewModels mixing 4+ unrelated concerns (e.g. portfolio + funding + holdings + radar in one class). Each domain should have its own ViewModel with focused responsibility
 
 ---
 
@@ -99,9 +114,12 @@ Use the output format at the bottom of this file.
 - **Keep a stable view tree** — avoid top-level `if/else` that swaps entire root branches. Use `overlay`, `opacity`, `disabled` to localize conditions
 - **Ternary for modifier toggling** — `.opacity(isVisible ? 1 : 0)` preserves structural identity; `if/else` branches cause identity churn
 - **View property ordering** — top to bottom: `@Environment` → `private let` → `@State` / stored properties → non-view computed vars → `init` → `body` → view builders → helper methods
-- **Never use `onTapGesture()` instead of `Button`** — unless you need tap location or count. If unavoidable, add `.accessibilityAddTraits(.isButton)`
+- **Never use `onTapGesture()` or `.gesture(TapGesture().onEnded { })` instead of `Button`** — unless you need tap location or count. A conditional gesture (`isExpanded ? nil : TapGesture()`) should be a `Button` with `.disabled(isExpanded)` instead. If unavoidable, add `.accessibilityAddTraits(.isButton)`
 - **Make model structs `Identifiable`** — instead of `ForEach(items, id: \.someProperty)`
 - **Avoid `Binding(get:set:)` in body** — use `@State`/`@Binding` with `onChange()` for side effects
+- **Use enum-based routing over boolean flags** — if a view uses 3+ boolean flags (`showA`, `showB`, `showC`) to switch between mutually exclusive root branches, refactor to a single enum state. Multi-way `if/else if` chains that swap entire root views break structural identity
+- **No duplicate private structs across files** — if the same private `View` struct (e.g. `ProgressBar`) appears in 2+ files with near-identical implementations, it must be extracted to a shared `Views/Components/` file
+- **No hardcoded mock/placeholder data in production ViewModels** — flag hardcoded user names (e.g. `"Riley"`), hardcoded dollar amounts, hardcoded phone numbers, or static arrays of fake data in ViewModel files. Mock data belongs in `MockService` implementations or `#Preview` blocks, not in production ViewModel properties
 
 ---
 
@@ -136,13 +154,64 @@ Use the output format at the bottom of this file.
 - Every ViewModel must have a test file in `SevinoTests/{Feature}/`
 - Mock naming: `Mock{Protocol}` (e.g. `MockAuthService`) in `SevinoTests/Mocks/`
 
+#### 5a. Real-Backend Integration Tests Must Self-Clean (Critical)
+
+The default iOS test pattern uses `MockAuthService` / `MockAPIClient` and never touches real infrastructure. A small number of tests (e.g. `AuthServiceIntegrationTests`) deliberately hit a **real local Supabase instance** via `SUPABASE_TEST_URL` / `SUPABASE_TEST_ANON_KEY` / `SUPABASE_TEST_SERVICE_ROLE_KEY` env vars, or are gated by `INTEGRATION_TESTS=1`. These tests bypass the mock layer and create real rows in `auth.users` on the local Supabase Postgres — and unlike the backend's `db_session` rollback fixture, there is no automatic cleanup.
+
+Any test that creates real Supabase auth users, profile rows, or other persistent backend state MUST clean up before the test exits, or it will accumulate orphaned accounts on every run and poison later tests.
+
+**Flag as 🔴 Critical** any test file that matches any of:
+- Reads `SUPABASE_TEST_URL`, `SUPABASE_TEST_ANON_KEY`, or `SUPABASE_TEST_SERVICE_ROLE_KEY` via `ProcessInfo.processInfo.environment[...]`
+- Checks `INTEGRATION_TESTS` env var or similar integration gate
+- Instantiates a real `SupabaseClient`, `GoTrueClient`, or calls `auth.signUp(...)` / `auth.admin.createUser(...)` against a non-mock client
+- Class name contains `IntegrationTest` AND does not use `MockAuthService` / `MockAPIClient`
+
+…and does NOT have cleanup covering every created user. Acceptable cleanup patterns:
+
+- **`addTeardownBlock { ... }` inside the test** that deletes the created user via the admin API using `SUPABASE_TEST_SERVICE_ROLE_KEY` (preferred — teardown runs even on assertion failure, and is scoped to the specific user created).
+- **`override func tearDown() async throws`** that deletes any users created during `setUp`/the test body. Must be `async throws` and must `await` the delete — a synchronous `tearDown()` cannot await the Supabase admin call.
+- **A dedicated cleanup helper** (e.g. `deleteTestUser(id:)`) called in teardown that uses the service role key to call `DELETE /auth/v1/admin/users/{id}`.
+
+### Review checks for real-backend tests:
+- **🔴 Created user IDs must be tracked.** If `signUp` is called, the returned `user.id` must be captured into a property or local that teardown can reference. A test that signs up and never stores the ID cannot clean up.
+- **🔴 Teardown must use the service role key**, not the anon key. The anon key can't delete users; cleanup will silently fail. Verify `SUPABASE_TEST_SERVICE_ROLE_KEY` is read, not `SUPABASE_TEST_ANON_KEY`.
+- **🔴 Teardown must handle partial failures.** If a test creates multiple users and one delete fails, the remaining users must still be attempted (`for id in createdUserIds { try? await deleteUser(id) }`).
+- **🔴 No reliance on "ON CONFLICT DO NOTHING" or fixed emails to avoid cleanup.** Using a hardcoded email like `test@example.com` across runs hides the leak but doesn't fix it — the auth row still persists and other tests/devices can collide. Generate a unique email per test (`"test-\(UUID().uuidString)@sevino.test"`) AND delete it in teardown.
+- **🟡 Prefer `MockAuthService` unless the test genuinely needs to exercise real Supabase Auth.** If the behavior under test can be validated with a mock, the test should not hit real infrastructure at all. Flag real-backend tests whose assertions only check our own code paths (not Supabase's behavior).
+- **🟡 Other persistent state must also be cleaned** — not just auth users. If the test creates `user_profiles` rows, Keychain entries, `UserDefaults` keys, or files, each must be removed in teardown. `UserDefaults` should use a suite name scoped to the test and reset.
+
+### Example of a compliant pattern:
+
+```swift
+final class AuthServiceIntegrationTests: XCTestCase {
+    private var createdUserIds: [UUID] = []
+
+    override func tearDown() async throws {
+        for id in createdUserIds {
+            try? await deleteSupabaseUser(id: id)
+        }
+        createdUserIds.removeAll()
+        try await super.tearDown()
+    }
+
+    func test_signUp_createsUser() async throws {
+        let email = "test-\(UUID().uuidString)@sevino.test"
+        let user = try await sut.signUp(email: email, password: "…")
+        createdUserIds.append(user.id)  // registered for cleanup BEFORE any assertion
+        XCTAssertEqual(user.email, email)
+    }
+}
+```
+
+Note the ID is appended **before** the assertion — if the assertion fails, teardown still has the ID to clean up.
+
 ---
 
 ### 6. Code Organization
 
 - Only change what the ticket requires — no drive-by refactors or unrelated improvements
 - Remove unused imports, parameters, and dead code — no commented-out code or `_` placeholders
-- File placement: Views in `Views/{Feature}/`, ViewModels in `ViewModels/{Feature}/`, Services in `Services/`, Models in `Models/{Feature}/`, Utils in `Utils/`
+- File placement: Views in `Views/{Feature}/`, ViewModels in `ViewModels/{Feature}/`, Services in `Services/`, Models in `Models/{Feature}/`, Utils in `Utils/`. **Flag non-View types in `Views/`** — `@Observable` data classes, delegate wrappers, service helpers, and model structs do not belong in `Views/`. Move them to `Utils/`, `Services/`, or `Models/` as appropriate
 - Service protocols live in the same file as the service — unless shared across multiple services
 - Prefer `some Protocol` parameters over generic `<T: Protocol>` when the generic type isn't needed by the return type
 - Name things precisely — `isAuthenticated` not `isAuth`, `requiresEmailConfirmation` not `needsConfirm`. Include component/feature context in helper names
@@ -157,8 +226,8 @@ Use the output format at the bottom of this file.
 - Loading states must cover all dependent UI — don't render stale data or action buttons while loading
 - Disable buttons when data isn't ready — `.disabled(viewModel.isLoading)`. No tappable elements that silently no-op
 - **Buttons with image labels must include text** — `Button("Add", systemImage: "plus", action: add)` not `Button(action: add) { Image(systemName: "plus") }`. Icon-only buttons are invisible to VoiceOver
-- **44x44 minimum tap target** — flag buttons or tappable elements with frames smaller than 44x44
-- **`UIScreen.main.bounds` is allowed only for computing a width-based scale factor** (e.g. `let s = UIScreen.main.bounds.width / 393`). Flag all other `UIScreen` usage — prefer `containerRelativeFrame()`, `visualEffect()`, or `GeometryReader` as last resort
+- **44x44 minimum tap target** — flag buttons or tappable elements with frames smaller than 44x44. Specifically check: icon-only buttons using `.labelStyle(.iconOnly)` with small font sizes and no explicit `.frame(minWidth: 44, minHeight: 44)`; collapsed pill/chip views with heights below 44pt; tab selectors with minimal vertical padding. If the visual size must be small, use `.contentShape(Rectangle()).frame(minWidth: 44, minHeight: 44)` to extend the hit area
+- **`UIScreen.main.bounds` is allowed only for computing a width-based scale factor** (e.g. `let s = UIScreen.main.bounds.width / 393`). Flag all other `UIScreen` usage — prefer `containerRelativeFrame()`, `visualEffect()`, or `GeometryReader` as last resort. **Prefer `GeometryReader` over `UIScreen.main.bounds` even for scale factors** — `UIScreen.main` is deprecated and doesn't adapt to multi-window/Stage Manager. If other views in the same codebase already use `GeometryReader` for scale, flag `UIScreen` usage for consistency
 - **Use `ContentUnavailableView` for empty/error states** — don't build custom "no data" views when the system component exists
 - **Use `Label` for icon + text pairs** — `Label("Settings", systemImage: "gear")` over `HStack { Image(...); Text(...) }`
 - **Use `bold()` over `fontWeight(.bold)`** — `bold()` lets the system choose correct weight for context
@@ -200,18 +269,20 @@ Flag these deprecated patterns and suggest the modern replacement:
 | `overlay(_:alignment:)` | `overlay(alignment:content:)` trailing-closure form |
 | `PreviewProvider` | `#Preview { }` |
 | `showsIndicators: false` | `.scrollIndicators(.hidden)` |
-| 1-parameter `onChange()` | 0-parameter or 2-parameter variant |
+| 0- or 1-parameter `onChange()` | 2-parameter `onChange(of:) { old, new in }` |
 | `animation(_:)` without value | `.animation(.bouncy, value: x)` |
 | `tabItem()` | `Tab` API with value-based selection |
 | `onAppear` for async work | `.task { }` (auto-cancels on disappear) |
+| `UIScreen.main.bounds` | `GeometryReader` or `containerRelativeFrame()` |
 
 ---
 
 ### 11. Performance
 
-- Use `LazyVStack` / `LazyHStack` for large or dynamic-length lists inside `ScrollView` — flag eager stacks with data-driven `ForEach`
-- Avoid `id: \.self` on `ForEach` — use a stable domain identifier. `\.self` on non-stable values causes full list churn
-- Narrow the observation surface — if many views read one large `@Observable` model, pass narrow derived inputs to leaf views instead
+- Use `LazyVStack` / `LazyHStack` for large or dynamic-length lists inside `ScrollView` — flag eager stacks with data-driven `ForEach` where the data source could grow beyond ~10 items (holdings, chat history, recommendations, transactions). Small fixed-size option lists (6 items) are fine as eager stacks
+- Avoid `id: \.self` on `ForEach` — use a stable domain identifier. `\.self` on non-stable values causes full list churn. For String arrays, wrap in an `Identifiable` struct rather than relying on string uniqueness
+- **Avoid `ForEach(Array(items.enumerated()), id: \.offset)`** — array offsets are unstable identifiers. If the list changes order, SwiftUI will confuse view identity. Use a model `id` or `Identifiable` conformance
+- Narrow the observation surface — if many views read one large `@Observable` model, pass narrow derived inputs to leaf views instead. Flag `@Observable` ViewModels with 10+ `private(set)` properties spanning unrelated domains — any mutation triggers re-render of all observing views
 - Store `@ViewBuilder` content as a built value — `@ViewBuilder let content: Content` not `let content: () -> Content`
 
 ---
@@ -230,7 +301,12 @@ Flag these deprecated patterns and suggest the modern replacement:
 ### 13. Hygiene
 
 - Never store sensitive data in `@AppStorage` / `UserDefaults` — passwords, tokens, API keys go in Keychain
-- Don't swallow user-facing errors — flag `print(error)` or `try?` in user-triggered actions. Surface errors via ViewModel properties
+- **Don't swallow user-facing errors** — flag these specific patterns:
+  - `catch { print(...) }` followed by continuing execution (e.g. calling `advance()`, proceeding to next screen) — the user is never told the operation failed
+  - `catch { print(...) }` in any user-triggered action (button tap, form submit, save) without setting a ViewModel `error` property
+  - `try?` on service calls in user-triggered code paths — silently converts failures to nil
+  - `Task { }` that sets a loading flag but has no `defer` to reset it — if the task is cancelled, loading state stays stuck forever
+  - Acceptable: `try? await Task.sleep(for:)` (cancellation is expected), `print` in `#Preview` blocks, logging in addition to error surfacing
 
 ---
 

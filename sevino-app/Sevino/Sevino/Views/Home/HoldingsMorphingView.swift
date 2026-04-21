@@ -24,9 +24,13 @@ struct HoldingsMorphingView: View {
         .fixedSize(horizontal: !isExpanded, vertical: true)
         .modifier(SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(L10n.Home.menuAccessibility)
+        .overlay {
+            if !isExpanded {
+                Button(action: onTap) { Color.clear.contentShape(.rect) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.Home.menuAccessibility)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if showFilter {
                 HoldingsFilterPopup(
@@ -53,15 +57,11 @@ struct HoldingsMorphingView: View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
-            ScrollView(.vertical) {
-                LazyVStack(spacing: 12 * scale) {
-                    ForEach(viewModel.holdings) { holding in
-                        HoldingRow(holding: holding, scale: scale)
-                    }
+            VStack(spacing: 12 * scale) {
+                ForEach(viewModel.holdings) { holding in
+                    HoldingRow(holding: holding, scale: scale)
                 }
             }
-            .scrollIndicators(.hidden)
-            .frame(maxHeight: 400 * scale)
         }
         .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
     }

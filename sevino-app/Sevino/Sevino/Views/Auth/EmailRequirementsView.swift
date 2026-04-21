@@ -23,3 +23,13 @@ struct EmailRequirementsView: View {
         .animation(.easeInOut(duration: 0.2), value: email)
     }
 }
+
+#Preview {
+    VStack(spacing: 24) {
+        EmailRequirementsView(email: "", scale: 1)
+        EmailRequirementsView(email: "user@sevino.ai", scale: 1)
+        EmailRequirementsView(email: "user @bad", scale: 1)
+    }
+    .padding()
+    .preferredColorScheme(.dark)
+}

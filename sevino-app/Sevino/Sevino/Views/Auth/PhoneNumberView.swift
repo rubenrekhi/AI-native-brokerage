@@ -1,19 +1,11 @@
 import SwiftUI
 
 struct PhoneNumberView: View {
-    @State private var phoneVM: PhoneNumberViewModel
+    @State private var phoneVM = PhoneNumberViewModel()
     @State private var rawInput = ""
     @State private var scale: CGFloat = 1
 
     let onComplete: (_ phoneNumber: String) -> Void
-
-    init(
-        phoneVM: PhoneNumberViewModel = PhoneNumberViewModel(),
-        onComplete: @escaping (_ phoneNumber: String) -> Void
-    ) {
-        self._phoneVM = State(initialValue: phoneVM)
-        self.onComplete = onComplete
-    }
 
     var body: some View {
         VStack(spacing: 0) {

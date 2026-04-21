@@ -1128,6 +1128,20 @@ Custom exceptions are raised in route/service code and mapped to HTTP status cod
 
 SQLAlchemy errors (integrity, data, programming) are caught and mapped automatically. The generic catch-all ensures no unhandled exception ever returns a raw stack trace.
 
+**`detail` payloads by code:**
+
+| Code | `detail` |
+|---|---|
+| `VALIDATION_ERROR` | `{"fields": [{"field", "message", "type"}, ...]}` |
+| `NOT_FOUND` | `{"resource": "<name>"}` when `NotFoundError(resource=...)` is raised |
+| `CONFLICT` (raised) | `{"resource": "<name>"}` / `{"field": "<name>"}` when passed |
+| `DUPLICATE_ENTRY` / `CONFLICT` (DB) | `{"field": "<column>"}` extracted from asyncpg (`column_name` → `Key (col)=` → `constraint_name`); omitted on failure |
+| `INVALID_DATA` | `{"field": "<column>"}` (same extraction) |
+| `INCOMPLETE_ONBOARDING` | `{"missing_fields": [...]}` |
+| `ALPACA_ERROR` | Alpaca's raw error body |
+
+Only column/resource names are ever surfaced — raw SQL, table names, and values are never leaked.
+
 ### 9.2 Correlation IDs
 
 Every request is assigned a correlation ID for end-to-end tracing. Implemented by `CorrelationIDMiddleware` (`app/middleware/correlation.py`).

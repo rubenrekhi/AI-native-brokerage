@@ -26,7 +26,9 @@ final class AddressSearchCompleter: NSObject, MKLocalSearchCompleterDelegate {
         }
     }
 
-    nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {}
+    nonisolated func completer(_ completer: MKLocalSearchCompleter, didFailWithError error: Error) {
+        print("[AddressSearchCompleter] Search failed: \(error.localizedDescription)")
+    }
 }
 
 extension MKLocalSearchCompletion: @retroactive @unchecked Sendable {}

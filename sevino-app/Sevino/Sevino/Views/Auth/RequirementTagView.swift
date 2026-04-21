@@ -15,3 +15,12 @@ struct RequirementTagView: View {
         .foregroundStyle(met ? Color.sevinoPositive : Color.sevinoNegative)
     }
 }
+
+#Preview {
+    VStack(spacing: 12) {
+        RequirementTagView(label: "Contains @", met: true, scale: 1)
+        RequirementTagView(label: "Valid domain", met: false, scale: 1)
+    }
+    .padding()
+    .preferredColorScheme(.dark)
+}

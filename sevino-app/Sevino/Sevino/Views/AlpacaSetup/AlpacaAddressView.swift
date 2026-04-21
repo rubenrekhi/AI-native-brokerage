@@ -13,6 +13,7 @@ struct AlpacaAddressView: View {
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var showInput = false
+    // Root owner of this @Observable; @State is correct here. Pass to child views as a plain parameter — do not re-wrap.
     @State private var completer = AddressSearchCompleter()
 
     private var showSuggestions: Bool {
@@ -52,11 +53,13 @@ struct AlpacaAddressView: View {
             Spacer()
 
             if showInput {
-                VStack(spacing: 0) {
-                    if showSuggestions {
-                        suggestionsOverlay
+                SevinoGlassContainer {
+                    VStack(spacing: 0) {
+                        if showSuggestions {
+                            suggestionsOverlay
+                        }
+                        chatInput
                     }
-                    chatInput
                 }
                 .transition(.opacity.combined(with: .offset(y: 16)))
             }
@@ -67,41 +70,39 @@ struct AlpacaAddressView: View {
 
 
     private var suggestionsOverlay: some View {
-        SevinoGlassContainer {
-            ScrollView {
-                VStack(spacing: 0) {
-                    ForEach(completer.results.prefix(6), id: \.self) { result in
-                        Button {
-                            selectResult(result)
-                        } label: {
-                            HStack(spacing: 12 * scale) {
-                                Image(systemName: "mappin.circle.fill")
-                                    .font(.system(size: 18 * scale))
-                                    .foregroundStyle(Color.sevinoNegative)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(result.title)
-                                        .font(.system(size: 14 * scale))
-                                        .foregroundStyle(Color.welcomeText)
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(completer.results.prefix(6), id: \.self) { result in
+                    Button {
+                        selectResult(result)
+                    } label: {
+                        HStack(spacing: 12 * scale) {
+                            Image(systemName: "mappin.circle.fill")
+                                .font(.system(size: 18 * scale))
+                                .foregroundStyle(Color.sevinoNegative)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(result.title)
+                                    .font(.system(size: 14 * scale))
+                                    .foregroundStyle(Color.welcomeText)
+                                    .lineLimit(1)
+                                if !result.subtitle.isEmpty {
+                                    Text(result.subtitle)
+                                        .font(.system(size: 12 * scale))
+                                        .foregroundStyle(Color.welcomeTextDimmed)
                                         .lineLimit(1)
-                                    if !result.subtitle.isEmpty {
-                                        Text(result.subtitle)
-                                            .font(.system(size: 12 * scale))
-                                            .foregroundStyle(Color.welcomeTextDimmed)
-                                            .lineLimit(1)
-                                    }
                                 }
-                                Spacer()
                             }
-                            .padding(.horizontal, 14 * scale)
-                            .padding(.vertical, 10 * scale)
+                            Spacer()
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 14 * scale)
+                        .padding(.vertical, 10 * scale)
                     }
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(maxHeight: 220 * scale)
-            .modifier(SevinoGlass.nav)
         }
+        .frame(maxHeight: 220 * scale)
+        .modifier(SevinoGlass.nav)
         .padding(.horizontal, 8 * scale)
         .padding(.bottom, 4 * scale)
     }

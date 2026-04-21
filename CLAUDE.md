@@ -114,3 +114,20 @@ Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each 
 - Connection strings auto-converted from `postgresql://` to `postgresql+asyncpg://`
 - SSL enabled for prod/staging, disabled for dev
 - Supabase local dev: Postgres on port 54322, Studio on 54323
+
+### Worktree cleanup after read-only agents
+
+When you spawn an agent with `isolation: "worktree"` purely for review (e.g. `be-auditor`, `fe-auditor`), the harness preserves the worktree and its `worktree-agent-<id>` scratch branch if the agent ran any git command that moved HEAD — even though no files were modified.
+
+These agents end their final report with an explicit signal:
+- `Worktree status: clean — safe to remove` → clean up immediately.
+- `Worktree status: DIRTY — <reason>` → investigate before removing.
+
+On a clean signal, run:
+
+```
+git worktree remove -f .claude/worktrees/agent-<id>
+git branch -D worktree-agent-<id>
+```
+
+(`-f` is needed because the harness locks active worktrees.) Do this as soon as you've consumed the agent's report — don't let orphan worktrees accumulate.

@@ -15,11 +15,12 @@ dependencies = [
     "pydantic-settings",
     "alpaca-py",
     "plaid-python",
-    "arq",
+    "arq==0.27.0",
     "httpx",
     "structlog>=25.5.0",
     "slowapi>=0.1.9",
     "sentry-sdk[fastapi]>=2.56.0",
+    "httpx-sse>=0.4.3",
 ]
 
 [dependency-groups]

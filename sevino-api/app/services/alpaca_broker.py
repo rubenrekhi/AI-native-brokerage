@@ -206,7 +206,10 @@ class AlpacaBrokerService:
         )
 
         if response.status_code == 404:
-            raise NotFoundError(f"Alpaca resource not found: {message}")
+            raise NotFoundError(
+                f"Alpaca resource not found: {message}",
+                resource="alpaca_account",
+            )
 
         raise AlpacaBrokerError(
             status_code=response.status_code,
