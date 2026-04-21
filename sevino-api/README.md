@@ -69,7 +69,7 @@ cd ../sevino-feature
 git worktreeinclude apply
 ```
 
-`git worktreeinclude apply` reads `.worktreeinclude` from the source worktree and copies only matching ignored files — tracked files are never touched. Without this step, `uv sync` and `pytest` will fail in the new worktree because pydantic-settings can't find `.env`.
+`git worktreeinclude apply` reads `.worktreeinclude` from the source worktree and copies only matching ignored files — tracked files are never touched. Without this step, `pytest` and the dev server will fail in the new worktree because pydantic-settings can't find `.env`.
 
 ### Makefile Reference
 
