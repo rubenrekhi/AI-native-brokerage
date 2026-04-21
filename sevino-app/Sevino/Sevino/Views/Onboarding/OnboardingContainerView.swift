@@ -1,31 +1,13 @@
 import SwiftUI
 
 struct OnboardingContainerView: View {
-    static let totalSteps = 18
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    let initialStep: Int
-    let resumeData: OnboardingResumeManager.OnboardingResumeData?
     let onComplete: (_ userName: String) -> Void
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var currentStep: Int
+    @State private var viewModel: OnboardingViewModel
     @State private var animate: Bool
     @State private var scale: CGFloat = 1
-    @State private var userName: String
-    @State private var referralSource: String
-    @State private var referralExtra: String?
-    @State private var mindsetSelections: Set<String>
-    @State private var goalSelections: Set<String>
-    @State private var dobString: String
-    @State private var incomeSelection: String
-    @State private var netWorthSelection: String
-    @State private var liquidCashSelection: String
-    @State private var incomeStabilitySelection: String
-    @State private var timeHorizonSelection: String
-    @State private var riskToleranceSelection: String
-    @State private var drawdownSelection: String
-    @State private var experienceSelection: String
-    private let onboarding: any OnboardingServiceProtocol
 
     init(
         initialStep: Int = 1,
@@ -33,37 +15,21 @@ struct OnboardingContainerView: View {
         onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
         onComplete: @escaping (_ userName: String) -> Void
     ) {
-        self.initialStep = initialStep
-        self.resumeData = resumeData
         self.onComplete = onComplete
-        self.onboarding = onboardingService
-
-        let data = resumeData ?? OnboardingResumeManager.OnboardingResumeData()
         let isResuming = resumeData != nil && initialStep > 1
-
-        _currentStep = State(initialValue: initialStep)
+        _viewModel = State(initialValue: OnboardingViewModel(
+            initialStep: initialStep,
+            resumeData: resumeData,
+            service: onboardingService
+        ))
         _animate = State(initialValue: !isResuming)
-        _userName = State(initialValue: data.userName)
-        _referralSource = State(initialValue: data.referralSource)
-        _referralExtra = State(initialValue: data.referralExtra)
-        _mindsetSelections = State(initialValue: data.mindsetSelections)
-        _goalSelections = State(initialValue: data.goalSelections)
-        _dobString = State(initialValue: data.dobString)
-        _incomeSelection = State(initialValue: data.incomeSelection)
-        _netWorthSelection = State(initialValue: data.netWorthSelection)
-        _liquidCashSelection = State(initialValue: data.liquidCashSelection)
-        _incomeStabilitySelection = State(initialValue: data.incomeStabilitySelection)
-        _timeHorizonSelection = State(initialValue: data.timeHorizonSelection)
-        _riskToleranceSelection = State(initialValue: data.riskToleranceSelection)
-        _drawdownSelection = State(initialValue: data.drawdownSelection)
-        _experienceSelection = State(initialValue: data.experienceSelection)
     }
 
     var body: some View {
         VStack(spacing: 0) {
             ProgressBar(
-                currentStep: currentStep,
-                totalSteps: Self.totalSteps,
+                currentStep: viewModel.currentStep,
+                totalSteps: OnboardingViewModel.totalSteps,
                 scale: scale
             )
             .padding(.top, 8 * scale)
@@ -83,12 +49,16 @@ struct OnboardingContainerView: View {
                 }
             }
         }
+        .onChange(of: viewModel.isComplete) { _, isComplete in
+            if isComplete {
+                onComplete(viewModel.userName)
+            }
+        }
     }
-
 
     @ViewBuilder
     private var backgroundView: some View {
-        if [1, 5, 7, 17].contains(currentStep) {
+        if [1, 5, 7, 17].contains(viewModel.currentStep) {
             OnboardingBackgroundView()
         } else {
             LinearGradient(
@@ -103,124 +73,105 @@ struct OnboardingContainerView: View {
         }
     }
 
-    private var yearsFromDOB: Int {
-        let parts = dobString.split(separator: "-")
-        guard parts.count == 3, let year = Int(parts[2]) else { return 40 }
-        let currentYear = Calendar.current.component(.year, from: Date.now)
-        return max(65 - (currentYear - year), 1)
-    }
-
-
     @ViewBuilder
     private var stepContent: some View {
-        switch currentStep {
+        switch viewModel.currentStep {
         case 1:
             OnboardingIntroView(scale: scale, animate: animate) {
-                saveAndAdvance(OnboardingPatchRequest(step: "welcome"))
+                viewModel.submitWelcome()
             }
         case 2:
-            OnboardingNameView(scale: scale, animate: animate, initialName: userName) { name in
-                userName = name
-                saveAndAdvance(OnboardingPatchRequest(step: "preferred_name", preferredName: name))
+            OnboardingNameView(scale: scale, animate: animate, initialName: viewModel.userName) { name in
+                viewModel.submitName(name)
             }
         case 3:
-            OnboardingReferralView(scale: scale, userName: userName, animate: animate) { source, extra in
-                referralSource = source
-                referralExtra = extra
-                let attribution = OnboardingDataMapper.buildAttribution(source: source, extra: extra)
-                saveAndAdvance(OnboardingPatchRequest(step: "attribution", attributionSource: attribution))
+            OnboardingReferralView(scale: scale, userName: viewModel.userName, animate: animate) { source, extra in
+                viewModel.submitReferral(source: source, extra: extra)
             }
         case 4:
             OnboardingMindsetView(
                 scale: scale,
-                userName: userName,
-                referralSummary: referralExtra.map { "\(referralSource): \($0)" } ?? referralSource,
+                userName: viewModel.userName,
+                referralSummary: viewModel.referralSummary,
                 animate: animate,
-                initialSelected: mindsetSelections
+                initialSelected: viewModel.mindsetSelections
             ) { selections in
-                mindsetSelections = selections
-                saveAndAdvance(OnboardingPatchRequest(step: "financial_worries", financialWorries: Array(selections)))
+                viewModel.submitMindset(selections)
             }
         case 5:
             OnboardingReflectionView(
                 scale: scale,
-                userName: userName,
-                worries: mindsetSelections,
+                userName: viewModel.userName,
+                worries: viewModel.mindsetSelections,
                 animate: animate,
                 onContinue: advance
             )
         case 6:
             OnboardingGoalsView(
                 scale: scale,
-                userPromptText: mindsetSelections.first ?? "",
+                userPromptText: viewModel.mindsetSelections.first ?? "",
                 animate: animate,
-                initialSelected: goalSelections
+                initialSelected: viewModel.goalSelections
             ) { selections in
-                goalSelections = selections
-                saveAndAdvance(OnboardingPatchRequest(step: "investment_goals", investmentGoals: Array(selections)))
+                viewModel.submitGoals(selections)
             }
         case 7:
             OnboardingGoalsReflectionView(
                 scale: scale,
-                userName: userName,
-                goals: goalSelections,
+                userName: viewModel.userName,
+                goals: viewModel.goalSelections,
                 animate: animate,
                 onContinue: advance
             )
         case 8:
             OnboardingDOBView(
                 scale: scale,
-                userPromptText: goalSelections.first ?? "",
+                userPromptText: viewModel.goalSelections.first ?? "",
                 animate: animate,
-                initialDOB: dobString
+                initialDOB: viewModel.dobString
             ) { dob in
-                dobString = dob
-                let isoDate = OnboardingDataMapper.formatDateOfBirth(dob)
-                saveAndAdvance(OnboardingPatchRequest(step: "date_of_birth", dateOfBirth: isoDate))
+                viewModel.submitDateOfBirth(dob)
             }
         case 9:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: dobString,
+                userPromptText: viewModel.dobString,
                 response1: L10n.Onboarding.incomeResponse1,
                 response2: L10n.Onboarding.incomeResponse2,
                 options: [L10n.Onboarding.incomeUnder25k, L10n.Onboarding.income25k50k, L10n.Onboarding.income50k100k, L10n.Onboarding.income100k200k, L10n.Onboarding.income200k500k, L10n.Onboarding.income500kPlus],
                 animate: animate,
-                initialSelected: incomeSelection.isEmpty ? nil : incomeSelection
+                initialSelected: viewModel.incomeSelection.isEmpty ? nil : viewModel.incomeSelection
             ) { value in
-                incomeSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "annual_income", annualIncome: value))
+                viewModel.submitSingleSelect(step: .annualIncome, value: value)
             }
         case 10:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: incomeSelection,
+                userPromptText: viewModel.incomeSelection,
                 response1: L10n.Onboarding.netWorthResponse1,
                 response2: L10n.Onboarding.netWorthResponse2,
                 options: [L10n.Onboarding.netWorthUnder10k, L10n.Onboarding.netWorth10k50k, L10n.Onboarding.netWorth50k100k, L10n.Onboarding.netWorth100k250k, L10n.Onboarding.netWorth250k500k, L10n.Onboarding.netWorth500k1m, L10n.Onboarding.netWorth1mPlus],
                 animate: animate,
-                initialSelected: netWorthSelection.isEmpty ? nil : netWorthSelection
+                initialSelected: viewModel.netWorthSelection.isEmpty ? nil : viewModel.netWorthSelection
             ) { value in
-                netWorthSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "net_worth", netWorth: value))
+                viewModel.submitSingleSelect(step: .netWorth, value: value)
             }
         case 11:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: netWorthSelection,
+                userPromptText: viewModel.netWorthSelection,
                 response1: L10n.Onboarding.liquidCashResponse1,
                 response2: L10n.Onboarding.liquidCashResponse2,
                 options: [L10n.Onboarding.liquidUnder10k, L10n.Onboarding.liquid10k25k, L10n.Onboarding.liquid25k50k, L10n.Onboarding.liquid50k100k, L10n.Onboarding.liquid100k250k, L10n.Onboarding.liquid250kPlus],
                 animate: animate,
-                initialSelected: liquidCashSelection.isEmpty ? nil : liquidCashSelection
+                initialSelected: viewModel.liquidCashSelection.isEmpty ? nil : viewModel.liquidCashSelection
             ) { value in
-                liquidCashSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "liquid_net_worth", liquidNetWorth: value))
+                viewModel.submitSingleSelect(step: .liquidNetWorth, value: value)
             }
         case 12:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: liquidCashSelection,
+                userPromptText: viewModel.liquidCashSelection,
                 response1: L10n.Onboarding.incomeStabilityResponse1,
                 response2: "",
                 options: [
@@ -230,28 +181,26 @@ struct OnboardingContainerView: View {
                     L10n.Onboarding.stabilityVerySecure,
                 ],
                 animate: animate,
-                initialSelected: incomeStabilitySelection.isEmpty ? nil : incomeStabilitySelection
+                initialSelected: viewModel.incomeStabilitySelection.isEmpty ? nil : viewModel.incomeStabilitySelection
             ) { value in
-                incomeStabilitySelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "income_stability", incomeStability: value))
+                viewModel.submitSingleSelect(step: .incomeStability, value: value)
             }
         case 13:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: incomeStabilitySelection,
+                userPromptText: viewModel.incomeStabilitySelection,
                 response1: L10n.Onboarding.timeHorizonResponse1,
                 response2: L10n.Onboarding.timeHorizonResponse2,
                 options: [L10n.Onboarding.horizonUnder2, L10n.Onboarding.horizon2_5, L10n.Onboarding.horizon5_10, L10n.Onboarding.horizon10_20, L10n.Onboarding.horizon20Plus],
                 animate: animate,
-                initialSelected: timeHorizonSelection.isEmpty ? nil : timeHorizonSelection
+                initialSelected: viewModel.timeHorizonSelection.isEmpty ? nil : viewModel.timeHorizonSelection
             ) { value in
-                timeHorizonSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "time_horizon", timeHorizon: value))
+                viewModel.submitSingleSelect(step: .timeHorizon, value: value)
             }
         case 14:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: timeHorizonSelection,
+                userPromptText: viewModel.timeHorizonSelection,
                 response1: L10n.Onboarding.riskToleranceResponse1,
                 response2: L10n.Onboarding.riskToleranceResponse2,
                 response3: L10n.Onboarding.riskToleranceResponse3,
@@ -263,15 +212,14 @@ struct OnboardingContainerView: View {
                     L10n.Onboarding.riskNotSure,
                 ],
                 animate: animate,
-                initialSelected: riskToleranceSelection.isEmpty ? nil : riskToleranceSelection
+                initialSelected: viewModel.riskToleranceSelection.isEmpty ? nil : viewModel.riskToleranceSelection
             ) { value in
-                riskToleranceSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "risk_scenario", riskScenarioResponse: value))
+                viewModel.submitSingleSelect(step: .riskScenario, value: value)
             }
         case 15:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: riskToleranceSelection,
+                userPromptText: viewModel.riskToleranceSelection,
                 response1: L10n.Onboarding.drawdownResponse1,
                 response2: "",
                 options: [
@@ -282,15 +230,14 @@ struct OnboardingContainerView: View {
                     L10n.Onboarding.drawdown40Plus,
                 ],
                 animate: animate,
-                initialSelected: drawdownSelection.isEmpty ? nil : drawdownSelection
+                initialSelected: viewModel.drawdownSelection.isEmpty ? nil : viewModel.drawdownSelection
             ) { value in
-                drawdownSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "max_loss_tolerance", maxLossTolerance: value))
+                viewModel.submitSingleSelect(step: .maxLossTolerance, value: value)
             }
         case 16:
             OnboardingSingleSelectView(
                 scale: scale,
-                userPromptText: drawdownSelection,
+                userPromptText: viewModel.drawdownSelection,
                 response1: L10n.Onboarding.experienceResponse1,
                 response2: "",
                 options: [
@@ -301,67 +248,46 @@ struct OnboardingContainerView: View {
                     L10n.Onboarding.experienceAdvanced,
                 ],
                 animate: animate,
-                initialSelected: experienceSelection.isEmpty ? nil : experienceSelection
+                initialSelected: viewModel.experienceSelection.isEmpty ? nil : viewModel.experienceSelection
             ) { value in
-                experienceSelection = value
-                saveAndAdvance(OnboardingPatchRequest(step: "experience", experienceLevel: value))
+                viewModel.submitSingleSelect(step: .experience, value: value)
             }
         case 17:
             OnboardingCompoundView(
                 scale: scale,
-                years: yearsFromDOB,
+                years: viewModel.yearsFromDOB,
                 animate: animate,
                 onContinue: advance
             )
         case 18:
             OnboardingDisclaimerView(
                 scale: scale,
-                userPromptText: experienceSelection,
+                userPromptText: viewModel.experienceSelection,
                 animate: animate
             ) {
-                let now = OnboardingDataMapper.isoTimestamp()
-                saveAndAdvance(OnboardingPatchRequest(step: "risk_disclosure", riskDisclosureAcknowledgedAt: now))
+                viewModel.submitRiskDisclosure()
             }
         default:
             Spacer()
         }
     }
 
+    // MARK: - View-level navigation (handles animation)
+
     private func goBack() {
-        if currentStep > 1 {
+        if viewModel.currentStep > 1 {
             animate = false
             withAnimation(.easeInOut(duration: 0.3)) {
-                currentStep -= 1
+                viewModel.goBack()
             }
         }
     }
 
     private func advance() {
-        if currentStep < Self.totalSteps {
-            animate = !reduceMotion
-            withAnimation(.easeInOut(duration: 0.3)) {
-                currentStep += 1
-            }
-        } else {
-            completeOnboarding()
+        animate = !reduceMotion
+        withAnimation(.easeInOut(duration: 0.3)) {
+            viewModel.advance()
         }
-    }
-
-    /// Save the step data to the backend, then advance. If the save fails, advance anyway
-    /// so the user isn't blocked — data can be re-sent on resume.
-    private func saveAndAdvance(_ request: OnboardingPatchRequest) {
-        Task {
-            do {
-                try await onboarding.saveStep(request)
-            } catch {
-                print("[Onboarding] Failed to save step \(request.step): \(error)")
-            }
-            advance()
-        }
-    }
-
-    private func completeOnboarding() {
-        onComplete(userName)
     }
 }
 
