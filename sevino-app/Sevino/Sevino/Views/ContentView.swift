@@ -2,24 +2,19 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var authVM: AuthViewModel
+    @State private var viewModel: ContentViewModel
     @State private var authRoute: AuthRoute = .welcome
-    @State private var showPhoneSheet = false
-    @State private var showOnboarding = false
-    @State private var showAlpacaSetup = false
-    @State private var onboardingUserName = ""
-    private let onboardingService: any OnboardingServiceProtocol = OnboardingService.shared
-    @State private var isCheckingStatus = false
-    @State private var onboardingResumeStep: Int = 1
-    @State private var onboardingResumeData: OnboardingResumeManager.OnboardingResumeData?
-    @State private var alpacaResumeStep: Int = 1
-    @State private var alpacaResumeData: OnboardingResumeManager.AlpacaResumeData?
 
     private enum AuthRoute {
         case welcome, signIn, signUp
     }
 
-    init(authVM: AuthViewModel = AuthViewModel()) {
+    init(
+        authVM: AuthViewModel = AuthViewModel(),
+        viewModel: ContentViewModel = ContentViewModel()
+    ) {
         self._authVM = State(initialValue: authVM)
+        self._viewModel = State(initialValue: viewModel)
     }
 
     var body: some View {
@@ -31,51 +26,33 @@ struct ContentView: View {
             }
         }
         .onChange(of: authVM.isAuthenticated) { _, isAuthenticated in
-            if isAuthenticated && authRoute == .signUp {
-                // Fresh signup — go straight to phone → onboarding, no status check
-                showPhoneSheet = true
-                showOnboarding = true
-            } else if isAuthenticated {
-                // Returning user — either login or cold launch session restore
-                checkOnboardingStatus()
-            }
+            handleAuthChange(isAuthenticated: isAuthenticated)
         }
         .task {
-            // Cold launch with existing session — check immediately if already authenticated
             if authVM.isAuthenticated {
-                checkOnboardingStatus()
+                await viewModel.checkOnboardingStatus()
             }
         }
     }
 
     private var authenticatedView: some View {
         Group {
-            if isCheckingStatus {
+            if viewModel.isCheckingStatus {
                 loadingView
-            } else if showPhoneSheet {
-                PhoneNumberView { phoneNumber in
-                    savePhoneNumber(phoneNumber)
-                }
-            } else if showOnboarding {
+            } else if viewModel.showPhoneSheet {
+                PhoneNumberView(onComplete: savePhoneNumber)
+            } else if viewModel.showOnboarding {
                 OnboardingContainerView(
-                    initialStep: onboardingResumeData != nil ? onboardingResumeStep : 1,
-                    resumeData: onboardingResumeData
-                ) { name in
-                    onboardingUserName = name
-                    showOnboarding = false
-                    showAlpacaSetup = true
-                    // Reset resume data so Alpaca setup starts fresh from onboarding completion
-                    alpacaResumeStep = 1
-                    alpacaResumeData = nil
-                }
-            } else if showAlpacaSetup {
+                    initialStep: viewModel.onboardingResumeData != nil ? viewModel.onboardingResumeStep : 1,
+                    resumeData: viewModel.onboardingResumeData,
+                    onComplete: viewModel.completeOnboarding
+                )
+            } else if viewModel.showAlpacaSetup {
                 AlpacaSetupContainerView(
-                    userName: onboardingUserName,
-                    initialStep: alpacaResumeData != nil ? alpacaResumeStep : 1,
-                    resumeData: alpacaResumeData,
-                    onComplete: {
-                        showAlpacaSetup = false
-                    }
+                    userName: viewModel.onboardingUserName,
+                    initialStep: viewModel.alpacaResumeData != nil ? viewModel.alpacaResumeStep : 1,
+                    resumeData: viewModel.alpacaResumeData,
+                    onComplete: viewModel.completeAlpacaSetup
                 )
             } else {
                 HomeView()
@@ -109,61 +86,23 @@ struct ContentView: View {
         }
     }
 
-    private func savePhoneNumber(_ phoneNumber: String) {
-        Task {
-            do {
-                try await onboardingService.saveStep(
-                    OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
-                )
-            } catch {
-                print("[ContentView] Failed to save phone: \(error)")
-            }
-        }
-        showPhoneSheet = false
-    }
-
-    private func checkOnboardingStatus() {
-        isCheckingStatus = true
-        Task {
-            do {
-                let status = try await onboardingService.getStatus()
-                let destination = OnboardingResumeManager.destination(from: status)
-
-                switch destination {
-                case .home:
-                    showOnboarding = false
-                    showAlpacaSetup = false
-                case .onboarding(let step, let data):
-                    onboardingResumeStep = step
-                    onboardingResumeData = data
-                    onboardingUserName = data.userName
-                    showOnboarding = true
-                case .alpacaSetup(let step, let data):
-                    alpacaResumeStep = step
-                    alpacaResumeData = data
-                    onboardingUserName = data.userName
-                    showAlpacaSetup = true
-                case .loading:
-                    break
-                }
-            } catch {
-                // If status check fails, show home — don't block the user
-                print("[ContentView] Status check failed: \(error)")
-            }
-            isCheckingStatus = false
-        }
-    }
-
-    private func signOut() {
-        Task {
-            await authVM.signOut()
+    private func handleAuthChange(isAuthenticated: Bool) {
+        guard isAuthenticated else {
+            // Reset the local auth route so a signed-out user always lands on welcome.
             authRoute = .welcome
-            showPhoneSheet = false
-            showOnboarding = false
-            showAlpacaSetup = false
-            onboardingResumeData = nil
-            alpacaResumeData = nil
+            return
         }
+        if authRoute == .signUp {
+            // Fresh signup — go straight to phone → onboarding, no status check
+            viewModel.startFreshSignUpFlow()
+        } else {
+            // Returning user — either login or cold launch session restore
+            Task { await viewModel.checkOnboardingStatus() }
+        }
+    }
+
+    private func savePhoneNumber(_ phoneNumber: String) {
+        Task { await viewModel.savePhoneNumber(phoneNumber) }
     }
 }
 
@@ -172,6 +111,7 @@ struct ContentView: View {
 @Observable
 private final class PreviewAuthService: AuthServiceProtocol {
     var isAuthenticated: Bool
+    var accessToken: String? { nil }
 
     init(isAuthenticated: Bool = false) {
         self.isAuthenticated = isAuthenticated
@@ -187,5 +127,9 @@ private final class PreviewAuthService: AuthServiceProtocol {
 }
 
 #Preview("Logged In") {
-    ContentView(authVM: AuthViewModel(authService: PreviewAuthService(isAuthenticated: true)))
+    let authService = PreviewAuthService(isAuthenticated: true)
+    return ContentView(
+        authVM: AuthViewModel(authService: authService),
+        viewModel: ContentViewModel(authService: authService)
+    )
 }
