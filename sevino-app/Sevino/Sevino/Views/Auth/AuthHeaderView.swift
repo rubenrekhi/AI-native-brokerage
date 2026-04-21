@@ -26,3 +26,14 @@ struct AuthHeaderView: View {
         .padding(.top, 8 * scale)
     }
 }
+
+#Preview {
+    ZStack {
+        AuthBackgroundView()
+        VStack {
+            AuthHeaderView(scale: 1, onBack: {})
+            Spacer()
+        }
+    }
+    .preferredColorScheme(.dark)
+}

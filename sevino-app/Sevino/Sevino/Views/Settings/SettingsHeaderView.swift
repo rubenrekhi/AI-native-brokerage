@@ -24,3 +24,21 @@ struct SettingsHeaderView: View {
         }
     }
 }
+
+#Preview("Dark") {
+    ZStack {
+        Color.sevinoSettingsBg.ignoresSafeArea()
+        SettingsHeaderView(title: "Settings", scale: 1, onBack: {})
+            .padding()
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Light") {
+    ZStack {
+        Color.sevinoSettingsBg.ignoresSafeArea()
+        SettingsHeaderView(title: "Settings", scale: 1, onBack: {})
+            .padding()
+    }
+    .preferredColorScheme(.light)
+}
