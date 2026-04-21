@@ -11,8 +11,7 @@ struct BrokerageSettingsView: View {
     private let netDeposits = "$800.00"
 
     @State private var accountName = "Growth 💰"
-    @State private var showRenameSheet = false
-    @State private var draftName = ""
+    @State private var renameItem: RenameItem?
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
@@ -79,12 +78,10 @@ struct BrokerageSettingsView: View {
                     .font(.system(size: 18 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
-            .sheet(isPresented: $showRenameSheet) {
-                AccountRenameSheet(
-                    name: $accountName,
-                    draftName: $draftName,
-                    scale: scale
-                )
+            .sheet(item: $renameItem) { item in
+                AccountRenameSheet(item: item, scale: scale) { newName in
+                    accountName = newName
+                }
                 .presentationDetents([.height(180 * scale)])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(.clear)
@@ -160,19 +157,31 @@ struct BrokerageSettingsView: View {
     }
 
     private func presentRename() {
-        draftName = accountName
-        showRenameSheet = true
+        renameItem = RenameItem(currentName: accountName)
     }
+}
+
+private struct RenameItem: Identifiable {
+    let id = UUID()
+    let currentName: String
 }
 
 private struct AccountRenameSheet: View {
     @Environment(\.dismiss) private var dismiss
 
-    @Binding var name: String
-    @Binding var draftName: String
+    let item: RenameItem
     let scale: CGFloat
+    let onSave: (String) -> Void
 
+    @State private var draftName: String
     @FocusState private var isFocused: Bool
+
+    init(item: RenameItem, scale: CGFloat, onSave: @escaping (String) -> Void) {
+        self.item = item
+        self.scale = scale
+        self.onSave = onSave
+        _draftName = State(initialValue: item.currentName)
+    }
 
     var body: some View {
         VStack(spacing: 16 * scale) {
@@ -212,7 +221,7 @@ private struct AccountRenameSheet: View {
     }
 
     private func save() {
-        name = draftName.trimmingCharacters(in: .whitespaces)
+        onSave(draftName.trimmingCharacters(in: .whitespaces))
         dismiss()
     }
 }
