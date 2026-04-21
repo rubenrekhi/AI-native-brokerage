@@ -55,6 +55,8 @@ final class AuthViewModel {
 
     func signOut() async {
         authError = nil
+        isLoading = true
+        defer { isLoading = false }
 
         do {
             try await authService.signOut()
