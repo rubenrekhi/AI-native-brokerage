@@ -684,6 +684,16 @@
         }
       }
     },
+    "home.greeting_afternoon_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good afternoon"
+          }
+        }
+      }
+    },
     "home.greeting_evening" : {
       "localizations" : {
         "en" : {
@@ -694,12 +704,32 @@
         }
       }
     },
+    "home.greeting_evening_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good evening"
+          }
+        }
+      }
+    },
     "home.greeting_morning" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Good morning, %@"
+          }
+        }
+      }
+    },
+    "home.greeting_morning_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good morning"
           }
         }
       }

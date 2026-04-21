@@ -337,6 +337,9 @@ enum L10n {
         static func greetingEvening(_ name: String) -> String {
             String(format: String(localized: "home.greeting_evening"), name)
         }
+        static let greetingMorningGeneric = String(localized: "home.greeting_morning_generic")
+        static let greetingAfternoonGeneric = String(localized: "home.greeting_afternoon_generic")
+        static let greetingEveningGeneric = String(localized: "home.greeting_evening_generic")
         static let exploreButton = String(localized: "home.explore_button")
         static let dismissExploreAccessibility = String(localized: "home.dismiss_explore_accessibility")
         static let suggestionNews = String(localized: "home.suggestion_news")

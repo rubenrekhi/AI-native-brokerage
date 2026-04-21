@@ -12,7 +12,7 @@ final class HomeViewModel {
     private(set) var error: String?
 
     init(
-        userProfileService: any UserProfileServiceProtocol = PlaceholderUserProfileService.shared,
+        userProfileService: any UserProfileServiceProtocol = UserProfileService.shared,
         chatService: any ChatServiceProtocol = PlaceholderChatService.shared
     ) {
         self.userProfileService = userProfileService
@@ -32,7 +32,10 @@ final class HomeViewModel {
         do {
             async let name = userProfileService.fetchPreferredName()
             async let recentChats = chatService.fetchRecentChats()
-            let (resolvedName, resolvedChats) = try await (name, recentChats)
+            let resolvedChats = try await recentChats
+            // A failed name lookup falls back to a generic greeting rather than
+            // blocking the rest of the home screen.
+            let resolvedName: String? = try? await name
             greeting = Self.greeting(for: resolvedName, at: Date.now)
             chats = resolvedChats
         } catch let caughtError {
@@ -44,12 +47,19 @@ final class HomeViewModel {
         error = nil
     }
 
-    private static func greeting(for name: String, at date: Date) -> String {
+    private static func greeting(for name: String?, at date: Date) -> String {
         let hour = Calendar.current.component(.hour, from: date)
+        if let name, !name.isEmpty {
+            switch hour {
+            case 5..<12: return L10n.Home.greetingMorning(name)
+            case 12..<17: return L10n.Home.greetingAfternoon(name)
+            default: return L10n.Home.greetingEvening(name)
+            }
+        }
         switch hour {
-        case 5..<12: return L10n.Home.greetingMorning(name)
-        case 12..<17: return L10n.Home.greetingAfternoon(name)
-        default: return L10n.Home.greetingEvening(name)
+        case 5..<12: return L10n.Home.greetingMorningGeneric
+        case 12..<17: return L10n.Home.greetingAfternoonGeneric
+        default: return L10n.Home.greetingEveningGeneric
         }
     }
 }
