@@ -3,13 +3,10 @@ import SwiftUI
 struct HoldingsMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    let viewModel: HoldingsViewModel
     @Binding var showFilter: Bool
     let onTap: () -> Void
     let onDismiss: () -> Void
-
-    @State private var displayOption = HoldingsDisplayOption.totalValue
-    @State private var sortOption = HoldingsSortOption.highToLow
 
     var body: some View {
         VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
@@ -35,8 +32,10 @@ struct HoldingsMorphingView: View {
             if showFilter {
                 HoldingsFilterPopup(
                     scale: scale,
-                    displayOption: $displayOption,
-                    sortOption: $sortOption,
+                    displayOption: viewModel.displayOption,
+                    sortOption: viewModel.sortOption,
+                    onSelectDisplay: viewModel.setDisplayOption,
+                    onSelectSort: viewModel.setSortOption,
                     onDismiss: { withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showFilter = false } }
                 )
                 .offset(x: -20 * scale, y: 50 * scale)
@@ -80,7 +79,7 @@ struct HoldingsMorphingView: View {
                 }
             } label: {
                 HStack(spacing: 6 * scale) {
-                    Text(displayOption.label)
+                    Text(viewModel.displayOption.label)
                         .font(.system(size: 13 * scale))
                         .foregroundStyle(Color.sevinoGreyContrast)
 
@@ -97,8 +96,10 @@ struct HoldingsMorphingView: View {
 
 private struct HoldingsFilterPopup: View {
     let scale: CGFloat
-    @Binding var displayOption: HoldingsDisplayOption
-    @Binding var sortOption: HoldingsSortOption
+    let displayOption: HoldingsDisplayOption
+    let sortOption: HoldingsSortOption
+    let onSelectDisplay: (HoldingsDisplayOption) -> Void
+    let onSelectSort: (HoldingsSortOption) -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -110,7 +111,7 @@ private struct HoldingsFilterPopup: View {
 
             ForEach(HoldingsDisplayOption.allCases) { option in
                 filterRow(label: option.label, isSelected: option == displayOption) {
-                    displayOption = option
+                    onSelectDisplay(option)
                     onDismiss()
                 }
             }
@@ -126,7 +127,7 @@ private struct HoldingsFilterPopup: View {
 
             ForEach(HoldingsSortOption.allCases) { option in
                 filterRow(label: option.label, isSelected: option == sortOption) {
-                    sortOption = option
+                    onSelectSort(option)
                     onDismiss()
                 }
             }
@@ -307,42 +308,32 @@ private struct HoldingRow: View {
     }
 }
 
-#Preview("Dark") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        HoldingsMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            showFilter: .constant(false),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
+private struct HoldingsMorphingPreview: View {
+    @State private var viewModel = HoldingsViewModel()
+
+    var body: some View {
+        ZStack {
+            Color.sevinoPrimary.ignoresSafeArea()
+            HoldingsMorphingView(
+                scale: 1,
+                isExpanded: true,
+                viewModel: viewModel,
+                showFilter: .constant(false),
+                onTap: {},
+                onDismiss: {}
+            )
+            .padding(16)
+        }
+        .task { await viewModel.loadHoldings() }
     }
-    .preferredColorScheme(.dark)
+}
+
+#Preview("Dark") {
+    HoldingsMorphingPreview()
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        HoldingsMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            showFilter: .constant(false),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
-    }
-    .preferredColorScheme(.light)
+    HoldingsMorphingPreview()
+        .preferredColorScheme(.light)
 }

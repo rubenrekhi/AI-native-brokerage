@@ -6,6 +6,7 @@ struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @State private var portfolioViewModel = PortfolioViewModel()
     @State private var fundingViewModel = FundingViewModel()
+    @State private var holdingsViewModel = HoldingsViewModel()
     @State private var messageText = ""
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
@@ -107,7 +108,7 @@ struct HomeView: View {
             HoldingsMorphingView(
                 scale: scale,
                 isExpanded: showHoldings,
-                viewModel: viewModel,
+                viewModel: holdingsViewModel,
                 showFilter: $showHoldingsFilter,
                 onTap: toggleHoldings,
                 onDismiss: dismissHoldings
@@ -168,6 +169,7 @@ struct HomeView: View {
         }
         .task { viewModel.loadGreeting() }
         .task { await fundingViewModel.loadFundingData() }
+        .task { await holdingsViewModel.loadHoldings() }
         .task(id: portfolioViewModel.selectedTimeRange) {
             await portfolioViewModel.loadPortfolio()
         }
@@ -201,6 +203,23 @@ struct HomeView: View {
             }
             Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
                 fundingViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+        .alert(
+            L10n.Home.holdingsLoadErrorTitle,
+            isPresented: Binding(
+                get: { holdingsViewModel.error != nil },
+                set: { if !$0 { holdingsViewModel.clearError() } }
+            ),
+            presenting: holdingsViewModel.error
+        ) { _ in
+            Button(L10n.Home.holdingsLoadErrorRetry) {
+                Task { await holdingsViewModel.loadHoldings() }
+            }
+            Button(L10n.Home.holdingsLoadErrorDismiss, role: .cancel) {
+                holdingsViewModel.clearError()
             }
         } message: { message in
             Text(message)

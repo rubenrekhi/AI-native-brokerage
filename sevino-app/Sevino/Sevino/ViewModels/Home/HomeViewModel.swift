@@ -4,9 +4,6 @@ import Foundation
 final class HomeViewModel {
     private(set) var greeting = ""
 
-    // MARK: - Holdings mock data
-    private(set) var holdings: [Holding] = []
-
     // MARK: - Radar mock data
     private(set) var radarItems: [RadarItem] = []
 
@@ -34,39 +31,12 @@ final class HomeViewModel {
         case 12..<17: greeting = L10n.Home.greetingAfternoon(name)
         default: greeting = L10n.Home.greetingEvening(name)
         }
-        loadMockHoldings()
         loadMockRadar()
     }
 
     func toggleRadarStar(id: String) {
         guard let idx = radarItems.firstIndex(where: { $0.id == id }) else { return }
         radarItems[idx].isStarred.toggle()
-    }
-
-    private func loadMockHoldings() {
-        holdings = [
-            Holding(
-                ticker: "CASH", isCash: true,
-                shares: nil, value: "$40,291.92", gainLossText: nil, isPositive: nil,
-                daysGain: nil, daysGainPercent: nil, totalGain: nil, totalGainPercent: nil, averageCost: nil
-            ),
-            Holding(
-                ticker: "TSLA", isCash: false,
-                shares: "57", value: "$21,748.18",
-                gainLossText: "+$7,418.90 (+51.74%)", isPositive: true,
-                daysGain: "+734.73", daysGainPercent: "+3.50%",
-                totalGain: "+$7,418.90", totalGainPercent: "+51.74%",
-                averageCost: "$248.91"
-            ),
-            Holding(
-                ticker: "AMD", isCash: false,
-                shares: "37", value: "$11,465.19",
-                gainLossText: "-$1,049.32 (-8.38%)", isPositive: false,
-                daysGain: "-89.21", daysGainPercent: "-0.77%",
-                totalGain: "-$1,049.32", totalGainPercent: "-8.38%",
-                averageCost: "$338.23"
-            ),
-        ]
     }
 
     private func loadMockRadar() {

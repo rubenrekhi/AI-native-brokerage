@@ -724,6 +724,36 @@
         }
       }
     },
+    "home.holdings_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.holdings_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.holdings_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load holdings"
+          }
+        }
+      }
+    },
     "home.holdings_my_holdings" : {
       "localizations" : {
         "en" : {
