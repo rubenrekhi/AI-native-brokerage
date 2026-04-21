@@ -223,7 +223,7 @@ class TestLinkBankIdempotency:
         patch_repos.rel_create.assert_not_called()
 
     async def test_race_path_integrity_error_returns_existing(
-        self, db, plaid, alpaca, patch_repos, user_id
+        self, db, plaid, alpaca, patch_repos, user_id, brokerage
     ):
         existing_item = _make_plaid_item(user_id)
         existing_rel = _make_rel(user_id, plaid_item_id=existing_item.id)
@@ -244,6 +244,99 @@ class TestLinkBankIdempotency:
         assert result is existing_rel
         db.rollback.assert_awaited()
         patch_repos.rel_create.assert_not_called()
+        # Our own Alpaca relationship is now orphaned (the concurrent request
+        # persisted a different one). Compensation must fire to tombstone it.
+        alpaca.delete_ach_relationship.assert_awaited_once_with(
+            brokerage.alpaca_account_id, "alp_rel_xyz"
+        )
+
+
+class TestLinkBankCompensation:
+    """Alpaca created a relationship but local persistence failed afterward.
+    The compensating delete must fire so retries don't hit BANK_ALREADY_LINKED
+    on a relationship we never recorded."""
+
+    async def test_plaid_item_create_failure_compensates(
+        self, db, plaid, alpaca, patch_repos, user_id, brokerage
+    ):
+        # PlaidItemRepository.create raises a non-IntegrityError failure.
+        patch_repos.plaid_item_create.side_effect = RuntimeError("db connection dropped")
+
+        with pytest.raises(RuntimeError, match="db connection dropped"):
+            await FundingService.link_bank(
+                db,
+                plaid=plaid,
+                alpaca=alpaca,
+                user_id=user_id,
+                public_token="public-abc",
+                account_id="plaid_acct_1",
+            )
+
+        alpaca.delete_ach_relationship.assert_awaited_once_with(
+            brokerage.alpaca_account_id, "alp_rel_xyz"
+        )
+        patch_repos.rel_create.assert_not_called()
+
+    async def test_ach_relationship_create_failure_compensates(
+        self, db, plaid, alpaca, patch_repos, user_id, brokerage
+    ):
+        # PlaidItem insert succeeds; AchRelationship insert blows up.
+        patch_repos.plaid_item_create.return_value = _make_plaid_item(user_id)
+        patch_repos.rel_create.side_effect = RuntimeError("disk full")
+
+        with pytest.raises(RuntimeError, match="disk full"):
+            await FundingService.link_bank(
+                db,
+                plaid=plaid,
+                alpaca=alpaca,
+                user_id=user_id,
+                public_token="public-abc",
+                account_id="plaid_acct_1",
+            )
+
+        alpaca.delete_ach_relationship.assert_awaited_once_with(
+            brokerage.alpaca_account_id, "alp_rel_xyz"
+        )
+
+    async def test_happy_path_does_not_compensate(
+        self, db, plaid, alpaca, patch_repos, user_id
+    ):
+        # Control case — ensure the compensation hook does NOT fire on success.
+        patch_repos.plaid_item_create.return_value = _make_plaid_item(user_id)
+        patch_repos.rel_create.return_value = _make_rel(user_id)
+
+        await FundingService.link_bank(
+            db,
+            plaid=plaid,
+            alpaca=alpaca,
+            user_id=user_id,
+            public_token="public-abc",
+            account_id="plaid_acct_1",
+        )
+
+        alpaca.delete_ach_relationship.assert_not_called()
+
+    async def test_compensation_swallows_cleanup_error(
+        self, db, plaid, alpaca, patch_repos, user_id, brokerage
+    ):
+        # DB write fails AND Alpaca delete also fails — original exception
+        # must still surface; cleanup error is logged but not re-raised.
+        patch_repos.plaid_item_create.side_effect = RuntimeError("original failure")
+        alpaca.delete_ach_relationship.side_effect = AlpacaBrokerUnavailableError(
+            "alpaca down"
+        )
+
+        with pytest.raises(RuntimeError, match="original failure"):
+            await FundingService.link_bank(
+                db,
+                plaid=plaid,
+                alpaca=alpaca,
+                user_id=user_id,
+                public_token="public-abc",
+                account_id="plaid_acct_1",
+            )
+
+        alpaca.delete_ach_relationship.assert_awaited_once()
 
 
 class TestLinkBankAccountGate:
@@ -288,11 +381,12 @@ class TestLinkBankAccountGate:
 
 
 class TestLinkBankAlpacaConflict:
-    async def test_409_raises_bank_already_linked(
+    async def test_409_duplicate_raises_bank_already_linked(
         self, db, plaid, alpaca, patch_repos, user_id
     ):
         alpaca.create_ach_relationship.side_effect = AlpacaBrokerError(
-            status_code=409, message="duplicate"
+            status_code=409,
+            message="an ach relationship already exists for this account",
         )
 
         with pytest.raises(ConflictError) as info:

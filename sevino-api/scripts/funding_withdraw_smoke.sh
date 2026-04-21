@@ -121,7 +121,7 @@ else
     "${AUTH_HEADERS[@]}" > "$TMP/rels.json"
   REL_ID=$(python3 -c "
 import json
-rels = json.load(open('$TMP/rels.json'))
+rels = json.load(open('$TMP/rels.json'))['relationships']
 if not rels:
     raise SystemExit('no active relationships — re-run without --assume-settled')
 print(rels[0]['id'])

@@ -151,9 +151,7 @@ async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
     logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
-    return error_response(
-        422, f"KYC submission failed: {exc.message}", "ALPACA_ERROR", detail=exc.detail
-    )
+    return error_response(422, exc.message, "ALPACA_ERROR", detail=exc.detail)
 
 
 async def alpaca_unavailable_handler(
@@ -161,6 +159,15 @@ async def alpaca_unavailable_handler(
 ) -> JSONResponse:
     logger.error("alpaca_unavailable", error=exc.message)
     return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
+
+
+# --- Plaid handler ---
+
+async def plaid_service_error_handler(
+    request: Request, exc: "PlaidServiceError"
+) -> JSONResponse:
+    logger.error("plaid_service_error", code=exc.code, message=exc.message)
+    return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 
 # --- SQLAlchemy handlers (registered before generic Exception) ---
@@ -265,6 +272,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
     app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
     app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
+    # Plaid handler
+    from app.services.plaid import PlaidServiceError
+    app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)

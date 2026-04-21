@@ -32,6 +32,10 @@ class AchRelationshipResponse(BaseModel):
     status: str
 
 
+class AchRelationshipListResponse(BaseModel):
+    relationships: list[AchRelationshipResponse]
+
+
 class TransferRequest(BaseModel):
     relationship_id: uuid.UUID  # local AchRelationship PK, NOT Alpaca's
     amount: Decimal = Field(..., gt=0, max_digits=12, decimal_places=2)
@@ -47,10 +51,12 @@ class TransferBank(BaseModel):
 class TransferResponse(BaseModel):
     """Alpaca transfer record plus our merged `bank` metadata.
 
-    Extra fields from Alpaca pass through untouched.
+    Only the explicitly declared fields are serialized back to the client.
+    Alpaca-internal fields (e.g. `account_id`, `relationship_id`) that ride
+    along in the upstream response are dropped at the boundary.
     """
 
-    model_config = ConfigDict(extra="allow")
+    model_config = ConfigDict(extra="ignore")
 
     id: str
     status: str

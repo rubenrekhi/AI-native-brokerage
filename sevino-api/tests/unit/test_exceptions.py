@@ -11,6 +11,7 @@ from app.exceptions import (
     ConflictError,
     NotFoundError,
     _extract_column,
+    alpaca_error_handler,
     authentication_error_handler,
     authorization_error_handler,
     conflict_error_handler,
@@ -22,6 +23,7 @@ from app.exceptions import (
     programming_error_handler,
     validation_error_handler,
 )
+from app.services.alpaca_broker import AlpacaBrokerError
 
 request = MagicMock()
 
@@ -312,6 +314,38 @@ async def test_generic_exception_returns_500_without_leaking():
     assert body["error"] == "Internal server error"
     assert body["code"] == "INTERNAL_ERROR"
     assert "secret" not in str(body)
+
+
+# ---------------------------------------------------------------------------
+# Alpaca error handler — surfaces upstream message verbatim, no hardcoded prefix
+# ---------------------------------------------------------------------------
+
+async def test_alpaca_error_handler_returns_422_with_code_and_message():
+    exc = AlpacaBrokerError(
+        status_code=422,
+        message="transfer amount must be less than or equal to withdrawable cash",
+        detail={"code": 40310000, "message": "transfer amount must be less than or equal to withdrawable cash"},
+    )
+    resp = await alpaca_error_handler(request, exc)
+    body = _body(resp)
+
+    assert resp.status_code == 422
+    assert body["code"] == "ALPACA_ERROR"
+    assert body["error"] == "transfer amount must be less than or equal to withdrawable cash"
+    assert body["detail"] == exc.detail
+
+
+async def test_alpaca_error_handler_does_not_prefix_non_kyc_messages():
+    # Regression guard: the handler previously prefixed every message with
+    # "KYC submission failed:", which rendered as nonsense on transfer and
+    # bank-link errors. The handler must surface `exc.message` verbatim.
+    exc = AlpacaBrokerError(
+        status_code=422, message="account is closed"
+    )
+    body = _body(await alpaca_error_handler(request, exc))
+
+    assert body["error"] == "account is closed"
+    assert "KYC" not in body["error"]
 
 
 # ---------------------------------------------------------------------------

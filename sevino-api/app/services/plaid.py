@@ -4,7 +4,7 @@ One service method per upstream call. No orchestration here; that lives in
 `app/services/funding.py`. Errors bubble up as `PlaidServiceError`; the caller
 decides how to map them.
 
-Canonical ref: docs/plaid-integration.md §§ Step 1, Step 3, Step 4.
+Canonical ref: docs/funding.md.
 """
 
 import asyncio

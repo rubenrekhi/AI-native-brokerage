@@ -13,6 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.plaid_item import PlaidItem
 from app.services.encryption import decrypt, encrypt
 
+# Known values for plaid_items.status (free-form TEXT column)
+STATUS_ACTIVE = "active"
+STATUS_INACTIVE = "inactive"
+STATUS_REQUIRES_REAUTH = "requires_reauth"  # reserved; reauth branch
+
 
 class PlaidItemRepository:
 

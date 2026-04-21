@@ -112,3 +112,62 @@ class TestUniqueConstraint:
 
         with pytest.raises(IntegrityError):
             await _make_item(db_session, test_user, plaid_item_id="item_dup")
+
+
+class TestSoftDeleteRuleOnParentDelete:
+    """Deleting a PlaidItem must preserve child AchRelationship rows
+    (soft-delete rule per plan Locked Decision #6)."""
+
+    async def test_deleting_plaid_item_sets_ach_relationship_fk_to_null(
+        self, db_session: AsyncSession, test_user
+    ):
+        from app.repositories.ach_relationship import AchRelationshipRepository
+
+        # Brokerage account row (required NOT NULL FK on ach_relationships)
+        brokerage_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO brokerage_accounts (
+                    id, user_id, alpaca_account_id, account_status, kyc_submitted_at
+                ) VALUES (:id, :user_id, :alpaca_id, 'ACTIVE', now())
+                """
+            ),
+            {
+                "id": brokerage_id,
+                "user_id": test_user,
+                "alpaca_id": f"alpaca_{uuid.uuid4()}",
+            },
+        )
+        await db_session.flush()
+
+        item = await _make_item(
+            db_session, test_user, plaid_item_id="item_parent_delete"
+        )
+        rel = await AchRelationshipRepository.create(
+            db_session,
+            user_id=test_user,
+            brokerage_account_id=brokerage_id,
+            plaid_item_id=item.id,
+            alpaca_relationship_id=f"alp_{uuid.uuid4()}",
+            institution_name="First Platypus Bank",
+            account_mask="0000",
+            account_type="CHECKING",
+            nickname="Test Checking",
+        )
+        assert rel.plaid_item_id == item.id
+
+        # Hard-delete the PlaidItem via the ORM
+        await db_session.delete(item)
+        await db_session.flush()
+
+        # AchRelationship row must still exist with plaid_item_id now NULL
+        result = await db_session.execute(
+            text("SELECT plaid_item_id FROM ach_relationships WHERE id = :id"),
+            {"id": rel.id},
+        )
+        row = result.fetchone()
+        assert row is not None, (
+            "AchRelationship row was hard-deleted (soft-delete rule violated)"
+        )
+        assert row[0] is None, f"plaid_item_id expected NULL, got {row[0]!r}"

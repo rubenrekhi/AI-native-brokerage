@@ -34,5 +34,6 @@ class PlaidItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="plaid_items")
     ach_relationships: Mapped[list["AchRelationship"]] = relationship(
-        back_populates="plaid_item", cascade="all, delete-orphan"
+        back_populates="plaid_item",
+        passive_deletes=True,
     )

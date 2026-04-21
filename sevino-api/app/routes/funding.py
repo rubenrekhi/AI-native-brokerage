@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.schemas.funding import (
+    AchRelationshipListResponse,
     AchRelationshipResponse,
     LinkBankRequest,
     LinkTokenResponse,
@@ -72,15 +73,17 @@ async def link_bank(
     return AchRelationshipResponse.model_validate(relationship)
 
 
-@router.get("/ach-relationships", response_model=list[AchRelationshipResponse])
+@router.get("/ach-relationships", response_model=AchRelationshipListResponse)
 async def list_ach_relationships(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-) -> list[AchRelationshipResponse]:
+) -> AchRelationshipListResponse:
     relationships = await FundingService.list_active_ach_relationships(
         db, user_id=uuid.UUID(user_id)
     )
-    return [AchRelationshipResponse.model_validate(r) for r in relationships]
+    return AchRelationshipListResponse(
+        relationships=[AchRelationshipResponse.model_validate(r) for r in relationships]
+    )
 
 
 @router.delete("/ach-relationships/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)

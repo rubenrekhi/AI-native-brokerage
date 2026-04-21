@@ -4,6 +4,18 @@ Used to encrypt Plaid access tokens before persisting to
 `plaid_items.plaid_access_token`. Key rotation is supported by passing a
 comma-separated list of Fernet keys in the `PLAID_FERNET_KEY` env var: the
 first key is used for encryption, and all keys are tried on decrypt.
+
+## Caching behavior
+
+`get_fernet()` is memoized with `@lru_cache(maxsize=1)`. Keys are read once
+per process at first call, then held for the lifetime of that process.
+Rotating `PLAID_FERNET_KEY` in a running container has **no effect** until
+the process restarts — which matches Railway's blue/green deploy model:
+any config/secret update triggers a fresh process.
+
+Tests that mutate `settings.plaid_fernet_key` must call
+`get_fernet.cache_clear()` between runs; production code has no reason
+to invalidate the cache manually.
 """
 
 from functools import lru_cache
@@ -19,6 +31,8 @@ class EncryptionError(Exception):
 
 @lru_cache(maxsize=1)
 def get_fernet() -> MultiFernet:
+    """Return the process-wide MultiFernet. Cached; restart process to pick up
+    rotated `PLAID_FERNET_KEY` values. See module docstring."""
     keys = settings.plaid_fernet_keys
     if not keys:
         raise EncryptionError(

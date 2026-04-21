@@ -265,7 +265,8 @@ class TestLinkBank:
         self, client, patch_repos, alpaca_mock
     ):
         alpaca_mock.create_ach_relationship.side_effect = AlpacaBrokerError(
-            status_code=409, message="duplicate"
+            status_code=409,
+            message="an ach relationship already exists for this account",
         )
 
         response = await client.post(
@@ -292,8 +293,9 @@ class TestListAchRelationships:
 
         assert response.status_code == 200
         body = response.json()
-        assert len(body) == 1
-        assert body[0]["alpaca_relationship_id"] == "alp_1"
+        assert "relationships" in body
+        assert len(body["relationships"]) == 1
+        assert body["relationships"][0]["alpaca_relationship_id"] == "alp_1"
 
 
 # ---------------------------------------------------------------------------

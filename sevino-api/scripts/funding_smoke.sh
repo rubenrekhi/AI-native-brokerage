@@ -171,8 +171,9 @@ curl -sS "$BACKEND_URL/v1/funding/ach-relationships" \
   "${AUTH_HEADERS[@]}" > "$TMP/list.json"
 python3 -c "
 import json
-rels = json.load(open('$TMP/list.json'))
-assert isinstance(rels, list) and any(r['id'] == '$REL_ID' for r in rels), f'rel missing from list: {rels}'
+body = json.load(open('$TMP/list.json'))
+rels = body['relationships']
+assert any(r['id'] == '$REL_ID' for r in rels), f'rel missing from list: {rels}'
 print(f'  {len(rels)} active relationship(s)')
 "
 
@@ -236,7 +237,8 @@ curl -sS "$BACKEND_URL/v1/funding/ach-relationships" \
   "${AUTH_HEADERS[@]}" > "$TMP/list2.json"
 python3 -c "
 import json
-rels = json.load(open('$TMP/list2.json'))
+body = json.load(open('$TMP/list2.json'))
+rels = body['relationships']
 assert not any(r['id'] == '$REL_ID' for r in rels), 'canceled rel still listed'
 print(f'  {len(rels)} active relationship(s) remaining')
 "

@@ -1,6 +1,6 @@
 """Data access for `ach_relationships`. Soft-delete only; never hard-delete.
 
-See docs/plaid-integration.md § "Transfer History & Unlinking" for the rationale.
+See docs/funding.md for the rationale.
 """
 
 import uuid
