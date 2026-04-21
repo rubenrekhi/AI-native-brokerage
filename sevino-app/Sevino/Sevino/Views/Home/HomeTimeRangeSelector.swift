@@ -14,31 +14,32 @@ struct HomeTimeRangeSelector: View {
     var body: some View {
         HStack(spacing: 0) {
             ForEach(TimeRange.allCases) { range in
-                Text(range.rawValue)
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(
-                        range == activeRange
-                            ? Color.sevinoSecondary
-                            : Color.sevinoGreyContrast
-                    )
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 6 * scale)
-                    .background {
-                        if range == activeRange {
-                            Capsule()
-                                .fill(.clear)
-                                .modifier(SevinoGlass.chip)
-                                .scaleEffect(isDragging ? 1.25 : 1.0)
-                                .matchedGeometryEffect(id: "timeIndicator", in: indicator)
-                        }
+                Button {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+                        onSelect(range)
                     }
-                    .contentShape(.rect)
-                    .onTapGesture {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-                            onSelect(range)
+                } label: {
+                    Text(range.rawValue)
+                        .font(.system(size: 13 * scale, weight: .medium))
+                        .foregroundStyle(
+                            range == activeRange
+                                ? Color.sevinoSecondary
+                                : Color.sevinoGreyContrast
+                        )
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .padding(.vertical, 6 * scale)
+                        .background {
+                            if range == activeRange {
+                                Capsule()
+                                    .fill(.clear)
+                                    .modifier(SevinoGlass.chip)
+                                    .scaleEffect(isDragging ? 1.25 : 1.0)
+                                    .matchedGeometryEffect(id: "timeIndicator", in: indicator)
+                            }
                         }
-                    }
-                    .accessibilityAddTraits(.isButton)
+                        .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
             }
         }
         .onGeometryChange(for: CGFloat.self) { geo in
@@ -47,7 +48,7 @@ struct HomeTimeRangeSelector: View {
             totalWidth = newValue
         }
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 10)
                 .updating($dragLocation) { value, state, _ in
                     state = value.location.x
                 }
