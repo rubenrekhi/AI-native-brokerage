@@ -56,13 +56,56 @@ struct HoldingsMorphingView: View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
-            LazyVStack(spacing: 12 * scale) {
-                ForEach(viewModel.holdings) { holding in
-                    HoldingRow(holding: holding, scale: scale)
+            if viewModel.isLoading, viewModel.holdings.isEmpty {
+                loadingState
+            } else if viewModel.error != nil, viewModel.holdings.isEmpty {
+                errorState
+            } else if viewModel.holdings.isEmpty {
+                emptyState
+            } else {
+                LazyVStack(spacing: 12 * scale) {
+                    ForEach(viewModel.holdings) { holding in
+                        HoldingRow(holding: holding, scale: scale)
+                    }
                 }
             }
         }
         .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+    }
+
+    private var loadingState: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32 * scale)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.holdingsEmptyTitle, systemImage: "chart.pie")
+        } description: {
+            Text(L10n.Home.holdingsEmptyMessage)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var errorState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.holdingsLoadErrorTitle, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(L10n.Home.holdingsLoadErrorMessage)
+        } actions: {
+            Button(L10n.Home.holdingsLoadErrorRetry, action: retry)
+                .font(.system(size: 14 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .padding(.horizontal, 20 * scale)
+                .padding(.vertical, 10 * scale)
+                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func retry() {
+        Task { await viewModel.loadHoldings() }
     }
 
     private var headerRow: some View {

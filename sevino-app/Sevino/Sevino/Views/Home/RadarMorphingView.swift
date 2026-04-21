@@ -39,12 +39,25 @@ struct RadarMorphingView: View {
         LazyVStack(alignment: .leading, spacing: 12 * scale) {
             headerSection
 
-            ForEach(viewModel.radarItems) { item in
-                RadarItemRow(item: item, scale: scale, onToggleStar: {
-                    viewModel.toggleStar(for: item.id)
-                })
+            if viewModel.radarItems.isEmpty {
+                emptyState
+            } else {
+                ForEach(viewModel.radarItems) { item in
+                    RadarItemRow(item: item, scale: scale, onToggleStar: {
+                        viewModel.toggleStar(for: item.id)
+                    })
+                }
             }
         }
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.radarEmptyTitle, systemImage: "eye")
+        } description: {
+            Text(L10n.Home.radarEmptyMessage)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var headerSection: some View {

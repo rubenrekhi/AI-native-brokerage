@@ -210,23 +210,6 @@ struct HomeView: View {
             Text(message)
         }
         .alert(
-            L10n.Home.holdingsLoadErrorTitle,
-            isPresented: Binding(
-                get: { holdingsViewModel.error != nil },
-                set: { if !$0 { holdingsViewModel.clearError() } }
-            ),
-            presenting: holdingsViewModel.error
-        ) { _ in
-            Button(L10n.Home.holdingsLoadErrorRetry) {
-                Task { await holdingsViewModel.loadHoldings() }
-            }
-            Button(L10n.Home.holdingsLoadErrorDismiss, role: .cancel) {
-                holdingsViewModel.clearError()
-            }
-        } message: { message in
-            Text(message)
-        }
-        .alert(
             L10n.Home.radarLoadErrorTitle,
             isPresented: Binding(
                 get: { radarViewModel.error != nil },
