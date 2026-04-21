@@ -36,7 +36,7 @@ struct RadarMorphingView: View {
     }
 
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 12 * scale) {
+        LazyVStack(alignment: .leading, spacing: 12 * scale) {
             headerSection
 
             ForEach(viewModel.radarItems) { item in
