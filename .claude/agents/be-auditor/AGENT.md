@@ -425,17 +425,68 @@ The entire app is async. This means:
 
 ## 11. Logging & Observability
 
-- **Use Python's `logging` module**, not `print()`. Logs go to stdout, which Railway captures.
-- **Use `logging.getLogger(__name__)`** so log messages are namespaced by module.
+### 11.1 Logging basics
+
+- **Use `structlog.get_logger(__name__)`**, not `print()` or stdlib `logging`. Logs go to stdout, which Railway captures.
 - **Log levels:** `DEBUG` for development detail, `INFO` for routine operations, `WARNING` for expected issues (bad user input), `ERROR` for real bugs (with `exc_info=True` for stack traces).
-- **Include correlation IDs in all log messages** so you can trace a request across the system.
-- **Sentry captures unhandled exceptions.** Don't duplicate Sentry reporting in application code.
+- **Include correlation IDs via `structlog.contextvars.bound_contextvars`** so every log line emitted during a request or event handler carries `correlation_id`, user/stream/operation context automatically.
+- **Never log sensitive data.** PII, tokens, passwords, API keys, SSNs, raw request/response bodies must never appear in logs.
+
+### 11.2 Logs vs. Sentry alerts — they are NOT the same signal
+
+A common mistake is assuming `logger.warning(...)` fires a Sentry alert. It does not.
+
+| Call | Where it goes | Fires an alert? |
+|---|---|---|
+| `logger.info/warning/error(...)` | stdout → Railway logs | **No** (becomes a Sentry *breadcrumb* only — attached as context to other errors) |
+| Unhandled exception propagating to FastAPI | Railway logs + Sentry | Yes (auto-captured) |
+| `sentry_sdk.capture_exception(exc)` | Sentry | Yes — creates an alert-worthy event |
+| `sentry_sdk.capture_message("...", level="warning")` | Sentry | Yes — use for operational warnings that have no exception |
+| `sentry_sdk.add_breadcrumb(...)` | Sentry (as context) | **No** — only attached to later errors |
+
+**The decision rule:**
+- If the situation is a **real bug or operationally notable failure that should be paged on or reviewed in the Sentry dashboard**, it must reach Sentry via `capture_exception` (for exceptions) or `capture_message` (for warnings without an exception).
+- If the situation is a **routine log for debugging only**, `logger.info/warning` is sufficient.
+- If the situation is **expected behavior that fires on every normal run** (e.g., `CancelledError` on graceful worker shutdown, normal reconnects in backoff loops), do NOT send it to Sentry — it's just noise that drowns out real signals.
+
+### 11.3 Sentry scope, tags, and context — required for long-running processes
+
+`sentry_sdk.capture_exception(exc)` only captures the current Sentry scope at the moment of the call. **Structlog contextvars are NOT automatically mirrored onto the Sentry scope.** If the captured event doesn't carry identifying tags, you can't filter or search for it in the Sentry UI.
+
+For any long-running process — SSE/WebSocket listener, ARQ background task, cron job, or event handler — every captured exception or message MUST be accompanied by:
+
+- **Tags** (searchable in the Sentry UI): the domain identifiers that scope the event. For a listener: stream name, event ID, event type. For a task: task name, user_id, job_id. Set via `scope.set_tag("key", value)` inside a `sentry_sdk.new_scope()` block.
+- **Context** (attached to the event body): the full structured detail of the failure. Set via `scope.set_context("name", {...})`.
+
+Pattern:
+```python
+with sentry_sdk.new_scope() as scope:
+    scope.set_tag("sse_stream", stream_name)
+    scope.set_tag("sse_event_id", event_id)
+    scope.set_context("sse_event", {"stream": ..., "event_id": ..., ...})
+    # ... later, inside this scope:
+    sentry_sdk.capture_exception(exc)
+```
+
+Without this, the Sentry event is un-filterable and ops can't do things like "show all errors on the `trade_events_sse` stream."
 
 ### Review checks:
-- **No `print()` statements.** Always use the logger.
-- **No logging of sensitive data.** PII, tokens, passwords, API keys, SSNs must never appear in logs. Redact or omit them.
-- **Error logs should include context** — user ID, correlation ID, what operation was being attempted.
-- **Don't log full request/response bodies** — they may contain sensitive data. Log metadata (method, path, status, latency).
+
+**Logging:**
+- **No `print()` statements.** Always use `structlog.get_logger`.
+- **No logging of sensitive data** (PII, tokens, passwords, API keys, SSNs, raw bodies).
+- **Error logs include context** — user/stream/event ID, operation attempted, correlation ID (via contextvars).
+- **No full request/response bodies in logs** — they may contain sensitive data.
+
+**Sentry escalation (log-level vs alert-level — catches the common mistake):**
+- **Operational warnings that need dashboard visibility MUST call `sentry_sdk.capture_message(level="warning")`**, not just `logger.warning(...)`. Examples that MUST escalate: background-task shutdown timeouts, cron job failures, prolonged listener silence, exhausted retry budgets, stuck jobs. If the code path writes "something unusual happened at runtime that ops needs to see" and only calls `logger.warning`, flag it — that event won't page anyone.
+- **Expected no-op paths MUST NOT capture to Sentry.** `CancelledError` during normal graceful shutdown, expected-empty result sets, normal reconnect-backoff attempts — these would be noise. If code path captures one of these to Sentry, flag it.
+- **`add_breadcrumb` is context, not an alert.** If the author uses `add_breadcrumb` where a `capture_message` was needed (i.e., the event matters on its own, not just as context for a later error), flag it.
+
+**Sentry scope/tags on captured events (catches the "un-searchable event" mistake):**
+- **For any `capture_exception` or `capture_message` call inside a long-running process (listener, ARQ task, cron, event handler), verify a `sentry_sdk.new_scope()` is open with tags identifying the scoping dimensions** (stream, user_id, task name, event_id, etc.). Relying on structlog contextvars alone does NOT attach those to the Sentry event — they must be explicitly set on the Sentry scope.
+- **Context should include the full structured detail** needed to diagnose without cross-referencing logs (event payload shape, IDs, retry counts).
+- **Exceptions raised from FastAPI routes and caught by global handlers** are fine without manual scope setup — the request middleware already attaches correlation ID and user to the Sentry scope. This rule is specifically about code running outside the request lifecycle.
 
 ---
 
@@ -879,7 +930,9 @@ For every PR, run through this:
 - [ ] Migration safety: Is the migration reversible? Does it avoid the `auth` schema?
 - [ ] Env vars: Are new secrets in `.env.example`? No hardcoded values?
 - [ ] Dependencies: Is `uv.lock` updated? Is the new dep justified?
-- [ ] Logging: Using `logger`, not `print()`? Correlation ID included?
+- [ ] Logging: Using `structlog.get_logger`, not `print()`? Correlation ID bound via contextvars?
+- [ ] Sentry escalation: Do operational warnings in long-running processes (listeners, tasks, crons) call `capture_message` — not just `logger.warning`? Are expected no-op paths (graceful cancel, normal reconnects) kept out of Sentry?
+- [ ] Sentry tags: For `capture_exception`/`capture_message` outside the request lifecycle, is a `new_scope()` opened with searchable tags (stream, user_id, task, event_id)? Structlog contextvars alone do NOT attach to Sentry events.
 - [ ] Code quality: Functions short and single-purpose? Names specific? Guard clauses over nesting?
 - [ ] Feature architecture: Route thin? Service layer owns logic? External responses mapped at boundary?
 - [ ] No anti-patterns: No god routes, leaky abstractions, or cross-service DB sharing?
