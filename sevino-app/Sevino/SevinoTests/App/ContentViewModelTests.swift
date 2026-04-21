@@ -25,6 +25,8 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showPhoneSheet)
         XCTAssertFalse(viewModel.showOnboarding)
         XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertFalse(viewModel.statusCheckFailed)
+        XCTAssertFalse(viewModel.showPhoneError)
         XCTAssertEqual(viewModel.onboardingUserName, "")
         XCTAssertNil(viewModel.onboardingResumeData)
         XCTAssertNil(viewModel.alpacaResumeData)
@@ -56,7 +58,7 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
     }
 
-    func testSavePhoneNumberFailureStillDismissesAndRecordsError() async {
+    func testSavePhoneNumberFailureKeepsSheetAndRecordsError() async {
         viewModel.startFreshSignUpFlow()
         mockOnboarding.saveStepError = NSError(
             domain: "", code: 0,
@@ -65,9 +67,43 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertTrue(viewModel.showPhoneSheet, "sheet stays open so user can retry after seeing the alert")
+        XCTAssertTrue(viewModel.showPhoneError, "alert flag is set so the view presents an alert")
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertEqual(viewModel.error, "Network error")
+    }
+
+    func testSavePhoneNumberRetrySuccessClearsErrorFlag() async {
+        viewModel.startFreshSignUpFlow()
+        mockOnboarding.saveStepError = NSError(
+            domain: "", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertTrue(viewModel.showPhoneError)
+
+        mockOnboarding.saveStepError = nil
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertFalse(viewModel.showPhoneError)
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertNil(viewModel.error)
+    }
+
+    func testClearErrorResetsErrorAndAlertFlag() async {
+        mockOnboarding.saveStepError = NSError(
+            domain: "", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+        viewModel.startFreshSignUpFlow()
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertNotNil(viewModel.error)
+        XCTAssertTrue(viewModel.showPhoneError)
+
+        viewModel.clearError()
+
+        XCTAssertNil(viewModel.error)
+        XCTAssertFalse(viewModel.showPhoneError)
     }
 
     // MARK: - checkOnboardingStatus — destination routing
@@ -123,13 +159,33 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertNotNil(viewModel.alpacaResumeData)
     }
 
-    func testCheckOnboardingStatusClearsIsCheckingStatusOnError() async {
+    func testCheckOnboardingStatusSurfacesRetryOnError() async {
         mockOnboarding.statusError = URLError(.notConnectedToInternet)
 
         await viewModel.checkOnboardingStatus()
 
         XCTAssertFalse(viewModel.isCheckingStatus, "defer must reset flag even on error")
+        XCTAssertTrue(viewModel.statusCheckFailed, "view needs a flag to show a retry prompt")
         XCTAssertNotNil(viewModel.error)
+    }
+
+    func testCheckOnboardingStatusRetryClearsFailureFlagOnSuccess() async {
+        mockOnboarding.statusError = URLError(.notConnectedToInternet)
+        await viewModel.checkOnboardingStatus()
+        XCTAssertTrue(viewModel.statusCheckFailed)
+
+        mockOnboarding.statusError = nil
+        mockOnboarding.statusResponse = OnboardingStatusResponse(
+            onboardingCompleted: true,
+            onboardingStep: nil,
+            accountStatus: nil,
+            profile: nil,
+            financialProfile: nil
+        )
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertFalse(viewModel.statusCheckFailed)
+        XCTAssertNil(viewModel.error)
     }
 
     // MARK: - Flow transitions

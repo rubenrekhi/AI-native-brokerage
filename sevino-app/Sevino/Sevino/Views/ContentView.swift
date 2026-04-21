@@ -39,8 +39,19 @@ struct ContentView: View {
         Group {
             if viewModel.isCheckingStatus {
                 loadingView
+            } else if viewModel.statusCheckFailed {
+                StatusCheckRetryView(onRetry: checkStatus)
             } else if viewModel.showPhoneSheet {
                 PhoneNumberView(onComplete: savePhoneNumber)
+                    .alert(
+                        L10n.General.errorTitle,
+                        isPresented: phoneErrorPresented,
+                        presenting: viewModel.error
+                    ) { _ in
+                        Button(L10n.General.ok) { viewModel.clearError() }
+                    } message: { error in
+                        Text(error)
+                    }
             } else if viewModel.showOnboarding {
                 OnboardingContainerView(
                     initialStep: viewModel.onboardingResumeData != nil ? viewModel.onboardingResumeStep : 1,
@@ -58,6 +69,13 @@ struct ContentView: View {
                 HomeView()
             }
         }
+    }
+
+    private var phoneErrorPresented: Binding<Bool> {
+        Binding(
+            get: { viewModel.showPhoneError },
+            set: { if !$0 { viewModel.clearError() } }
+        )
     }
 
     private var loadingView: some View {
@@ -97,12 +115,52 @@ struct ContentView: View {
             viewModel.startFreshSignUpFlow()
         } else {
             // Returning user — either login or cold launch session restore
-            Task { await viewModel.checkOnboardingStatus() }
+            checkStatus()
         }
+    }
+
+    private func checkStatus() {
+        Task { await viewModel.checkOnboardingStatus() }
     }
 
     private func savePhoneNumber(_ phoneNumber: String) {
         Task { await viewModel.savePhoneNumber(phoneNumber) }
+    }
+}
+
+// MARK: - Status check retry
+
+private struct StatusCheckRetryView: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        ZStack {
+            OnboardingBackgroundView()
+            VStack(spacing: 16) {
+                Text(L10n.General.connectionErrorTitle)
+                    .font(.dmSerif(size: 28))
+                    .foregroundStyle(Color.welcomeText)
+                    .multilineTextAlignment(.center)
+
+                Text(L10n.General.connectionErrorBody)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.welcomeText.opacity(0.8))
+                    .multilineTextAlignment(.center)
+
+                Button(action: onRetry) {
+                    Text(L10n.General.tryAgain)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color.welcomeButtonDarkTint)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+                .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
+                .padding(.top, 8)
+            }
+            .padding(.horizontal, 32)
+        }
+        .preferredColorScheme(.dark)
     }
 }
 
@@ -132,4 +190,8 @@ private final class PreviewAuthService: AuthServiceProtocol {
         authVM: AuthViewModel(authService: authService),
         viewModel: ContentViewModel(authService: authService)
     )
+}
+
+#Preview("Status Check Retry") {
+    StatusCheckRetryView(onRetry: {})
 }
