@@ -6,8 +6,9 @@ struct LoginSecuritySettingsView: View {
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
     @State private var showDeleteConfirmation = false
+    @State private var baseScale: CGFloat = 1
 
-    private var scale: CGFloat { UIScreen.main.bounds.width / 393 * textMultiplier }
+    private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -43,6 +44,13 @@ struct LoginSecuritySettingsView: View {
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear.onAppear {
+                    baseScale = geo.size.width / 393
+                }
+            }
         }
         .navigationBarBackButtonHidden()
     }

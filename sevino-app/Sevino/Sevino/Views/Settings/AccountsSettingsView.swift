@@ -8,7 +8,9 @@ struct AccountsSettingsView: View {
     // TODO: Replace with real status from ViewModel
     private let kycStatus = KYCStatus.submitted
 
-    private var scale: CGFloat { UIScreen.main.bounds.width / 393 * textMultiplier }
+    @State private var baseScale: CGFloat = 1
+
+    private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,6 +28,13 @@ struct AccountsSettingsView: View {
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear.onAppear {
+                    baseScale = geo.size.width / 393
+                }
+            }
         }
         .navigationBarBackButtonHidden()
     }

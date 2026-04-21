@@ -18,7 +18,9 @@ struct PersonalInfoSettingsView: View {
         userName.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined()
     }
 
-    private var scale: CGFloat { UIScreen.main.bounds.width / 393 * textMultiplier }
+    @State private var baseScale: CGFloat = 1
+
+    private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
         ScrollView {
@@ -43,6 +45,13 @@ struct PersonalInfoSettingsView: View {
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear.onAppear {
+                    baseScale = geo.size.width / 393
+                }
+            }
         }
         .navigationBarBackButtonHidden()
     }
