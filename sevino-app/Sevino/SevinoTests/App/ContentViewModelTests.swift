@@ -1,0 +1,187 @@
+import XCTest
+@testable import Sevino
+
+@MainActor
+final class ContentViewModelTests: XCTestCase {
+
+    private var mockOnboarding: MockOnboardingService!
+    private var mockAuth: MockAuthService!
+    private var viewModel: ContentViewModel!
+
+    override func setUp() {
+        mockOnboarding = MockOnboardingService()
+        mockAuth = MockAuthService()
+        viewModel = ContentViewModel(
+            onboardingService: mockOnboarding,
+            authService: mockAuth
+        )
+    }
+
+    // MARK: - Initial state
+
+    func testInitialState() {
+        XCTAssertFalse(viewModel.isCheckingStatus)
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertEqual(viewModel.onboardingUserName, "")
+        XCTAssertNil(viewModel.onboardingResumeData)
+        XCTAssertNil(viewModel.alpacaResumeData)
+        XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - startFreshSignUpFlow
+
+    func testStartFreshSignUpFlowSkipsStatusCheck() {
+        viewModel.startFreshSignUpFlow()
+
+        XCTAssertTrue(viewModel.showPhoneSheet)
+        XCTAssertTrue(viewModel.showOnboarding)
+        XCTAssertEqual(mockOnboarding.getStatusCallCount, 0)
+    }
+
+    // MARK: - savePhoneNumber
+
+    func testSavePhoneNumberSuccessDismissesSheet() async {
+        viewModel.startFreshSignUpFlow()
+
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertNil(viewModel.error)
+        XCTAssertEqual(mockOnboarding.saveStepCallCount, 1)
+        XCTAssertEqual(mockOnboarding.lastSavedRequest?.step, "welcome")
+        XCTAssertEqual(mockOnboarding.lastSavedRequest?.phoneNumber, "4165551234")
+    }
+
+    func testSavePhoneNumberFailureStillDismissesAndRecordsError() async {
+        viewModel.startFreshSignUpFlow()
+        mockOnboarding.errorToThrow = NSError(
+            domain: "", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertFalse(viewModel.isLoading)
+        XCTAssertEqual(viewModel.error, "Network error")
+    }
+
+    // MARK: - checkOnboardingStatus — destination routing
+
+    func testCheckOnboardingStatusRoutesToHomeWhenCompleted() async {
+        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+            onboardingCompleted: true,
+            onboardingStep: nil,
+            accountStatus: nil,
+            profile: nil,
+            financialProfile: nil
+        )
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertFalse(viewModel.isCheckingStatus)
+    }
+
+    func testCheckOnboardingStatusRoutesToOnboardingForPartialProgress() async {
+        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: "preferred_name",
+            accountStatus: nil,
+            profile: ProfileData(preferredName: "Riley"),
+            financialProfile: nil
+        )
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertTrue(viewModel.showOnboarding)
+        XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertEqual(viewModel.onboardingResumeStep, 3)
+        XCTAssertEqual(viewModel.onboardingUserName, "Riley")
+        XCTAssertNotNil(viewModel.onboardingResumeData)
+    }
+
+    func testCheckOnboardingStatusRoutesToAlpacaSetupAfterPhase1() async {
+        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: "risk_disclosure",
+            accountStatus: nil,
+            profile: ProfileData(preferredName: "Riley"),
+            financialProfile: nil
+        )
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertTrue(viewModel.showAlpacaSetup)
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertEqual(viewModel.alpacaResumeStep, 1)
+        XCTAssertNotNil(viewModel.alpacaResumeData)
+    }
+
+    func testCheckOnboardingStatusClearsIsCheckingStatusOnError() async {
+        mockOnboarding.errorToThrow = URLError(.notConnectedToInternet)
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertFalse(viewModel.isCheckingStatus, "defer must reset flag even on error")
+        XCTAssertNotNil(viewModel.error)
+    }
+
+    // MARK: - Flow transitions
+
+    func testCompleteOnboardingAdvancesToAlpacaSetup() {
+        viewModel.startFreshSignUpFlow()
+
+        viewModel.completeOnboarding(userName: "Riley")
+
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertTrue(viewModel.showAlpacaSetup)
+        XCTAssertEqual(viewModel.onboardingUserName, "Riley")
+        XCTAssertEqual(viewModel.alpacaResumeStep, 1)
+        XCTAssertNil(viewModel.alpacaResumeData, "Alpaca resume data resets on fresh handoff")
+    }
+
+    func testCompleteAlpacaSetupClearsFlag() {
+        viewModel.completeOnboarding(userName: "Riley")
+
+        viewModel.completeAlpacaSetup()
+
+        XCTAssertFalse(viewModel.showAlpacaSetup)
+    }
+
+    // MARK: - signOut
+
+    func testSignOutResetsRoutingState() async {
+        viewModel.startFreshSignUpFlow()
+        viewModel.completeOnboarding(userName: "Riley")
+        mockAuth.isAuthenticated = true
+
+        await viewModel.signOut()
+
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertNil(viewModel.onboardingResumeData)
+        XCTAssertNil(viewModel.alpacaResumeData)
+        XCTAssertFalse(mockAuth.isAuthenticated)
+    }
+
+    func testSignOutFailureStillResetsRoutingState() async {
+        viewModel.startFreshSignUpFlow()
+        mockAuth.errorToThrow = NSError(
+            domain: "", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Sign-out failed"]
+        )
+
+        await viewModel.signOut()
+
+        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertEqual(viewModel.error, "Sign-out failed")
+    }
+}
