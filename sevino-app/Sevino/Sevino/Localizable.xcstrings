@@ -904,6 +904,36 @@
         }
       }
     },
+    "home.portfolio_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.portfolio_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.portfolio_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load portfolio"
+          }
+        }
+      }
+    },
     "home.radar_disclaimer" : {
       "localizations" : {
         "en" : {

@@ -1,12 +1,12 @@
 import SwiftUI
 
 struct PortfolioChartView: View {
-    let points: [CGFloat]
+    let points: [Double]
     let scale: CGFloat
     @Binding var scrubValue: String?
 
     @State private var scrubIndex: Int?
-    @State private var displayPoints: [CGFloat] = []
+    @State private var displayPoints: [Double] = []
 
     var body: some View {
         GeometryReader { geo in
@@ -29,7 +29,7 @@ struct PortfolioChartView: View {
                 if let idx = scrubIndex, idx < displayPoints.count, let label = scrubValue {
                     let step = width / CGFloat(displayPoints.count - 1)
                     let x = CGFloat(idx) * step
-                    let y = height - (displayPoints[idx] * height)
+                    let y = height - (CGFloat(displayPoints[idx]) * height)
                     let labelX = min(max(x, 40 * scale), width - 40 * scale)
 
                     Rectangle()
@@ -79,19 +79,19 @@ struct PortfolioChartView: View {
         let idx = min(max(Int((x / step).rounded()), 0), displayPoints.count - 1)
         scrubIndex = idx
         let dollarValue = 400 + displayPoints[idx] * 800
-        scrubValue = Double(dollarValue).formatted(.currency(code: "USD"))
+        scrubValue = dollarValue.formatted(.currency(code: "USD"))
     }
 }
 
 /// A vector type that SwiftUI can interpolate for chart animation.
 private struct AnimatableVector: VectorArithmetic {
-    var values: [CGFloat]
+    var values: [Double]
 
     static var zero: AnimatableVector { AnimatableVector(values: []) }
 
     static func + (lhs: AnimatableVector, rhs: AnimatableVector) -> AnimatableVector {
         let count = max(lhs.values.count, rhs.values.count)
-        var result = [CGFloat](repeating: 0, count: count)
+        var result = [Double](repeating: 0, count: count)
         for i in 0..<count {
             let l = i < lhs.values.count ? lhs.values[i] : 0
             let r = i < rhs.values.count ? rhs.values[i] : 0
@@ -102,7 +102,7 @@ private struct AnimatableVector: VectorArithmetic {
 
     static func - (lhs: AnimatableVector, rhs: AnimatableVector) -> AnimatableVector {
         let count = max(lhs.values.count, rhs.values.count)
-        var result = [CGFloat](repeating: 0, count: count)
+        var result = [Double](repeating: 0, count: count)
         for i in 0..<count {
             let l = i < lhs.values.count ? lhs.values[i] : 0
             let r = i < rhs.values.count ? rhs.values[i] : 0
@@ -113,17 +113,17 @@ private struct AnimatableVector: VectorArithmetic {
 
     mutating func scale(by rhs: Double) {
         for i in values.indices {
-            values[i] *= CGFloat(rhs)
+            values[i] *= rhs
         }
     }
 
     var magnitudeSquared: Double {
-        values.reduce(0) { $0 + Double($1 * $1) }
+        values.reduce(0) { $0 + $1 * $1 }
     }
 }
 
 private struct AnimatableChartLine: Shape {
-    var points: [CGFloat]
+    var points: [Double]
     var size: CGSize
 
     var animatableData: AnimatableVector {
@@ -138,7 +138,7 @@ private struct AnimatableChartLine: Shape {
         return Path { path in
             for (index, point) in points.enumerated() {
                 let x = CGFloat(index) * step
-                let y = size.height - (point * size.height)
+                let y = size.height - (CGFloat(point) * size.height)
                 if index == 0 {
                     path.move(to: CGPoint(x: x, y: y))
                 } else {
@@ -150,7 +150,7 @@ private struct AnimatableChartLine: Shape {
 }
 
 private struct AnimatableChartFill: Shape {
-    var points: [CGFloat]
+    var points: [Double]
     var size: CGSize
 
     var animatableData: AnimatableVector {
@@ -166,7 +166,7 @@ private struct AnimatableChartFill: Shape {
             path.move(to: CGPoint(x: 0, y: size.height))
             for (index, point) in points.enumerated() {
                 let x = CGFloat(index) * step
-                let y = size.height - (point * size.height)
+                let y = size.height - (CGFloat(point) * size.height)
                 path.addLine(to: CGPoint(x: x, y: y))
             }
             path.addLine(to: CGPoint(x: size.width, y: size.height))
@@ -177,7 +177,7 @@ private struct AnimatableChartFill: Shape {
 
 #Preview {
     PortfolioChartView(
-        points: (0..<40).map { _ in CGFloat.random(in: 0.1...0.9) },
+        points: (0..<40).map { _ in Double.random(in: 0.1...0.9) },
         scale: 1,
         scrubValue: .constant(nil)
     )
