@@ -4234,6 +4234,86 @@
         }
       }
     },
+    "welcome.timeframe_1d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1D"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_1m" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1M"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_1w" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1W"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_1y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1Y"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_3m" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "3M"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_6m" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "6M"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_all" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ALL"
+          }
+        }
+      }
+    },
+    "welcome.timeframe_ytd" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YTD"
+          }
+        }
+      }
+    },
     "welcome.trade_ai_response" : {
       "localizations" : {
         "en" : {
