@@ -3,11 +3,6 @@ import Foundation
 @Observable
 final class HomeViewModel {
     private(set) var greeting = ""
-    private(set) var portfolioDisplayValue = "$1,084.92"
-    private(set) var portfolioIsDown = true
-    private(set) var portfolioGainText = "+232.82 (+27.64%)"
-    private(set) var portfolioChartPoints: [CGFloat] = []
-    private(set) var selectedTimeRange = TimeRange.oneMonth
 
     // MARK: - Funding mock data
     private(set) var cashBalance = "$2,412.08"
@@ -51,7 +46,6 @@ final class HomeViewModel {
         case 12..<17: greeting = L10n.Home.greetingAfternoon(name)
         default: greeting = L10n.Home.greetingEvening(name)
         }
-        loadMockChartData()
         loadMockHoldings()
         loadMockRadar()
     }
@@ -59,15 +53,6 @@ final class HomeViewModel {
     func toggleRadarStar(id: String) {
         guard let idx = radarItems.firstIndex(where: { $0.id == id }) else { return }
         radarItems[idx].isStarred.toggle()
-    }
-
-    func selectTimeRange(_ range: TimeRange) {
-        selectedTimeRange = range
-        loadMockChartData()
-    }
-
-    var portfolioPeriodLabel: String {
-        selectedTimeRange.periodLabel
     }
 
     private func loadMockHoldings() {
@@ -94,20 +79,6 @@ final class HomeViewModel {
                 averageCost: "$338.23"
             ),
         ]
-    }
-
-    private func loadMockChartData() {
-        var points: [CGFloat] = []
-        var value: CGFloat = 0.15
-        for _ in 0..<40 {
-            value += CGFloat.random(in: -0.03...0.05)
-            value = max(0.05, min(1.0, value))
-            points.append(value)
-        }
-        points[points.count - 1] = 0.92
-        points[points.count - 2] = 0.88
-        points[points.count - 3] = 0.95
-        portfolioChartPoints = points
     }
 
     private func loadMockRadar() {

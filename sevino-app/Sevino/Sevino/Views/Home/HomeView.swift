@@ -4,6 +4,7 @@ struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     @State private var viewModel = HomeViewModel()
+    @State private var portfolioViewModel = PortfolioViewModel()
     @State private var messageText = ""
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
@@ -75,7 +76,7 @@ struct HomeView: View {
             PortfolioMorphingView(
                 scale: scale,
                 isExpanded: showPortfolio,
-                viewModel: viewModel,
+                viewModel: portfolioViewModel,
                 onTap: togglePortfolio,
                 onDismiss: dismissPortfolio
             )
@@ -165,6 +166,26 @@ struct HomeView: View {
             )
         }
         .task { viewModel.loadGreeting() }
+        .task(id: portfolioViewModel.selectedTimeRange) {
+            await portfolioViewModel.loadPortfolio()
+        }
+        .alert(
+            L10n.Home.portfolioLoadErrorTitle,
+            isPresented: Binding(
+                get: { portfolioViewModel.error != nil },
+                set: { if !$0 { portfolioViewModel.clearError() } }
+            ),
+            presenting: portfolioViewModel.error
+        ) { _ in
+            Button(L10n.Home.portfolioLoadErrorRetry) {
+                Task { await portfolioViewModel.loadPortfolio() }
+            }
+            Button(L10n.Home.portfolioLoadErrorDismiss, role: .cancel) {
+                portfolioViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
     }
 
     private func togglePortfolio() {
@@ -394,7 +415,7 @@ private struct SidebarPanelView: View {
 private struct PortfolioMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    let viewModel: PortfolioViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -420,7 +441,7 @@ private struct PortfolioMorphingView: View {
 
     private var pillContent: some View {
         HStack(spacing: 8 * scale) {
-            Text(viewModel.portfolioDisplayValue)
+            Text(viewModel.displayValue)
                 .font(.system(size: isExpanded ? 36 * scale : 14 * scale, weight: isExpanded ? .bold : .semibold))
                 .foregroundStyle(Color.sevinoSecondary)
 
@@ -436,7 +457,7 @@ private struct PortfolioMorphingView: View {
                     Image(systemName: "chevron.down")
                 }
                 .font(.system(size: 9 * scale, weight: .bold))
-                .foregroundStyle(Color.sevinoNegative)
+                .foregroundStyle(viewModel.isDown ? Color.sevinoNegative : Color.sevinoPositive)
                 .accessibilityHidden(true)
             }
         }
@@ -446,22 +467,22 @@ private struct PortfolioMorphingView: View {
 /// The expanded-only content (gain text, chart, time selector, chat button).
 private struct PortfolioExpandedContent: View {
     let scale: CGFloat
-    let viewModel: HomeViewModel
+    let viewModel: PortfolioViewModel
     @State private var scrubValue: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16 * scale) {
-            Text("\(viewModel.portfolioGainText) \(viewModel.portfolioPeriodLabel)")
+            Text("\(viewModel.gainText) \(viewModel.periodLabel)")
                 .font(.system(size: 15 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoPositive)
 
-            PortfolioChartView(points: viewModel.portfolioChartPoints, scale: scale, scrubValue: $scrubValue)
+            PortfolioChartView(points: viewModel.chartPoints, scale: scale, scrubValue: $scrubValue)
                 .frame(height: 160 * scale)
 
             TimeRangeSelector(
                 selected: viewModel.selectedTimeRange,
                 scale: scale,
-                onSelect: { viewModel.selectTimeRange($0) }
+                onSelect: viewModel.setTimeRange
             )
 
             Button(L10n.Home.chatAboutThis, action: {})
