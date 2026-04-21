@@ -1584,6 +1584,36 @@
         }
       }
     },
+    "onboarding.alpaca_save_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your answer"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
     "onboarding.compound_chart_savings" : {
       "localizations" : {
         "en" : {
