@@ -65,9 +65,9 @@ struct PortfolioChartView: View {
                     }
             )
         }
-        .onChange(of: points) {
+        .onChange(of: points) { _, newValue in
             withAnimation(.easeInOut(duration: 0.4)) {
-                displayPoints = points
+                displayPoints = newValue
             }
         }
         .task { displayPoints = points }
