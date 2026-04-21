@@ -51,14 +51,14 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showPhoneSheet)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
-        XCTAssertEqual(mockOnboarding.saveStepCallCount, 1)
-        XCTAssertEqual(mockOnboarding.lastSavedRequest?.step, "welcome")
-        XCTAssertEqual(mockOnboarding.lastSavedRequest?.phoneNumber, "4165551234")
+        XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
+        XCTAssertEqual(mockOnboarding.savedSteps.last?.step, "welcome")
+        XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
     }
 
     func testSavePhoneNumberFailureStillDismissesAndRecordsError() async {
         viewModel.startFreshSignUpFlow()
-        mockOnboarding.errorToThrow = NSError(
+        mockOnboarding.saveStepError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
@@ -73,7 +73,7 @@ final class ContentViewModelTests: XCTestCase {
     // MARK: - checkOnboardingStatus — destination routing
 
     func testCheckOnboardingStatusRoutesToHomeWhenCompleted() async {
-        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+        mockOnboarding.statusResponse = OnboardingStatusResponse(
             onboardingCompleted: true,
             onboardingStep: nil,
             accountStatus: nil,
@@ -89,7 +89,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testCheckOnboardingStatusRoutesToOnboardingForPartialProgress() async {
-        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+        mockOnboarding.statusResponse = OnboardingStatusResponse(
             onboardingCompleted: false,
             onboardingStep: "preferred_name",
             accountStatus: nil,
@@ -107,7 +107,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testCheckOnboardingStatusRoutesToAlpacaSetupAfterPhase1() async {
-        mockOnboarding.statusToReturn = OnboardingStatusResponse(
+        mockOnboarding.statusResponse = OnboardingStatusResponse(
             onboardingCompleted: false,
             onboardingStep: "risk_disclosure",
             accountStatus: nil,
@@ -124,7 +124,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testCheckOnboardingStatusClearsIsCheckingStatusOnError() async {
-        mockOnboarding.errorToThrow = URLError(.notConnectedToInternet)
+        mockOnboarding.statusError = URLError(.notConnectedToInternet)
 
         await viewModel.checkOnboardingStatus()
 

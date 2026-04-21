@@ -2,39 +2,31 @@ import Foundation
 @testable import Sevino
 
 final class MockOnboardingService: OnboardingServiceProtocol {
-    var errorToThrow: Error?
-    var statusToReturn: OnboardingStatusResponse?
-    var submitResponseToReturn: OnboardingSubmitResponse?
+    var saveStepError: Error?
+    var submitError: Error?
+    var statusError: Error?
 
-    private(set) var saveStepCallCount = 0
-    private(set) var lastSavedRequest: OnboardingPatchRequest?
+    var submitResponse = OnboardingSubmitResponse(accountStatus: "APPROVED", alpacaAccountId: "acc_123")
+    var statusResponse = OnboardingStatusResponse()
+
+    private(set) var savedSteps: [OnboardingPatchRequest] = []
+    private(set) var submittedTaxIds: [String] = []
     private(set) var getStatusCallCount = 0
-    private(set) var submitCallCount = 0
 
     func saveStep(_ request: OnboardingPatchRequest) async throws {
-        saveStepCallCount += 1
-        lastSavedRequest = request
-        if let error = errorToThrow { throw error }
+        savedSteps.append(request)
+        if let error = saveStepError { throw error }
     }
 
     func submit(taxId: String) async throws -> OnboardingSubmitResponse {
-        submitCallCount += 1
-        if let error = errorToThrow { throw error }
-        return submitResponseToReturn ?? OnboardingSubmitResponse(
-            accountStatus: "SUBMITTED",
-            alpacaAccountId: "alpaca-test"
-        )
+        submittedTaxIds.append(taxId)
+        if let error = submitError { throw error }
+        return submitResponse
     }
 
     func getStatus() async throws -> OnboardingStatusResponse {
         getStatusCallCount += 1
-        if let error = errorToThrow { throw error }
-        return statusToReturn ?? OnboardingStatusResponse(
-            onboardingCompleted: false,
-            onboardingStep: nil,
-            accountStatus: nil,
-            profile: nil,
-            financialProfile: nil
-        )
+        if let error = statusError { throw error }
+        return statusResponse
     }
 }

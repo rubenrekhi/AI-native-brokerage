@@ -111,6 +111,7 @@ struct ContentView: View {
 @Observable
 private final class PreviewAuthService: AuthServiceProtocol {
     var isAuthenticated: Bool
+    var accessToken: String? { nil }
 
     init(isAuthenticated: Bool = false) {
         self.isAuthenticated = isAuthenticated

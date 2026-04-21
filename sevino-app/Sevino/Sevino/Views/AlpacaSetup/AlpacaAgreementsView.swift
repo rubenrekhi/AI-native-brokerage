@@ -62,6 +62,7 @@ struct AlpacaAgreementsView: View {
                     Image(systemName: "arrow.up.right.square")
                         .font(.system(size: 16 * scale))
                         .foregroundStyle(Color.welcomeTextMuted)
+                        .accessibilityHidden(true)
                 }
                 .padding(.horizontal, 16 * scale)
                 .padding(.vertical, 14 * scale)
