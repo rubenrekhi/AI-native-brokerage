@@ -80,6 +80,50 @@ async def test_mixed_listeners_only_silent_ones_alert(monkeypatch):
     assert "account_status" not in args[0]
 
 
+async def test_silent_listener_sets_sentry_tags_and_context(monkeypatch):
+    """Per be-auditor §11.3, every capture_message inside a long-running
+    process must run within a new_scope that sets searchable tags. Without
+    the sse_stream tag, ops can't filter silence alerts by stream in the
+    Sentry UI — the stream name would only exist in the message text."""
+    captured_tags: dict = {}
+    captured_context: dict = {}
+
+    class _FakeScope:
+        def set_tag(self, k, v):
+            captured_tags[k] = v
+
+        def set_context(self, k, v):
+            captured_context[k] = v
+
+    class _FakeScopeManager:
+        def __enter__(self):
+            return _FakeScope()
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.new_scope",
+        lambda: _FakeScopeManager(),
+    )
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.capture_message",
+        MagicMock(),
+    )
+
+    listener = _listener(
+        "trade_events_ws", silence_seconds=250, threshold=60
+    )
+    await check_listener_liveness({"listeners": [listener]})
+
+    assert captured_tags["sse_stream"] == "trade_events_ws"
+    assert captured_tags["alert_type"] == "sse_silence"
+    assert captured_context["sse_silence"]["stream"] == "trade_events_ws"
+    assert captured_context["sse_silence"]["threshold_seconds"] == 60
+    # silence_seconds is rounded but should reflect the 250s we passed in.
+    assert captured_context["sse_silence"]["silence_seconds"] >= 249
+
+
 async def test_every_silent_stream_fires_its_own_alert(monkeypatch):
     """Two silent streams = two separate Sentry events, one per stream, so
     alerts can be routed / silenced independently."""
