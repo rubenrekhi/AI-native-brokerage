@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct OnboardingProgressBar: View {
+struct ProgressBar: View {
     let currentStep: Int
     let totalSteps: Int
     let scale: CGFloat
@@ -24,4 +24,14 @@ struct OnboardingProgressBar: View {
         .frame(height: 4 * scale)
         .accessibilityValue("\(currentStep) of \(totalSteps)")
     }
+}
+
+#Preview {
+    VStack(spacing: 24) {
+        ProgressBar(currentStep: 1, totalSteps: 10, scale: 1)
+        ProgressBar(currentStep: 5, totalSteps: 10, scale: 1)
+        ProgressBar(currentStep: 10, totalSteps: 10, scale: 1)
+    }
+    .padding()
+    .background(Color.black)
 }

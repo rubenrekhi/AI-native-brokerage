@@ -27,7 +27,7 @@ struct OnboardingContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            OnboardingProgressBar(
+            ProgressBar(
                 currentStep: viewModel.currentStep,
                 totalSteps: OnboardingViewModel.totalSteps,
                 scale: scale
