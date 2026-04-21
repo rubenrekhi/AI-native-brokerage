@@ -22,7 +22,7 @@ struct ProgressBar: View {
             }
         }
         .frame(height: 4 * scale)
-        .accessibilityValue("\(currentStep) of \(totalSteps)")
+        .accessibilityValue(L10n.Onboarding.progressAccessibility(currentStep, totalSteps))
     }
 }
 

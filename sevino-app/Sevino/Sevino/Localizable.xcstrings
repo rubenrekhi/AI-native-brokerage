@@ -24,16 +24,6 @@
         }
       }
     },
-    "%lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld"
-          }
-        }
-      }
-    },
     "auth.continue_with_apple" : {
       "localizations" : {
         "en" : {
@@ -2800,6 +2790,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Under $10K"
+          }
+        }
+      }
+    },
+    "onboarding.progress_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld of %2$lld"
           }
         }
       }

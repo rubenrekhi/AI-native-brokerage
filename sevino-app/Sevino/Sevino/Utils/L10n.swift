@@ -96,6 +96,9 @@ enum L10n {
         static let disclaimerResponse2 = String(localized: "onboarding.disclaimer_response2")
         static let disclaimerResponse3 = String(localized: "onboarding.disclaimer_response3")
         static let disclaimerButton = String(localized: "onboarding.disclaimer_button")
+        static func progressAccessibility(_ currentStep: Int, _ totalSteps: Int) -> String {
+            String(format: String(localized: "onboarding.progress_accessibility"), currentStep, totalSteps)
+        }
         static func compoundHeading(_ years: Int) -> String {
             String(format: String(localized: "onboarding.compound_heading"), years)
         }
