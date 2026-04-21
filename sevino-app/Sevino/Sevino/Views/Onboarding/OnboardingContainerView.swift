@@ -27,7 +27,7 @@ struct OnboardingContainerView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ProgressBar(
+            OnboardingProgressBar(
                 currentStep: viewModel.currentStep,
                 totalSteps: OnboardingViewModel.totalSteps,
                 scale: scale
@@ -291,32 +291,6 @@ struct OnboardingContainerView: View {
     }
 }
 
-
-private struct ProgressBar: View {
-    let currentStep: Int
-    let totalSteps: Int
-    let scale: CGFloat
-
-    private var progress: CGFloat {
-        CGFloat(currentStep) / CGFloat(totalSteps)
-    }
-
-    var body: some View {
-        GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.onboardingProgressTrack)
-
-                Capsule()
-                    .fill(Color.onboardingProgressFill)
-                    .frame(width: max(geo.size.width * progress, geo.size.height))
-                    .animation(.easeInOut(duration: 0.3), value: currentStep)
-            }
-        }
-        .frame(height: 4 * scale)
-        .accessibilityValue("\(currentStep) of \(totalSteps)")
-    }
-}
 
 #Preview {
     OnboardingContainerView { _ in }
