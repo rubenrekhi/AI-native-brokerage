@@ -100,15 +100,9 @@ struct SettingsView: View {
     private func settingsRow(icon: String, title: String, action: (() -> Void)? = nil) -> some View {
         Button(action: action ?? {}) {
             VStack(spacing: 0) {
-                HStack(spacing: 14 * scale) {
-                    Image(systemName: icon)
-                        .font(.system(size: 18 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(width: 28 * scale)
-
-                    Text(title)
-                        .font(.system(size: 16 * scale))
-                        .foregroundStyle(Color.sevinoSecondary)
+                HStack {
+                    Label(title, systemImage: icon)
+                        .labelStyle(SettingsRowLabelStyle(scale: scale))
 
                     Spacer()
 
@@ -160,6 +154,23 @@ struct SettingsView: View {
     private func openConsumerTerms() {
         guard let url = URL(string: "https://sevino.ai/consumer-terms") else { return }
         openURL(url)
+    }
+}
+
+private struct SettingsRowLabelStyle: LabelStyle {
+    let scale: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 14 * scale) {
+            configuration.icon
+                .font(.system(size: 18 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 28 * scale)
+
+            configuration.title
+                .font(.system(size: 16 * scale))
+                .foregroundStyle(Color.sevinoSecondary)
+        }
     }
 }
 
