@@ -441,6 +441,45 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
     assert "since_id" not in (req.url.query.decode() if req.url.query else "")
 
 
+async def test_stream_once_raises_on_non_200_status(
+    broker, fake_session, monkeypatch
+):
+    """If Alpaca returns a non-200 (401, 429, 5xx) — even with a
+    text/event-stream content-type that would otherwise fool httpx-sse's
+    content-type check — the listener must raise so run()'s backoff
+    escalates. Without `raise_for_status`, the stream would drain to zero
+    events and _stream_once would return normally, triggering a rapid
+    attempt=0 reconnect loop."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        # Worst case: 503 with the SSE content-type, which is the scenario
+        # httpx-sse's content-type guard would silently allow through.
+        return httpx.Response(
+            503,
+            headers={"content-type": "text/event-stream"},
+            content=b"",
+        )
+
+    transport = httpx.MockTransport(_handler)
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await listener._stream_once(client)
+
+    # Handler must not have been invoked for any events — we bailed before
+    # entering the iteration loop.
+    assert listener.handled == []
+
+
 async def test_stream_once_sends_since_id_when_checkpoint_exists(
     broker, fake_session, monkeypatch
 ):

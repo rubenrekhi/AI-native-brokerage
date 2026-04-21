@@ -128,6 +128,15 @@ class BaseSSEListener(abc.ABC):
         async with httpx_sse.aconnect_sse(
             client, "GET", url, headers=headers, params=params,
         ) as event_source:
+            # httpx-sse doesn't validate the HTTP status before iterating;
+            # it only checks Content-Type inside aiter_sse. A non-200 response
+            # that happens to carry `Content-Type: text/event-stream` (e.g. a
+            # proxied 5xx error page) would otherwise drain to zero events
+            # and cause _stream_once to return normally — which resets our
+            # backoff counter and produces a tight rapid-reconnect loop.
+            # raise_for_status surfaces real failures as httpx.HTTPStatusError
+            # so they flow through the standard backoff path in run().
+            event_source.response.raise_for_status()
             logger.info("sse_listener_connected", stream=self.stream_name)
             sentry_sdk.add_breadcrumb(
                 category="sse",
