@@ -1,0 +1,13 @@
+# Gitignored files to copy from the source worktree into new worktrees.
+# Consumed by `git worktreeinclude apply` (https://github.com/satococoa/git-worktreeinclude).
+# Uses gitignore syntax. Only files that are BOTH matched here AND classified
+# as ignored by git are copied — tracked files are never touched.
+#
+# Keep this list minimal: only things a developer/agent literally needs to
+# run the app or tests in a fresh worktree. Regeneratable artifacts (e.g.
+# `.venv/`, Xcode build output) must NOT be listed; let each worktree build
+# its own.
+
+# Backend env — required by pydantic-settings to import `app.config`, which
+# every unit test, the server, and the worker depend on.
+/sevino-api/.env

@@ -31,6 +31,7 @@ These are the canonical docs in the project. Audit all of them:
 | `sevino-api/docs/architecture.md` | Full architecture: directory structure, auth, DB, integrations, background jobs, deployment |
 | `sevino-api/docs/testing.md` | Test setup, test structure, mocking, CI/CD |
 | `sevino-app/README.md` | iOS app setup and dev guide |
+| `.worktreeinclude` | List of gitignored files copied into new git worktrees by `git worktreeinclude apply` |
 
 ---
 
@@ -77,6 +78,14 @@ Read `sevino-app/README.md`. Use Glob to check the real structure of `sevino-app
 ### 8. Audit the root README
 
 Verify the system diagram, monorepo structure, and team table in `README.md` match reality. The diagram should reflect the actual external services the API talks to.
+
+### 9. Audit `.worktreeinclude`
+
+Read `.worktreeinclude` at the repo root. Cross-reference every listed path against `.gitignore` (and any nested `.gitignore` files under `sevino-api/` and `sevino-app/`):
+
+- Every entry in `.worktreeinclude` must resolve to a path that is actually gitignored. Tracked files listed here are silently skipped by the tool — flag them so the list stays honest.
+- Look for gitignored files that are **required at runtime** but missing from `.worktreeinclude`. Heuristics: a `.env` / `.env.local` / credentials file referenced by `README.md`, a config file listed in a "Configuration (secrets)" section of a `.gitignore`, a local override file named in `app/config.py` or Xcode build settings. Flag candidates — do not auto-add; the owner decides.
+- Do NOT list regeneratable build artifacts (`.venv/`, `build/`, `DerivedData/`, `.build/`, `Packages/`, `*.xcworkspace/xcuserdata/`) — each worktree must rebuild these itself.
 
 ---
 

@@ -10,6 +10,7 @@ FastAPI backend for Sevino. Handles authentication, trading (via Alpaca), bank l
 - [uv](https://docs.astral.sh/uv/getting-started/installation/) (package manager)
 - [Supabase CLI](https://supabase.com/docs/guides/cli/getting-started) v2.71.1+ (local Postgres + Auth; >=2.71.1 required for JWKS asymmetric key signing)
 - [Redis](https://redis.io/) — install via `brew install redis`
+- [git-worktreeinclude](https://github.com/satococoa/git-worktreeinclude) — install via `brew install satococoa/tap/git-worktreeinclude`. Required for carrying `.env` into new git worktrees (see [Worktrees](#worktrees)).
 - Docker (required by Supabase CLI)
 - Alpaca Broker API sandbox keys ([sign up](https://broker-app.alpaca.markets/sign-up))
 - Plaid sandbox keys ([sign up](https://dashboard.plaid.com/signup))
@@ -57,6 +58,18 @@ You need both `make server` and `make worker` running for the full system. If yo
 The API will be running at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
 **Note on infrastructure lifecycle:** `supabase start` runs several Docker containers (Postgres, Auth, etc.) that use a few hundred MB of RAM. Always run `make down` when you're done. Your data persists between sessions. Redis is lightweight and essentially invisible when idle, but the Makefile stops it too for a clean slate.
+
+### Worktrees
+
+The repo defines a root-level [`.worktreeinclude`](../.worktreeinclude) that lists gitignored files (currently just `sevino-api/.env`) that must be copied into new git worktrees for the backend to run. After creating a worktree, copy those files over with:
+
+```bash
+git worktree add ../sevino-feature some-branch
+cd ../sevino-feature
+git worktreeinclude apply
+```
+
+`git worktreeinclude apply` reads `.worktreeinclude` from the source worktree and copies only matching ignored files — tracked files are never touched. Without this step, `uv sync` and `pytest` will fail in the new worktree because pydantic-settings can't find `.env`.
 
 ### Makefile Reference
 
