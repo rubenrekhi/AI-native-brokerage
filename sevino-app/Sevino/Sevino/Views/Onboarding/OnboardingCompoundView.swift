@@ -25,60 +25,60 @@ struct OnboardingCompoundView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(spacing: 24 * scale) {
-                    Text(L10n.Onboarding.compoundHeading(years))
-                        .font(.system(size: 26 * scale, weight: .light))
-                        .foregroundStyle(Color.welcomeText)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 20 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(spacing: 24 * scale) {
+                        Text(L10n.Onboarding.compoundHeading(years))
+                            .font(.system(size: 26 * scale, weight: .light))
+                            .foregroundStyle(Color.welcomeText)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 20 * scale)
 
-                    chartCard
+                        chartCard
 
-                    legendSection
+                        legendSection
 
-                    motivationText
+                        motivationText
+                    }
+                    .padding(.top, 20 * scale)
+                    .padding(.bottom, 60 * scale)
                 }
-                .padding(.top, 20 * scale)
-                .padding(.bottom, 60 * scale)
-            }
-            .scrollIndicators(.hidden)
+                .scrollIndicators(.hidden)
 
-            Button(action: onContinue) {
-                Text(L10n.Onboarding.setupAccount)
-                    .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(Color.welcomeText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14 * scale)
+                Button(action: onContinue) {
+                    Text(L10n.Onboarding.setupAccount)
+                        .font(.system(size: 16 * scale, weight: .semibold))
+                        .foregroundStyle(Color.welcomeText)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14 * scale)
+                }
+                .buttonStyle(.plain)
+                .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))
+                .padding(.horizontal, 32 * scale)
+                .padding(.bottom, 16 * scale)
             }
-            .buttonStyle(.plain)
-            .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))
-            .padding(.horizontal, 32 * scale)
-            .padding(.bottom, 16 * scale)
         }
         .task { await runAnimations() }
     }
 
 
     private var chartCard: some View {
-        SevinoGlassContainer {
-            VStack(spacing: 0) {
-                HStack(alignment: .bottom, spacing: 0) {
-                    yAxis
-                    barsArea
-                }
-                .frame(height: 200 * scale)
-                .padding(.top, 20 * scale)
-                .padding(.leading, 12 * scale)
-                .padding(.trailing, 4 * scale)
-
-                xAxisLabels
-                    .padding(.top, 8 * scale)
-                    .padding(.bottom, 12 * scale)
+        VStack(spacing: 0) {
+            HStack(alignment: .bottom, spacing: 0) {
+                yAxis
+                barsArea
             }
-            .modifier(SevinoGlass.nav)
+            .frame(height: 200 * scale)
+            .padding(.top, 20 * scale)
+            .padding(.leading, 12 * scale)
+            .padding(.trailing, 4 * scale)
+
+            xAxisLabels
+                .padding(.top, 8 * scale)
+                .padding(.bottom, 12 * scale)
         }
+        .modifier(SevinoGlass.nav)
         .padding(.horizontal, 20 * scale)
     }
 
