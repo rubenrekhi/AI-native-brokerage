@@ -21,6 +21,8 @@ struct FundingMorphingView: View {
             .fixedSize(horizontal: !isExpanded, vertical: true)
             .modifier(SevinoGlass.card)
             .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
+            .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isExpanded)

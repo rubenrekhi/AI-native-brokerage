@@ -491,6 +491,8 @@ private struct PortfolioMorphingView: View {
         .fixedSize(horizontal: !isExpanded, vertical: isExpanded)
         .modifier(isExpanded ? SevinoGlass.card : SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 18 * scale))
+        .frame(minHeight: isExpanded ? nil : 44 * scale)
+        .contentShape(Rectangle())
         .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
         .accessibilityAddTraits(.isButton)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
