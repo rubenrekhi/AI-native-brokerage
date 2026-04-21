@@ -85,6 +85,7 @@ struct ContentView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 40)
+                .accessibilityHidden(true)
         }
         .preferredColorScheme(.dark)
     }
