@@ -4,9 +4,6 @@ import Foundation
 final class HomeViewModel {
     private(set) var greeting = ""
 
-    // MARK: - Radar mock data
-    private(set) var radarItems: [RadarItem] = []
-
     // MARK: - Sidebar mock chats
     // TODO: Replace with real chat history from backend
     private(set) var mockChats = [
@@ -31,40 +28,5 @@ final class HomeViewModel {
         case 12..<17: greeting = L10n.Home.greetingAfternoon(name)
         default: greeting = L10n.Home.greetingEvening(name)
         }
-        loadMockRadar()
-    }
-
-    func toggleRadarStar(id: String) {
-        guard let idx = radarItems.firstIndex(where: { $0.id == id }) else { return }
-        radarItems[idx].isStarred.toggle()
-    }
-
-    private func loadMockRadar() {
-        radarItems = [
-            RadarItem(
-                ticker: "TSLA",
-                description: "Automotive tech leader you asked about last week, earnings in 2 days.",
-                price: "$274.63", changePercent: "+1.24%", isPositive: true,
-                expiresIn: "6 days", isStarred: false
-            ),
-            RadarItem(
-                ticker: "NVDA",
-                description: "AI chip giant with record data center revenue, up 180% this year.",
-                price: "$892.41", changePercent: "+2.67%", isPositive: true,
-                expiresIn: "3 days", isStarred: false
-            ),
-            RadarItem(
-                ticker: "AAPL",
-                description: "iPhone maker nearing $4T market cap, services revenue accelerating.",
-                price: "$198.11", changePercent: "-0.43%", isPositive: false,
-                expiresIn: "5 days", isStarred: true
-            ),
-            RadarItem(
-                ticker: "AMZN",
-                description: "Cloud and retail leader with AWS growth reaccelerating to 19%.",
-                price: "$186.49", changePercent: "+0.91%", isPositive: true,
-                expiresIn: "4 days", isStarred: false
-            ),
-        ]
     }
 }

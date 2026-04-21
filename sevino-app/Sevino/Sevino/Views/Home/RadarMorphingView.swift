@@ -3,7 +3,7 @@ import SwiftUI
 struct RadarMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    let viewModel: RadarViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -41,7 +41,7 @@ struct RadarMorphingView: View {
 
             ForEach(viewModel.radarItems) { item in
                 RadarItemRow(item: item, scale: scale, onToggleStar: {
-                    viewModel.toggleRadarStar(id: item.id)
+                    viewModel.toggleStar(for: item.id)
                 })
             }
         }
@@ -117,40 +117,31 @@ private struct RadarItemRow: View {
     }
 }
 
-#Preview("Dark") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        RadarMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
+private struct RadarMorphingPreview: View {
+    @State private var viewModel = RadarViewModel()
+
+    var body: some View {
+        ZStack {
+            Color.sevinoPrimary.ignoresSafeArea()
+            RadarMorphingView(
+                scale: 1,
+                isExpanded: true,
+                viewModel: viewModel,
+                onTap: {},
+                onDismiss: {}
+            )
+            .padding(16)
+        }
+        .task { await viewModel.loadRadar() }
     }
-    .preferredColorScheme(.dark)
+}
+
+#Preview("Dark") {
+    RadarMorphingPreview()
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        RadarMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
-    }
-    .preferredColorScheme(.light)
+    RadarMorphingPreview()
+        .preferredColorScheme(.light)
 }

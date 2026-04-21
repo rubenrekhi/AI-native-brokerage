@@ -7,6 +7,7 @@ struct HomeView: View {
     @State private var portfolioViewModel = PortfolioViewModel()
     @State private var fundingViewModel = FundingViewModel()
     @State private var holdingsViewModel = HoldingsViewModel()
+    @State private var radarViewModel = RadarViewModel()
     @State private var messageText = ""
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
@@ -124,7 +125,7 @@ struct HomeView: View {
             RadarMorphingView(
                 scale: scale,
                 isExpanded: showRadar,
-                viewModel: viewModel,
+                viewModel: radarViewModel,
                 onTap: toggleRadar,
                 onDismiss: dismissRadar
             )
@@ -170,6 +171,7 @@ struct HomeView: View {
         .task { viewModel.loadGreeting() }
         .task { await fundingViewModel.loadFundingData() }
         .task { await holdingsViewModel.loadHoldings() }
+        .task { await radarViewModel.loadRadar() }
         .task(id: portfolioViewModel.selectedTimeRange) {
             await portfolioViewModel.loadPortfolio()
         }
@@ -220,6 +222,23 @@ struct HomeView: View {
             }
             Button(L10n.Home.holdingsLoadErrorDismiss, role: .cancel) {
                 holdingsViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+        .alert(
+            L10n.Home.radarLoadErrorTitle,
+            isPresented: Binding(
+                get: { radarViewModel.error != nil },
+                set: { if !$0 { radarViewModel.clearError() } }
+            ),
+            presenting: radarViewModel.error
+        ) { _ in
+            Button(L10n.Home.radarLoadErrorRetry) {
+                Task { await radarViewModel.loadRadar() }
+            }
+            Button(L10n.Home.radarLoadErrorDismiss, role: .cancel) {
+                radarViewModel.clearError()
             }
         } message: { message in
             Text(message)

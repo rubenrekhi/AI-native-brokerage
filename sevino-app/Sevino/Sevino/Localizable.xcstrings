@@ -1004,6 +1004,36 @@
         }
       }
     },
+    "home.radar_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.radar_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.radar_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load radar"
+          }
+        }
+      }
+    },
     "home.radar_star_accessibility" : {
       "localizations" : {
         "en" : {

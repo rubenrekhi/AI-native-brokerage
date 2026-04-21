@@ -413,6 +413,9 @@ enum L10n {
             String(format: String(localized: "home.radar_expires"), time)
         }
         static let radarStarAccessibility = String(localized: "home.radar_star_accessibility")
+        static let radarLoadErrorTitle = String(localized: "home.radar_load_error_title")
+        static let radarLoadErrorRetry = String(localized: "home.radar_load_error_retry")
+        static let radarLoadErrorDismiss = String(localized: "home.radar_load_error_dismiss")
     }
 
     enum Sidebar {
