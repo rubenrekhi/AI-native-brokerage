@@ -5,7 +5,7 @@ final class PhoneNumberViewModel {
     private(set) var phoneNumber = ""
 
     var isPhoneValid: Bool {
-        phoneNumber.filter(\.isNumber).count == 10
+        phoneNumber.count(where: \.isNumber) == 10
     }
 
     func updatePhoneNumber(_ newValue: String) {
