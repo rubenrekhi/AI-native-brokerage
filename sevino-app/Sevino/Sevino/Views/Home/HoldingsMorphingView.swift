@@ -57,7 +57,7 @@ struct HoldingsMorphingView: View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
-            VStack(spacing: 12 * scale) {
+            LazyVStack(spacing: 12 * scale) {
                 ForEach(viewModel.holdings) { holding in
                     HoldingRow(holding: holding, scale: scale)
                 }
