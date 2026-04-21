@@ -183,11 +183,12 @@ struct OnboardingCompoundView: View {
     private func formatShort(_ value: Double) -> String {
         if value >= 1_000_000 {
             let m = value / 1_000_000
-            return m == m.rounded() ? String(format: "$%.0fM", m) : String(format: "$%.1fM", m)
+            let fractionLength = m == m.rounded() ? 0 : 1
+            return "$\(m.formatted(.number.precision(.fractionLength(fractionLength))))M"
         } else if value >= 1000 {
-            return String(format: "$%.0fK", value / 1000)
+            return "$\((value / 1000).formatted(.number.precision(.fractionLength(0))))K"
         }
-        return String(format: "$%.0f", value)
+        return "$\(value.formatted(.number.precision(.fractionLength(0))))"
     }
 
     private static let currencyFormatter: NumberFormatter = {
