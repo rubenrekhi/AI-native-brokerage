@@ -5,6 +5,7 @@ import Supabase
 // Protocol for dependency injection — use MockAuthService in tests
 protocol AuthServiceProtocol {
     var isAuthenticated: Bool { get }
+    var accessToken: String? { get async }
     func signUp(email: String, password: String) async throws
     func signIn(email: String, password: String) async throws
     func signOut() async throws
