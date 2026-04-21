@@ -3,11 +3,11 @@ import SwiftUI
 struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
-    @State private var viewModel = HomeViewModel()
-    @State private var portfolioViewModel = PortfolioViewModel()
-    @State private var fundingViewModel = FundingViewModel()
-    @State private var holdingsViewModel = HoldingsViewModel()
-    @State private var radarViewModel = RadarViewModel()
+    @State private var viewModel: HomeViewModel
+    @State private var portfolioViewModel: PortfolioViewModel
+    @State private var fundingViewModel: FundingViewModel
+    @State private var holdingsViewModel: HoldingsViewModel
+    @State private var radarViewModel: RadarViewModel
     @State private var messageText = ""
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
@@ -20,6 +20,20 @@ struct HomeView: View {
     @State private var showSidebar = false
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
+
+    init(
+        viewModel: HomeViewModel = HomeViewModel(),
+        portfolioViewModel: PortfolioViewModel = PortfolioViewModel(),
+        fundingViewModel: FundingViewModel = FundingViewModel(),
+        holdingsViewModel: HoldingsViewModel = HoldingsViewModel(),
+        radarViewModel: RadarViewModel = RadarViewModel()
+    ) {
+        self._viewModel = State(initialValue: viewModel)
+        self._portfolioViewModel = State(initialValue: portfolioViewModel)
+        self._fundingViewModel = State(initialValue: fundingViewModel)
+        self._holdingsViewModel = State(initialValue: holdingsViewModel)
+        self._radarViewModel = State(initialValue: radarViewModel)
+    }
 
     var body: some View {
         ZStack {
