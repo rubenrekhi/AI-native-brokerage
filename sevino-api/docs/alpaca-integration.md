@@ -210,7 +210,7 @@ This is a one-time flow per bank account.
 
 Full transfer status values: `QUEUED`, `APPROVAL_PENDING`, `PENDING`, `SENT_TO_CLEARING`, `APPROVED`, `COMPLETE`, `REJECTED`, `CANCELED`, `RETURNED`. Handle `RETURNED` (ACH chargebacks) as a critical failure path — notify user and restrict future instant funding.
 
-**Transfer record retention:** Transfer records are keyed by their own transfer `id`, not by `relationship_id`. Deleting an ACH relationship (`DELETE /v1/accounts/{id}/ach_relationships/{rel_id}`) marks it canceled but **does not delete the transfer history** — `GET /v1/accounts/{id}/transfers` still returns every transfer ever made, including those tied to since-deleted relationships. Our app mirrors this: never hard-delete `ach_relationships` or `plaid_items` rows; soft-delete via `status = 'CANCELED'` / `status = 'inactive'` so historical transfers can still be rendered with the correct bank nickname and mask. Full pattern in `docs/plaid-integration.md`.
+**Transfer record retention:** Transfer records are keyed by their own transfer `id`, not by `relationship_id`. Deleting an ACH relationship (`DELETE /v1/accounts/{id}/ach_relationships/{rel_id}`) marks it canceled but **does not delete the transfer history** — `GET /v1/accounts/{id}/transfers` still returns every transfer ever made, including those tied to since-deleted relationships. Our app mirrors this: never hard-delete `ach_relationships` or `plaid_items` rows; soft-delete via `status = 'CANCELED'` / `status = 'inactive'` so historical transfers can still be rendered with the correct bank nickname and mask. Full pattern in `docs/funding.md`.
 
 **SSE Monitoring Endpoint:** `GET /v2/events/funding/status` (note: `/v1/events/transfers/status` is deprecated)
 
