@@ -62,7 +62,7 @@ final class FundingViewModel {
         } catch let apiError as APIError {
             serverError = apiError
         } catch {
-            localError = "Something went wrong. Try again."
+            localError = L10n.Home.fundingGenericError
         }
     }
 
@@ -77,7 +77,7 @@ final class FundingViewModel {
         } catch let apiError as APIError {
             serverError = apiError
         } catch {
-            localError = "Something went wrong. Try again."
+            localError = L10n.Home.fundingGenericError
         }
     }
 
@@ -111,7 +111,7 @@ final class FundingViewModel {
                 await loadRelationships()
             }
         } catch {
-            localError = "Something went wrong. Try again."
+            localError = L10n.Home.fundingGenericError
         }
         linkToken = nil
         isShowingPlaidLink = false
@@ -121,7 +121,7 @@ final class FundingViewModel {
     /// nil error = user-cancelled (silent). Non-nil = surface a generic banner.
     func onPlaidExit(error plaidError: Error?) {
         if plaidError != nil {
-            localError = "Couldn't connect to your bank. Try again."
+            localError = L10n.Home.fundingPlaidConnectionError
         }
         linkToken = nil
         isShowingPlaidLink = false

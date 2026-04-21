@@ -8,23 +8,34 @@ struct FundingMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
-                if isExpanded {
-                    expandedContent
-                } else {
-                    pillContent
-                }
+        // Outer Button only wraps the collapsed pill — wrapping the expanded
+        // state too would propagate `.disabled(isExpanded)` through the
+        // environment and disable the inner Deposit / Withdraw / Link buttons.
+        if isExpanded {
+            expandedCard
+        } else {
+            Button(action: onTap) {
+                pillCard
             }
-            .padding(isExpanded ? 20 * scale : 0)
-            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
-            .fixedSize(horizontal: !isExpanded, vertical: true)
-            .modifier(SevinoGlass.card)
-            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Home.fundingAccessibility)
         }
-        .buttonStyle(.plain)
-        .disabled(isExpanded)
-        .accessibilityLabel(L10n.Home.fundingAccessibility)
+    }
+
+    private var expandedCard: some View {
+        expandedContent
+            .padding(20 * scale)
+            .frame(maxWidth: .infinity)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
+    }
+
+    private var pillCard: some View {
+        pillContent
+            .fixedSize()
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: 50 * scale))
     }
 
     private var pillContent: some View {
@@ -181,6 +192,10 @@ struct FundingMorphingView: View {
     }
 
     private var actionButtons: some View {
+        // Deposit and Withdraw use empty action closures per Locked Decision #1;
+        // wiring ships in SEV-227. Left visually live instead of `.disabled(true)`
+        // because greying out a button that users legitimately can use would
+        // read as "blocked", not "coming soon".
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
                 .font(.system(size: 15 * scale, weight: .semibold))
@@ -202,7 +217,7 @@ struct FundingMorphingView: View {
         Button {
             Task { await viewModel.funding.startBankLink() }
         } label: {
-            Text("Link a bank account")
+            Text(L10n.Home.linkBankAccount)
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoPrimary)
                 .frame(maxWidth: .infinity)
@@ -213,6 +228,8 @@ struct FundingMorphingView: View {
     }
 
     private var infoRow: some View {
+        // Cash-interest explainer is a deferred feature; render as disabled
+        // so VoiceOver doesn't announce a live but no-op tap target.
         Button(action: {}) {
             HStack {
                 Image(systemName: "info.circle")
@@ -234,6 +251,7 @@ struct FundingMorphingView: View {
             .padding(12 * scale)
             .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
         }
+        .disabled(true)
     }
 
     private var disclaimer: some View {

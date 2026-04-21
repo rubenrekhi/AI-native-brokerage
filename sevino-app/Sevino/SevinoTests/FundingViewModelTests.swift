@@ -96,8 +96,8 @@ final class FundingViewModelTests: XCTestCase {
         await sut.startBankLink()
 
         XCTAssertNil(sut.serverError)
-        XCTAssertEqual(sut.localError, "Something went wrong. Try again.")
-        XCTAssertEqual(sut.displayedError, "Something went wrong. Try again.")
+        XCTAssertEqual(sut.localError, L10n.Home.fundingGenericError)
+        XCTAssertEqual(sut.displayedError, L10n.Home.fundingGenericError)
         XCTAssertFalse(sut.isShowingPlaidLink)
     }
 
@@ -200,7 +200,7 @@ final class FundingViewModelTests: XCTestCase {
         )
 
         XCTAssertNil(sut.serverError)
-        XCTAssertEqual(sut.localError, "Something went wrong. Try again.")
+        XCTAssertEqual(sut.localError, L10n.Home.fundingGenericError)
         XCTAssertFalse(sut.isShowingPlaidLink)
     }
 
@@ -226,7 +226,7 @@ final class FundingViewModelTests: XCTestCase {
 
         sut.onPlaidExit(error: URLError(.notConnectedToInternet))
 
-        XCTAssertEqual(sut.localError, "Couldn't connect to your bank. Try again.")
+        XCTAssertEqual(sut.localError, L10n.Home.fundingPlaidConnectionError)
         XCTAssertNil(sut.serverError)
         XCTAssertFalse(sut.isShowingPlaidLink)
     }

@@ -28,3 +28,11 @@ struct AchRelationshipDTO: Decodable, Identifiable, Equatable {
     let nickname: String?
     let status: String
 }
+
+/// Wrapper response for GET /v1/funding/ach-relationships. Mirrors the
+/// backend's `AchRelationshipListResponse` shape; callers of
+/// `FundingService.listAchRelationships()` still receive a plain
+/// `[AchRelationshipDTO]` — this DTO is an internal decoding hop.
+struct AchRelationshipListResponse: Decodable {
+    let relationships: [AchRelationshipDTO]
+}

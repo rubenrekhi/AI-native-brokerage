@@ -30,7 +30,10 @@ final class FundingService: FundingServiceProtocol {
     }
 
     func listAchRelationships() async throws -> [AchRelationshipDTO] {
-        try await api.get("/v1/funding/ach-relationships")
+        let response: AchRelationshipListResponse = try await api.get(
+            "/v1/funding/ach-relationships"
+        )
+        return response.relationships
     }
 }
 
