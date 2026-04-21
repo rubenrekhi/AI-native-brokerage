@@ -53,6 +53,15 @@ struct AlpacaSetupContainerView: View {
             stepContent
         }
         .background { backgroundView }
+        .overlay(alignment: .bottom) { saveErrorBanner }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.25), value: viewModel.pendingRetryRequest?.step)
+        .onChange(of: viewModel.error) { _, newError in
+            if let newError {
+                AccessibilityNotification.Announcement(
+                    "\(L10n.Onboarding.alpacaSaveErrorHeading). \(newError)"
+                ).post()
+            }
+        }
         .preferredColorScheme(.dark)
         .background {
             GeometryReader { geo in
@@ -68,6 +77,69 @@ struct AlpacaSetupContainerView: View {
         }
     }
 
+
+    @ViewBuilder
+    private var saveErrorBanner: some View {
+        if let message = viewModel.error, viewModel.pendingRetryRequest != nil {
+            VStack(alignment: .leading, spacing: 8 * scale) {
+                VStack(alignment: .leading, spacing: 8 * scale) {
+                    Text(L10n.Onboarding.alpacaSaveErrorHeading)
+                        .font(.system(size: 15 * scale, weight: .semibold))
+                        .foregroundStyle(Color.welcomeText)
+
+                    Text(message)
+                        .font(.system(size: 13 * scale))
+                        .foregroundStyle(Color.welcomeTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+
+                HStack(spacing: 8 * scale) {
+                    Button(action: viewModel.dismissSaveError) {
+                        Text(L10n.Onboarding.alpacaSaveErrorDismiss)
+                            .font(.system(size: 14 * scale, weight: .medium))
+                            .foregroundStyle(Color.welcomeTextSecondary)
+                            .padding(.horizontal, 16 * scale)
+                            .padding(.vertical, 10 * scale)
+                            .contentShape(Rectangle())
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .modifier(SevinoGlass.nav)
+
+                    Button(action: retry) {
+                        HStack(spacing: 6 * scale) {
+                            if viewModel.isLoading {
+                                ProgressView()
+                                    .tint(Color.welcomeText)
+                                    .scaleEffect(0.8)
+                            }
+                            Text(L10n.Onboarding.alpacaSaveErrorRetry)
+                                .font(.system(size: 14 * scale, weight: .semibold))
+                                .foregroundStyle(Color.welcomeText)
+                        }
+                        .padding(.horizontal, 16 * scale)
+                        .padding(.vertical, 10 * scale)
+                        .contentShape(Rectangle())
+                        .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isLoading)
+                    .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))
+                }
+            }
+            .padding(16 * scale)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .modifier(SevinoGlass.nav)
+            .padding(.horizontal, 16 * scale)
+            .padding(.bottom, 24 * scale)
+            .transition(reduceMotion ? .opacity : .move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    private func retry() {
+        Task { await viewModel.retryLastSave() }
+    }
 
     @ViewBuilder
     private var backgroundView: some View {
