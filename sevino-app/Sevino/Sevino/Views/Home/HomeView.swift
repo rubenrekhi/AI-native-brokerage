@@ -76,19 +76,22 @@ struct HomeView: View {
             .brightness(anyModalOpen && colorScheme == .light ? -0.3 : 0)
             .allowsHitTesting(!anyModalOpen)
 
-            Color.sevinoPrimary
-                .opacity(anyModalOpen ? 0.4 : 0)
-                .ignoresSafeArea()
-                .onTapGesture {
-                    if showHoldingsFilter {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
-                    } else {
-                        dismissAllModals()
-                    }
+            Button {
+                if showHoldingsFilter {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
+                } else {
+                    dismissAllModals()
                 }
-                .accessibilityAddTraits(.isButton)
-                .accessibilityLabel(L10n.Home.dismissAccessibility)
-                .allowsHitTesting(anyModalOpen)
+            } label: {
+                Color.sevinoPrimary
+                    .opacity(anyModalOpen ? 0.4 : 0)
+                    .ignoresSafeArea()
+            }
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel(L10n.Home.dismissAccessibility)
+            .accessibilityHidden(!anyModalOpen)
+            .allowsHitTesting(anyModalOpen)
 
             PortfolioMorphingView(
                 scale: scale,
