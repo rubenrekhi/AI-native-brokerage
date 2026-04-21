@@ -54,26 +54,30 @@ struct SidebarPanelView: View {
                     .foregroundStyle(Color.sevinoSecondary)
                     .padding(.bottom, 6 * scale)
 
-                ForEach(chats) { chat in
-                    Button(action: {}) {
-                        Text(chat.title)
-                            .font(.system(size: 16 * scale))
-                            .foregroundStyle(Color.sevinoSecondary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 11 * scale)
-                            .padding(.horizontal, 12 * scale)
-                            .background(
-                                chat.id == chats.first?.id
-                                    ? Color.sevinoGreyAccent.opacity(0.3)
-                                    : .clear,
-                                in: .rect(cornerRadius: 8 * scale)
-                            )
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(chats) { chat in
+                            Button(action: {}) {
+                                Text(chat.title)
+                                    .font(.system(size: 16 * scale))
+                                    .foregroundStyle(Color.sevinoSecondary)
+                                    .lineLimit(1)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.vertical, 11 * scale)
+                                    .padding(.horizontal, 12 * scale)
+                                    .background(
+                                        chat.id == chats.first?.id
+                                            ? Color.sevinoGreyAccent.opacity(0.3)
+                                            : .clear,
+                                        in: .rect(cornerRadius: 8 * scale)
+                                    )
+                            }
+                            .disabled(true)
+                        }
                     }
-                    .disabled(true)
                 }
-
-                Spacer()
+                .scrollIndicators(.hidden)
+                .frame(maxHeight: .infinity, alignment: .top)
 
                 HStack {
                     Button(action: { showSettings = true }) {
