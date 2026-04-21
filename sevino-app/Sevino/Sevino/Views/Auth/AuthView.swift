@@ -3,8 +3,8 @@ import SwiftUI
 struct AuthView: View {
     let isSignUp: Bool
     let onBack: () -> Void
+    let authVM: AuthViewModel
 
-    @Bindable var authVM: AuthViewModel
     @State private var email = ""
     @State private var password = ""
     @State private var scale: CGFloat = 1
