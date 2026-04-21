@@ -181,7 +181,7 @@ class BaseSSEListener(abc.ABC):
             sentry_sdk.capture_exception(exc)
             return
 
-        event_ulid = data.get(self.resume_field)
+        event_ulid = data.get(self.resume_field) if isinstance(data, dict) else None
         correlation_id = (
             f"sse-{self.stream_name}-{event_ulid}"
             if event_ulid
