@@ -2,17 +2,22 @@ import Foundation
 
 @Observable
 final class HomeViewModel {
-    private(set) var greeting = ""
+    private let userProfileService: any UserProfileServiceProtocol
+    private let chatService: any ChatServiceProtocol
 
-    // MARK: - Sidebar mock chats
-    // TODO: Replace with real chat history from backend
-    private(set) var mockChats = [
-        ChatItem(title: "How was Tesla's most recent e..."),
-        ChatItem(title: "Help me balance my portfolio"),
-        ChatItem(title: "What happened with AMD this..."),
-        ChatItem(title: "What is an option?"),
-        ChatItem(title: "How much would I have made ..."),
-    ]
+    private(set) var greeting = ""
+    private(set) var chats: [ChatItem] = []
+
+    private(set) var isLoading = false
+    private(set) var error: String?
+
+    init(
+        userProfileService: any UserProfileServiceProtocol = PlaceholderUserProfileService.shared,
+        chatService: any ChatServiceProtocol = PlaceholderChatService.shared
+    ) {
+        self.userProfileService = userProfileService
+        self.chatService = chatService
+    }
 
     // MARK: - Contact URLs
 
@@ -20,13 +25,31 @@ final class HomeViewModel {
     func founderTextURL() -> URL? { URL(string: "sms:4169189713") }
     func contactEmailURL() -> URL? { URL(string: "mailto:admin@sevino.ai") }
 
-    func loadGreeting() {
-        let hour = Calendar.current.component(.hour, from: Date.now)
-        let name = "Riley"
+    func load() async {
+        error = nil
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            async let name = userProfileService.fetchPreferredName()
+            async let recentChats = chatService.fetchRecentChats()
+            let (resolvedName, resolvedChats) = try await (name, recentChats)
+            greeting = Self.greeting(for: resolvedName, at: Date.now)
+            chats = resolvedChats
+        } catch let caughtError {
+            error = caughtError.localizedDescription
+        }
+    }
+
+    func clearError() {
+        error = nil
+    }
+
+    private static func greeting(for name: String, at date: Date) -> String {
+        let hour = Calendar.current.component(.hour, from: date)
         switch hour {
-        case 5..<12: greeting = L10n.Home.greetingMorning(name)
-        case 12..<17: greeting = L10n.Home.greetingAfternoon(name)
-        default: greeting = L10n.Home.greetingEvening(name)
+        case 5..<12: return L10n.Home.greetingMorning(name)
+        case 12..<17: return L10n.Home.greetingAfternoon(name)
+        default: return L10n.Home.greetingEvening(name)
         }
     }
 }

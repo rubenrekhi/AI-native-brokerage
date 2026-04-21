@@ -162,13 +162,13 @@ struct HomeView: View {
         .background {
             SidebarPanelView(
                 scale: scale,
-                chats: viewModel.mockChats,
+                chats: viewModel.chats,
                 founderPhoneURL: viewModel.founderPhoneURL(),
                 founderTextURL: viewModel.founderTextURL(),
                 contactEmailURL: viewModel.contactEmailURL()
             )
         }
-        .task { viewModel.loadGreeting() }
+        .task { await viewModel.load() }
         .task { await fundingViewModel.loadFundingData() }
         .task { await holdingsViewModel.loadHoldings() }
         .task { await radarViewModel.loadRadar() }
@@ -222,6 +222,23 @@ struct HomeView: View {
             }
             Button(L10n.Home.radarLoadErrorDismiss, role: .cancel) {
                 radarViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+        .alert(
+            L10n.Home.homeLoadErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.homeLoadErrorRetry) {
+                Task { await viewModel.load() }
+            }
+            Button(L10n.Home.homeLoadErrorDismiss, role: .cancel) {
+                viewModel.clearError()
             }
         } message: { message in
             Text(message)
