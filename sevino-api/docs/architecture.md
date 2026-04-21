@@ -355,29 +355,53 @@ SSE (Server-Sent Events) is a one-way streaming protocol over plain HTTP. The wo
 
 ```
 event: account_status
-id: evt_123
-data: {"account_id": "abc", "status_from": "SUBMITTED", "status_to": "ACTIVE"}
+data: {"event_id": 12627517, "event_ulid": "01HCMKXQYJ3ZBV66Q21KCT1CRR", "account_id": "abc", "status_from": "SUBMITTED", "status_to": "ACTIVE"}
 
 event: account_status
-id: evt_124
-data: {"account_id": "def", "status_from": "SUBMITTED", "status_to": "REJECTED"}
+data: {"event_id": 12627518, "event_ulid": "01HCMKXR8K3ZBV66Q21KCT4DQS", "account_id": "def", "status_from": "SUBMITTED", "status_to": "REJECTED"}
 ```
 
-The connection stays open indefinitely. Each block is a discrete event pushed whenever something happens. If the connection drops, the worker reconnects with `?since_id=<last_id>` and Alpaca replays everything missed. SSE has built-in replay; WebSocket does not.
+The connection stays open indefinitely. Each block is a discrete event pushed whenever something happens. If the connection drops, the worker reconnects with `?since_ulid=<last_ulid>` and Alpaca replays everything missed. SSE has built-in replay; WebSocket does not.
 
-Why both SSE and WebSocket for trade events: WebSocket gives millisecond latency for the real-time Trade Confirmation Card UX. SSE gives historical replay capability via `since_id` if the WebSocket drops. Together they ensure no order event is ever missed.
+Why both SSE and WebSocket for trade events: WebSocket gives millisecond latency for the real-time Trade Confirmation Card UX. SSE gives historical replay capability via `since_ulid` if the WebSocket drops. Together they ensure no order event is ever missed.
 
 ### Checkpoint & resume strategy
 
 Each SSE stream's last processed event ID is stored in a Postgres table (`sse_checkpoints`): one row per stream (`stream_name` PK, `last_event_id`, `updated_at`). Updated after each event is successfully processed.
 
+The checkpoint value is the ULID pulled from the parsed JSON payload — not the SSE wire-protocol `id:` line — so the listener is independent of whether Alpaca populates that line. Which JSON field carries the ULID depends on the endpoint: legacy endpoints expose it in `event_ulid`, already-migrated endpoints (`/v2/events/trades`, admin actions) expose it directly in `event_id`. The column is named `last_event_id` for historical reasons, but the value is always a ULID string.
+
 | Scenario | Behavior |
 |----------|----------|
-| First-ever deploy | No checkpoint row → connect without `since_id` → stream from now |
-| Worker restart / redeploy | Read `last_event_id` from Postgres → reconnect with `since_id` → Alpaca replays missed events |
-| Checkpoint lost | Connect without `since_id` → stream from now; backfill gaps via Alpaca REST if needed |
+| First-ever deploy | No checkpoint row → connect without resume param → stream from now |
+| Worker restart / redeploy | Read `last_event_id` from Postgres → reconnect with `?since_ulid=<ulid>` (or `?since_id=<ulid>` for already-migrated endpoints) → Alpaca replays missed events |
+| Checkpoint lost | Connect without resume param → stream from now; backfill gaps via Alpaca REST if needed |
 
 No Redis is needed for checkpointing — Postgres is the durable store and it survives restarts, redeploys, and worker crashes.
+
+### Implementing a new listener
+
+A new listener is a subclass of `BaseSSEListener` (`app/listeners/base_sse.py`). The required surface area:
+
+- Set `stream_name` (unique per stream; used as the `sse_checkpoints` PK and Sentry tag).
+- Set `endpoint_path` (e.g. `/v1/events/accounts/status`).
+- Set `silence_threshold_seconds` (the liveness cron alerts when no event has arrived within this window).
+- Implement `handle_event(session, event_type, data)` — runs inside the same transaction as the checkpoint upsert, so a raise rolls back both.
+
+The base class already owns connect/reconnect, checkpoint persistence, exponential backoff, correlation IDs, Sentry scope tagging, and liveness timestamping — subclasses should not reimplement any of that.
+
+**Resume-param overrides.** Alpaca is migrating all SSE streams from integer `event_id` to ULIDs. The base class's defaults (`resume_field = "event_ulid"`, `resume_param = "since_ulid"`) match legacy endpoints — the ULID lives in a separate `event_ulid` JSON field and the resume query param is `since_ulid`. For already-migrated endpoints (`/v2/events/trades`, admin actions), the ULID lives directly in the `event_id` JSON field and the resume param is `since_id` (name unchanged, value is now a ULID). Those subclasses must override:
+
+```python
+class TradeEventsListener(BaseSSEListener):
+    stream_name = "trade_events_sse"
+    endpoint_path = "/v2/events/trades"
+    silence_threshold_seconds = ...
+    resume_field = "event_id"
+    resume_param = "since_id"
+```
+
+Using ULIDs today — even on legacy endpoints that still accept integer `since_id` — means we won't be forced to migrate every listener in lockstep when Alpaca deprecates the integer resume params. Reference: https://docs.alpaca.markets/docs/sse-events.
 
 ### Event handlers
 
