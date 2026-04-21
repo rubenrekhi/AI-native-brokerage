@@ -13,6 +13,7 @@ struct AlpacaAddressView: View {
     @State private var showPrompt = false
     @State private var typed1 = ""
     @State private var showInput = false
+    // Root owner of this @Observable; @State is correct here. Pass to child views as a plain parameter — do not re-wrap.
     @State private var completer = AddressSearchCompleter()
 
     private var showSuggestions: Bool {
