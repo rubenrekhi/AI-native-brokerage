@@ -7,23 +7,14 @@ final class ContentViewModel {
     private let onboardingService: any OnboardingServiceProtocol
     private let authService: any AuthServiceProtocol
 
-    // MARK: - Routing flags
+    // MARK: - Routing
 
-    private(set) var isCheckingStatus = false
+    private(set) var route: AuthenticatedRoute = .idle
+
+    // MARK: - Transient UI state
+
     private(set) var isLoading = false
-    private(set) var showPhoneSheet = false
-    private(set) var showOnboarding = false
-    private(set) var showAlpacaSetup = false
-    private(set) var statusCheckFailed = false
     private(set) var showPhoneError = false
-
-    // MARK: - Resume data
-
-    private(set) var onboardingUserName = ""
-    private(set) var onboardingResumeStep = 1
-    private(set) var onboardingResumeData: OnboardingResumeManager.OnboardingResumeData?
-    private(set) var alpacaResumeStep = 1
-    private(set) var alpacaResumeData: OnboardingResumeManager.AlpacaResumeData?
 
     // MARK: - Error
 
@@ -41,30 +32,28 @@ final class ContentViewModel {
 
     // MARK: - Auth transitions
 
-    /// Fresh signup: skip the status check and go straight to phone capture → onboarding.
+    /// Fresh signup: skip the status check and go straight to phone capture.
+    /// There is no server-side status to resume from on a brand new account, so
+    /// the onboarding flow starts once the phone number is saved.
     func startFreshSignUpFlow() {
-        showPhoneSheet = true
-        showOnboarding = true
+        route = .phone
     }
 
     // MARK: - Flow completion
 
     func completeOnboarding(userName: String) {
-        onboardingUserName = userName
-        showOnboarding = false
-        showAlpacaSetup = true
-        alpacaResumeStep = 1
-        alpacaResumeData = nil
+        route = .alpacaSetup(step: 1, userName: userName, data: nil)
     }
 
     func completeAlpacaSetup() {
-        showAlpacaSetup = false
+        route = .home
     }
 
     // MARK: - Async operations
 
-    /// Saves the phone number and dismisses the sheet on success. On failure, the sheet
-    /// stays open and `error` is set so the view can surface an alert and allow a retry.
+    /// Saves the phone number and advances to onboarding on success. On failure, the
+    /// route stays on `.phone` and `error` is set so the view can surface an alert
+    /// and allow a retry.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
         showPhoneError = false
@@ -74,7 +63,7 @@ final class ContentViewModel {
             try await onboardingService.saveStep(
                 OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
             )
-            showPhoneSheet = false
+            route = .onboarding(step: 1, data: nil)
         } catch let caughtError {
             error = caughtError.localizedDescription
             showPhoneError = true
@@ -82,19 +71,17 @@ final class ContentViewModel {
     }
 
     /// Fetches onboarding status and routes to the matching destination. On failure,
-    /// sets `statusCheckFailed` so the view can show a retry prompt instead of silently
-    /// falling through to home (where the user might see the wrong screen).
+    /// routes to `.statusCheckFailed` so the view shows a retry prompt instead of
+    /// silently falling through to home.
     func checkOnboardingStatus() async {
         error = nil
-        statusCheckFailed = false
-        isCheckingStatus = true
-        defer { isCheckingStatus = false }
+        route = .loading
         do {
             let status = try await onboardingService.getStatus()
             apply(OnboardingResumeManager.destination(from: status))
         } catch let caughtError {
             error = caughtError.localizedDescription
-            statusCheckFailed = true
+            route = .statusCheckFailed
         }
     }
 
@@ -118,30 +105,18 @@ final class ContentViewModel {
     private func apply(_ destination: OnboardingResumeManager.Destination) {
         switch destination {
         case .home:
-            showOnboarding = false
-            showAlpacaSetup = false
+            route = .home
         case .onboarding(let step, let data):
-            onboardingResumeStep = step
-            onboardingResumeData = data
-            onboardingUserName = data.userName
-            showOnboarding = true
+            route = .onboarding(step: step, data: data)
         case .alpacaSetup(let step, let data):
-            alpacaResumeStep = step
-            alpacaResumeData = data
-            onboardingUserName = data.userName
-            showAlpacaSetup = true
+            route = .alpacaSetup(step: step, userName: data.userName, data: data)
         case .loading:
             break
         }
     }
 
     private func resetRoutingState() {
-        showPhoneSheet = false
-        showOnboarding = false
-        showAlpacaSetup = false
-        statusCheckFailed = false
+        route = .idle
         showPhoneError = false
-        onboardingResumeData = nil
-        alpacaResumeData = nil
     }
 }
