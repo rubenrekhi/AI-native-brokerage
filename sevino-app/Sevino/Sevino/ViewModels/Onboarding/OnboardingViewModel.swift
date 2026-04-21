@@ -16,6 +16,10 @@ final class OnboardingViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
 
+    /// The last request that failed to save — retained so the user can retry.
+    /// Nil when there is no pending save-step failure.
+    private(set) var pendingRetryRequest: OnboardingPatchRequest?
+
     // MARK: - Form data
 
     private(set) var userName: String
@@ -86,6 +90,7 @@ final class OnboardingViewModel {
     func goBack() {
         if currentStep > 1 {
             currentStep -= 1
+            dismissSaveError()
         }
     }
 
@@ -104,19 +109,36 @@ final class OnboardingViewModel {
 
     // MARK: - Save + advance
 
-    /// Saves the step data to the backend, then advances.
-    /// On failure, records the error but still advances so the user isn't blocked
-    /// — data can be re-sent on resume. Error surfacing in the UI is handled by ticket SEV-237.
+    /// Saves the step data to the backend, then advances on success.
+    /// On failure, records the error and retains the request so the user can retry —
+    /// the step does NOT advance. Silent data loss is not acceptable in a financial
+    /// onboarding flow.
     func saveAndAdvance(_ request: OnboardingPatchRequest) async {
-        error = nil
         isLoading = true
         defer { isLoading = false }
         do {
             try await onboarding.saveStep(request)
         } catch let caughtError {
             self.error = caughtError.localizedDescription
+            self.pendingRetryRequest = request
+            return
         }
+        error = nil
+        pendingRetryRequest = nil
         advance()
+    }
+
+    /// Re-attempts the last failed save. No-op if there is no pending retry.
+    func retryLastSave() async {
+        guard let request = pendingRetryRequest else { return }
+        await saveAndAdvance(request)
+    }
+
+    /// Clears the save-step error without retrying. The step does not advance, so
+    /// the user remains on the same screen and can edit their input.
+    func dismissSaveError() {
+        error = nil
+        pendingRetryRequest = nil
     }
 
     // MARK: - Step handlers
