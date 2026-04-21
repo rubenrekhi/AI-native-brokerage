@@ -3,13 +3,13 @@ import SwiftUI
 struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    let viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
     var body: some View {
         Button(action: onTap) {
-            VStack(alignment: isExpanded ? .center : .leading, spacing: isExpanded ? 0 : 0) {
+            VStack(alignment: isExpanded ? .center : .leading, spacing: 0) {
                 if isExpanded {
                     expandedContent
                 } else {
@@ -181,40 +181,31 @@ struct FundingMorphingView: View {
     }
 }
 
-#Preview("Dark") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        FundingMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
+private struct FundingMorphingPreview: View {
+    @State private var viewModel = FundingViewModel()
+
+    var body: some View {
+        ZStack {
+            Color.sevinoPrimary.ignoresSafeArea()
+            FundingMorphingView(
+                scale: 1,
+                isExpanded: true,
+                viewModel: viewModel,
+                onTap: {},
+                onDismiss: {}
+            )
+            .padding(16)
+        }
+        .task { await viewModel.loadFundingData() }
     }
-    .preferredColorScheme(.dark)
+}
+
+#Preview("Dark") {
+    FundingMorphingPreview()
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        FundingMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
-    }
-    .preferredColorScheme(.light)
+    FundingMorphingPreview()
+        .preferredColorScheme(.light)
 }

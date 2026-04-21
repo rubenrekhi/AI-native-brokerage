@@ -5,6 +5,7 @@ struct HomeView: View {
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
     @State private var viewModel = HomeViewModel()
     @State private var portfolioViewModel = PortfolioViewModel()
+    @State private var fundingViewModel = FundingViewModel()
     @State private var messageText = ""
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
@@ -91,7 +92,7 @@ struct HomeView: View {
             FundingMorphingView(
                 scale: scale,
                 isExpanded: showFunding,
-                viewModel: viewModel,
+                viewModel: fundingViewModel,
                 onTap: toggleFunding,
                 onDismiss: dismissFunding
             )
@@ -166,6 +167,7 @@ struct HomeView: View {
             )
         }
         .task { viewModel.loadGreeting() }
+        .task { await fundingViewModel.loadFundingData() }
         .task(id: portfolioViewModel.selectedTimeRange) {
             await portfolioViewModel.loadPortfolio()
         }
@@ -182,6 +184,23 @@ struct HomeView: View {
             }
             Button(L10n.Home.portfolioLoadErrorDismiss, role: .cancel) {
                 portfolioViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+        .alert(
+            L10n.Home.fundingLoadErrorTitle,
+            isPresented: Binding(
+                get: { fundingViewModel.error != nil },
+                set: { if !$0 { fundingViewModel.clearError() } }
+            ),
+            presenting: fundingViewModel.error
+        ) { _ in
+            Button(L10n.Home.fundingLoadErrorRetry) {
+                Task { await fundingViewModel.loadFundingData() }
+            }
+            Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
+                fundingViewModel.clearError()
             }
         } message: { message in
             Text(message)

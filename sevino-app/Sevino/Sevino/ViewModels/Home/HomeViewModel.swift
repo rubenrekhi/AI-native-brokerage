@@ -4,18 +4,6 @@ import Foundation
 final class HomeViewModel {
     private(set) var greeting = ""
 
-    // MARK: - Funding mock data
-    private(set) var cashBalance = "$2,412.08"
-    private(set) var cashApy = "3.20%"
-    private(set) var cashThisMonth = "+$6.43"
-    private(set) var cashDaysAccrued = "22"
-    private(set) var cashLifetime = "+$41.87"
-    private(set) var cashLifetimeSince = "Oct 2025"
-    private(set) var cashBuyingPower = "$2,412.08"
-    private(set) var cashPendingDeposits = "$100.50"
-    private(set) var cashInterestPaidOut = "Monthly"
-    private(set) var cashFdicInsured = "$2,500,000"
-
     // MARK: - Holdings mock data
     private(set) var holdings: [Holding] = []
 
