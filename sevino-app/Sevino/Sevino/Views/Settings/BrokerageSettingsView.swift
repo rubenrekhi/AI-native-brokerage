@@ -110,6 +110,8 @@ struct BrokerageSettingsView: View {
                         .labelStyle(.iconOnly)
                         .font(.system(size: 12 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoGreyContrast)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
             }
             .padding(.vertical, 8 * scale)
