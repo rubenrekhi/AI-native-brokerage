@@ -14,6 +14,8 @@ final class ContentViewModel {
     private(set) var showPhoneSheet = false
     private(set) var showOnboarding = false
     private(set) var showAlpacaSetup = false
+    private(set) var statusCheckFailed = false
+    private(set) var showPhoneError = false
 
     // MARK: - Resume data
 
@@ -24,7 +26,7 @@ final class ContentViewModel {
     private(set) var alpacaResumeData: OnboardingResumeManager.AlpacaResumeData?
 
     // MARK: - Error
-    // Set on failure but not yet bound to UI — surfacing is handled by ticket SEV-237.
+
     private(set) var error: String?
 
     // MARK: - Init
@@ -61,34 +63,44 @@ final class ContentViewModel {
 
     // MARK: - Async operations
 
-    /// Saves the phone number, then dismisses the sheet. On failure, records the error
-    /// but still dismisses so the user isn't blocked — data can be re-sent on resume.
-    /// Error surfacing in the UI is handled by ticket SEV-237.
+    /// Saves the phone number and dismisses the sheet on success. On failure, the sheet
+    /// stays open and `error` is set so the view can surface an alert and allow a retry.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
+        showPhoneError = false
         isLoading = true
         defer { isLoading = false }
         do {
             try await onboardingService.saveStep(
                 OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
             )
+            showPhoneSheet = false
         } catch let caughtError {
             error = caughtError.localizedDescription
+            showPhoneError = true
         }
-        showPhoneSheet = false
     }
 
+    /// Fetches onboarding status and routes to the matching destination. On failure,
+    /// sets `statusCheckFailed` so the view can show a retry prompt instead of silently
+    /// falling through to home (where the user might see the wrong screen).
     func checkOnboardingStatus() async {
         error = nil
+        statusCheckFailed = false
         isCheckingStatus = true
         defer { isCheckingStatus = false }
         do {
             let status = try await onboardingService.getStatus()
             apply(OnboardingResumeManager.destination(from: status))
         } catch let caughtError {
-            // Status check failures fall through to home so the user isn't blocked.
             error = caughtError.localizedDescription
+            statusCheckFailed = true
         }
+    }
+
+    func clearError() {
+        error = nil
+        showPhoneError = false
     }
 
     func signOut() async {
@@ -127,6 +139,8 @@ final class ContentViewModel {
         showPhoneSheet = false
         showOnboarding = false
         showAlpacaSetup = false
+        statusCheckFailed = false
+        showPhoneError = false
         onboardingResumeData = nil
         alpacaResumeData = nil
     }

@@ -7,6 +7,11 @@ enum L10n {
         static let appName = String(localized: "general.app_name")
         static let back = String(localized: "general.back")
         static let submit = String(localized: "general.submit")
+        static let errorTitle = String(localized: "general.error_title")
+        static let ok = String(localized: "general.ok")
+        static let tryAgain = String(localized: "general.try_again")
+        static let connectionErrorTitle = String(localized: "general.connection_error_title")
+        static let connectionErrorBody = String(localized: "general.connection_error_body")
     }
 
     enum Auth {
