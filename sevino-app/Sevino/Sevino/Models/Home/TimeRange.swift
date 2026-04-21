@@ -24,4 +24,17 @@ enum TimeRange: String, CaseIterable, Identifiable {
         case .all: L10n.Home.periodAllTime
         }
     }
+
+    var shortLabel: String {
+        switch self {
+        case .oneDay: L10n.Welcome.timeframe1D
+        case .oneWeek: L10n.Welcome.timeframe1W
+        case .oneMonth: L10n.Welcome.timeframe1M
+        case .threeMonths: L10n.Welcome.timeframe3M
+        case .sixMonths: L10n.Welcome.timeframe6M
+        case .ytd: L10n.Welcome.timeframeYTD
+        case .oneYear: L10n.Welcome.timeframe1Y
+        case .all: L10n.Welcome.timeframeAll
+        }
+    }
 }
