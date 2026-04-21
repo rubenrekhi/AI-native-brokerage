@@ -24,9 +24,13 @@ struct HoldingsMorphingView: View {
         .fixedSize(horizontal: !isExpanded, vertical: true)
         .modifier(SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .gesture(isExpanded ? nil : TapGesture().onEnded { onTap() })
-        .accessibilityAddTraits(.isButton)
-        .accessibilityLabel(L10n.Home.menuAccessibility)
+        .overlay {
+            if !isExpanded {
+                Button(action: onTap) { Color.clear.contentShape(.rect) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.Home.menuAccessibility)
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if showFilter {
                 HoldingsFilterPopup(
