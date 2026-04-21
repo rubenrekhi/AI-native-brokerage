@@ -8,7 +8,9 @@ struct AppearanceSettingsView: View {
     @AppStorage("appTheme") private var selectedTheme = AppTheme.system.rawValue
     @AppStorage("appTextSize") private var selectedTextSize = AppTextSize.small.rawValue
 
-    private var scale: CGFloat { UIScreen.main.bounds.width / 393 * textMultiplier }
+    @State private var baseScale: CGFloat = 1
+
+    private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -25,6 +27,13 @@ struct AppearanceSettingsView: View {
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
+        }
+        .background {
+            GeometryReader { geo in
+                Color.clear.onAppear {
+                    baseScale = geo.size.width / 393
+                }
+            }
         }
         .navigationBarBackButtonHidden()
     }
