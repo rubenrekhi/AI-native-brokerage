@@ -27,24 +27,28 @@ struct OnboardingReflectionView: View {
                         Text(typedHeading)
                             .font(.system(size: 22 * scale, weight: .light))
                             .foregroundStyle(Color.welcomeText)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if !typedBody1.isEmpty {
                         Text(typedBody1)
                             .font(.system(size: 16 * scale))
                             .foregroundStyle(Color.welcomeTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if !typedBody2.isEmpty {
                         Text(typedBody2)
                             .font(.system(size: 16 * scale))
                             .foregroundStyle(Color.welcomeTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if !typedStat.isEmpty {
                         Text(typedStat)
                             .font(.system(size: 48 * scale, weight: .thin))
                             .foregroundStyle(Color.welcomeText)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.top, 8 * scale)
                     }
 
@@ -52,6 +56,7 @@ struct OnboardingReflectionView: View {
                         Text(typedStatDesc)
                             .font(.system(size: 16 * scale))
                             .foregroundStyle(Color.welcomeTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
