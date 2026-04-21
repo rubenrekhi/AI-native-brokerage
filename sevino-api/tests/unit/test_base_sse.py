@@ -88,22 +88,30 @@ async def test_process_event_calls_handler_and_upserts_checkpoint(
     )
 
     await listener._process_event(
-        _sse("account_status", "evt_1", '{"account_id": "abc", "status": "ACTIVE"}')
+        _sse(
+            "account_status",
+            None,
+            '{"event_ulid": "evt_1", "account_id": "abc", "status": "ACTIVE"}',
+        )
     )
 
     assert listener.handled == [
-        ("account_status", {"account_id": "abc", "status": "ACTIVE"})
+        (
+            "account_status",
+            {"event_ulid": "evt_1", "account_id": "abc", "status": "ACTIVE"},
+        )
     ]
     upsert.assert_awaited_once_with(fake_session, "test_stream", "evt_1")
     fake_session.commit.assert_awaited_once()
     fake_session.rollback.assert_not_awaited()
 
 
-async def test_process_event_skips_checkpoint_when_event_id_missing(
+async def test_process_event_skips_checkpoint_when_event_ulid_missing(
     listener, fake_session, monkeypatch
 ):
     """Alpaca always includes an ID, but guard against malformed events that
-    lack one — we can't anchor `since_id` to a missing ID, so skip it."""
+    lack one — we can't anchor the resume param to a missing ID, so skip
+    the checkpoint but still let the handler run and commit."""
     upsert = AsyncMock()
     monkeypatch.setattr(
         "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
@@ -145,7 +153,9 @@ async def test_process_event_rolls_back_and_captures_on_handler_exception(
     )
 
     # Does not raise — loop must keep running.
-    await listener._process_event(_sse("account_status", "evt_2", '{"x": 1}'))
+    await listener._process_event(
+        _sse("account_status", None, '{"event_ulid": "evt_2", "x": 1}')
+    )
 
     fake_session.rollback.assert_awaited_once()
     fake_session.commit.assert_not_awaited()
@@ -164,7 +174,7 @@ async def test_process_event_parse_failure_skips_handler_and_captures(
     session_factory = MagicMock()
     monkeypatch.setattr("app.listeners.base_sse.async_session", session_factory)
 
-    await listener._process_event(_sse("bad", "evt_x", "not json"))
+    await listener._process_event(_sse("bad", None, "not json"))
 
     assert listener.handled == []
     session_factory.assert_not_called()
@@ -194,7 +204,9 @@ async def test_process_event_binds_correlation_id_to_contextvars(
         "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
     )
 
-    await listener._process_event(_sse("account_status", "evt_42", "{}"))
+    await listener._process_event(
+        _sse("account_status", None, '{"event_ulid": "evt_42"}')
+    )
 
     assert captured["correlation_id"] == "sse-test_stream-evt_42"
     assert captured["stream"] == "test_stream"
@@ -324,7 +336,9 @@ async def test_process_event_tags_sentry_scope_with_stream_and_event_id(
         "app.listeners.base_sse.sentry_sdk.capture_exception", MagicMock()
     )
 
-    await listener._process_event(_sse("order_fill", "evt_77", "{}"))
+    await listener._process_event(
+        _sse("order_fill", None, '{"event_ulid": "evt_77"}')
+    )
 
     assert captured_tags["sse_stream"] == "trade_events_sse"
     assert captured_tags["sse_event_id"] == "evt_77"
@@ -361,7 +375,9 @@ async def test_process_event_rolls_back_and_reraises_on_cancellation(
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await listener._process_event(_sse("account_status", "evt_3", "{}"))
+        await listener._process_event(
+            _sse("account_status", None, '{"event_ulid": "evt_3"}')
+        )
 
     fake_session.rollback.assert_awaited_once()
     fake_session.commit.assert_not_awaited()
@@ -381,7 +397,8 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
     # token — the actual base URL doesn't matter.
     monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
 
-    # Checkpoint starts empty → listener must not send ?since_id on first connect.
+    # Checkpoint starts empty → listener must not send a resume param on first
+    # connect.
     monkeypatch.setattr(
         "app.listeners.base_sse.SseCheckpointRepository.get",
         AsyncMock(return_value=None),
@@ -393,12 +410,10 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
 
     sse_body = (
         b"event: account_status\n"
-        b"id: evt_100\n"
-        b'data: {"account_id": "abc", "status": "ACTIVE"}\n'
+        b'data: {"event_ulid": "01HCM000000000000000000100", "account_id": "abc", "status": "ACTIVE"}\n'
         b"\n"
         b"event: account_status\n"
-        b"id: evt_101\n"
-        b'data: {"account_id": "def", "status": "REJECTED"}\n'
+        b'data: {"event_ulid": "01HCM000000000000000000101", "account_id": "def", "status": "REJECTED"}\n'
         b"\n"
     )
 
@@ -424,21 +439,45 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
 
     # Two events handled, in order, with parsed JSON payloads.
     assert listener.handled == [
-        ("account_status", {"account_id": "abc", "status": "ACTIVE"}),
-        ("account_status", {"account_id": "def", "status": "REJECTED"}),
+        (
+            "account_status",
+            {
+                "event_ulid": "01HCM000000000000000000100",
+                "account_id": "abc",
+                "status": "ACTIVE",
+            },
+        ),
+        (
+            "account_status",
+            {
+                "event_ulid": "01HCM000000000000000000101",
+                "account_id": "def",
+                "status": "REJECTED",
+            },
+        ),
     ]
-    # Checkpoint advanced to each event's ID as they were handled.
+    # Checkpoint advanced to each event's ULID as they were handled.
     assert upsert.await_count == 2
-    assert upsert.await_args_list[0].args == (fake_session, "test_stream", "evt_100")
-    assert upsert.await_args_list[1].args == (fake_session, "test_stream", "evt_101")
+    assert upsert.await_args_list[0].args == (
+        fake_session,
+        "test_stream",
+        "01HCM000000000000000000100",
+    )
+    assert upsert.await_args_list[1].args == (
+        fake_session,
+        "test_stream",
+        "01HCM000000000000000000101",
+    )
     # Liveness timestamp updated.
     assert listener.last_message_received_at > 0.0
-    # Request carried the bearer and no `since_id` on first connect.
+    # Request carried the bearer and no resume param on first connect.
     assert len(captured_requests) == 1
     req = captured_requests[0]
     assert req.headers["authorization"] == "Bearer tok-xyz"
     assert req.headers["accept"] == "text/event-stream"
-    assert "since_id" not in (req.url.query.decode() if req.url.query else "")
+    query = req.url.query.decode() if req.url.query else ""
+    assert "since_ulid" not in query
+    assert "since_id" not in query
 
 
 async def test_stream_once_raises_on_non_200_status(
@@ -480,11 +519,12 @@ async def test_stream_once_raises_on_non_200_status(
     assert listener.handled == []
 
 
-async def test_stream_once_sends_since_id_when_checkpoint_exists(
+async def test_stream_once_sends_since_ulid_when_checkpoint_exists(
     broker, fake_session, monkeypatch
 ):
     """On reconnect after a disconnect/restart, the listener must replay from
-    the last processed event by passing ``?since_id=<id>``."""
+    the last processed event by passing ``?since_ulid=<ulid>`` — the default
+    resume param for legacy endpoints."""
     monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
 
     row = MagicMock()
@@ -512,4 +552,76 @@ async def test_stream_once_sends_since_id_when_checkpoint_exists(
         await listener._stream_once(client)
 
     assert len(captured_requests) == 1
-    assert "since_id=evt_99" in captured_requests[0].url.query.decode()
+    query = captured_requests[0].url.query.decode()
+    assert "since_ulid=evt_99" in query
+    assert "since_id=" not in query
+
+
+async def test_stream_once_uses_overridden_resume_field_and_param(
+    broker, fake_session, monkeypatch
+):
+    """Subclasses for already-migrated endpoints (`/v2/events/trades`,
+    admin actions) must override `resume_field` and `resume_param`. Those
+    endpoints put the ULID directly in the `event_id` JSON field and accept
+    the resume value on the original `since_id` query param. This test
+    verifies both knobs route through: the checkpoint is extracted from
+    `data["event_id"]` and the reconnect URL carries `?since_id=<ulid>`."""
+
+    class _V2TradeListener(BaseSSEListener):
+        stream_name = "trade_events"
+        endpoint_path = "/v2/events/trades"
+        silence_threshold_seconds = 60
+        resume_field = "event_id"
+        resume_param = "since_id"
+
+        def __init__(self, broker):
+            super().__init__(broker)
+            self.handled: list[tuple[str, dict]] = []
+
+        async def handle_event(self, session, event_type, data):
+            self.handled.append((event_type, data))
+
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
+
+    row = MagicMock()
+    row.last_event_id = "01HCMKKNRK7S5C1JYP50QGDECP"
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=row),
+    )
+    upsert = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
+    )
+
+    sse_body = (
+        b"event: fill\n"
+        b'data: {"event_id": "01HCMKKNRK7S5C1JYP50QGDECQ", "order_id": "ord_1"}\n'
+        b"\n"
+    )
+
+    captured_requests: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse_body,
+        )
+
+    transport = httpx.MockTransport(_handler)
+    listener = _V2TradeListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    # Reconnect URL uses the overridden query param name with the stored ULID.
+    assert len(captured_requests) == 1
+    query = captured_requests[0].url.query.decode()
+    assert "since_id=01HCMKKNRK7S5C1JYP50QGDECP" in query
+    assert "since_ulid=" not in query
+    # Checkpoint upsert pulled the new ULID out of the `event_id` JSON field.
+    upsert.assert_awaited_once_with(
+        fake_session, "trade_events", "01HCMKKNRK7S5C1JYP50QGDECQ"
+    )

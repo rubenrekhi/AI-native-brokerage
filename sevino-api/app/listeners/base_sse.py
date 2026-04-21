@@ -39,7 +39,7 @@ class BaseSSEListener(abc.ABC):
     base class owns every piece of transport plumbing:
 
     * Alpaca OAuth bearer via :class:`AlpacaBrokerService`
-    * Checkpoint read on connect (``?since_id=<last_event_id>``)
+    * Checkpoint read on connect (``?<resume_param>=<last_event_id>``)
     * Event parsing (via ``httpx_sse``) and dispatch
     * Per-event correlation ID bound to ``structlog.contextvars``
     * Sentry breadcrumbs on connect / disconnect / parse failure
@@ -49,11 +49,22 @@ class BaseSSEListener(abc.ABC):
 
     An instance is a long-running :class:`asyncio.Task` spawned in the ARQ
     worker's ``on_startup`` hook. :meth:`run` exits only on cancellation.
+
+    The defaults for ``resume_field`` and ``resume_param`` match Alpaca's
+    legacy endpoints (``/v1/events/accounts/status``, transfers, journal
+    status, NTA), which expose a ULID in a separate ``event_ulid`` JSON
+    field and accept ``?since_ulid=<ulid>`` on resume. Subclasses for
+    already-migrated endpoints (``/v2/events/trades``, admin actions) must
+    override both to ``"event_id"`` / ``"since_id"`` because those
+    endpoints put the ULID directly in ``event_id`` and the query param
+    name was not renamed. See docs/architecture.md.
     """
 
     stream_name: str
     endpoint_path: str
     silence_threshold_seconds: int
+    resume_field: str = "event_ulid"
+    resume_param: str = "since_ulid"
 
     def __init__(self, broker: AlpacaBrokerService) -> None:
         self._broker = broker
@@ -104,25 +115,25 @@ class BaseSSEListener(abc.ABC):
 
     async def _stream_once(self, client: httpx.AsyncClient) -> None:
         """Open one SSE connection and process events until it drops."""
-        since_id = await self._load_checkpoint()
+        checkpoint = await self._load_checkpoint()
         token = await self._broker._get_token()
         headers = {
             "Authorization": f"Bearer {token}",
             "Accept": "text/event-stream",
         }
-        params = {"since_id": since_id} if since_id else None
+        params = {self.resume_param: checkpoint} if checkpoint else None
         url = f"{settings.alpaca_base_url}{self.endpoint_path}"
 
         logger.info(
             "sse_listener_connecting",
             stream=self.stream_name,
-            since_id=since_id,
+            checkpoint=checkpoint,
         )
         sentry_sdk.add_breadcrumb(
             category="sse",
             level="info",
             message=f"{self.stream_name} connecting",
-            data={"since_id": since_id},
+            data={"checkpoint": checkpoint},
         )
 
         async with httpx_sse.aconnect_sse(
@@ -149,11 +160,31 @@ class BaseSSEListener(abc.ABC):
 
     async def _process_event(self, sse: httpx_sse.ServerSentEvent) -> None:
         """Atomic: subclass handler + checkpoint upsert in one transaction."""
-        event_id = sse.id
         event_type = sse.event
+
+        # Parse first so we can pull the ULID out of the payload. Reading
+        # from parsed JSON (rather than the SSE wire `id:` line) makes us
+        # independent of whether Alpaca populates `id:` on a given endpoint.
+        try:
+            data = sse.json() if sse.data else {}
+        except Exception as exc:
+            logger.warning(
+                "sse_parse_failed",
+                stream=self.stream_name,
+                error=str(exc),
+            )
+            sentry_sdk.add_breadcrumb(
+                category="sse",
+                level="warning",
+                message=f"{self.stream_name} parse failed",
+            )
+            sentry_sdk.capture_exception(exc)
+            return
+
+        event_ulid = data.get(self.resume_field)
         correlation_id = (
-            f"sse-{self.stream_name}-{event_id}"
-            if event_id
+            f"sse-{self.stream_name}-{event_ulid}"
+            if event_ulid
             else f"sse-{self.stream_name}"
         )
 
@@ -169,41 +200,24 @@ class BaseSSEListener(abc.ABC):
             # trade_events_sse"); context is attached to the event body.
             scope.set_tag("sse_stream", self.stream_name)
             scope.set_tag("sse_event_type", event_type or "unknown")
-            if event_id:
-                scope.set_tag("sse_event_id", event_id)
+            if event_ulid:
+                scope.set_tag("sse_event_id", event_ulid)
             scope.set_context(
                 "sse_event",
                 {
                     "stream": self.stream_name,
-                    "event_id": event_id,
+                    "event_id": event_ulid,
                     "event_type": event_type,
                     "correlation_id": correlation_id,
                 },
             )
 
-            try:
-                data = sse.json() if sse.data else {}
-            except Exception as exc:
-                logger.warning(
-                    "sse_parse_failed",
-                    event_id=event_id,
-                    error=str(exc),
-                )
-                sentry_sdk.add_breadcrumb(
-                    category="sse",
-                    level="warning",
-                    message=f"{self.stream_name} parse failed",
-                    data={"event_id": event_id},
-                )
-                sentry_sdk.capture_exception(exc)
-                return
-
             async with async_session() as session:
                 try:
                     await self.handle_event(session, event_type, data)
-                    if event_id:
+                    if event_ulid:
                         await SseCheckpointRepository.upsert(
-                            session, self.stream_name, event_id
+                            session, self.stream_name, event_ulid
                         )
                     await session.commit()
                 except Exception as exc:
