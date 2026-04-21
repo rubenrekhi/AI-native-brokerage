@@ -125,6 +125,8 @@ Pushing to `main` auto-deploys to **staging** on Railway. Production deployments
 
 The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips='*'`).
 
+**The `worker` Railway service MUST run with `replicas=1`** — it hosts persistent Alpaca SSE/WebSocket listeners, and Alpaca only permits one connection per API key. Scaling `worker` beyond 1 replica will cause connection conflicts and duplicate event handling. See [docs/architecture.md §Worker topology](docs/architecture.md#worker-topology) for details.
+
 ## Environment Variables
 
 | Variable | Description | Local Default |
