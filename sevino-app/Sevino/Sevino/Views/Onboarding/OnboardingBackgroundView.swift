@@ -21,3 +21,13 @@ struct OnboardingBackgroundView: View {
         .ignoresSafeArea()
     }
 }
+
+#Preview("Dark") {
+    OnboardingBackgroundView()
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Light") {
+    OnboardingBackgroundView()
+        .preferredColorScheme(.light)
+}

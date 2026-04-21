@@ -21,3 +21,13 @@ struct AuthBackgroundView: View {
         .ignoresSafeArea()
     }
 }
+
+#Preview("Dark") {
+    AuthBackgroundView()
+        .preferredColorScheme(.dark)
+}
+
+#Preview("Light") {
+    AuthBackgroundView()
+        .preferredColorScheme(.light)
+}
