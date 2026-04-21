@@ -21,9 +21,9 @@ final class HomeViewModel {
 
     // MARK: - Contact URLs
 
-    func founderPhoneURL() -> URL? { URL(string: "tel:4169189713") }
-    func founderTextURL() -> URL? { URL(string: "sms:4169189713") }
-    func contactEmailURL() -> URL? { URL(string: "mailto:admin@sevino.ai") }
+    func founderPhoneURL() -> URL? { AppConfig.Contact.founderPhoneURL }
+    func founderTextURL() -> URL? { AppConfig.Contact.founderTextURL }
+    func contactEmailURL() -> URL? { AppConfig.Contact.supportEmailURL }
 
     func load() async {
         error = nil
