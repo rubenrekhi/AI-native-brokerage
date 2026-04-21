@@ -100,11 +100,11 @@ struct OnboardingDOBView: View {
 
     private var dateFields: some View {
         HStack(spacing: 16 * scale) {
-            dobField(text: $month, label: "MM", field: .month)
+            dobField(text: $month, label: L10n.Onboarding.dobMonth, field: .month)
                 .frame(width: 80 * scale)
-            dobField(text: $day, label: "DD", field: .day)
+            dobField(text: $day, label: L10n.Onboarding.dobDay, field: .day)
                 .frame(width: 80 * scale)
-            dobField(text: $year, label: "YYYY", field: .year)
+            dobField(text: $year, label: L10n.Onboarding.dobYear, field: .year)
                 .frame(width: 120 * scale)
         }
         .padding(.top, 8 * scale)

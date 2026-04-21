@@ -1744,6 +1744,36 @@
         }
       }
     },
+    "onboarding.dob_month" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MM"
+          }
+        }
+      }
+    },
+    "onboarding.dob_day" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DD"
+          }
+        }
+      }
+    },
+    "onboarding.dob_year" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YYYY"
+          }
+        }
+      }
+    },
     "onboarding.drawdown_0_5" : {
       "localizations" : {
         "en" : {
