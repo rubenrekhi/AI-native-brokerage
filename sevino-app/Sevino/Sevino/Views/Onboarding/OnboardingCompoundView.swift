@@ -223,18 +223,26 @@ struct OnboardingCompoundView: View {
 
         try? await Task.sleep(for: .milliseconds(400))
 
-        let totalSteps = 60
+        async let start: Void = countUp(to: startTodayValue) { displayedStart = $0 }
+        async let wait: Void = countUp(to: wait5Value) { displayedWait = $0 }
+        async let savings: Void = countUp(to: savingsValue) { displayedSavings = $0 }
+        _ = await (start, wait, savings)
+    }
+
+    private func countUp(to target: Double, update: (Double) -> Void) async {
+        guard target > 0 else {
+            update(0)
+            return
+        }
+        let duration = 0.4 + log10(target) * 0.18
+        let totalSteps = max(Int(duration * 60), 12)
         for step in 1...totalSteps {
             let t = Double(step) / Double(totalSteps)
             let eased = 1 - pow(1 - t, 3)
-            displayedStart = startTodayValue * eased
-            displayedWait = wait5Value * eased
-            displayedSavings = savingsValue * eased
-            try? await Task.sleep(for: .milliseconds(25))
+            update(target * eased)
+            try? await Task.sleep(for: .milliseconds(16))
         }
-        displayedStart = startTodayValue
-        displayedWait = wait5Value
-        displayedSavings = savingsValue
+        update(target)
     }
 }
 
