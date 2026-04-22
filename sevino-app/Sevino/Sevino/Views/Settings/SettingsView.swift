@@ -46,12 +46,10 @@ struct SettingsView: View {
                 Color.sevinoSettingsBg
                     .ignoresSafeArea()
             }
-            .background {
-                GeometryReader { geo in
-                    Color.clear.onAppear {
-                        baseScale = geo.size.width / 393
-                    }
-                }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                baseScale = width / 393
             }
             .navigationBarBackButtonHidden()
             .navigationDestination(for: SettingsDestination.self) { destination in
