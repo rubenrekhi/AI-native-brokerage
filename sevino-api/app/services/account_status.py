@@ -64,9 +64,6 @@ async def apply_account_status_change(
         update_fields["activated_at"] = event_time or datetime.now(timezone.utc)
         # TODO(SEV-318): trigger FDIC insured cash sweep enrollment here.
 
-    await BrokerageAccountRepository.update_status(
-        session, account.id, new_status, **update_fields
-    )
     previous_status = account.account_status
     await BrokerageAccountRepository.update_status(
         session, account.id, new_status, **update_fields
