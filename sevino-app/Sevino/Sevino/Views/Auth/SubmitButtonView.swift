@@ -24,6 +24,7 @@ struct SubmitButtonView: View {
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.tintedButton(tint: .welcomeButtonDarkTint))
+        .accessibilityIdentifier("auth.submit")
         .disabled(isFormIncomplete || isLoading)
         .opacity((isFormIncomplete && !isLoading) ? 0.6 : 1)
         .padding(.top, 20 * scale)
