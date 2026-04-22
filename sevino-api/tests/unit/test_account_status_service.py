@@ -66,6 +66,7 @@ async def test_active_transition_sets_activated_at_from_event_time(
     account = _account("APPROVED")
     get = AsyncMock(return_value=account)
     update = AsyncMock()
+    profile_update = AsyncMock()
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
         get,
@@ -73,6 +74,10 @@ async def test_active_transition_sets_activated_at_from_event_time(
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.update_status",
         update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
     )
     event_time = datetime(2023, 10, 13, 13, 34, 28, tzinfo=timezone.utc)
 
@@ -92,6 +97,7 @@ async def test_active_transition_without_event_time_uses_now(session, monkeypatc
     account = _account("APPROVED")
     get = AsyncMock(return_value=account)
     update = AsyncMock()
+    profile_update = AsyncMock()
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
         get,
@@ -99,6 +105,10 @@ async def test_active_transition_without_event_time_uses_now(session, monkeypatc
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.update_status",
         update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
     )
 
     before = datetime.now(timezone.utc)
@@ -251,6 +261,7 @@ async def test_active_replay_with_new_kyc_does_not_overwrite_activated_at(
     account = _account("ACTIVE", kyc_results=None)
     get = AsyncMock(return_value=account)
     update = AsyncMock()
+    profile_update = AsyncMock()
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
         get,
@@ -258,6 +269,10 @@ async def test_active_replay_with_new_kyc_does_not_overwrite_activated_at(
     monkeypatch.setattr(
         "app.services.account_status.BrokerageAccountRepository.update_status",
         update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
     )
     new_kyc = {"accept": ["CIP retry ok"]}
 
@@ -273,3 +288,94 @@ async def test_active_replay_with_new_kyc_does_not_overwrite_activated_at(
     kwargs = update.await_args.kwargs
     assert kwargs == {"kyc_results": new_kyc}
     assert "activated_at" not in kwargs
+    # kyc-only replays on an already-ACTIVE account must NOT touch the
+    # profile flag — the flip belongs to the first ACTIVE transition only.
+    profile_update.assert_not_awaited()
+
+
+async def test_active_transition_flips_onboarding_completed(session, monkeypatch):
+    """First ACTIVE transition flips user_profile.onboarding_completed=True
+    in the same transaction (SEV-327)."""
+    user_id = uuid.uuid4()
+    account = _account("APPROVED")
+    account.user_id = user_id
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    profile_update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
+    )
+
+    await apply_account_status_change(
+        session, alpaca_account_id="abc", new_status="ACTIVE"
+    )
+
+    profile_update.assert_awaited_once_with(
+        session, user_id, onboarding_completed=True
+    )
+
+
+async def test_non_active_transition_does_not_flip_onboarding_completed(
+    session, monkeypatch
+):
+    """REJECTED / APPROVAL_PENDING / etc. must never flip the profile flag."""
+    account = _account("SUBMITTED")
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    profile_update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
+    )
+
+    await apply_account_status_change(
+        session, alpaca_account_id="abc", new_status="REJECTED"
+    )
+
+    update.assert_awaited_once()
+    profile_update.assert_not_awaited()
+
+
+async def test_active_replay_is_noop_for_profile_flag(session, monkeypatch):
+    """A replay of an already-ACTIVE event (same status, no kyc delta) must
+    short-circuit before the profile flip — no redundant writes."""
+    account = _account("ACTIVE")
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    profile_update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.UserProfileRepository.update_fields",
+        profile_update,
+    )
+
+    await apply_account_status_change(
+        session, alpaca_account_id="abc", new_status="ACTIVE"
+    )
+
+    update.assert_not_awaited()
+    profile_update.assert_not_awaited()

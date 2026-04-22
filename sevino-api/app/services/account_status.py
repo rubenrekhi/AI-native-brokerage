@@ -5,6 +5,7 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.brokerage_account import BrokerageAccountRepository
+from app.repositories.user_profile import UserProfileRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -68,6 +69,19 @@ async def apply_account_status_change(
     await BrokerageAccountRepository.update_status(
         session, account.id, new_status, **update_fields
     )
+    # First-time ACTIVE is the authoritative signal that onboarding is truly
+    # done (SEV-327) — flip the profile flag in the same transaction. The
+    # status_changed guard above makes this idempotent: replays short-circuit
+    # before reaching here.
+    if status_changed and new_status == "ACTIVE":
+        await UserProfileRepository.update_fields(
+            session, account.user_id, onboarding_completed=True
+        )
+        logger.info(
+            "onboarding_completed_flipped",
+            user_id=str(account.user_id),
+            alpaca_account_id=alpaca_account_id,
+        )
     logger.info(
         "account_status_applied",
         alpaca_account_id=alpaca_account_id,
