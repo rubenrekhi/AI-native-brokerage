@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeBackgroundView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
     @State private var phase: CGFloat = 0
 
     var body: some View {
@@ -12,7 +13,10 @@ struct HomeBackgroundView: View {
             if #available(iOS 18, *) {
                 meshGradient
                     .ignoresSafeArea()
-                    .blendMode(.plusLighter)
+                    // plusLighter reveals the accent on a black base (dark mode) but
+                    // saturates to white on a near-white base (light mode), erasing
+                    // the purple. Fall back to normal compositing in light mode.
+                    .blendMode(colorScheme == .dark ? .plusLighter : .normal)
                     .opacity(0.9)
             } else {
                 LinearGradient(
