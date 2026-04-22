@@ -66,7 +66,7 @@ struct HomeView: View {
                             .padding(.bottom, 20 * scale)
                             .padding(.horizontal, 16 * scale)
 
-                        HomeChatInputBar(text: $messageText, scale: scale)
+                        HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
                             .padding(.horizontal, 16 * scale)
                             .padding(.bottom, 8 * scale)
                     }

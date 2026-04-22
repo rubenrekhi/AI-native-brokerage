@@ -3,6 +3,7 @@ import SwiftUI
 struct HomeChatInputBar: View {
     @Binding var text: String
     let scale: CGFloat
+    let isDimmed: Bool
     @FocusState private var isFocused: Bool
 
     private var hasText: Bool {
@@ -47,5 +48,18 @@ struct HomeChatInputBar: View {
             .padding(.bottom, 4 * scale)
         }
         .modifier(SevinoGlass.card)
+        .onChange(of: isDimmed) { _, newValue in
+            if newValue { isFocused = false }
+        }
     }
+}
+
+#Preview("Focused") {
+    HomeChatInputBar(text: .constant(""), scale: 1, isDimmed: false)
+        .padding()
+}
+
+#Preview("Dimmed") {
+    HomeChatInputBar(text: .constant("Hello"), scale: 1, isDimmed: true)
+        .padding()
 }
