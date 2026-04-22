@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
+    @State private var authVM = AuthViewModel()
     @State private var showLegalLinks = false
     @State private var path = NavigationPath()
     @State private var baseScale: CGFloat = 1
@@ -28,7 +29,7 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button(action: {}) {
+                    Button(action: logOut) {
                         Text(L10n.Settings.logOut)
                             .font(.system(size: 16 * scale, weight: .semibold))
                             .foregroundStyle(Color.sevinoSecondary)
@@ -37,7 +38,7 @@ struct SettingsView: View {
                             .contentShape(.rect(cornerRadius: 14 * scale))
                     }
                     .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
-                    .disabled(true)
+                    .disabled(authVM.isLoading)
                     .padding(.bottom, 16 * scale)
                 }
                 .padding(.horizontal, 20 * scale)
@@ -141,6 +142,10 @@ struct SettingsView: View {
 
     private func navigateToAppearance() {
         path.append(SettingsDestination.appearance)
+    }
+
+    private func logOut() {
+        Task { await authVM.signOut() }
     }
 
     private func openPrivacyPolicy() {
