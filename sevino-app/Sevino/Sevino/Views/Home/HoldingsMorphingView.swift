@@ -80,7 +80,10 @@ struct HoldingsMorphingView: View {
                 }
             }
         }
-        .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
     }
 
     private var loadingState: some View {

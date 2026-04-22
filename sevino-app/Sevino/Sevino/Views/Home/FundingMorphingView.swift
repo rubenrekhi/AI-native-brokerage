@@ -49,6 +49,7 @@ struct FundingMorphingView: View {
             infoRow
             disclaimer
         }
+        .transition(.asymmetric(insertion: .opacity, removal: .identity))
     }
 
     private var headerSection: some View {

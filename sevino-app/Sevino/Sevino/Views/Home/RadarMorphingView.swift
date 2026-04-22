@@ -54,6 +54,7 @@ struct RadarMorphingView: View {
                 }
             }
         }
+        .transition(.asymmetric(insertion: .opacity, removal: .identity))
     }
 
     private var emptyState: some View {
