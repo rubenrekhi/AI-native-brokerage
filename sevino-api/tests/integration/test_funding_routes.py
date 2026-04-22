@@ -63,6 +63,12 @@ def alpaca_mock() -> AsyncMock:
         "created_at": "2026-04-18T18:00:00Z",
     }
     svc.list_transfers.return_value = []
+    # The refresh-on-read path calls this for both GET /ach-relationships and
+    # POST /transfers. Default to APPROVED so canonical happy-path tests work
+    # without per-test wiring.
+    svc.list_ach_relationships.return_value = [
+        {"id": "alp_rel_xyz", "status": "APPROVED"},
+    ]
     return svc
 
 
@@ -284,9 +290,12 @@ class TestLinkBank:
 
 
 class TestListAchRelationships:
-    async def test_returns_only_active(self, client, patch_repos):
+    async def test_returns_only_active(self, client, patch_repos, alpaca_mock):
         patch_repos.list_active.return_value = [
             _make_rel(alpaca_relationship_id="alp_1", status="APPROVED")
+        ]
+        alpaca_mock.list_ach_relationships.return_value = [
+            {"id": "alp_1", "status": "APPROVED"}
         ]
 
         response = await client.get("/v1/funding/ach-relationships")
@@ -296,6 +305,23 @@ class TestListAchRelationships:
         assert "relationships" in body
         assert len(body["relationships"]) == 1
         assert body["relationships"][0]["alpaca_relationship_id"] == "alp_1"
+
+    async def test_refreshes_drifted_status_from_alpaca(
+        self, client, patch_repos, alpaca_mock
+    ):
+        # Local says QUEUED, Alpaca now says APPROVED. Response reflects the
+        # refreshed value — this is the whole point of the refresh-on-read.
+        rel = _make_rel(alpaca_relationship_id="alp_drift", status="QUEUED")
+        patch_repos.list_active.return_value = [rel]
+        alpaca_mock.list_ach_relationships.return_value = [
+            {"id": "alp_drift", "status": "APPROVED"}
+        ]
+
+        response = await client.get("/v1/funding/ach-relationships")
+
+        assert response.status_code == 200
+        assert response.json()["relationships"][0]["status"] == "APPROVED"
+        alpaca_mock.list_ach_relationships.assert_awaited_once_with("alpaca_acc_42")
 
 
 # ---------------------------------------------------------------------------
@@ -374,6 +400,52 @@ class TestCreateTransfer:
         assert response.status_code == 422
         assert response.json()["code"] == "VALIDATION_ERROR"
 
+    async def test_queued_relationship_returns_not_approved(
+        self, client, patch_repos, alpaca_mock
+    ):
+        rel = _make_rel(status="QUEUED")
+        patch_repos.get_rel.return_value = rel
+        alpaca_mock.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "QUEUED"}
+        ]
+
+        response = await client.post(
+            "/v1/funding/transfers",
+            json={
+                "relationship_id": str(rel.id),
+                "amount": "10",
+                "direction": "INCOMING",
+            },
+        )
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "RELATIONSHIP_NOT_APPROVED"
+        assert body["detail"] == {"status": "QUEUED"}
+        alpaca_mock.create_transfer.assert_not_called()
+
+    async def test_cancel_requested_returns_canceled(
+        self, client, patch_repos, alpaca_mock
+    ):
+        rel = _make_rel(status="QUEUED")
+        patch_repos.get_rel.return_value = rel
+        alpaca_mock.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "CANCEL_REQUESTED"}
+        ]
+
+        response = await client.post(
+            "/v1/funding/transfers",
+            json={
+                "relationship_id": str(rel.id),
+                "amount": "10",
+                "direction": "INCOMING",
+            },
+        )
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "RELATIONSHIP_CANCELED"
+        alpaca_mock.create_transfer.assert_not_called()
+
 
 # ---------------------------------------------------------------------------
 # GET /transfers
@@ -419,6 +491,31 @@ class TestListTransfers:
         alpaca_mock.list_transfers.assert_awaited_once_with(
             "alpaca_acc_42", limit=50, offset=0
         )
+
+    async def test_exposes_reason_on_returned_transfer(
+        self, client, patch_repos, alpaca_mock
+    ):
+        # RETURNED (ACH chargeback) is the state where `reason` actually matters —
+        # users need to know WHY their deposit got clawed back days later.
+        patch_repos.list_all.return_value = []
+        alpaca_mock.list_transfers.return_value = [
+            {
+                "id": "t_returned",
+                "relationship_id": "alp_rel_xyz",
+                "status": "RETURNED",
+                "amount": "500.00",
+                "direction": "INCOMING",
+                "created_at": "2026-04-18T18:00:00Z",
+                "reason": "R01 Insufficient funds",
+            }
+        ]
+
+        response = await client.get("/v1/funding/transfers")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["transfers"][0]["reason"] == "R01 Insufficient funds"
+        assert body["transfers"][0]["status"] == "RETURNED"
 
 
 # ---------------------------------------------------------------------------

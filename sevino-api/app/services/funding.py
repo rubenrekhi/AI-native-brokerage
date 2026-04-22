@@ -18,6 +18,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.exceptions import ConflictError, NotFoundError
 from app.models.ach_relationship import AchRelationship
 from app.repositories.ach_relationship import (
+    STATUS_APPROVED as ACH_RELATIONSHIP_STATUS_APPROVED,
+)
+from app.repositories.ach_relationship import (
+    STATUS_CANCEL_REQUESTED as ACH_RELATIONSHIP_STATUS_CANCEL_REQUESTED,
+)
+from app.repositories.ach_relationship import (
     STATUS_CANCELED as ACH_RELATIONSHIP_STATUS_CANCELED,
 )
 from app.repositories.ach_relationship import AchRelationshipRepository
@@ -181,9 +187,45 @@ class FundingService:
 
     @staticmethod
     async def list_active_ach_relationships(
-        db: AsyncSession, *, user_id: uuid.UUID
+        db: AsyncSession,
+        *,
+        alpaca: AlpacaBrokerService,
+        user_id: uuid.UUID,
     ) -> list[AchRelationship]:
-        return await AchRelationshipRepository.list_active_for_user(db, user_id)
+        """Return the user's non-canceled relationships, refreshed from Alpaca.
+
+        Alpaca does not push `ach_relationship` status over SSE (only transfer
+        status). So we refresh on read: the one-shot Alpaca call keeps the
+        local `status` column aligned with reality when the user looks at
+        their bank list. If the brokerage isn't ACTIVE or no rows exist, we
+        skip the call. If Alpaca itself is unreachable, we log and fall back
+        to local state — this endpoint is informational, never a money
+        precondition (`create_transfer` does its own fresh refresh before
+        any transfer), so returning stale status is safe.
+        """
+        relationships = await AchRelationshipRepository.list_active_for_user(db, user_id)
+        if not relationships:
+            return relationships
+
+        brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+        if (
+            brokerage is not None
+            and brokerage.account_status == BROKERAGE_ACCOUNT_STATUS_ACTIVE
+        ):
+            try:
+                await _refresh_statuses_from_alpaca(
+                    db,
+                    alpaca=alpaca,
+                    alpaca_account_id=brokerage.alpaca_account_id,
+                    relationships=relationships,
+                )
+            except (AlpacaBrokerError, AlpacaBrokerUnavailableError) as exc:
+                logger.warning(
+                    "ach_relationship_refresh_failed",
+                    user_id=str(user_id),
+                    error=str(exc),
+                )
+        return relationships
 
     @staticmethod
     async def unlink_bank(
@@ -237,12 +279,49 @@ class FundingService:
         direction: str,
     ) -> dict[str, Any]:
         rel = await _load_relationship_for_user(db, user_id, relationship_pk)
+        # Local soft-delete short-circuits before any external call.
         if rel.status == ACH_RELATIONSHIP_STATUS_CANCELED:
             raise ConflictError(
                 "This bank account has been unlinked.",
                 code="RELATIONSHIP_CANCELED",
             )
         brokerage = await _require_active_brokerage(db, user_id)
+
+        # Refresh from Alpaca before gating so we don't block on a stale
+        # creation-time status (QUEUED locally → APPROVED at Alpaca is common)
+        # or let a stale-APPROVED row through when Alpaca has since canceled.
+        await _refresh_statuses_from_alpaca(
+            db,
+            alpaca=alpaca,
+            alpaca_account_id=brokerage.alpaca_account_id,
+            relationships=[rel],
+        )
+
+        if rel.status == ACH_RELATIONSHIP_STATUS_CANCEL_REQUESTED:
+            logger.warning(
+                "transfer_blocked_relationship_cancel_requested",
+                user_id=str(user_id),
+                relationship_pk=str(rel.id),
+                alpaca_relationship_id=rel.alpaca_relationship_id,
+            )
+            raise ConflictError(
+                "This bank link was canceled. Please link another account.",
+                code="RELATIONSHIP_CANCELED",
+                detail={"status": rel.status},
+            )
+        if rel.status != ACH_RELATIONSHIP_STATUS_APPROVED:
+            logger.warning(
+                "transfer_blocked_relationship_not_approved",
+                user_id=str(user_id),
+                relationship_pk=str(rel.id),
+                alpaca_relationship_id=rel.alpaca_relationship_id,
+                status=rel.status,
+            )
+            raise ConflictError(
+                "This bank is still being verified. Try again in a few minutes.",
+                code="RELATIONSHIP_NOT_APPROVED",
+                detail={"status": rel.status},
+            )
 
         transfer = await alpaca.create_transfer(
             brokerage.alpaca_account_id,
@@ -298,6 +377,50 @@ class FundingService:
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+
+async def _refresh_statuses_from_alpaca(
+    db: AsyncSession,
+    *,
+    alpaca: AlpacaBrokerService,
+    alpaca_account_id: str,
+    relationships: list[AchRelationship],
+) -> None:
+    """Refresh local ACH relationship statuses from Alpaca.
+
+    Alpaca has no SSE stream for relationship lifecycle (QUEUED → APPROVED or
+    async CANCEL_REQUESTED), so polling on read is the only way to observe
+    transitions. Skips local CANCELED rows (soft-delete wins) and rows Alpaca
+    has dropped entirely (leave drift for operators).
+    """
+    non_terminal = [
+        r for r in relationships if r.status != ACH_RELATIONSHIP_STATUS_CANCELED
+    ]
+    if not non_terminal:
+        return
+
+    remote_list = await alpaca.list_ach_relationships(alpaca_account_id)
+    remote_by_id = {r["id"]: r for r in remote_list}
+
+    changed = False
+    for rel in non_terminal:
+        remote = remote_by_id.get(rel.alpaca_relationship_id)
+        if remote is None:
+            continue
+        new_status = remote.get("status")
+        if new_status and new_status != rel.status:
+            logger.info(
+                "ach_relationship_status_refreshed",
+                relationship_pk=str(rel.id),
+                alpaca_relationship_id=rel.alpaca_relationship_id,
+                status_from=rel.status,
+                status_to=new_status,
+            )
+            rel.status = new_status
+            changed = True
+
+    if changed:
+        await db.flush()
 
 
 async def _compensate_alpaca_ach_relationship(

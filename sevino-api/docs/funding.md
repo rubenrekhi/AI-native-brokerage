@@ -86,7 +86,7 @@ errors:   409 ACCOUNT_NOT_ACTIVE, 409 BANK_ALREADY_LINKED, 422 ALPACA_ERROR, 422
 ```
 response: { relationships: [AchRelationshipResponse] }
 ```
-Filters out `status = CANCELED`.
+Filters out `status = CANCELED`. Before returning, refreshes each row's `status` from Alpaca via one `list_ach_relationships` call — Alpaca has no SSE stream for relationship lifecycle, so this is how we observe `QUEUED → APPROVED` and Alpaca-initiated `CANCEL_REQUESTED` transitions. Skipped when the brokerage account isn't ACTIVE. If the Alpaca call fails (4xx/5xx/unreachable), we log `ach_relationship_refresh_failed` and return the local rows as-is — this endpoint is informational, not a money precondition, so stale status is safe (`POST /transfers` does its own fresh refresh before acting).
 
 ### `DELETE /v1/funding/ach-relationships/{id}`
 ```
@@ -103,9 +103,10 @@ request:  {
   direction: "INCOMING" | "OUTGOING"
 }
 response: TransferResponse
-errors:   409 RELATIONSHIP_CANCELED, 409 ACCOUNT_NOT_ACTIVE, 422 ALPACA_ERROR, 422 VALIDATION_ERROR
+errors:   409 RELATIONSHIP_CANCELED, 409 RELATIONSHIP_NOT_APPROVED,
+          409 ACCOUNT_NOT_ACTIVE, 422 ALPACA_ERROR, 422 VALIDATION_ERROR
 ```
-`amount` is quantized to 2 decimal places before forwarding to Alpaca.
+`amount` is quantized to 2 decimal places before forwarding to Alpaca. Before calling Alpaca, refreshes the relationship's `status` from Alpaca; transfers only proceed when `status = APPROVED`. Local `CANCELED` short-circuits before the refresh. Alpaca-side `CANCEL_REQUESTED` surfaces as `RELATIONSHIP_CANCELED` (same user-facing semantics as our soft-delete). Any other non-`APPROVED` value (`QUEUED`, `PENDING`) surfaces as `RELATIONSHIP_NOT_APPROVED` with `detail.status` carrying the current value so iOS can distinguish "still verifying" from "unusable."
 
 ### `GET /v1/funding/transfers`
 ```
@@ -122,7 +123,7 @@ Merges local `nickname` / `account_mask` / `institution_name` onto each Alpaca r
 Plaintext access tokens exist only in memory inside `PlaidService`, `FundingService.link_bank`, and `PlaidItemRepository`. They are never logged.
 
 ### Response shapes whitelist outbound fields
-`TransferResponse` uses `extra="ignore"`, so Alpaca-internal fields (`account_id`, `relationship_id`, `type`, `reason`, etc.) are dropped at the boundary instead of being forwarded to iOS.
+`TransferResponse` uses `extra="ignore"`, so Alpaca-internal fields (`account_id`, `relationship_id`, `type`, etc.) are dropped at the boundary instead of being forwarded to iOS. `reason` is deliberately exposed — it carries Alpaca's explanation for `RETURNED` / `REJECTED` transfers (e.g. NACHA return codes like `R01 Insufficient funds`), which iOS needs to render a useful failure message.
 
 ### Auth + rate limit
 All endpoints require JWT auth via `get_current_user`. slowapi middleware enforces the 120/minute per-user default from `Limiter(default_limits=["120/minute"])`. No per-endpoint overrides.
@@ -135,7 +136,8 @@ Errors map to the standard `error_response` helper (`app/exceptions.py`):
 |---|---|---|
 | `ACCOUNT_NOT_ACTIVE` | 409 | Brokerage row missing or `account_status != "ACTIVE"`. `detail.account_status` carries the current value. |
 | `BANK_ALREADY_LINKED` | 409 | Alpaca returned 409 from `create_ach_relationship`. iOS refreshes relationships and can show the existing link. |
-| `RELATIONSHIP_CANCELED` | 409 | User tried to transfer through a canceled relationship. |
+| `RELATIONSHIP_CANCELED` | 409 | User tried to transfer through a canceled relationship — either locally soft-deleted via unlink, or Alpaca-side `CANCEL_REQUESTED` observed during the pre-transfer refresh. |
+| `RELATIONSHIP_NOT_APPROVED` | 409 | Relationship is still in `QUEUED` or `PENDING` at Alpaca after refresh. `detail.status` carries the current value. iOS can surface "still being verified — try again in a few minutes." |
 | `ALPACA_ERROR` | 422 | Alpaca 4xx for any non-409 reason. Message forwarded verbatim; `detail` carries Alpaca's `{code, message}`. |
 | `ALPACA_UNAVAILABLE` | 503 | Alpaca 5xx or unreachable. |
 | `VALIDATION_ERROR` | 422 | Request failed Pydantic validation. |
@@ -167,6 +169,9 @@ Structured log events fire at boundary points. All include `user_id` for correla
 | `link_bank_race_resolved` | info | IntegrityError race recovered |
 | `link_bank_duplicate_attempt` | warning | Alpaca 409 → `BANK_ALREADY_LINKED` |
 | `link_bank_completed` | info | Happy path return |
+| `ach_relationship_status_refreshed` | info | Refresh-on-read flipped a local status to match Alpaca (e.g. QUEUED → APPROVED). Carries `status_from`/`status_to`. |
+| `transfer_blocked_relationship_not_approved` | warning | Pre-transfer refresh showed non-APPROVED status (QUEUED/PENDING). |
+| `transfer_blocked_relationship_cancel_requested` | warning | Pre-transfer refresh showed Alpaca-side CANCEL_REQUESTED. |
 | `link_bank_alpaca_compensation_succeeded` | info | Orphan cleanup succeeded |
 | `link_bank_alpaca_compensation_failed` | error | Orphan cleanup failed — operator action required |
 | `transfer_initiated` | info | After `alpaca.create_transfer` returns |
@@ -209,7 +214,8 @@ Tracked in Linear under the **Alpaca — Bank Linking & Transfers (+Plaid)** pro
 - **SEV-224** / **SEV-228** — Transfer history UI (Shivam) + backend wiring. Backend `GET /v1/funding/transfers` is live; no iOS surface yet.
 - **SEV-225** — `ITEM_LOGIN_REQUIRED` re-auth. Needs Plaid webhook consumer + update-mode link-token endpoint. `PLAID_ITEM_STATUS_REQUIRES_REAUTH` constant reserved. Status transitions not observed today (we don't consume webhooks yet, so `plaid_items.status` stays `active` forever after a successful link).
 - **SEV-226** — Settings entry point for bank management (list + unlink + optional nickname edit). Backend DELETE endpoint is live; no iOS surface.
-- **SEV-214** — Alpaca transfer status SSE listener. Today `ach_relationships.status` captures whatever Alpaca returned at creation time and never updates. Real-time status transitions on transfers (QUEUED → SENT_TO_CLEARING → COMPLETE) are invisible to our local DB; the `GET /v1/funding/transfers` endpoint papers over this by refetching from Alpaca each call.
+- **SEV-214** — Alpaca transfer status SSE listener. Transfer lifecycle transitions (QUEUED → SENT_TO_CLEARING → COMPLETE) are only observed when the user opens the history screen; `GET /v1/funding/transfers` refetches from Alpaca each call. Worth deferring until push notifications or a local transfers table actually need push updates — today the refresh-on-read pattern is correct and simpler.
+- **ACH relationship status.** Alpaca does **not** publish an SSE stream for the `ach_relationship` resource — only for `transfer`. `ach_relationships.status` is kept fresh via refresh-on-read inside `GET /v1/funding/ach-relationships` and `POST /v1/funding/transfers` (one `GET /v1/accounts/{id}/ach_relationships` call per operation, bounded by the user's relationship count — usually 1). No background reconciliation job today; users who never open the app won't see their status updated.
 
 Operational gaps worth tracking separately (no ticket yet):
 

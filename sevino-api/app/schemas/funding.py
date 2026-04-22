@@ -63,6 +63,7 @@ class TransferResponse(BaseModel):
     amount: str
     direction: str
     created_at: str | None = None
+    reason: str | None = None
     bank: TransferBank | None = None
 
 

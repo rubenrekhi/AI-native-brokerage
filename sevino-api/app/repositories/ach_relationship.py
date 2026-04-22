@@ -10,6 +10,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ach_relationship import AchRelationship
 
+# Alpaca lifecycle values (from their OpenAPI enum).
+STATUS_QUEUED = "QUEUED"
+STATUS_PENDING = "PENDING"
+STATUS_APPROVED = "APPROVED"
+STATUS_CANCEL_REQUESTED = "CANCEL_REQUESTED"
+
+# Local soft-delete sentinel — written by `mark_canceled`, never by Alpaca.
 STATUS_CANCELED = "CANCELED"
 
 

@@ -64,6 +64,11 @@ def alpaca():
         "amount": "500.00",
     }
     svc.list_transfers.return_value = []
+    # Default: the refresh call flips the canonical test rel to APPROVED so
+    # happy-path transfer tests don't have to wire this up every time.
+    svc.list_ach_relationships.return_value = [
+        {"id": "alp_rel_xyz", "status": "APPROVED"},
+    ]
     return svc
 
 
@@ -429,6 +434,8 @@ class TestCreateTransfer:
     async def test_decimal_serialized_and_relationship_resolved(
         self, db, alpaca, patch_repos, user_id, brokerage
     ):
+        # Local rel is QUEUED. Alpaca's refresh flips it to APPROVED (see
+        # alpaca fixture). Transfer should proceed.
         rel = _make_rel(user_id, alpaca_relationship_id="alp_rel_xyz")
         patch_repos.get_rel.return_value = rel
 
@@ -441,6 +448,10 @@ class TestCreateTransfer:
             direction="INCOMING",
         )
 
+        alpaca.list_ach_relationships.assert_awaited_once_with(
+            brokerage.alpaca_account_id
+        )
+        assert rel.status == "APPROVED"  # refresh mutated the local row
         alpaca.create_transfer.assert_awaited_once_with(
             brokerage.alpaca_account_id,
             relationship_id="alp_rel_xyz",
@@ -466,11 +477,85 @@ class TestCreateTransfer:
             )
         alpaca.create_transfer.assert_not_called()
 
-    async def test_canceled_relationship_raises_conflict(
+    async def test_canceled_relationship_short_circuits_before_alpaca(
         self, db, alpaca, patch_repos, user_id
     ):
+        # Local CANCELED is our soft-delete. We must NOT hit Alpaca in this
+        # case — both for efficiency and because refreshing could theoretically
+        # re-populate a status we've chosen to bury.
         rel = _make_rel(user_id, status="CANCELED")
         patch_repos.get_rel.return_value = rel
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.create_transfer(
+                db,
+                alpaca=alpaca,
+                user_id=user_id,
+                relationship_pk=rel.id,
+                amount=Decimal("10"),
+                direction="INCOMING",
+            )
+        assert info.value.code == "RELATIONSHIP_CANCELED"
+        alpaca.list_ach_relationships.assert_not_called()
+        alpaca.create_transfer.assert_not_called()
+
+    async def test_queued_relationship_raises_not_approved(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Alpaca refresh still shows QUEUED. Block the transfer with the
+        # dedicated RELATIONSHIP_NOT_APPROVED code so iOS can show
+        # "still being verified" rather than a generic Alpaca error.
+        rel = _make_rel(user_id, status="QUEUED")
+        patch_repos.get_rel.return_value = rel
+        alpaca.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "QUEUED"}
+        ]
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.create_transfer(
+                db,
+                alpaca=alpaca,
+                user_id=user_id,
+                relationship_pk=rel.id,
+                amount=Decimal("10"),
+                direction="INCOMING",
+            )
+        assert info.value.code == "RELATIONSHIP_NOT_APPROVED"
+        assert info.value.detail == {"status": "QUEUED"}
+        alpaca.create_transfer.assert_not_called()
+
+    async def test_pending_relationship_raises_not_approved(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        rel = _make_rel(user_id, status="QUEUED")
+        patch_repos.get_rel.return_value = rel
+        alpaca.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "PENDING"}
+        ]
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.create_transfer(
+                db,
+                alpaca=alpaca,
+                user_id=user_id,
+                relationship_pk=rel.id,
+                amount=Decimal("10"),
+                direction="INCOMING",
+            )
+        assert info.value.code == "RELATIONSHIP_NOT_APPROVED"
+        assert info.value.detail == {"status": "PENDING"}
+
+    async def test_cancel_requested_by_alpaca_raises_canceled(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Alpaca flipped the relationship to CANCEL_REQUESTED on their side
+        # (AML, risk, ops). Surface as RELATIONSHIP_CANCELED so iOS tells the
+        # user to link a different bank.
+        rel = _make_rel(user_id, status="QUEUED")
+        patch_repos.get_rel.return_value = rel
+        alpaca.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "CANCEL_REQUESTED"}
+        ]
 
         with pytest.raises(ConflictError) as info:
             await FundingService.create_transfer(
@@ -552,6 +637,138 @@ class TestUnlinkBank:
                 db, alpaca=alpaca, user_id=user_id, relationship_pk=other_rel.id
             )
         alpaca.delete_ach_relationship.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# list_active_ach_relationships — refresh-on-read
+# ---------------------------------------------------------------------------
+
+
+class TestListActiveAchRelationships:
+    async def test_empty_list_skips_alpaca_call(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        patch_repos.list_active.return_value = []
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result == []
+        alpaca.list_ach_relationships.assert_not_called()
+
+    async def test_refresh_updates_drifted_status(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Local says QUEUED, Alpaca now says APPROVED — expected drift.
+        rel = _make_rel(user_id, status="QUEUED", alpaca_relationship_id="alp_rel_xyz")
+        patch_repos.list_active.return_value = [rel]
+        alpaca.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "APPROVED"}
+        ]
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "APPROVED"
+        db.flush.assert_awaited()
+
+    async def test_no_change_skips_flush(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        rel = _make_rel(user_id, status="APPROVED", alpaca_relationship_id="alp_rel_xyz")
+        patch_repos.list_active.return_value = [rel]
+        alpaca.list_ach_relationships.return_value = [
+            {"id": "alp_rel_xyz", "status": "APPROVED"}
+        ]
+
+        await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        db.flush.assert_not_called()
+
+    async def test_missing_remote_row_leaves_local_untouched(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Alpaca no longer returns this relationship (rare — maybe they
+        # deleted it). We must NOT overwrite the local row to some default,
+        # and we must NOT flush. Operator can investigate the drift.
+        rel = _make_rel(user_id, status="APPROVED", alpaca_relationship_id="alp_rel_xyz")
+        patch_repos.list_active.return_value = [rel]
+        alpaca.list_ach_relationships.return_value = []
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "APPROVED"
+        db.flush.assert_not_called()
+
+    async def test_inactive_brokerage_skips_refresh(
+        self, db, alpaca, patch_repos, user_id, brokerage
+    ):
+        # If the account is suspended/submitted, skip the refresh rather than
+        # failing the list. Users should still be able to see their banks.
+        brokerage.account_status = "SUBMITTED"
+        patch_repos.get_brokerage.return_value = brokerage
+        rel = _make_rel(user_id, status="QUEUED")
+        patch_repos.list_active.return_value = [rel]
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "QUEUED"  # unchanged
+        alpaca.list_ach_relationships.assert_not_called()
+
+    async def test_missing_brokerage_skips_refresh(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        patch_repos.get_brokerage.return_value = None
+        rel = _make_rel(user_id, status="QUEUED")
+        patch_repos.list_active.return_value = [rel]
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "QUEUED"
+        alpaca.list_ach_relationships.assert_not_called()
+
+    async def test_alpaca_unavailable_falls_back_to_local_state(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Informational endpoint — Alpaca outages must not prevent a user from
+        # seeing their linked banks. Money-safety is enforced by create_transfer's
+        # own fresh refresh, not by this one.
+        rel = _make_rel(user_id, status="QUEUED", alpaca_relationship_id="alp_rel_xyz")
+        patch_repos.list_active.return_value = [rel]
+        alpaca.list_ach_relationships.side_effect = AlpacaBrokerUnavailableError(
+            "alpaca down"
+        )
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "QUEUED"  # stale, but returned anyway
+
+    async def test_alpaca_4xx_also_falls_back(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        rel = _make_rel(user_id, status="APPROVED", alpaca_relationship_id="alp_rel_xyz")
+        patch_repos.list_active.return_value = [rel]
+        alpaca.list_ach_relationships.side_effect = AlpacaBrokerError(
+            status_code=401, message="auth expired"
+        )
+
+        result = await FundingService.list_active_ach_relationships(
+            db, alpaca=alpaca, user_id=user_id
+        )
+
+        assert result[0].status == "APPROVED"
 
 
 # ---------------------------------------------------------------------------

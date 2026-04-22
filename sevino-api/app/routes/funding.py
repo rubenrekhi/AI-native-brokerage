@@ -77,9 +77,10 @@ async def link_bank(
 async def list_ach_relationships(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
 ) -> AchRelationshipListResponse:
     relationships = await FundingService.list_active_ach_relationships(
-        db, user_id=uuid.UUID(user_id)
+        db, alpaca=alpaca, user_id=uuid.UUID(user_id)
     )
     return AchRelationshipListResponse(
         relationships=[AchRelationshipResponse.model_validate(r) for r in relationships]
