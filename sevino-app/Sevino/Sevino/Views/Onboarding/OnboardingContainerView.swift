@@ -353,7 +353,7 @@ struct OnboardingContainerView: View {
 
     private func goBack() {
         if viewModel.currentStep > 1 {
-            animate = false
+            animate = !reduceMotion
             withAnimation(.easeInOut(duration: 0.3)) {
                 viewModel.goBack()
             }
