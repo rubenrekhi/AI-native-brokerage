@@ -107,7 +107,7 @@ struct HomeView: View {
                     onTap: togglePortfolio
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 8) * scale)
+                .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 4) * scale)
                 .padding(.trailing, showPortfolio ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -121,7 +121,7 @@ struct HomeView: View {
                     onDismiss: dismissFunding
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 8 + 44 + 8) * scale)
+                .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 44) * scale)
                 .padding(.leading, showFunding ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -150,7 +150,7 @@ struct HomeView: View {
                     onDismiss: dismissRadar
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showRadar ? 16 * scale : (16 + 44 + 8) * scale)
+                .padding(.trailing, showRadar ? 16 * scale : (16 + 44) * scale)
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -359,12 +359,14 @@ struct HomeView: View {
     private var navSidebarButton: some View {
         Button(action: toggleSidebar) {
             Image(systemName: "sidebar.left")
-                .font(.system(size: 16 * scale, weight: .medium))
+                .font(.system(size: 14 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
-                .frame(width: 44 * scale, height: 44 * scale)
+                .frame(width: 36 * scale, height: 36 * scale)
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.navCircleClear)
+        .contentShape(.rect)
+        .frame(minWidth: 44 * scale, minHeight: 44 * scale)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 

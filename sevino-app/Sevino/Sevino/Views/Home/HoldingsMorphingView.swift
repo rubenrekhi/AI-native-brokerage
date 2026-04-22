@@ -29,12 +29,14 @@ struct HoldingsMorphingView: View {
     private var pillButton: some View {
         Button(action: onTap) {
             Image(systemName: "list.bullet")
-                .font(.system(size: 16 * scale, weight: .medium))
+                .font(.system(size: 14 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
-                .frame(width: 44 * scale, height: 44 * scale)
+                .frame(width: 36 * scale, height: 36 * scale)
         }
         .buttonStyle(.bouncePill)
         .modifier(SevinoGlass.navCircleClear)
+        .contentShape(.rect)
+        .frame(minWidth: 44 * scale, minHeight: 44 * scale)
         .accessibilityLabel(L10n.Home.menuAccessibility)
     }
 

@@ -23,24 +23,26 @@ struct PortfolioMorphingView: View {
 
     private var pillButton: some View {
         Button(action: onTap) {
-            HStack(spacing: 8 * scale) {
+            HStack(spacing: 6 * scale) {
                 Text(viewModel.displayValue)
-                    .font(.system(size: 14 * scale, weight: .semibold))
+                    .font(.system(size: 13 * scale, weight: .semibold))
                     .foregroundStyle(Color.sevinoSecondary)
 
                 VStack(spacing: -2 * scale) {
                     Image(systemName: "chevron.down")
                     Image(systemName: "chevron.down")
                 }
-                .font(.system(size: 9 * scale, weight: .bold))
+                .font(.system(size: 8 * scale, weight: .bold))
                 .foregroundStyle(viewModel.isDown ? Color.sevinoNegative : Color.sevinoPositive)
                 .accessibilityHidden(true)
             }
-            .padding(.horizontal, 14 * scale)
-            .frame(height: 44 * scale)
+            .padding(.horizontal, 12 * scale)
+            .frame(height: 36 * scale)
         }
         .buttonStyle(.bouncePill)
         .modifier(SevinoGlass.navPillClear)
+        .contentShape(.rect)
+        .frame(minHeight: 44 * scale)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
     }
 
