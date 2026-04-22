@@ -107,7 +107,7 @@ struct SidebarPanelView: View {
                         .font(.system(size: 24 * scale, weight: .light))
                         .foregroundStyle(Color.sevinoSecondary)
                         .frame(width: 44 * scale, height: 44 * scale)
-                        .modifier(SevinoGlass.navCircle)
+                        .modifier(SevinoGlass.navCircleClear)
                         .disabled(true)
                 }
                 .padding(.bottom, 8 * scale)
@@ -126,7 +126,7 @@ struct SidebarPanelView: View {
             .font(.system(size: 16 * scale, weight: .medium))
             .foregroundStyle(Color.sevinoSecondary)
             .frame(width: 44 * scale, height: 44 * scale)
-            .modifier(SevinoGlass.navCircle)
+            .modifier(SevinoGlass.navCircleClear)
             .confirmationDialog(L10n.Sidebar.contactTitle, isPresented: $showContactOptions) {
                 Button(L10n.Sidebar.talkToFounders, action: { showFounderContact = true })
                 Button(L10n.Sidebar.contactUs, action: openEmail)
