@@ -67,10 +67,14 @@ async def apply_account_status_change(
     await BrokerageAccountRepository.update_status(
         session, account.id, new_status, **update_fields
     )
+    previous_status = account.account_status
+    await BrokerageAccountRepository.update_status(
+        session, account.id, new_status, **update_fields
+    )
     logger.info(
         "account_status_applied",
         alpaca_account_id=alpaca_account_id,
-        previous_status=account.account_status,
+        previous_status=previous_status,
         new_status=new_status,
         kyc_changed=kyc_changed,
     )
