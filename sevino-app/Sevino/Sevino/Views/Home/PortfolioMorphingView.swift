@@ -7,6 +7,8 @@ struct PortfolioMorphingView: View {
     let viewModel: PortfolioViewModel
     let onTap: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: .leading, spacing: isExpanded ? 16 * scale : 0) {
@@ -21,7 +23,8 @@ struct PortfolioMorphingView: View {
             .frame(maxWidth: isExpanded ? .infinity : nil, alignment: .leading)
             .frame(height: isExpanded ? nil : 36 * scale)
             .fixedSize(horizontal: !isExpanded, vertical: isExpanded)
-            .modifier(isExpanded ? SevinoGlass.card : SevinoGlass.card)
+            .modifier(SevinoGlass.card)
+            .modifier(GlassMorphID(id: "portfolio", namespace: morphNamespace))
             .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 18 * scale))
             .frame(minHeight: isExpanded ? nil : 44 * scale)
             .contentShape(Rectangle())

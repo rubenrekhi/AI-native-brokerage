@@ -329,7 +329,7 @@ struct HomeView: View {
                 .contentShape(.rect)
                 .frame(minWidth: 44 * scale, minHeight: 44 * scale)
         }
-        .modifier(SevinoGlass.navCircle)
+        .modifier(SevinoGlass.navCircleClear)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 

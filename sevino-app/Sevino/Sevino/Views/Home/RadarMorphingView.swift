@@ -7,6 +7,8 @@ struct RadarMorphingView: View {
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
         Button(action: onTap) {
             VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
@@ -20,6 +22,7 @@ struct RadarMorphingView: View {
             .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
             .fixedSize(horizontal: !isExpanded, vertical: !isExpanded)
             .modifier(SevinoGlass.card)
+            .modifier(GlassMorphID(id: "radar", namespace: morphNamespace))
             .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
             .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
             .contentShape(Rectangle())

@@ -1,11 +1,15 @@
 import SwiftUI
 
 enum SevinoGlass {
+    static let containerSpacing: CGFloat = 40
+
     static let card = CardGlass()
     static let chip = ChipGlass()
     static let button = ButtonGlass()
     static let nav = NavGlass()
     static let navCircle = NavCircleGlass()
+    static let navClear = NavClearGlass()
+    static let navCircleClear = NavCircleClearGlass()
 
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
@@ -29,7 +33,7 @@ struct SevinoGlassContainer<Content: View>: View {
 
     var body: some View {
         if #available(iOS 26, *) {
-            GlassEffectContainer {
+            GlassEffectContainer(spacing: SevinoGlass.containerSpacing) {
                 content
             }
         } else {
@@ -74,7 +78,7 @@ struct ButtonGlass: ViewModifier {
         if #available(iOS 26, *) {
             content
                 .glassEffect(
-                    .regular.tint(Color.sevinoAccent).interactive(),
+                    .regular.interactive(),
                     in: .rect(cornerRadius: Self.cornerRadius)
                 )
         } else {
@@ -116,6 +120,48 @@ struct NavCircleGlass: ViewModifier {
     }
 }
 
+struct NavClearGlass: ViewModifier {
+    static let cornerRadius: CGFloat = 16
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(.clear.interactive(), in: .rect(cornerRadius: Self.cornerRadius))
+        } else {
+            content
+                .background(
+                    .ultraThinMaterial,
+                    in: RoundedRectangle(cornerRadius: Self.cornerRadius)
+                )
+        }
+    }
+}
+
+struct NavCircleClearGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(.clear.interactive(), in: .circle)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Circle())
+        }
+    }
+}
+
+struct GlassMorphID: ViewModifier {
+    let id: String
+    let namespace: Namespace.ID
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffectID(id, in: namespace)
+        } else {
+            content
+        }
+    }
+}
+
 struct ConditionalChipGlass: ViewModifier {
     let isSelected: Bool
 
@@ -129,6 +175,8 @@ struct ConditionalChipGlass: ViewModifier {
 }
 
 struct TintedButtonGlass: ViewModifier {
+    static let tintOpacity: CGFloat = 0.55
+
     let tint: Color
     var cornerRadius: CGFloat = CardGlass.cornerRadius
 
@@ -136,7 +184,7 @@ struct TintedButtonGlass: ViewModifier {
         if #available(iOS 26, *) {
             content
                 .glassEffect(
-                    .regular.tint(tint).interactive(),
+                    .regular.tint(tint.opacity(Self.tintOpacity)).interactive(),
                     in: .rect(cornerRadius: cornerRadius)
                 )
         } else {

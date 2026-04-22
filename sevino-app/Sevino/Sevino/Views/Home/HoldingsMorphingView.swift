@@ -8,6 +8,8 @@ struct HoldingsMorphingView: View {
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
             card
@@ -40,6 +42,7 @@ struct HoldingsMorphingView: View {
         .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
         .fixedSize(horizontal: !isExpanded, vertical: true)
         .modifier(SevinoGlass.card)
+        .modifier(GlassMorphID(id: "holdings", namespace: morphNamespace))
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
         .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
         .contentShape(Rectangle())

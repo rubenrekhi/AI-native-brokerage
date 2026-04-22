@@ -16,40 +16,42 @@ struct LinkedAccountsSettingsView: View {
     private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.bottom, 24 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                header
+                    .padding(.bottom, 24 * scale)
 
-            if accounts.isEmpty {
-                emptyState
-            } else {
-                ForEach(accounts) { account in
-                    LinkedAccountRow(
-                        account: account,
-                        scale: scale,
-                        isExpanded: expandedAccountId == account.id,
-                        onToggle: { toggleExpanded(account.id) },
-                        onCopy: { copyAccountNumber(account.lastFour) },
-                        onUnlink: { unlink(account.id) }
-                    )
+                if accounts.isEmpty {
+                    emptyState
+                } else {
+                    ForEach(accounts) { account in
+                        LinkedAccountRow(
+                            account: account,
+                            scale: scale,
+                            isExpanded: expandedAccountId == account.id,
+                            onToggle: { toggleExpanded(account.id) },
+                            onCopy: { copyAccountNumber(account.lastFour) },
+                            onUnlink: { unlink(account.id) }
+                        )
+                    }
+
+                    Spacer()
                 }
 
-                Spacer()
+                Button(action: {}) {
+                    Text(L10n.Settings.addAccount)
+                        .font(.system(size: 16 * scale, weight: .semibold))
+                        .foregroundStyle(Color.sevinoSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16 * scale)
+                }
+                .modifier(SevinoGlass.card)
+                .disabled(true)
+                .padding(.bottom, 16 * scale)
             }
-
-            Button(action: {}) {
-                Text(L10n.Settings.addAccount)
-                    .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(Color.sevinoSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16 * scale)
-            }
-            .modifier(SevinoGlass.card)
-            .disabled(true)
-            .padding(.bottom, 16 * scale)
+            .padding(.horizontal, 20 * scale)
+            .padding(.top, 12 * scale)
         }
-        .padding(.horizontal, 20 * scale)
-        .padding(.top, 12 * scale)
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()

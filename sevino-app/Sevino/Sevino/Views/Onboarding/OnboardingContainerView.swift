@@ -29,19 +29,21 @@ struct OnboardingContainerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ProgressBar(
-                currentStep: viewModel.currentStep,
-                totalSteps: OnboardingViewModel.totalSteps,
-                scale: scale
-            )
-            .padding(.top, 8 * scale)
-            .padding(.horizontal, 32 * scale)
-            .padding(.bottom, 8 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                ProgressBar(
+                    currentStep: viewModel.currentStep,
+                    totalSteps: OnboardingViewModel.totalSteps,
+                    scale: scale
+                )
+                .padding(.top, 8 * scale)
+                .padding(.horizontal, 32 * scale)
+                .padding(.bottom, 8 * scale)
 
-            AuthHeaderView(scale: scale, onBack: goBack)
+                AuthHeaderView(scale: scale, onBack: goBack)
 
-            stepContent
+                stepContent
+            }
         }
         .background { backgroundView }
         .overlay(alignment: .bottom) { saveErrorBanner }

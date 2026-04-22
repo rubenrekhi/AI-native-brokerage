@@ -8,24 +8,26 @@ struct PhoneNumberView: View {
     let onComplete: (_ phoneNumber: String) -> Void
 
     var body: some View {
-        VStack(spacing: 0) {
-            Image("logo_white")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 36 * scale)
-                .accessibilityLabel(L10n.General.appName)
-                .padding(.top, 8 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                Image("logo_white")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 36 * scale)
+                    .accessibilityLabel(L10n.General.appName)
+                    .padding(.top, 8 * scale)
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    PhoneTitleView(scale: scale)
-                    phoneSection
-                    nextButton
+                ScrollView {
+                    VStack(spacing: 0) {
+                        PhoneTitleView(scale: scale)
+                        phoneSection
+                        nextButton
+                    }
                 }
-            }
-            .scrollIndicators(.hidden)
+                .scrollIndicators(.hidden)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
         }
         .background { AuthBackgroundView() }
         .preferredColorScheme(.dark)
