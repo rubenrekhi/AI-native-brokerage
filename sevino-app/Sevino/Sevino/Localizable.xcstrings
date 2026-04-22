@@ -1184,6 +1184,16 @@
         }
       }
     },
+    "home.sidebar_dismiss_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss sidebar"
+          }
+        }
+      }
+    },
     "home.since_label" : {
       "localizations" : {
         "en" : {

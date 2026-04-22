@@ -166,13 +166,15 @@ struct HomeView: View {
                 .ignoresSafeArea()
         }
         .overlay {
-            Color.clear
-                .contentShape(.rect)
-                .ignoresSafeArea()
-                .onTapGesture { toggleSidebar() }
-                .allowsHitTesting(showSidebar)
-                .accessibilityAddTraits(.isButton)
-                .accessibilityLabel(L10n.Home.dismissAccessibility)
+            Button(action: toggleSidebar) {
+                Color.clear
+                    .contentShape(.rect)
+                    .ignoresSafeArea()
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L10n.Home.sidebarDismissAccessibility)
+            .accessibilityHidden(!showSidebar)
+            .allowsHitTesting(showSidebar)
         }
         .offset(x: showSidebar ? 300 * scale : 0)
         .background {

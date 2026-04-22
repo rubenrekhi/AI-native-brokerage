@@ -364,6 +364,7 @@ enum L10n {
         static let holdingsEmptyMessage = String(localized: "home.holdings_empty_message")
         static let chatAboutThis = String(localized: "home.chat_about_this")
         static let dismissAccessibility = String(localized: "home.dismiss_accessibility")
+        static let sidebarDismissAccessibility = String(localized: "home.sidebar_dismiss_accessibility")
         static let periodToday = String(localized: "home.period_today")
         static let period7Days = String(localized: "home.period_7_days")
         static let period30Days = String(localized: "home.period_30_days")
