@@ -83,6 +83,7 @@ struct PhoneNumberView: View {
                 .foregroundStyle(Color.welcomeButtonDarkTint)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14 * scale)
+                .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))

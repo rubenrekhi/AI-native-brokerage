@@ -55,6 +55,7 @@ struct AlpacaSetupIntroView: View {
                         .foregroundStyle(Color.welcomeText)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 14 * scale)
+                        .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
                 }
                 .buttonStyle(.plain)
                 .modifier(SevinoGlass.tintedButton(tint: Color.onboardingButtonActive))

@@ -159,6 +159,7 @@ private struct LinkedAccountRow: View {
                     .foregroundStyle(Color.sevinoSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12 * scale)
+                    .contentShape(.rect(cornerRadius: 14 * scale))
             }
             .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
             .confirmationDialog(L10n.Settings.unlinkConfirmTitle, isPresented: $showUnlinkConfirmation) {

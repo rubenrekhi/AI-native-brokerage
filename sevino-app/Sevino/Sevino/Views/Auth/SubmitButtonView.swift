@@ -21,6 +21,7 @@ struct SubmitButtonView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14 * scale)
+            .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.tintedButton(tint: .welcomeButtonDarkTint))

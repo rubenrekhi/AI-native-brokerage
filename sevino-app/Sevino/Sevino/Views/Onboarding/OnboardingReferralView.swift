@@ -123,6 +123,7 @@ struct OnboardingReferralView: View {
                                 : Color.clear,
                             cornerRadius: 16
                         ))
+                        .contentShape(.rect(cornerRadius: 16))
                 }
                 .buttonStyle(.plain)
             }
@@ -158,6 +159,7 @@ struct OnboardingReferralView: View {
                 .foregroundStyle(Color.welcomeText)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14 * scale)
+                .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.tintedButton(
