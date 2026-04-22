@@ -57,7 +57,11 @@ struct HomeView: View {
 
                 VStack(spacing: 0) {
                     HStack(spacing: 8 * scale) {
-                        navSidebarButton
+                        if anyModalOpen {
+                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                        } else {
+                            navSidebarButton
+                        }
                         Color.clear.frame(width: 120 * scale, height: 44 * scale)
                         Spacer()
                         HStack(spacing: 8 * scale) {
@@ -103,6 +107,7 @@ struct HomeView: View {
                 PortfolioMorphingView(
                     scale: scale,
                     isExpanded: showPortfolio,
+                    isHidden: showFunding || showHoldings || showRadar,
                     viewModel: portfolioViewModel,
                     onTap: togglePortfolio
                 )
@@ -111,14 +116,11 @@ struct HomeView: View {
                 .padding(.trailing, showPortfolio ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
-                .accessibilityHidden(showFunding || showHoldings || showRadar)
-                .blur(radius: showFunding || showHoldings || showRadar ? 10 : 0)
-                .brightness(modalDimBrightness(when: showFunding || showHoldings || showRadar))
 
                 FundingMorphingView(
                     scale: scale,
                     isExpanded: showFunding,
+                    isHidden: showPortfolio || showHoldings || showRadar,
                     viewModel: fundingViewModel,
                     onTap: toggleFunding,
                     onDismiss: dismissFunding
@@ -128,14 +130,11 @@ struct HomeView: View {
                 .padding(.leading, showFunding ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
-                .accessibilityHidden(showPortfolio || showHoldings || showRadar)
-                .blur(radius: showPortfolio || showHoldings || showRadar ? 10 : 0)
-                .brightness(modalDimBrightness(when: showPortfolio || showHoldings || showRadar))
 
                 HoldingsMorphingView(
                     scale: scale,
                     isExpanded: showHoldings,
+                    isHidden: showPortfolio || showFunding || showRadar,
                     viewModel: holdingsViewModel,
                     showFilter: $showHoldingsFilter,
                     onTap: toggleHoldings,
@@ -146,14 +145,11 @@ struct HomeView: View {
                 .padding(.leading, showHoldings ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
-                .accessibilityHidden(showPortfolio || showFunding || showRadar)
-                .blur(radius: showPortfolio || showFunding || showRadar ? 10 : 0)
-                .brightness(modalDimBrightness(when: showPortfolio || showFunding || showRadar))
 
                 RadarMorphingView(
                     scale: scale,
                     isExpanded: showRadar,
+                    isHidden: showPortfolio || showFunding || showHoldings,
                     viewModel: radarViewModel,
                     onTap: toggleRadar,
                     onDismiss: dismissRadar
@@ -163,10 +159,6 @@ struct HomeView: View {
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
-                .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
-                .accessibilityHidden(showPortfolio || showFunding || showHoldings)
-                .blur(radius: showPortfolio || showFunding || showHoldings ? 10 : 0)
-                .brightness(modalDimBrightness(when: showPortfolio || showFunding || showHoldings))
             }
         }
         .background { HomeBackgroundView() }
@@ -341,10 +333,9 @@ struct HomeView: View {
             Image(systemName: "sidebar.left")
                 .font(.system(size: 16 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
-                .frame(width: 36 * scale, height: 36 * scale)
-                .contentShape(.rect)
-                .frame(minWidth: 44 * scale, minHeight: 44 * scale)
+                .frame(width: 44 * scale, height: 44 * scale)
         }
+        .buttonStyle(.plain)
         .modifier(SevinoGlass.navCircleClear)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }

@@ -33,7 +33,7 @@ struct HomeTimeRangeSelector: View {
             if totalWidth > 0 {
                 Capsule()
                     .fill(.clear)
-                    .modifier(SevinoGlass.chip)
+                    .modifier(SevinoGlass.navPillClear)
                     .frame(width: itemWidth)
                     .scaleEffect(isPressing ? 1.12 : 1.0)
                     .offset(x: indicatorOffsetX)
@@ -49,8 +49,7 @@ struct HomeTimeRangeSelector: View {
                                 ? Color.sevinoSecondary
                                 : Color.sevinoGreyContrast
                         )
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                        .padding(.vertical, 6 * scale)
+                        .frame(maxWidth: .infinity, minHeight: 44 * scale)
                         .contentShape(.rect)
                         .accessibilityLabel(range.periodLabel)
                         .accessibilityAddTraits(.isButton)

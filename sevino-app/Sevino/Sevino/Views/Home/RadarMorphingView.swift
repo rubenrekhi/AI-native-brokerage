@@ -3,6 +3,7 @@ import SwiftUI
 struct RadarMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     let viewModel: RadarViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
@@ -10,34 +11,35 @@ struct RadarMorphingView: View {
     @Namespace private var morphNamespace
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
-                if isExpanded {
-                    expandedContent
-                } else {
-                    pillContent
-                }
+        Group {
+            if isExpanded {
+                expandedCard
+            } else if !isHidden {
+                pillButton
             }
-            .padding(isExpanded ? 20 * scale : 0)
-            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
-            .fixedSize(horizontal: !isExpanded, vertical: !isExpanded)
-            .modifier(SevinoGlass.card)
-            .modifier(GlassMorphID(id: "radar", namespace: morphNamespace))
-            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-            .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-            .contentShape(Rectangle())
+        }
+        .modifier(GlassMorphID(id: "radar", namespace: morphNamespace))
+    }
+
+    private var pillButton: some View {
+        Button(action: onTap) {
+            Image(systemName: "eye")
+                .font(.system(size: 16 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 44 * scale, height: 44 * scale)
         }
         .buttonStyle(.plain)
-        .disabled(isExpanded)
-        .accessibilityAddTraits(.isButton)
+        .modifier(SevinoGlass.navCircleClear)
         .accessibilityLabel(L10n.Home.watchlistAccessibility)
     }
 
-    private var pillContent: some View {
-        Image(systemName: "eye")
-            .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(width: 36 * scale, height: 36 * scale)
+    private var expandedCard: some View {
+        expandedContent
+            .padding(20 * scale)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 
     private var expandedContent: some View {
@@ -145,6 +147,7 @@ private struct RadarMorphingPreview: View {
             RadarMorphingView(
                 scale: 1,
                 isExpanded: true,
+                isHidden: false,
                 viewModel: viewModel,
                 onTap: {},
                 onDismiss: {}

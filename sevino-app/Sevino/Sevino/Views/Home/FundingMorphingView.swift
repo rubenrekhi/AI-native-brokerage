@@ -3,6 +3,7 @@ import SwiftUI
 struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     let viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
@@ -10,35 +11,35 @@ struct FundingMorphingView: View {
     @Namespace private var morphNamespace
 
     var body: some View {
-        VStack(alignment: isExpanded ? .center : .leading, spacing: 0) {
+        Group {
             if isExpanded {
-                expandedContent
-            } else {
-                pillContent
+                expandedCard
+            } else if !isHidden {
+                pillButton
             }
         }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
         .modifier(GlassMorphID(id: "funding", namespace: morphNamespace))
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-        .contentShape(Rectangle())
-        .overlay {
-            if !isExpanded {
-                Button(action: onTap) { Color.clear.contentShape(.rect) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.fundingAccessibility)
-            }
-        }
     }
 
-    private var pillContent: some View {
-        Image(systemName: "dollarsign")
-            .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(width: 36 * scale, height: 36 * scale)
+    private var pillButton: some View {
+        Button(action: onTap) {
+            Image(systemName: "dollarsign")
+                .font(.system(size: 16 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 44 * scale, height: 44 * scale)
+        }
+        .buttonStyle(.plain)
+        .modifier(SevinoGlass.navCircleClear)
+        .accessibilityLabel(L10n.Home.fundingAccessibility)
+    }
+
+    private var expandedCard: some View {
+        expandedContent
+            .padding(20 * scale)
+            .frame(maxWidth: .infinity)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 
     private var expandedContent: some View {
@@ -201,6 +202,7 @@ private struct FundingMorphingPreview: View {
             FundingMorphingView(
                 scale: 1,
                 isExpanded: true,
+                isHidden: false,
                 viewModel: viewModel,
                 onTap: {},
                 onDismiss: {}

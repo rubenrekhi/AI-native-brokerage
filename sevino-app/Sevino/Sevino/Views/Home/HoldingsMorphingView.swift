@@ -3,6 +3,7 @@ import SwiftUI
 struct HoldingsMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     let viewModel: HoldingsViewModel
     @Binding var showFilter: Bool
     let onTap: () -> Void
@@ -31,35 +32,35 @@ struct HoldingsMorphingView: View {
     }
 
     private var card: some View {
-        VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
+        Group {
             if isExpanded {
-                expandedContent
-            } else {
-                pillContent
+                expandedCard
+            } else if !isHidden {
+                pillButton
             }
         }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
         .modifier(GlassMorphID(id: "holdings", namespace: morphNamespace))
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-        .contentShape(Rectangle())
-        .overlay {
-            if !isExpanded {
-                Button(action: onTap) { Color.clear.contentShape(.rect) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.menuAccessibility)
-            }
-        }
     }
 
-    private var pillContent: some View {
-        Image(systemName: "list.bullet")
-            .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(width: 36 * scale, height: 36 * scale)
+    private var pillButton: some View {
+        Button(action: onTap) {
+            Image(systemName: "list.bullet")
+                .font(.system(size: 16 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 44 * scale, height: 44 * scale)
+        }
+        .buttonStyle(.plain)
+        .modifier(SevinoGlass.navCircleClear)
+        .accessibilityLabel(L10n.Home.menuAccessibility)
+    }
+
+    private var expandedCard: some View {
+        expandedContent
+            .padding(20 * scale)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 
     private var expandedContent: some View {
@@ -373,6 +374,7 @@ private struct HoldingsMorphingPreview: View {
             HoldingsMorphingView(
                 scale: 1,
                 isExpanded: true,
+                isHidden: false,
                 viewModel: viewModel,
                 showFilter: .constant(false),
                 onTap: {},

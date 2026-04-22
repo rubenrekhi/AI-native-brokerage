@@ -10,6 +10,7 @@ enum SevinoGlass {
     static let navCircle = NavCircleGlass()
     static let navClear = NavClearGlass()
     static let navCircleClear = NavCircleClearGlass()
+    static let navPillClear = NavPillClearGlass()
 
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
@@ -145,6 +146,18 @@ struct NavCircleClearGlass: ViewModifier {
         } else {
             content
                 .background(.ultraThinMaterial, in: Circle())
+        }
+    }
+}
+
+struct NavPillClearGlass: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content
+                .glassEffect(.clear.interactive(), in: .capsule)
+        } else {
+            content
+                .background(.ultraThinMaterial, in: Capsule())
         }
     }
 }

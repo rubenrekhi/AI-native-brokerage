@@ -84,7 +84,7 @@ struct SettingsView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 14 * scale, weight: .semibold))
                     .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: 40 * scale, height: 40 * scale)
+                    .frame(width: 44 * scale, height: 44 * scale)
                     .modifier(SevinoGlass.navCircleClear)
 
                 Spacer()
@@ -93,7 +93,7 @@ struct SettingsView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: 40 * scale, height: 40 * scale)
+                    .frame(width: 44 * scale, height: 44 * scale)
                     .modifier(SevinoGlass.navCircleClear)
                     .confirmationDialog(L10n.Settings.legalTitle, isPresented: $showLegalLinks) {
                         Button(L10n.Settings.privacyPolicy, action: openPrivacyPolicy)
