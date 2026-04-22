@@ -195,10 +195,10 @@ enum L10n {
 
         // MARK: - Income options (screen 9)
         static let incomeUnder25k = String(localized: "onboarding.income_under_25k")
-        static let income25k50k = String(localized: "onboarding.income_25k_50k")
-        static let income50k100k = String(localized: "onboarding.income_50k_100k")
-        static let income100k200k = String(localized: "onboarding.income_100k_200k")
-        static let income200k500k = String(localized: "onboarding.income_200k_500k")
+        static let income25k49k = String(localized: "onboarding.income_25k_49k")
+        static let income50k99k = String(localized: "onboarding.income_50k_99k")
+        static let income100k199k = String(localized: "onboarding.income_100k_199k")
+        static let income200k499k = String(localized: "onboarding.income_200k_499k")
         static let income500kPlus = String(localized: "onboarding.income_500k_plus")
 
         // MARK: - Net worth options (screen 10)

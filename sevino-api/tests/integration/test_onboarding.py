@@ -140,7 +140,7 @@ class TestGetOnboardingStatus:
         )
         await authenticated_db_client.patch(
             "/v1/onboarding",
-            json={"step": "annual_income", "annual_income": "$50K-$100K"},
+            json={"step": "annual_income", "annual_income": "$50K \u2013 $99K"},
         )
 
         response = await authenticated_db_client.get("/v1/onboarding/status")
@@ -149,7 +149,7 @@ class TestGetOnboardingStatus:
         data = response.json()
         assert data["onboarding_step"] == "annual_income"
         assert data["profile"]["preferred_name"] == "Riley"
-        assert data["financial_profile"]["annual_income"] == "$50K-$100K"
+        assert data["financial_profile"]["annual_income"] == "$50K \u2013 $99K"
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +172,9 @@ class TestPostOnboardingSubmit:
                 "step": "investment_goals",
                 "investment_goals": ["grow_wealth"],
             },
-            {"step": "annual_income", "annual_income": "$50K-$100K"},
-            {"step": "net_worth", "net_worth": "$100K-$250K"},
-            {"step": "liquid_net_worth", "liquid_net_worth": "$25K-$50K"},
+            {"step": "annual_income", "annual_income": "$50K \u2013 $99K"},
+            {"step": "net_worth", "net_worth": "$100K \u2013 $250K"},
+            {"step": "liquid_net_worth", "liquid_net_worth": "$25K \u2013 $50K"},
             {"step": "income_stability", "income_stability": "stable"},
             {"step": "time_horizon", "time_horizon": "5-10 years"},
             {"step": "risk_scenario", "risk_scenario_response": "hold"},

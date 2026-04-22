@@ -208,7 +208,7 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: FinancialProfileData(
                 financialWorries: ["not_saving_enough"],
                 investmentGoals: ["grow_wealth", "retirement"],
-                annualIncome: "$50K – $100K"
+                annualIncome: "$50K – $99K"
             )
         )
 
@@ -217,7 +217,7 @@ final class OnboardingResumeManagerTests: XCTestCase {
             XCTAssertEqual(data.referralSource, "TikTok")
             XCTAssertEqual(data.mindsetSelections, ["not_saving_enough"])
             XCTAssertEqual(data.goalSelections, ["grow_wealth", "retirement"])
-            XCTAssertEqual(data.incomeSelection, "$50K – $100K")
+            XCTAssertEqual(data.incomeSelection, "$50K – $99K")
             // DOB should be converted from YYYY-MM-DD to MM-DD-YYYY
             XCTAssertEqual(data.dobString, "03-15-1998")
         } else {

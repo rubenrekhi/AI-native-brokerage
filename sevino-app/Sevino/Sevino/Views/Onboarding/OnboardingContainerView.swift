@@ -215,7 +215,7 @@ struct OnboardingContainerView: View {
                 userPromptText: viewModel.dobString,
                 response1: L10n.Onboarding.incomeResponse1,
                 response2: L10n.Onboarding.incomeResponse2,
-                options: [L10n.Onboarding.incomeUnder25k, L10n.Onboarding.income25k50k, L10n.Onboarding.income50k100k, L10n.Onboarding.income100k200k, L10n.Onboarding.income200k500k, L10n.Onboarding.income500kPlus],
+                options: [L10n.Onboarding.incomeUnder25k, L10n.Onboarding.income25k49k, L10n.Onboarding.income50k99k, L10n.Onboarding.income100k199k, L10n.Onboarding.income200k499k, L10n.Onboarding.income500kPlus],
                 animate: animate,
                 initialSelected: viewModel.incomeSelection.isEmpty ? nil : viewModel.incomeSelection
             ) { value in

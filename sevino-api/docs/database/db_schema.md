@@ -100,7 +100,7 @@ Financial questionnaire answers collected during onboarding. Injected into AI co
 | `id` **[PK]** | UUID | Primary key |
 | `user_id` **[FK]** | UUID | FK → `user_profiles(id)` |
 | `date_of_birth` | DATE | Denormalized for AI context |
-| `annual_income` | TEXT | Range string, e.g. `$50K – $100K` |
+| `annual_income` | TEXT | Range string, e.g. `$50K – $99K` |
 | `net_worth` | TEXT | Range string, e.g. `$100K – $250K` |
 | `liquid_net_worth` | TEXT | Range string, e.g. `$25K – $50K` |
 | `risk_tolerance` | TEXT | Derived value for AI context |

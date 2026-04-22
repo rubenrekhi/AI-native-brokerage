@@ -2,6 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
+import sentry_sdk
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,10 +32,10 @@ logger = structlog.get_logger(__name__)
 
 INCOME_RANGES: dict[str, tuple[str, str]] = {
     "Under $25K": ("0", "25000"),
-    "$25K \u2013 $50K": ("25000", "50000"),
-    "$50K \u2013 $100K": ("50000", "100000"),
-    "$100K \u2013 $200K": ("100000", "200000"),
-    "$200K \u2013 $500K": ("200000", "500000"),
+    "$25K \u2013 $49K": ("25000", "50000"),
+    "$50K \u2013 $99K": ("50000", "100000"),
+    "$100K \u2013 $199K": ("100000", "200000"),
+    "$200K \u2013 $499K": ("200000", "500000"),
     "$500K+": ("500000", "1000000"),
 }
 
@@ -171,6 +172,16 @@ def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]
         return ranges[value]
     first = next(iter(ranges.values()))
     logger.warning("unknown_range_value", value=value)
+    with sentry_sdk.new_scope() as scope:
+        scope.set_tag("alert_type", "unknown_range_value")
+        scope.set_context(
+            "range_lookup",
+            {"value": value, "known_keys": list(ranges.keys())},
+        )
+        sentry_sdk.capture_message(
+            f"unknown_range_value mapped to fallback: {value!r}",
+            level="warning",
+        )
     return first
 
 

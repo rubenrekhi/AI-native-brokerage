@@ -192,7 +192,7 @@ struct OnboardingSingleSelectView: View {
         userPromptText: "01-08-2004",
         response1: "What's your annual income, before taxes?",
         response2: "I use this to tailor guidance to your situation. No judgment — every number is a great starting point.",
-        options: ["Under $25K", "$25K – $50K", "$50K – $100K", "$100K – $200K", "$200K – $500K", "$500K+"],
+        options: ["Under $25K", "$25K – $49K", "$50K – $99K", "$100K – $199K", "$200K – $499K", "$500K+"],
         animate: true,
         onContinue: { _ in }
     )
