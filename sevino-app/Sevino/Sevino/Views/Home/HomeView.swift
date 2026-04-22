@@ -42,7 +42,8 @@ struct HomeView: View {
                     HomeGreetingSection(
                         scale: scale,
                         greeting: viewModel.greeting,
-                        showExplore: $showExplore
+                        showExplore: $showExplore,
+                        isHidden: anyModalOpen
                     )
                     .offset(y: -60 * scale)
 
