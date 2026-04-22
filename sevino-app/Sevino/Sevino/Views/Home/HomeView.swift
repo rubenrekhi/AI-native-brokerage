@@ -20,6 +20,7 @@ struct HomeView: View {
     @State private var showSidebar = false
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
+    private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter }
 
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
@@ -87,13 +88,7 @@ struct HomeView: View {
                 .brightness(modalDimBrightness(when: anyModalOpen))
                 .allowsHitTesting(!anyModalOpen)
 
-                Button {
-                    if showHoldingsFilter {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
-                    } else {
-                        dismissAllModals()
-                    }
-                } label: {
+                Button(action: dismissTopLayer) {
                     Color.sevinoPrimary
                         .opacity(anyModalOpen ? 0.4 : 0)
                         .ignoresSafeArea()
@@ -101,8 +96,8 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .contentShape(Rectangle())
                 .accessibilityLabel(L10n.Home.dismissAccessibility)
-                .accessibilityHidden(!anyModalOpen)
-                .allowsHitTesting(anyModalOpen)
+                .accessibilityHidden(!anyDismissableLayerOpen)
+                .allowsHitTesting(anyDismissableLayerOpen)
 
                 PortfolioMorphingView(
                     scale: scale,
@@ -159,6 +154,25 @@ struct HomeView: View {
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if showHoldingsFilter {
+                HoldingsFilterPopup(
+                    scale: scale,
+                    displayOption: holdingsViewModel.displayOption,
+                    sortOption: holdingsViewModel.sortOption,
+                    onSelectDisplay: holdingsViewModel.setDisplayOption,
+                    onSelectSort: holdingsViewModel.setSortOption,
+                    onDismiss: {
+                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+                            showHoldingsFilter = false
+                        }
+                    }
+                )
+                .padding(.trailing, 36 * scale)
+                .padding(.top, 54 * scale)
+                .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
             }
         }
         .background { HomeBackgroundView() }
@@ -271,15 +285,25 @@ struct HomeView: View {
         }
     }
 
+    private func dismissTopLayer() {
+        if showHoldingsFilter {
+            withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
+        } else {
+            dismissAllModals()
+        }
+    }
+
     private func togglePortfolio() {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showPortfolio.toggle()
+            showHoldingsFilter = false
         }
     }
 
     private func toggleFunding() {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showFunding.toggle()
+            showHoldingsFilter = false
         }
     }
 
@@ -292,18 +316,21 @@ struct HomeView: View {
     private func toggleHoldings() {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showHoldings.toggle()
+            if !showHoldings { showHoldingsFilter = false }
         }
     }
 
     private func dismissHoldings() {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showHoldings = false
+            showHoldingsFilter = false
         }
     }
 
     private func toggleRadar() {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showRadar.toggle()
+            showHoldingsFilter = false
         }
     }
 
@@ -319,6 +346,7 @@ struct HomeView: View {
             showFunding = false
             showHoldings = false
             showRadar = false
+            showHoldingsFilter = false
         }
     }
 
