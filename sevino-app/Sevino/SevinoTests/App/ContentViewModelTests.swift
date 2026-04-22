@@ -5,16 +5,11 @@ import XCTest
 final class ContentViewModelTests: XCTestCase {
 
     private var mockOnboarding: MockOnboardingService!
-    private var mockAuth: MockAuthService!
     private var viewModel: ContentViewModel!
 
     override func setUp() {
         mockOnboarding = MockOnboardingService()
-        mockAuth = MockAuthService()
-        viewModel = ContentViewModel(
-            onboardingService: mockOnboarding,
-            authService: mockAuth
-        )
+        viewModel = ContentViewModel(onboardingService: mockOnboarding)
     }
 
     // MARK: - Initial state
@@ -225,30 +220,4 @@ final class ContentViewModelTests: XCTestCase {
         )
     }
 
-    // MARK: - signOut
-
-    func testSignOutResetsRoutingState() async {
-        viewModel.startFreshSignUpFlow()
-        viewModel.completeOnboarding(userName: "Riley")
-        mockAuth.isAuthenticated = true
-
-        await viewModel.signOut()
-
-        XCTAssertEqual(viewModel.route, .idle)
-        XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertFalse(mockAuth.isAuthenticated)
-    }
-
-    func testSignOutFailureStillResetsRoutingState() async {
-        viewModel.startFreshSignUpFlow()
-        mockAuth.errorToThrow = NSError(
-            domain: "", code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "Sign-out failed"]
-        )
-
-        await viewModel.signOut()
-
-        XCTAssertEqual(viewModel.route, .idle, "routing resets even when the sign-out RPC fails")
-        XCTAssertEqual(viewModel.error, "Sign-out failed")
-    }
 }

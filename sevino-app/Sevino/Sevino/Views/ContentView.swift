@@ -57,8 +57,18 @@ struct ContentView: View {
             OnboardingContainerView(
                 initialStep: step,
                 resumeData: data,
-                onComplete: viewModel.completeOnboarding
+                onComplete: viewModel.completeOnboarding,
+                onLogOut: signOut
             )
+            .alert(
+                L10n.General.errorTitle,
+                isPresented: signOutErrorPresented,
+                presenting: authVM.authError
+            ) { _ in
+                Button(L10n.General.ok) { authVM.clearError() }
+            } message: { error in
+                Text(error)
+            }
         case .alpacaSetup(let step, let userName, let data):
             AlpacaSetupContainerView(
                 userName: userName,
@@ -75,6 +85,13 @@ struct ContentView: View {
         Binding(
             get: { viewModel.showPhoneError },
             set: { if !$0 { viewModel.clearError() } }
+        )
+    }
+
+    private var signOutErrorPresented: Binding<Bool> {
+        Binding(
+            get: { authVM.authError != nil },
+            set: { if !$0 { authVM.clearError() } }
         )
     }
 
@@ -126,6 +143,10 @@ struct ContentView: View {
 
     private func savePhoneNumber(_ phoneNumber: String) {
         Task { await viewModel.savePhoneNumber(phoneNumber) }
+    }
+
+    private func signOut() {
+        Task { await authVM.signOut() }
     }
 }
 
@@ -189,7 +210,7 @@ private final class PreviewAuthService: AuthServiceProtocol {
     let authService = PreviewAuthService(isAuthenticated: true)
     return ContentView(
         authVM: AuthViewModel(authService: authService),
-        viewModel: ContentViewModel(authService: authService)
+        viewModel: ContentViewModel()
     )
 }
 
