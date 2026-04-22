@@ -99,7 +99,7 @@ struct BrokerageSettingsView: View {
 
     private func accountDetailRow(label: String, value: String, showCopy: Bool = false, isLast: Bool = false) -> some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 0) {
                 Text(label)
                     .font(.system(size: 14 * scale))
                     .foregroundStyle(Color.sevinoSecondary)
@@ -117,6 +117,8 @@ struct BrokerageSettingsView: View {
                         .foregroundStyle(Color.sevinoGreyContrast)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
+                        .padding(.leading, -16 * scale)
+                        .padding(.vertical, -8 * scale)
                 }
             }
             .padding(.vertical, 8 * scale)

@@ -178,7 +178,7 @@ private struct LinkedAccountRow: View {
             Spacer()
 
             VStack(alignment: .trailing, spacing: 2 * scale) {
-                HStack(spacing: 6 * scale) {
+                HStack(spacing: 0) {
                     Text(value)
                         .font(.system(size: 14 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoSecondary)
@@ -190,6 +190,8 @@ private struct LinkedAccountRow: View {
                             .foregroundStyle(Color.sevinoGreyContrast)
                             .frame(minWidth: 44, minHeight: 44)
                             .contentShape(Rectangle())
+                            .padding(.leading, -16 * scale)
+                            .padding(.vertical, -8 * scale)
                     }
                 }
 
