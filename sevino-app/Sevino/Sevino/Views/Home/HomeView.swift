@@ -36,8 +36,8 @@ struct HomeView: View {
     }
 
     var body: some View {
-        ZStack {
-            SevinoGlassContainer {
+        SevinoGlassContainer {
+            ZStack {
                 ZStack {
                     HomeGreetingSection(
                         scale: scale,
@@ -71,87 +71,87 @@ struct HomeView: View {
                             .padding(.bottom, 8 * scale)
                     }
                 }
-            }
-            .blur(radius: anyModalOpen ? 10 : 0)
-            .brightness(anyModalOpen && colorScheme == .light ? -0.3 : 0)
-            .allowsHitTesting(!anyModalOpen)
+                .blur(radius: anyModalOpen ? 10 : 0)
+                .brightness(anyModalOpen && colorScheme == .light ? -0.3 : 0)
+                .allowsHitTesting(!anyModalOpen)
 
-            Button {
-                if showHoldingsFilter {
-                    withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
-                } else {
-                    dismissAllModals()
+                Button {
+                    if showHoldingsFilter {
+                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
+                    } else {
+                        dismissAllModals()
+                    }
+                } label: {
+                    Color.sevinoPrimary
+                        .opacity(anyModalOpen ? 0.4 : 0)
+                        .ignoresSafeArea()
                 }
-            } label: {
-                Color.sevinoPrimary
-                    .opacity(anyModalOpen ? 0.4 : 0)
-                    .ignoresSafeArea()
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityLabel(L10n.Home.dismissAccessibility)
+                .accessibilityHidden(!anyModalOpen)
+                .allowsHitTesting(anyModalOpen)
+
+                PortfolioMorphingView(
+                    scale: scale,
+                    isExpanded: showPortfolio,
+                    viewModel: portfolioViewModel,
+                    onTap: togglePortfolio
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .padding(.leading, showPortfolio ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.trailing, showPortfolio ? 16 * scale : 0)
+                .padding(.top, 4 * scale)
+                .ignoresSafeArea(.keyboard)
+                .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
+                .opacity(showFunding || showHoldings || showRadar ? 0 : 1)
+
+                FundingMorphingView(
+                    scale: scale,
+                    isExpanded: showFunding,
+                    viewModel: fundingViewModel,
+                    onTap: toggleFunding,
+                    onDismiss: dismissFunding
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, showFunding ? 16 * scale : (16 + 36 + 8 + 36 + 8) * scale)
+                .padding(.leading, showFunding ? 16 * scale : 0)
+                .padding(.top, 4 * scale)
+                .ignoresSafeArea(.keyboard)
+                .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
+                .opacity(showPortfolio || showHoldings || showRadar ? 0 : 1)
+
+                HoldingsMorphingView(
+                    scale: scale,
+                    isExpanded: showHoldings,
+                    viewModel: holdingsViewModel,
+                    showFilter: $showHoldingsFilter,
+                    onTap: toggleHoldings,
+                    onDismiss: dismissHoldings
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, showHoldings ? 16 * scale : 16 * scale)
+                .padding(.leading, showHoldings ? 16 * scale : 0)
+                .padding(.top, 4 * scale)
+                .ignoresSafeArea(.keyboard)
+                .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
+                .opacity(showPortfolio || showFunding || showRadar ? 0 : 1)
+
+                RadarMorphingView(
+                    scale: scale,
+                    isExpanded: showRadar,
+                    viewModel: radarViewModel,
+                    onTap: toggleRadar,
+                    onDismiss: dismissRadar
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(.trailing, showRadar ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.leading, showRadar ? 16 * scale : 0)
+                .padding(.top, 4 * scale)
+                .ignoresSafeArea(.keyboard)
+                .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
+                .opacity(showPortfolio || showFunding || showHoldings ? 0 : 1)
             }
-            .buttonStyle(.plain)
-            .contentShape(Rectangle())
-            .accessibilityLabel(L10n.Home.dismissAccessibility)
-            .accessibilityHidden(!anyModalOpen)
-            .allowsHitTesting(anyModalOpen)
-
-            PortfolioMorphingView(
-                scale: scale,
-                isExpanded: showPortfolio,
-                viewModel: portfolioViewModel,
-                onTap: togglePortfolio
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .padding(.leading, showPortfolio ? 16 * scale : (16 + 36 + 8) * scale)
-            .padding(.trailing, showPortfolio ? 16 * scale : 0)
-            .padding(.top, 4 * scale)
-            .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
-            .opacity(showFunding || showHoldings || showRadar ? 0 : 1)
-
-            FundingMorphingView(
-                scale: scale,
-                isExpanded: showFunding,
-                viewModel: fundingViewModel,
-                onTap: toggleFunding,
-                onDismiss: dismissFunding
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .padding(.trailing, showFunding ? 16 * scale : (16 + 36 + 8 + 36 + 8) * scale)
-            .padding(.leading, showFunding ? 16 * scale : 0)
-            .padding(.top, 4 * scale)
-            .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
-            .opacity(showPortfolio || showHoldings || showRadar ? 0 : 1)
-
-            HoldingsMorphingView(
-                scale: scale,
-                isExpanded: showHoldings,
-                viewModel: holdingsViewModel,
-                showFilter: $showHoldingsFilter,
-                onTap: toggleHoldings,
-                onDismiss: dismissHoldings
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .padding(.trailing, showHoldings ? 16 * scale : 16 * scale)
-            .padding(.leading, showHoldings ? 16 * scale : 0)
-            .padding(.top, 4 * scale)
-            .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
-            .opacity(showPortfolio || showFunding || showRadar ? 0 : 1)
-
-            RadarMorphingView(
-                scale: scale,
-                isExpanded: showRadar,
-                viewModel: radarViewModel,
-                onTap: toggleRadar,
-                onDismiss: dismissRadar
-            )
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-            .padding(.trailing, showRadar ? 16 * scale : (16 + 36 + 8) * scale)
-            .padding(.leading, showRadar ? 16 * scale : 0)
-            .padding(.top, 4 * scale)
-            .ignoresSafeArea(.keyboard)
-            .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
-            .opacity(showPortfolio || showFunding || showHoldings ? 0 : 1)
         }
         .background { HomeBackgroundView() }
         .background {
