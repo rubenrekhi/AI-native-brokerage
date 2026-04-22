@@ -8,9 +8,6 @@ struct FundingMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        // Outer Button only wraps the collapsed pill — wrapping the expanded
-        // state too would propagate `.disabled(isExpanded)` through the
-        // environment and disable the inner Deposit / Withdraw / Link buttons.
         if isExpanded {
             expandedCard
         } else {
@@ -49,20 +46,6 @@ struct FundingMorphingView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 16 * scale) {
-            if let message = viewModel.displayedError {
-                Text(message)
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoNegative)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10 * scale)
-                    .padding(.horizontal, 12 * scale)
-                    .background(
-                        Color.sevinoNegative.opacity(0.12),
-                        in: .rect(cornerRadius: 12 * scale)
-                    )
-                    .transition(.opacity)
-            }
             headerSection
             earningsBadge
             statCards
@@ -194,10 +177,6 @@ struct FundingMorphingView: View {
     }
 
     private var actionButtons: some View {
-        // Deposit and Withdraw use empty action closures per Locked Decision #1;
-        // wiring ships in SEV-227. Left visually live instead of `.disabled(true)`
-        // because greying out a button that users legitimately can use would
-        // read as "blocked", not "coming soon".
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
                 .font(.system(size: 15 * scale, weight: .semibold))
@@ -230,8 +209,6 @@ struct FundingMorphingView: View {
     }
 
     private var infoRow: some View {
-        // Cash-interest explainer is a deferred feature; render as disabled
-        // so VoiceOver doesn't announce a live but no-op tap target.
         Button(action: {}) {
             HStack {
                 Image(systemName: "info.circle")

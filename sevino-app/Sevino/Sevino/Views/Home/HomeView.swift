@@ -210,6 +210,20 @@ struct HomeView: View {
             Text(message)
         }
         .alert(
+            L10n.Home.fundingLoadErrorTitle,
+            isPresented: Binding(
+                get: { fundingViewModel.error != nil },
+                set: { if !$0 { fundingViewModel.clearError() } }
+            ),
+            presenting: fundingViewModel.error
+        ) { _ in
+            Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
+                fundingViewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+        .alert(
             L10n.Home.radarLoadErrorTitle,
             isPresented: Binding(
                 get: { radarViewModel.error != nil },

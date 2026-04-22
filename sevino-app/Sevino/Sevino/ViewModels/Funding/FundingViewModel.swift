@@ -2,9 +2,7 @@ import Foundation
 import Observation
 
 /// Observable state for the Plaid + ACH funding flow.
-///
-/// Composed onto `HomeViewModel.funding` so `FundingMorphingView` can keep a
-/// single `viewModel: HomeViewModel` parameter.
+
 @Observable
 final class FundingViewModel {
 
@@ -14,10 +12,6 @@ final class FundingViewModel {
     var isLoading: Bool = false
 
     // MARK: - Error state
-    //
-    // `serverError` is populated when APIClient decodes a non-2xx body into
-    // APIError. `localError` holds anything client-side (Plaid exit error,
-    // unexpected throw). Views bind to `displayedError` — a coalesced string.
 
     var serverError: APIError?
     var localError: String?
@@ -28,11 +22,6 @@ final class FundingViewModel {
     var isShowingPlaidLink: Bool = false
 
     // MARK: - Cash display (mock) state
-    //
-    // Rendered by the expanded `FundingMorphingView`. Hardcoded placeholder
-    // values until real balance data lands (would plug into Alpaca's account
-    // / activities endpoints). Kept on this VM rather than HomeViewModel so
-    // it matches main's per-card decomposition pattern.
 
     private(set) var cashBalance = "$2,412.08"
     private(set) var cashApy = "3.20%"
@@ -53,17 +42,15 @@ final class FundingViewModel {
 
     // MARK: - Derived
 
-    /// Drives the CTA branch in `FundingMorphingView`.
     var hasLinkedBank: Bool { !relationships.isEmpty }
 
-    /// Single string the inline banner renders. Server error wins if both set —
-    /// server messages are more specific than the generic local fallback.
     var displayedError: String? {
         serverError?.localizedDescription ?? localError
     }
 
-    /// Clear both error sources. Called at the start of any user-initiated
-    /// operation that should reset the banner.
+    var error: String? { displayedError }
+    func clearError() { clearErrors() }
+
     func clearErrors() {
         serverError = nil
         localError = nil
@@ -71,7 +58,6 @@ final class FundingViewModel {
 
     // MARK: - Actions
 
-    /// Called when the `$` modal expands.
     func loadRelationships() async {
         isLoading = true
         defer { isLoading = false }
@@ -84,7 +70,6 @@ final class FundingViewModel {
         }
     }
 
-    /// Called when the user taps "Link a bank account".
     func startBankLink() async {
         clearErrors()
         isLoading = true
@@ -99,10 +84,6 @@ final class FundingViewModel {
         }
     }
 
-    /// Called from PlaidLinkSheet's onSuccess.
-    /// Awaits `loadRelationships()` BEFORE flipping `isShowingPlaidLink` false
-    /// so the action row has already re-rendered as Deposit/Withdraw by the
-    /// time the sheet dismisses.
     func onPlaidSuccess(
         publicToken: String,
         accountId: String,
@@ -124,7 +105,6 @@ final class FundingViewModel {
             await loadRelationships()
         } catch let apiError as APIError {
             serverError = apiError
-            // On BANK_ALREADY_LINKED, refresh so UI catches up with server state.
             if apiError.code == "BANK_ALREADY_LINKED" {
                 await loadRelationships()
             }
@@ -135,8 +115,6 @@ final class FundingViewModel {
         isShowingPlaidLink = false
     }
 
-    /// Called from PlaidLinkSheet's onExit.
-    /// nil error = user-cancelled (silent). Non-nil = surface a generic banner.
     func onPlaidExit(error plaidError: Error?) {
         if plaidError != nil {
             localError = L10n.Home.fundingPlaidConnectionError
