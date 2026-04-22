@@ -538,7 +538,7 @@ The settings screen is accessible via the Settings button at the bottom of the c
 - **Brokerage:** Alpaca Broker API (fully disclosed, firm-level API keys)
 - **Bank Linking:** Plaid Link → processor token → Alpaca ACH
 - **Market Data:** Alpaca Market Data API (REST on-demand, WebSocket deferred)
-- **Real-time Events:** Alpaca Trade Updates WebSocket (order fills/cancels/rejects), SSE for account/transfer status
+- **Real-time Events:** Alpaca Broker API SSE streams for account status, transfer status, and trade events (order fills/cancels/rejects)
 - **Caching:** Redis (30–60s TTL for rate limit protection)
 - **Error Tracking:** Sentry
 - **Analytics:** PostHog or equivalent

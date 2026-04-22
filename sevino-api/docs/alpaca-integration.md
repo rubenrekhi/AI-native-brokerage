@@ -2,7 +2,7 @@
 
 > **Sevino Technical Reference Document** — Version 1.0 • March 2026
 >
-> This document defines how the Sevino mobile application integrates with Alpaca's Broker API. It maps each feature to specific Alpaca endpoints, communication protocols (REST, WebSocket, SSE), and data flows. Use this as the single source of truth for the entire brokerage integration layer.
+> This document defines how the Sevino mobile application integrates with Alpaca's Broker API. It maps each feature to specific Alpaca endpoints, communication protocols (REST, SSE), and data flows. Use this as the single source of truth for the entire brokerage integration layer.
 
 ---
 
@@ -20,7 +20,7 @@
 
 ## Communication Protocols
 
-Sevino uses three communication mechanisms with Alpaca. Each serves a different purpose.
+Sevino uses two communication mechanisms with Alpaca's Broker API. Each serves a different purpose.
 
 ### REST API (Request/Response)
 
@@ -36,23 +36,17 @@ The primary mechanism for reading data and initiating actions. Every account cre
 
 ### Server-Sent Events (SSE)
 
-Server-to-server event streaming for asynchronous state changes. The Sevino backend opens a persistent HTTP connection to Alpaca's Events API and receives pushed updates (account approvals, transfer completions, order state changes).
+Server-to-server event streaming for asynchronous state changes. The Sevino backend opens persistent HTTP connections to Alpaca's Events API and receives pushed updates (account approvals, transfer completions, order fills / cancels / rejects).
 
 - Supports both real-time streaming and historical queries.
-- On connection drop, reconnect and replay missed events using `since` / `since_id` parameters.
+- On connection drop, reconnect and replay missed events using `since_ulid` / `since_id` parameters.
+- Alpaca's Broker API allows **up to 25 concurrent SSE connections per API key** ([Broker API FAQ](https://docs.alpaca.markets/docs/broker-api-faq)); exceeded requests return `Too many requests`. See `docs/architecture.md` §Worker topology for how that pool is allocated across environments.
 
-### WebSocket (Trade Updates Only)
+### Note on WebSockets
 
-A single WebSocket connection for order lifecycle events.
+Alpaca's Broker API does not expose a WebSocket trade-updates endpoint. The `wss://(paper-)api.alpaca.markets/stream` WebSockets belong to Alpaca's **Trading API** (different auth model, different concurrency rules, per-account rather than broker-wide). As a broker partner, Sevino uses the Broker API's SSE trade events stream (`/v2/events/trades`) for all real-time order status updates.
 
-| Property | Value |
-|---|---|
-| **URL (Live)** | `wss://api.alpaca.markets/stream` |
-| **URL (Sandbox)** | `wss://paper-api.alpaca.markets/stream` |
-| **Purpose** | Real-time order fill, cancel, and reject events |
-| **Management** | Server-side only (Sevino backend) |
-
-When the user confirms a trade, the backend receives fill/error events within milliseconds via this stream and updates the Trade Confirmation Card.
+The Market Data WebSocket (`wss://stream.data.alpaca.markets/v2/{feed}`) is a separate feature — available but deferred to future; see §Future Enhancements.
 
 ### Protocol Decision Matrix
 
@@ -68,7 +62,7 @@ Use this table to determine which protocol to use for each data type:
 | Account info (balance, buying power) | REST | Sevino → Alpaca | On demand + 5-min background |
 | Portfolio history (charts) | REST | Sevino → Alpaca | On demand (user opens modal) |
 | Order placement | REST | Sevino → Alpaca | Per trade |
-| Order fill / cancel / reject events | WebSocket | Alpaca → Sevino | Real-time |
+| Order fill / cancel / reject events | SSE | Alpaca → Sevino | Per event |
 | Stock prices (Stock Info Cards, Radar) | REST | Sevino → Alpaca | On demand (user taps) |
 | Historical bars (sparklines, charts) | REST | Sevino → Alpaca | On demand (user taps) |
 | Market clock / calendar | REST | Sevino → Alpaca | On app open / new conversation |
@@ -409,11 +403,11 @@ When markets are closed (FR-8.15):
 - **Must display clear warnings** about potential price differences
 - Use `GET /v1/clock` — returns `is_open`, `next_open`, `next_close` timestamps
 
-### Order Status Updates (WebSocket)
+### Order Status Updates (SSE)
 
-**Endpoint:** `wss://broker-api.alpaca.markets/stream`
+**Endpoint:** `GET /v2/events/trades` (SSE)
 
-After placing an order, listen for `trade_updates` events:
+After placing an order, the trade events SSE listener processes `trade_updates` events and updates the `order_events` row:
 
 | Event | Meaning | Sevino Action |
 |---|---|---|
@@ -650,17 +644,11 @@ For "after >2% drop": check SPY's daily change during the status bar's 5-minute 
 
 ### SSE Connection Management
 
-- Track last received `event_id` or timestamp
-- On reconnection, use `since_id` or `since` parameter to replay missed events
+- Track last received `event_ulid` (or `event_id` on v2-migrated endpoints — both are ULIDs)
+- On reconnection, use `since_ulid` / `since_id` parameter to replay missed events
 - Implement exponential backoff for reconnection attempts
-- Deduplicate events by `event_id` when processing from both SSE and WebSocket channels
-
-### WebSocket Connection Management
-
-- **Ping/pong keepalive** to detect stale connections
-- **Authenticate within 10 seconds** of connecting
-- Automatic reconnection and re-listen to `trade_updates` stream on disconnect
-- Handle `406` "connection limit exceeded" error if another connection is already active
+- Handlers are UPDATE-idempotent, so replay after reconnect is safe — no explicit dedup keys needed
+- Stay within Alpaca's **25 concurrent connections per API key** limit across all environments sharing the sandbox key
 
 ### PDT (Pattern Day Trader) Considerations
 
@@ -707,8 +695,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 | `/v1/trading/accounts/{id}/positions` | `GET` | List all open positions |
 | `/v1/trading/accounts/{id}/positions/{symbol}` | `GET` | Get position for specific symbol |
 | `/v1/trading/accounts/{id}/account/portfolio/history` | `GET` | Portfolio history timeseries |
-| `/v2/events/trades` | `GET` (SSE) | Stream order status change events (future redundancy layer). Note: `/v1/events/trades` is deprecated. |
-| `wss://broker-api.alpaca.markets/stream` | WebSocket | Real-time trade update events |
+| `/v2/events/trades` | `GET` (SSE) | Stream order status change events (fills, cancels, rejects). Note: `/v1/events/trades` is deprecated for new partners. |
 
 ### Market Data
 
@@ -740,12 +727,6 @@ If a user's account gets flagged as a Pattern Day Trader:
 
 ## Future Enhancements
 
-### SSE Trade Events as Redundancy Layer
-
-**Endpoint:** `GET /v2/events/trades` (note: `/v1/events/trades` is deprecated for new partners)
-
-Listen to both the WebSocket and SSE trade events stream simultaneously. If WebSocket drops, SSE (with historical replay via `since_id`) ensures no order events are missed. Deduplicate by `event_id`.
-
 ### Real-Time Market Data WebSocket
 
 **Endpoint:** `wss://stream.data.alpaca.markets/v2/{feed}`
@@ -769,8 +750,7 @@ Replace on-demand REST for price data if a future feature requires continuously 
 |---|---|---|
 | Status bar refresh | Every 5 minutes (frontend, foreground only) | Calls account endpoint, updates equity display |
 | AI Radar generation | Daily | Generates personalized stock recommendations |
-| SSE listener | Persistent connection | Receives account status, transfer status events |
-| WebSocket listener | Persistent connection | Receives trade update events |
+| SSE listeners | Persistent connections | Receive account status, transfer status, and trade events |
 
 ### Rate Limit Protection
 

@@ -125,7 +125,7 @@ Pushing to `main` auto-deploys to **staging** on Railway. Production deployments
 
 The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade head`) → start (`uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips='*'`).
 
-**The `worker` Railway service MUST run with `replicas=1`** — it hosts persistent Alpaca SSE/WebSocket listeners, and Alpaca only permits one connection per API key. Scaling `worker` beyond 1 replica will cause connection conflicts and duplicate event handling. See [docs/architecture.md §Worker topology](docs/architecture.md#worker-topology) for details.
+**The `worker` Railway service MUST run with `replicas=1` per environment** — it hosts persistent Alpaca SSE listeners. Alpaca's Broker API caps us at **25 concurrent SSE connections per API key** ([Broker API FAQ](https://docs.alpaca.markets/docs/broker-api-faq)); scaling a single environment's worker beyond 1 replica would double-consume events for that environment. Our connection budget across the fleet is: **3 local dev + 1 staging + up to 21 PR preview environments = 25**. If PR previews exceed 21 concurrent, later workers will get `Too many requests` from Alpaca and fail to start listeners. See [docs/architecture.md §Worker topology](docs/architecture.md#worker-topology) for details.
 
 ## Environment Variables
 
