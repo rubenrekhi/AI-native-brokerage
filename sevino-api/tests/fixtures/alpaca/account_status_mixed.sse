@@ -1,0 +1,13 @@
+event: account_status
+data: {"event_ulid": "01HCM000000000000000000001", "account_id": "abc", "status_to": "ACTIVE"}
+
+:heartbeat
+
+event: account_status
+data: {"event_ulid": "01HCM000000000000000000002", "account_id": "def", "status_to": "REJECTED"}
+
+: you are reading too slowly, dropped 10000 messages
+
+event: account_status
+data: {"event_ulid": "01HCM000000000000000000003", "account_id": "ghi", "status_to": "ACTIVE"}
+

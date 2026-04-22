@@ -365,6 +365,18 @@ The connection stays open indefinitely. Each block is a discrete event pushed wh
 
 Why both SSE and WebSocket for trade events: WebSocket gives millisecond latency for the real-time Trade Confirmation Card UX. SSE gives historical replay capability via `since_ulid` if the WebSocket drops. Together they ensure no order event is ever missed.
 
+### Comment lines (heartbeats + diagnostics)
+
+Alongside `event:` / `data:` frames, Alpaca also sends SSE comment lines (lines starting with `:`). We read and surface all of them:
+
+| Comment | When | What we do |
+|---------|------|------------|
+| `:heartbeat` | On idle streams, proving the TCP connection is alive (Alpaca's FAQ: *"Alpaca would never stop responding, hence we also send 'heartbeat' to let partners know that the connection is alive"*) | Bump `last_message_received_at`, info-log `sse_heartbeat` |
+| `: you are reading too slowly, dropped N messages` | Slow-client warning — our consumer fell behind | Bump liveness, warning log, breadcrumb, plus a standalone Sentry `capture_message` tagged with `sse_dropped_messages=N` so it's searchable independent of whether the connection later drops |
+| `: internal server error` | v2/v2beta1 endpoints only — sent by Alpaca before it closes the connection | Bump liveness, warning log, Sentry breadcrumb so it attaches to the subsequent disconnect event |
+
+`httpx_sse.aiter_sse()` silently swallows comment lines, so the listener reads raw lines via `event_source.response.aiter_lines()` and feeds non-comment lines to `httpx_sse`'s `SSEDecoder` itself. Real events flow through `handle_event` unchanged.
+
 ### Checkpoint & resume strategy
 
 Each SSE stream's last processed event ID is stored in a Postgres table (`sse_checkpoints`): one row per stream (`stream_name` PK, `last_event_id`, `updated_at`). Updated after each event is successfully processed.
@@ -444,7 +456,7 @@ Not needed for SSE-only streams (account status, transfer status) — a single S
 
 ### Worker integration
 
-The SSE listeners and WebSocket listener run as `asyncio.Task`s spawned in the ARQ worker's `startup` hook and cancelled in `shutdown`. They are persistent loops (not cron jobs) with internal reconnection logic using exponential backoff on connection failure.
+The SSE listeners and WebSocket listener run as `asyncio.Task`s spawned in the ARQ worker's `startup` hook and cancelled in `shutdown`. They are persistent loops (not cron jobs) with internal reconnection logic using exponential backoff on connection failure. A separate liveness cron reads each listener's `last_message_received_at` and alerts if it's been silent longer than `silence_threshold_seconds` (default 90s, sized to survive ~6 missed 15s heartbeats; subclasses can override per stream).
 
 ```python
 async def startup(ctx: dict):
