@@ -12,7 +12,7 @@ enum OnboardingResumeManager {
     }
 
     /// All saved Phase 1 data, mapped to OnboardingContainerView's @State var names.
-    struct OnboardingResumeData {
+    struct OnboardingResumeData: Equatable {
         var userName: String = ""
         var referralSource: String = ""
         var referralExtra: String? = nil
@@ -30,7 +30,7 @@ enum OnboardingResumeManager {
     }
 
     /// All saved Phase 2 data, mapped to AlpacaSetupContainerView's @State var names.
-    struct AlpacaResumeData {
+    struct AlpacaResumeData: Equatable {
         var userName: String = ""
         var legalName: String = ""
         var address: String = ""

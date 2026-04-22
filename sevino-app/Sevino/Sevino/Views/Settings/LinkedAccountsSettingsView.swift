@@ -20,18 +20,22 @@ struct LinkedAccountsSettingsView: View {
             header
                 .padding(.bottom, 24 * scale)
 
-            ForEach(accounts) { account in
-                LinkedAccountRow(
-                    account: account,
-                    scale: scale,
-                    isExpanded: expandedAccountId == account.id,
-                    onToggle: { toggleExpanded(account.id) },
-                    onCopy: { copyAccountNumber(account.lastFour) },
-                    onUnlink: { unlink(account.id) }
-                )
-            }
+            if accounts.isEmpty {
+                emptyState
+            } else {
+                ForEach(accounts) { account in
+                    LinkedAccountRow(
+                        account: account,
+                        scale: scale,
+                        isExpanded: expandedAccountId == account.id,
+                        onToggle: { toggleExpanded(account.id) },
+                        onCopy: { copyAccountNumber(account.lastFour) },
+                        onUnlink: { unlink(account.id) }
+                    )
+                }
 
-            Spacer()
+                Spacer()
+            }
 
             Button(action: {}) {
                 Text(L10n.Settings.addAccount)
@@ -62,6 +66,15 @@ struct LinkedAccountsSettingsView: View {
 
     private var header: some View {
         SettingsHeaderView(title: L10n.Settings.linkedAccounts, scale: scale, onBack: { dismiss() })
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Settings.linkedAccountsEmptyTitle, systemImage: "link")
+        } description: {
+            Text(L10n.Settings.linkedAccountsEmptyMessage)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func toggleExpanded(_ id: UUID) {

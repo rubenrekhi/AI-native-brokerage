@@ -16,4 +16,13 @@ enum AppConfig {
     static var apiKey: String {
         Bundle.main.infoDictionary?["API_KEY"] as? String ?? ""
     }
+
+    enum Contact {
+        static let founderPhoneNumber = "4169189713"
+        static let supportEmail = "admin@sevino.ai"
+
+        static var founderPhoneURL: URL? { URL(string: "tel:\(founderPhoneNumber)") }
+        static var founderTextURL: URL? { URL(string: "sms:\(founderPhoneNumber)") }
+        static var supportEmailURL: URL? { URL(string: "mailto:\(supportEmail)") }
+    }
 }

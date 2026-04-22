@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import httpx
@@ -88,22 +89,30 @@ async def test_process_event_calls_handler_and_upserts_checkpoint(
     )
 
     await listener._process_event(
-        _sse("account_status", "evt_1", '{"account_id": "abc", "status": "ACTIVE"}')
+        _sse(
+            "account_status",
+            None,
+            '{"event_ulid": "evt_1", "account_id": "abc", "status": "ACTIVE"}',
+        )
     )
 
     assert listener.handled == [
-        ("account_status", {"account_id": "abc", "status": "ACTIVE"})
+        (
+            "account_status",
+            {"event_ulid": "evt_1", "account_id": "abc", "status": "ACTIVE"},
+        )
     ]
     upsert.assert_awaited_once_with(fake_session, "test_stream", "evt_1")
     fake_session.commit.assert_awaited_once()
     fake_session.rollback.assert_not_awaited()
 
 
-async def test_process_event_skips_checkpoint_when_event_id_missing(
+async def test_process_event_skips_checkpoint_when_event_ulid_missing(
     listener, fake_session, monkeypatch
 ):
     """Alpaca always includes an ID, but guard against malformed events that
-    lack one — we can't anchor `since_id` to a missing ID, so skip it."""
+    lack one — we can't anchor the resume param to a missing ID, so skip
+    the checkpoint but still let the handler run and commit."""
     upsert = AsyncMock()
     monkeypatch.setattr(
         "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
@@ -145,7 +154,9 @@ async def test_process_event_rolls_back_and_captures_on_handler_exception(
     )
 
     # Does not raise — loop must keep running.
-    await listener._process_event(_sse("account_status", "evt_2", '{"x": 1}'))
+    await listener._process_event(
+        _sse("account_status", None, '{"event_ulid": "evt_2", "x": 1}')
+    )
 
     fake_session.rollback.assert_awaited_once()
     fake_session.commit.assert_not_awaited()
@@ -164,7 +175,7 @@ async def test_process_event_parse_failure_skips_handler_and_captures(
     session_factory = MagicMock()
     monkeypatch.setattr("app.listeners.base_sse.async_session", session_factory)
 
-    await listener._process_event(_sse("bad", "evt_x", "not json"))
+    await listener._process_event(_sse("bad", None, "not json"))
 
     assert listener.handled == []
     session_factory.assert_not_called()
@@ -194,7 +205,9 @@ async def test_process_event_binds_correlation_id_to_contextvars(
         "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
     )
 
-    await listener._process_event(_sse("account_status", "evt_42", "{}"))
+    await listener._process_event(
+        _sse("account_status", None, '{"event_ulid": "evt_42"}')
+    )
 
     assert captured["correlation_id"] == "sse-test_stream-evt_42"
     assert captured["stream"] == "test_stream"
@@ -324,7 +337,9 @@ async def test_process_event_tags_sentry_scope_with_stream_and_event_id(
         "app.listeners.base_sse.sentry_sdk.capture_exception", MagicMock()
     )
 
-    await listener._process_event(_sse("order_fill", "evt_77", "{}"))
+    await listener._process_event(
+        _sse("order_fill", None, '{"event_ulid": "evt_77"}')
+    )
 
     assert captured_tags["sse_stream"] == "trade_events_sse"
     assert captured_tags["sse_event_id"] == "evt_77"
@@ -361,7 +376,9 @@ async def test_process_event_rolls_back_and_reraises_on_cancellation(
     )
 
     with pytest.raises(asyncio.CancelledError):
-        await listener._process_event(_sse("account_status", "evt_3", "{}"))
+        await listener._process_event(
+            _sse("account_status", None, '{"event_ulid": "evt_3"}')
+        )
 
     fake_session.rollback.assert_awaited_once()
     fake_session.commit.assert_not_awaited()
@@ -381,7 +398,8 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
     # token — the actual base URL doesn't matter.
     monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
 
-    # Checkpoint starts empty → listener must not send ?since_id on first connect.
+    # Checkpoint starts empty → listener must not send a resume param on first
+    # connect.
     monkeypatch.setattr(
         "app.listeners.base_sse.SseCheckpointRepository.get",
         AsyncMock(return_value=None),
@@ -393,12 +411,10 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
 
     sse_body = (
         b"event: account_status\n"
-        b"id: evt_100\n"
-        b'data: {"account_id": "abc", "status": "ACTIVE"}\n'
+        b'data: {"event_ulid": "01HCM000000000000000000100", "account_id": "abc", "status": "ACTIVE"}\n'
         b"\n"
         b"event: account_status\n"
-        b"id: evt_101\n"
-        b'data: {"account_id": "def", "status": "REJECTED"}\n'
+        b'data: {"event_ulid": "01HCM000000000000000000101", "account_id": "def", "status": "REJECTED"}\n'
         b"\n"
     )
 
@@ -424,21 +440,45 @@ async def test_stream_once_parses_canned_sse_and_advances_checkpoint(
 
     # Two events handled, in order, with parsed JSON payloads.
     assert listener.handled == [
-        ("account_status", {"account_id": "abc", "status": "ACTIVE"}),
-        ("account_status", {"account_id": "def", "status": "REJECTED"}),
+        (
+            "account_status",
+            {
+                "event_ulid": "01HCM000000000000000000100",
+                "account_id": "abc",
+                "status": "ACTIVE",
+            },
+        ),
+        (
+            "account_status",
+            {
+                "event_ulid": "01HCM000000000000000000101",
+                "account_id": "def",
+                "status": "REJECTED",
+            },
+        ),
     ]
-    # Checkpoint advanced to each event's ID as they were handled.
+    # Checkpoint advanced to each event's ULID as they were handled.
     assert upsert.await_count == 2
-    assert upsert.await_args_list[0].args == (fake_session, "test_stream", "evt_100")
-    assert upsert.await_args_list[1].args == (fake_session, "test_stream", "evt_101")
+    assert upsert.await_args_list[0].args == (
+        fake_session,
+        "test_stream",
+        "01HCM000000000000000000100",
+    )
+    assert upsert.await_args_list[1].args == (
+        fake_session,
+        "test_stream",
+        "01HCM000000000000000000101",
+    )
     # Liveness timestamp updated.
     assert listener.last_message_received_at > 0.0
-    # Request carried the bearer and no `since_id` on first connect.
+    # Request carried the bearer and no resume param on first connect.
     assert len(captured_requests) == 1
     req = captured_requests[0]
     assert req.headers["authorization"] == "Bearer tok-xyz"
     assert req.headers["accept"] == "text/event-stream"
-    assert "since_id" not in (req.url.query.decode() if req.url.query else "")
+    query = req.url.query.decode() if req.url.query else ""
+    assert "since_ulid" not in query
+    assert "since_id" not in query
 
 
 async def test_stream_once_raises_on_non_200_status(
@@ -480,11 +520,12 @@ async def test_stream_once_raises_on_non_200_status(
     assert listener.handled == []
 
 
-async def test_stream_once_sends_since_id_when_checkpoint_exists(
+async def test_stream_once_sends_since_ulid_when_checkpoint_exists(
     broker, fake_session, monkeypatch
 ):
     """On reconnect after a disconnect/restart, the listener must replay from
-    the last processed event by passing ``?since_id=<id>``."""
+    the last processed event by passing ``?since_ulid=<ulid>`` — the default
+    resume param for legacy endpoints."""
     monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
 
     row = MagicMock()
@@ -512,4 +553,395 @@ async def test_stream_once_sends_since_id_when_checkpoint_exists(
         await listener._stream_once(client)
 
     assert len(captured_requests) == 1
-    assert "since_id=evt_99" in captured_requests[0].url.query.decode()
+    query = captured_requests[0].url.query.decode()
+    assert "since_ulid=evt_99" in query
+    assert "since_id=" not in query
+
+
+async def test_stream_once_uses_overridden_resume_field_and_param(
+    broker, fake_session, monkeypatch
+):
+    """Subclasses for already-migrated endpoints (`/v2/events/trades`,
+    admin actions) must override `resume_field` and `resume_param`. Those
+    endpoints put the ULID directly in the `event_id` JSON field and accept
+    the resume value on the original `since_id` query param. This test
+    verifies both knobs route through: the checkpoint is extracted from
+    `data["event_id"]` and the reconnect URL carries `?since_id=<ulid>`."""
+
+    class _V2TradeListener(BaseSSEListener):
+        stream_name = "trade_events"
+        endpoint_path = "/v2/events/trades"
+        silence_threshold_seconds = 60
+        resume_field = "event_id"
+        resume_param = "since_id"
+
+        def __init__(self, broker):
+            super().__init__(broker)
+            self.handled: list[tuple[str, dict]] = []
+
+        async def handle_event(self, session, event_type, data):
+            self.handled.append((event_type, data))
+
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok-xyz"))
+
+    row = MagicMock()
+    row.last_event_id = "01HCMKKNRK7S5C1JYP50QGDECP"
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=row),
+    )
+    upsert = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
+    )
+
+    sse_body = (
+        b"event: fill\n"
+        b'data: {"event_id": "01HCMKKNRK7S5C1JYP50QGDECQ", "order_id": "ord_1"}\n'
+        b"\n"
+    )
+
+    captured_requests: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        captured_requests.append(request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=sse_body,
+        )
+
+    transport = httpx.MockTransport(_handler)
+    listener = _V2TradeListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    # Reconnect URL uses the overridden query param name with the stored ULID.
+    assert len(captured_requests) == 1
+    query = captured_requests[0].url.query.decode()
+    assert "since_id=01HCMKKNRK7S5C1JYP50QGDECP" in query
+    assert "since_ulid=" not in query
+    # Checkpoint upsert pulled the new ULID out of the `event_id` JSON field.
+    upsert.assert_awaited_once_with(
+        fake_session, "trade_events", "01HCMKKNRK7S5C1JYP50QGDECQ"
+    )
+
+
+# --- SSE comment handling (SEV-298) ---------------------------------------
+
+
+def _sse_response(body: bytes) -> "httpx.Response":
+    return httpx.Response(
+        200,
+        headers={"content-type": "text/event-stream"},
+        content=body,
+    )
+
+
+def test_silence_threshold_default_is_90_seconds():
+    """Default silence threshold is 90s: ~6x headroom on SSE-spec 15s
+    heartbeats, sized to survive a few missed beats without false-alarming.
+    Subclasses can still override — this only checks the base default."""
+    assert BaseSSEListener.silence_threshold_seconds == 90
+
+
+async def test_stream_once_heartbeat_bumps_liveness_without_dispatching_handler(
+    broker, fake_session, monkeypatch
+):
+    """:heartbeat lines are the whole reason we read comments at all — they
+    advance last_message_received_at on quiet streams so the liveness cron
+    doesn't false-alarm. They must NOT hit the handler or advance the
+    checkpoint."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    upsert = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
+    )
+
+    transport = httpx.MockTransport(
+        lambda _req: _sse_response(b":heartbeat\n\n")
+    )
+    listener = _CaptureListener(broker)
+    listener.last_message_received_at = 0.0
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    assert listener.handled == []
+    upsert.assert_not_awaited()
+    assert listener.last_message_received_at > 0.0
+
+
+async def test_stream_once_heartbeat_emits_info_log(
+    broker, fake_session, monkeypatch
+):
+    """Every heartbeat is info-logged with the stream name so worker logs
+    give a live signal of connection health even on quiet streams."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    info_calls: list[tuple[str, dict]] = []
+
+    def _capture_info(event: str, **kwargs):
+        info_calls.append((event, kwargs))
+
+    monkeypatch.setattr(
+        "app.listeners.base_sse.logger.info", _capture_info
+    )
+
+    transport = httpx.MockTransport(
+        lambda _req: _sse_response(b":heartbeat\n\n")
+    )
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    heartbeat_logs = [
+        (event, kwargs)
+        for event, kwargs in info_calls
+        if event == "sse_heartbeat"
+    ]
+    assert len(heartbeat_logs) == 1
+    _, kwargs = heartbeat_logs[0]
+    assert kwargs == {"stream": "test_stream"}
+
+
+async def test_stream_once_diagnostic_comment_logs_and_breadcrumbs(
+    broker, fake_session, monkeypatch
+):
+    """Non-heartbeat comments (e.g. Alpaca's v2 `: internal server error`)
+    are logged at warning and added as a Sentry breadcrumb so they attach
+    to any subsequent disconnect capture."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    breadcrumbs: list[dict] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.add_breadcrumb",
+        lambda **kwargs: breadcrumbs.append(kwargs),
+    )
+
+    warning_calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.logger.warning",
+        lambda event, **kwargs: warning_calls.append((event, kwargs)),
+    )
+
+    transport = httpx.MockTransport(
+        lambda _req: _sse_response(b": internal server error\n\n")
+    )
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    diag_warnings = [
+        (event, kwargs)
+        for event, kwargs in warning_calls
+        if event == "sse_diagnostic_comment"
+    ]
+    assert len(diag_warnings) == 1
+    _, kwargs = diag_warnings[0]
+    assert kwargs["stream"] == "test_stream"
+    assert kwargs["comment"] == "internal server error"
+
+    diag_breadcrumbs = [
+        b for b in breadcrumbs
+        if b.get("category") == "sse"
+        and b.get("level") == "warning"
+        and "internal server error" in (b.get("message") or "")
+    ]
+    assert len(diag_breadcrumbs) == 1
+    assert diag_breadcrumbs[0]["data"]["comment"] == "internal server error"
+
+
+async def test_stream_once_dropped_messages_emits_sentry_capture_with_tag(
+    broker, fake_session, monkeypatch
+):
+    """Alpaca's slow-client warning `: you are reading too slowly, dropped
+    N messages` must raise its own Sentry event with the drop count as a
+    searchable tag. A tag alone (riding on a future disconnect) would
+    leave a silent gap if the connection stays up."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    captured_messages: list[tuple[str, str, dict]] = []
+    captured_tags: dict = {}
+    captured_contexts: dict = {}
+
+    class _FakeScope:
+        def set_tag(self, k, v):
+            captured_tags[k] = v
+
+        def set_context(self, k, v):
+            captured_contexts[k] = v
+
+    class _FakeScopeManager:
+        def __enter__(self):
+            return _FakeScope()
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.new_scope",
+        lambda: _FakeScopeManager(),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.capture_message",
+        lambda msg, level=None: captured_messages.append(
+            (msg, level, dict(captured_tags))
+        ),
+    )
+
+    transport = httpx.MockTransport(
+        lambda _req: _sse_response(
+            b": you are reading too slowly, dropped 10000 messages\n\n"
+        )
+    )
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    assert len(captured_messages) == 1
+    msg, level, tags_snapshot = captured_messages[0]
+    assert level == "warning"
+    assert "10000" in msg
+    assert "test_stream" in msg
+    assert tags_snapshot["sse_stream"] == "test_stream"
+    assert tags_snapshot["sse_dropped_messages"] == "10000"
+    assert captured_contexts["sse_slow_client"]["dropped_messages"] == 10000
+
+
+async def test_stream_once_mixed_events_and_comments(
+    broker, fake_session, monkeypatch
+):
+    """End-to-end mixed stream: real events, a heartbeat, a slow-client
+    warning, interleaved. All events reach the handler; liveness advances
+    across the entire stream; the slow-client comment triggered its own
+    Sentry capture."""
+    fixture = (
+        Path(__file__).parents[1]
+        / "fixtures"
+        / "alpaca"
+        / "account_status_mixed.sse"
+    )
+    sse_body = fixture.read_bytes()
+
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    upsert = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", upsert
+    )
+
+    captured_messages: list[str] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.capture_message",
+        lambda msg, level=None: captured_messages.append(msg),
+    )
+
+    transport = httpx.MockTransport(lambda _req: _sse_response(sse_body))
+    listener = _CaptureListener(broker)
+    listener.last_message_received_at = 0.0
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    # Three real events reached the handler, in order.
+    assert [evt for evt, _ in listener.handled] == [
+        "account_status",
+        "account_status",
+        "account_status",
+    ]
+    assert [d["account_id"] for _, d in listener.handled] == [
+        "abc",
+        "def",
+        "ghi",
+    ]
+    # Checkpoint advanced across all three events' ULIDs.
+    assert upsert.await_count == 3
+    assert upsert.await_args_list[-1].args[2] == (
+        "01HCM000000000000000000003"
+    )
+    # Liveness updated.
+    assert listener.last_message_received_at > 0.0
+    # Slow-client comment produced a Sentry capture.
+    assert any("dropped 10000" in msg for msg in captured_messages)
+
+
+async def test_stream_once_comment_between_multiline_data_preserves_event(
+    broker, fake_session, monkeypatch
+):
+    """The whole reason we intercept comments at the line layer (rather
+    than letting SSEDecoder see them) is that a comment in the middle of
+    a multi-line event must not tear the event. The SSEDecoder's internal
+    state should survive the comment-skip and emit one event with both
+    data lines joined on the terminating blank line."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    # One event with two data: lines, a :heartbeat comment wedged between
+    # them. Per the SSE spec, the two data values are joined with "\n" on
+    # emit. The expected handler payload is {"a": 1, "b": 2} only if
+    # both data lines reach the decoder despite the comment.
+    sse_body = (
+        b"event: account_status\n"
+        b'data: {"event_ulid": "01HCM00000000000000000MULT",\n'
+        b":heartbeat\n"
+        b'data:  "a": 1, "b": 2}\n'
+        b"\n"
+    )
+
+    transport = httpx.MockTransport(lambda _req: _sse_response(sse_body))
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    # Exactly one event reached the handler — the comment did not split
+    # the frame into two malformed halves.
+    assert len(listener.handled) == 1
+    event_type, data = listener.handled[0]
+    assert event_type == "account_status"
+    # And the data payload round-tripped correctly across the interleaved
+    # comment (SSEDecoder joins multi-line data: with "\n").
+    assert data == {
+        "event_ulid": "01HCM00000000000000000MULT",
+        "a": 1,
+        "b": 2,
+    }

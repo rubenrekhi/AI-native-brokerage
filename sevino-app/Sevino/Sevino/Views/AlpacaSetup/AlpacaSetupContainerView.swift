@@ -29,7 +29,7 @@ struct AlpacaSetupContainerView: View {
     var body: some View {
         VStack(spacing: 0) {
             if viewModel.currentStep > 1 {
-                OnboardingProgressBar(
+                ProgressBar(
                     currentStep: viewModel.currentStep - 1,
                     totalSteps: AlpacaSetupViewModel.totalSteps - 1,
                     scale: scale

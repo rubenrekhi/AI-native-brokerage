@@ -29,13 +29,11 @@ This document describes how the Sevino API works — the full stack, how service
   - [Account creation & KYC](#account-creation--kyc)
   - [Trading](#trading)
   - [Portfolio data](#portfolio-data)
-- [📡 Real-Time Events (SSE & WebSocket)](#-real-time-events-sse--websocket)
+- [📡 Real-Time Events (SSE)](#-real-time-events-sse)
   - [Connections](#connections)
   - [How SSE works](#how-sse-works)
   - [Checkpoint & resume strategy](#checkpoint--resume-strategy)
   - [Event handlers](#event-handlers)
-  - [Deduplication](#deduplication)
-  - [Out-of-order protection](#out-of-order-protection)
   - [Worker integration](#worker-integration)
 - [🏦 Plaid Integration](#-plaid-integration)
   - [The flow](#the-flow-1)
@@ -332,22 +330,25 @@ Alpaca is the source of truth. The API calls Alpaca on every request:
 
 We do not store this data in our database. Redis is available for caching with short TTLs if performance becomes an issue.
 
-## 📡 Real-Time Events (SSE & WebSocket)
+## 📡 Real-Time Events (SSE)
 
-The ARQ worker maintains persistent connections to Alpaca's event APIs. Events update existing DB rows (not an append-only event log). The FastAPI web server never touches these connections — it just reads the DB/cache when the iOS app asks.
+The ARQ worker maintains persistent SSE connections to Alpaca's event APIs. Events update existing DB rows (not an append-only event log). The FastAPI web server never touches these connections — it just reads the DB/cache when the iOS app asks.
+
+Alpaca's Broker API does not offer a WebSocket endpoint for trade updates (the `wss://api.alpaca.markets/stream` endpoint belongs to the Trading API and uses a different auth model); SSE is the canonical real-time channel for Broker API partners.
 
 ### Connections
 
-Four persistent connections, maintained by the ARQ worker (not the web process), regardless of how many users exist:
+Three persistent SSE connections, maintained by the ARQ worker (not the web process), regardless of how many users exist:
 
 | # | Protocol | Endpoint | Purpose |
 |---|----------|----------|---------|
 | 1 | SSE | `GET /v1/events/accounts/status` | KYC lifecycle (SUBMITTED → ACTIVE, ACTION_REQUIRED, REJECTED) |
 | 2 | SSE | `GET /v1/events/transfers/status` | ACH lifecycle (QUEUED → PENDING → COMPLETE, REJECTED, RETURNED) |
-| 3 | SSE | `GET /v1/events/trades` | Order fills, cancels, rejects (redundancy layer) |
-| 4 | WebSocket | `wss://broker-api.alpaca.markets/stream` | Order fills, cancels, rejects (primary, millisecond latency) |
+| 3 | SSE | `GET /v2/events/trades` | Order fills, cancels, rejects |
 
-All Sevino users' events arrive on the same connections. Each event payload includes `account_id` to match to the right user in the database. One SSE connection per stream, one WebSocket — Alpaca enforces this limit per API key.
+All Sevino users' events arrive on the same connections. Each event payload includes `account_id` to match to the right user in the database.
+
+**Concurrency limit.** Alpaca's Broker API allows up to **25 concurrent SSE connections per API key** ([Broker API FAQ](https://docs.alpaca.markets/docs/broker-api-faq)); past that, further connections receive `Too many requests`. See §Worker topology for how we allocate that budget across dev / staging / PR preview environments.
 
 ### How SSE works
 
@@ -355,82 +356,97 @@ SSE (Server-Sent Events) is a one-way streaming protocol over plain HTTP. The wo
 
 ```
 event: account_status
-id: evt_123
-data: {"account_id": "abc", "status_from": "SUBMITTED", "status_to": "ACTIVE"}
+data: {"event_id": 12627517, "event_ulid": "01HCMKXQYJ3ZBV66Q21KCT1CRR", "account_id": "abc", "status_from": "SUBMITTED", "status_to": "ACTIVE"}
 
 event: account_status
-id: evt_124
-data: {"account_id": "def", "status_from": "SUBMITTED", "status_to": "REJECTED"}
+data: {"event_id": 12627518, "event_ulid": "01HCMKXR8K3ZBV66Q21KCT4DQS", "account_id": "def", "status_from": "SUBMITTED", "status_to": "REJECTED"}
 ```
 
-The connection stays open indefinitely. Each block is a discrete event pushed whenever something happens. If the connection drops, the worker reconnects with `?since_id=<last_id>` and Alpaca replays everything missed. SSE has built-in replay; WebSocket does not.
+The connection stays open indefinitely. Each block is a discrete event pushed whenever something happens. If the connection drops, the worker reconnects with `?since_ulid=<last_ulid>` and Alpaca replays everything missed — SSE has built-in replay, so no events are lost across reconnects.
 
-Why both SSE and WebSocket for trade events: WebSocket gives millisecond latency for the real-time Trade Confirmation Card UX. SSE gives historical replay capability via `since_id` if the WebSocket drops. Together they ensure no order event is ever missed.
+### Comment lines (heartbeats + diagnostics)
+
+Alongside `event:` / `data:` frames, Alpaca also sends SSE comment lines (lines starting with `:`). We read and surface all of them:
+
+| Comment | When | What we do |
+|---------|------|------------|
+| `:heartbeat` | On idle streams, proving the TCP connection is alive (Alpaca's FAQ: *"Alpaca would never stop responding, hence we also send 'heartbeat' to let partners know that the connection is alive"*) | Bump `last_message_received_at`, info-log `sse_heartbeat` |
+| `: you are reading too slowly, dropped N messages` | Slow-client warning — our consumer fell behind | Bump liveness, warning log, breadcrumb, plus a standalone Sentry `capture_message` tagged with `sse_dropped_messages=N` so it's searchable independent of whether the connection later drops |
+| `: internal server error` | v2/v2beta1 endpoints only — sent by Alpaca before it closes the connection | Bump liveness, warning log, Sentry breadcrumb so it attaches to the subsequent disconnect event |
+
+`httpx_sse.aiter_sse()` silently swallows comment lines, so the listener reads raw lines via `event_source.response.aiter_lines()` and feeds non-comment lines to `httpx_sse`'s `SSEDecoder` itself. Real events flow through `handle_event` unchanged.
 
 ### Checkpoint & resume strategy
 
 Each SSE stream's last processed event ID is stored in a Postgres table (`sse_checkpoints`): one row per stream (`stream_name` PK, `last_event_id`, `updated_at`). Updated after each event is successfully processed.
 
+The checkpoint value is the ULID pulled from the parsed JSON payload — not the SSE wire-protocol `id:` line — so the listener is independent of whether Alpaca populates that line. Which JSON field carries the ULID depends on the endpoint: legacy endpoints expose it in `event_ulid`, already-migrated endpoints (`/v2/events/trades`, admin actions) expose it directly in `event_id`. The column is named `last_event_id` for historical reasons, but the value is always a ULID string.
+
 | Scenario | Behavior |
 |----------|----------|
-| First-ever deploy | No checkpoint row → connect without `since_id` → stream from now |
-| Worker restart / redeploy | Read `last_event_id` from Postgres → reconnect with `since_id` → Alpaca replays missed events |
-| Checkpoint lost | Connect without `since_id` → stream from now; backfill gaps via Alpaca REST if needed |
+| First-ever deploy | No checkpoint row → connect without resume param → stream from now |
+| Worker restart / redeploy | Read `last_event_id` from Postgres → reconnect with `?since_ulid=<ulid>` (or `?since_id=<ulid>` for already-migrated endpoints) → Alpaca replays missed events |
+| Checkpoint lost | Connect without resume param → stream from now; backfill gaps via Alpaca REST if needed |
 
 No Redis is needed for checkpointing — Postgres is the durable store and it survives restarts, redeploys, and worker crashes.
+
+### Implementing a new listener
+
+A new listener is a subclass of `BaseSSEListener` (`app/listeners/base_sse.py`). The required surface area:
+
+- Set `stream_name` (unique per stream; used as the `sse_checkpoints` PK and Sentry tag).
+- Set `endpoint_path` (e.g. `/v1/events/accounts/status`).
+- Set `silence_threshold_seconds` (the liveness cron alerts when no event has arrived within this window).
+- Implement `handle_event(session, event_type, data)` — runs inside the same transaction as the checkpoint upsert, so a raise rolls back both.
+
+The base class already owns connect/reconnect, checkpoint persistence, exponential backoff, correlation IDs, Sentry scope tagging, and liveness timestamping — subclasses should not reimplement any of that.
+
+**Resume-param overrides.** Alpaca is migrating all SSE streams from integer `event_id` to ULIDs. The base class's defaults (`resume_field = "event_ulid"`, `resume_param = "since_ulid"`) match legacy endpoints — the ULID lives in a separate `event_ulid` JSON field and the resume query param is `since_ulid`. For already-migrated endpoints (`/v2/events/trades`, admin actions), the ULID lives directly in the `event_id` JSON field and the resume param is `since_id` (name unchanged, value is now a ULID). Those subclasses must override:
+
+```python
+class TradeEventsListener(BaseSSEListener):
+    stream_name = "trade_events_sse"
+    endpoint_path = "/v2/events/trades"
+    silence_threshold_seconds = ...
+    resume_field = "event_id"
+    resume_param = "since_id"
+```
+
+Using ULIDs today — even on legacy endpoints that still accept integer `since_id` — means we won't be forced to migrate every listener in lockstep when Alpaca deprecates the integer resume params. Reference: https://docs.alpaca.markets/docs/sse-events.
 
 ### Event handlers
 
 All handlers UPDATE existing rows, not INSERT new ones. The operation is always "find the row by Alpaca ID, update its status."
 
-**Account status** (SSE only):
+**Account status:**
 1. Look up `brokerage_accounts` by `alpaca_account_id`.
 2. Set `account_status` to the new value.
 3. If status is `ACTIVE`: trigger FDIC sweep enrollment via Alpaca REST, set `activated_at`.
 4. Invalidate relevant cache keys.
 
-**Transfer status** (SSE only):
+**Transfer status:**
 1. Invalidate balance/account cache so the next app read sees updated funds.
 2. Future: send push notification to user.
 
-**Trade events** (SSE + WebSocket — both call the same handler function):
+**Trade events:**
 1. Look up `order_events` by `alpaca_order_id`.
 2. Update `status`, `filled_avg_price`, `filled_qty`, `filled_at`.
 3. Invalidate positions/account cache.
 
-### Deduplication
-
-Since both the SSE and WebSocket channels deliver trade events, the same fill/cancel could arrive twice. No explicit dedup mechanism is needed because the handlers perform UPDATEs, which are naturally idempotent — writing the same status and fill data to the same row twice produces the same result. No Redis dedup keys, no unique constraint tricks.
-
-Account status and transfer status are SSE-only (single channel), so duplication is not a concern.
-
-### Out-of-order protection
-
-Only applies to trade events where two channels (SSE + WebSocket) could deliver events in different order. A slower channel could deliver a stale intermediate status after the faster channel already wrote the final status:
-
-```
-Actual lifecycle:   new → accepted → partially_filled → filled
-WebSocket delivers: filled           (fast, writes immediately)
-SSE delivers:       partially_filled (slow, arrives after — would regress the status)
-```
-
-The handler checks a status ordering map before writing: only update if the incoming status is "later" in the lifecycle than the current status. If not, skip. This prevents stale events from overwriting newer data.
-
-Not needed for SSE-only streams (account status, transfer status) — a single SSE connection delivers events sequentially, so they always arrive in order.
+A single SSE connection per stream delivers events sequentially, so events always arrive in order and duplicates are not a concern. Handlers are UPDATE-idempotent regardless — writing the same status/fill data twice produces the same result — so replay after reconnect (via `since_ulid`) is safe.
 
 ### Worker integration
 
-The SSE listeners and WebSocket listener run as `asyncio.Task`s spawned in the ARQ worker's `startup` hook and cancelled in `shutdown`. They are persistent loops (not cron jobs) with internal reconnection logic using exponential backoff on connection failure.
+The SSE listeners run as `asyncio.Task`s spawned in the ARQ worker's `startup` hook and cancelled in `shutdown`. They are persistent loops (not cron jobs) with internal reconnection logic using exponential backoff on connection failure. A separate liveness cron reads each listener's `last_message_received_at` and alerts if it's been silent longer than `silence_threshold_seconds` (default 90s, sized to survive ~6 missed 15s heartbeats; subclasses can override per stream).
 
 ```python
 async def startup(ctx: dict):
     ctx["sse_account"] = asyncio.create_task(listen_account_status(ctx))
     ctx["sse_transfer"] = asyncio.create_task(listen_transfer_status(ctx))
     ctx["sse_trade"] = asyncio.create_task(listen_trade_events(ctx))
-    ctx["ws_trade"] = asyncio.create_task(listen_ws_trade_updates(ctx))
 
 async def shutdown(ctx: dict):
-    for key in ("sse_account", "sse_transfer", "sse_trade", "ws_trade"):
+    for key in ("sse_account", "sse_transfer", "sse_trade"):
         task = ctx.get(key)
         if task:
             task.cancel()
@@ -495,7 +511,7 @@ Current tasks:
 | Task | Type | Cadence | Purpose |
 |------|------|---------|---------|
 | `health_ping` | cron | every 5 min | Placeholder heartbeat — remove once more real tasks exist |
-| `check_listener_liveness` | cron | every 5 min | Reads `last_message_received_at` on every registered SSE/WebSocket listener. If any has been silent longer than its per-stream threshold, emits `sentry_sdk.capture_message(level="warning")` naming the stream. This is how we get paged when a listener silently drops (e.g., Alpaca stops sending during market hours). See §Real-Time Events for thresholds per stream. |
+| `check_listener_liveness` | cron | every 5 min | Reads `last_message_received_at` on every registered SSE listener. If any has been silent longer than its per-stream threshold, emits `sentry_sdk.capture_message(level="warning")` naming the stream. This is how we get paged when a listener silently drops (e.g., Alpaca stops sending during market hours). See §Real-Time Events for thresholds per stream. |
 
 ## 🚀 Deployment
 
@@ -523,13 +539,26 @@ Each Railway service uses a different process from the Procfile.
 
 ### Worker topology
 
-The `worker` Railway service is the sole host for every long-running Alpaca listener (account status SSE, transfer status SSE, trade events SSE, trade updates WebSocket). The `web` service never opens these connections.
+The `worker` Railway service is the sole host for every long-running Alpaca listener (account status SSE, transfer status SSE, trade events SSE). The `web` service never opens these connections. Listeners are spawned as `asyncio.Task`s inside the ARQ worker's `on_startup` hook and cancelled in `on_shutdown`. Liveness is surfaced via a cron task (`check_listener_liveness`) that reads each listener's `last_message_received_at` against a per-listener silence threshold and emits a Sentry `capture_message` when a stream has gone silent longer than expected. No separate health-check endpoint is needed — alerting bubbles up through Sentry.
 
-**Deploy-time invariant: the `worker` service MUST run with `replicas=1`.**
+**Deploy-time invariant: the `worker` service MUST run with `replicas=1` per environment.** Scaling any single environment's worker beyond 1 replica would double-consume events for that environment (each replica would open its own SSE connections to the same endpoints).
 
-Alpaca enforces one SSE connection per stream and one WebSocket per API key. That per-API-key limit is what guarantees single-consumer semantics across the fleet — we do not run leader election, we rely on Railway keeping replica count pinned to 1. Running a second worker replica would cause the second connection to displace the first (or be rejected), and handler invocations would duplicate.
+#### Connection budget across the fleet
 
-Listeners are spawned as `asyncio.Task`s inside the existing ARQ worker's `on_startup` hook and cancelled in `on_shutdown`. Liveness is surfaced via a cron task (`check_listener_liveness`) that reads each listener's `last_message_received_at` against a per-listener silence threshold and emits a Sentry `capture_message` when a stream has gone silent longer than expected. No separate health-check endpoint is needed — alerting bubbles up through Sentry.
+Alpaca's Broker API caps us at **25 concurrent SSE connections per API key** ([Broker API FAQ](https://docs.alpaca.markets/docs/broker-api-faq)). All non-prod environments share a single sandbox API key, so that 25-slot pool is the ceiling for simultaneous dev + staging + PR preview workers:
+
+| Environment | Concurrent connections | Notes |
+|---|---|---|
+| Local dev | 3 | One per developer (currently 3 devs). Running `make worker` locally opens SSE connections to the sandbox. |
+| Staging | 1 | The always-on staging worker. |
+| PR previews | up to 21 | Each open PR spins up its own Railway preview with its own worker. |
+| **Total** | **25** | Hard ceiling enforced by Alpaca. |
+
+If the number of open PRs exceeds 21 at any moment, the 22nd+ preview worker will get `Too many requests` from Alpaca when trying to open its SSE streams, and its listeners will fail to start. The web service in that preview continues to work — only the real-time event pipeline is affected. Closing older PRs (or pausing preview environments) frees slots.
+
+Production uses a separate Alpaca API key (different broker account), so it has its own independent 25-slot pool and does not compete with dev/staging/previews.
+
+**What counts against the limit.** The documented quote is "25 connection requests" — we treat this as 25 concurrent connections per key across all SSE endpoints. If it turns out to be per-endpoint (25 per `/v1/events/accounts/status`, 25 per `/v2/events/trades`, etc.), our effective capacity is higher; if it's a rolling rate-limit on connection attempts rather than a concurrency ceiling, behavior on rapid reconnects will be different. Verify empirically before relying on headroom beyond what's documented above.
 
 ### Environments & PR previews
 

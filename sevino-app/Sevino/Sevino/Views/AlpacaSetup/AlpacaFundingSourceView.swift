@@ -20,14 +20,14 @@ struct AlpacaFundingSourceView: View {
     @State private var typed2 = ""
     @State private var showOptions = false
 
-    private let options = [
+    private let options: [IdentifiableOption] = [
         L10n.Onboarding.alpacaFundingEmployment,
         L10n.Onboarding.alpacaFundingSavings,
         L10n.Onboarding.alpacaFundingInvestments,
         L10n.Onboarding.alpacaFundingBusiness,
         L10n.Onboarding.alpacaFundingFamily,
         L10n.Onboarding.alpacaFundingInheritance,
-    ]
+    ].asIdentifiableOptions
 
     var body: some View {
         VStack(spacing: 0) {
@@ -84,17 +84,17 @@ struct AlpacaFundingSourceView: View {
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
-            ForEach(options, id: \.self) { option in
+            ForEach(options) { option in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        if selected.contains(option) {
-                            selected.remove(option)
+                        if selected.contains(option.value) {
+                            selected.remove(option.value)
                         } else {
-                            selected.insert(option)
+                            selected.insert(option.value)
                         }
                     }
                 } label: {
-                    Text(option)
+                    Text(option.value)
                         .font(.system(size: 15 * scale, weight: .medium))
                         .foregroundStyle(Color.welcomeText)
                         .multilineTextAlignment(.center)
@@ -102,7 +102,7 @@ struct AlpacaFundingSourceView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SevinoGlass.tintedButton(
-                            tint: selected.contains(option)
+                            tint: selected.contains(option.value)
                                 ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16

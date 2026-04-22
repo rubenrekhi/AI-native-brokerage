@@ -11,6 +11,8 @@ struct OnboardingSingleSelectView: View {
     let initialSelected: String?
     let onContinue: (String) -> Void
 
+    private let identifiableOptions: [IdentifiableOption]
+
     @State private var selected: String?
 
     init(
@@ -30,6 +32,7 @@ struct OnboardingSingleSelectView: View {
         self.response2 = response2
         self.response3 = response3
         self.options = options
+        self.identifiableOptions = options.asIdentifiableOptions
         self.animate = animate
         self.initialSelected = initialSelected
         self.onContinue = onContinue
@@ -102,13 +105,13 @@ struct OnboardingSingleSelectView: View {
 
     private var optionsList: some View {
         VStack(spacing: 12 * scale) {
-            ForEach(options, id: \.self) { option in
+            ForEach(identifiableOptions) { option in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        selected = option
+                        selected = option.value
                     }
                 } label: {
-                    Text(option)
+                    Text(option.value)
                         .font(.system(size: 15 * scale, weight: .medium))
                         .foregroundStyle(Color.welcomeText)
                         .multilineTextAlignment(.center)
@@ -116,7 +119,7 @@ struct OnboardingSingleSelectView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SevinoGlass.tintedButton(
-                            tint: selected == option
+                            tint: selected == option.value
                                 ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16

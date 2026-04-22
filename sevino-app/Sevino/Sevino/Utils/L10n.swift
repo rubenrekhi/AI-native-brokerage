@@ -96,6 +96,9 @@ enum L10n {
         static let disclaimerResponse2 = String(localized: "onboarding.disclaimer_response2")
         static let disclaimerResponse3 = String(localized: "onboarding.disclaimer_response3")
         static let disclaimerButton = String(localized: "onboarding.disclaimer_button")
+        static func progressAccessibility(_ currentStep: Int, _ totalSteps: Int) -> String {
+            String(format: String(localized: "onboarding.progress_accessibility"), currentStep, totalSteps)
+        }
         static func compoundHeading(_ years: Int) -> String {
             String(format: String(localized: "onboarding.compound_heading"), years)
         }
@@ -334,6 +337,9 @@ enum L10n {
         static func greetingEvening(_ name: String) -> String {
             String(format: String(localized: "home.greeting_evening"), name)
         }
+        static let greetingMorningGeneric = String(localized: "home.greeting_morning_generic")
+        static let greetingAfternoonGeneric = String(localized: "home.greeting_afternoon_generic")
+        static let greetingEveningGeneric = String(localized: "home.greeting_evening_generic")
         static let exploreButton = String(localized: "home.explore_button")
         static let dismissExploreAccessibility = String(localized: "home.dismiss_explore_accessibility")
         static let suggestionNews = String(localized: "home.suggestion_news")
@@ -348,8 +354,17 @@ enum L10n {
         static let portfolioLoadErrorTitle = String(localized: "home.portfolio_load_error_title")
         static let portfolioLoadErrorRetry = String(localized: "home.portfolio_load_error_retry")
         static let portfolioLoadErrorDismiss = String(localized: "home.portfolio_load_error_dismiss")
+        static let fundingLoadErrorTitle = String(localized: "home.funding_load_error_title")
+        static let fundingLoadErrorRetry = String(localized: "home.funding_load_error_retry")
+        static let fundingLoadErrorDismiss = String(localized: "home.funding_load_error_dismiss")
+        static let holdingsLoadErrorTitle = String(localized: "home.holdings_load_error_title")
+        static let holdingsLoadErrorRetry = String(localized: "home.holdings_load_error_retry")
+        static let holdingsLoadErrorMessage = String(localized: "home.holdings_load_error_message")
+        static let holdingsEmptyTitle = String(localized: "home.holdings_empty_title")
+        static let holdingsEmptyMessage = String(localized: "home.holdings_empty_message")
         static let chatAboutThis = String(localized: "home.chat_about_this")
         static let dismissAccessibility = String(localized: "home.dismiss_accessibility")
+        static let sidebarDismissAccessibility = String(localized: "home.sidebar_dismiss_accessibility")
         static let periodToday = String(localized: "home.period_today")
         static let period7Days = String(localized: "home.period_7_days")
         static let period30Days = String(localized: "home.period_30_days")
@@ -407,6 +422,14 @@ enum L10n {
             String(format: String(localized: "home.radar_expires"), time)
         }
         static let radarStarAccessibility = String(localized: "home.radar_star_accessibility")
+        static let radarEmptyTitle = String(localized: "home.radar_empty_title")
+        static let radarEmptyMessage = String(localized: "home.radar_empty_message")
+        static let radarLoadErrorTitle = String(localized: "home.radar_load_error_title")
+        static let radarLoadErrorRetry = String(localized: "home.radar_load_error_retry")
+        static let radarLoadErrorDismiss = String(localized: "home.radar_load_error_dismiss")
+        static let homeLoadErrorTitle = String(localized: "home.home_load_error_title")
+        static let homeLoadErrorRetry = String(localized: "home.home_load_error_retry")
+        static let homeLoadErrorDismiss = String(localized: "home.home_load_error_dismiss")
     }
 
     enum Sidebar {
@@ -439,6 +462,8 @@ enum L10n {
         static let backAccessibility = String(localized: "settings.back_accessibility")
         static let brokerage = String(localized: "settings.brokerage")
         static let linkedAccounts = String(localized: "settings.linked_accounts")
+        static let linkedAccountsEmptyTitle = String(localized: "settings.linked_accounts_empty_title")
+        static let linkedAccountsEmptyMessage = String(localized: "settings.linked_accounts_empty_message")
         static let kycStatus = String(localized: "settings.kyc_status")
         static let kycOnboarding = String(localized: "settings.kyc_onboarding")
         static let kycSubmitted = String(localized: "settings.kyc_submitted")

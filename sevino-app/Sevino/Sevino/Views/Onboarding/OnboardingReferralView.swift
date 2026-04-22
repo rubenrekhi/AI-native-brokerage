@@ -14,13 +14,13 @@ struct OnboardingReferralView: View {
     @State private var typed3 = ""
     @State private var showOptions = false
 
-    private let sources = [
+    private let sources: [IdentifiableOption] = [
         L10n.Onboarding.referralTiktok, L10n.Onboarding.referralInstagram,
         L10n.Onboarding.referralTwitter, L10n.Onboarding.referralFriend,
         L10n.Onboarding.referralGoogle, L10n.Onboarding.referralReddit,
         L10n.Onboarding.referralAiTool, L10n.Onboarding.referralLinkedin,
         L10n.Onboarding.referralArticle, L10n.Onboarding.referralOther,
-    ]
+    ].asIdentifiableOptions
 
     private var needsExtraText: Bool {
         selectedSource == L10n.Onboarding.referralFriend || selectedSource == L10n.Onboarding.referralOther
@@ -103,14 +103,14 @@ struct OnboardingReferralView: View {
             ],
             spacing: 12 * scale
         ) {
-            ForEach(sources, id: \.self) { source in
+            ForEach(sources) { source in
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedSource = source
+                        selectedSource = source.value
                     }
                     if !needsExtraText { extraText = "" }
                 } label: {
-                    Text(source)
+                    Text(source.value)
                         .font(.system(size: 15 * scale, weight: .medium))
                         .foregroundStyle(Color.welcomeText)
                         .multilineTextAlignment(.center)
@@ -118,7 +118,7 @@ struct OnboardingReferralView: View {
                         .padding(.vertical, 14 * scale)
                         .padding(.horizontal, 16 * scale)
                         .modifier(SevinoGlass.tintedButton(
-                            tint: selectedSource == source
+                            tint: selectedSource == source.value
                                 ? Color.sevinoAccent
                                 : Color.clear,
                             cornerRadius: 16

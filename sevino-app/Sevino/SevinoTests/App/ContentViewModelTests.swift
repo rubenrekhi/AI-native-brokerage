@@ -20,16 +20,9 @@ final class ContentViewModelTests: XCTestCase {
     // MARK: - Initial state
 
     func testInitialState() {
-        XCTAssertFalse(viewModel.isCheckingStatus)
+        XCTAssertEqual(viewModel.route, .idle, "pre-check state is distinct from .home so cold launch does not flash HomeView")
         XCTAssertFalse(viewModel.isLoading)
-        XCTAssertFalse(viewModel.showPhoneSheet)
-        XCTAssertFalse(viewModel.showOnboarding)
-        XCTAssertFalse(viewModel.showAlpacaSetup)
-        XCTAssertFalse(viewModel.statusCheckFailed)
         XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertEqual(viewModel.onboardingUserName, "")
-        XCTAssertNil(viewModel.onboardingResumeData)
-        XCTAssertNil(viewModel.alpacaResumeData)
         XCTAssertNil(viewModel.error)
     }
 
@@ -38,19 +31,18 @@ final class ContentViewModelTests: XCTestCase {
     func testStartFreshSignUpFlowSkipsStatusCheck() {
         viewModel.startFreshSignUpFlow()
 
-        XCTAssertTrue(viewModel.showPhoneSheet)
-        XCTAssertTrue(viewModel.showOnboarding)
+        XCTAssertEqual(viewModel.route, .phone)
         XCTAssertEqual(mockOnboarding.getStatusCallCount, 0)
     }
 
     // MARK: - savePhoneNumber
 
-    func testSavePhoneNumberSuccessDismissesSheet() async {
+    func testSavePhoneNumberSuccessAdvancesToOnboarding() async {
         viewModel.startFreshSignUpFlow()
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
         XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
@@ -58,7 +50,7 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
     }
 
-    func testSavePhoneNumberFailureKeepsSheetAndRecordsError() async {
+    func testSavePhoneNumberFailureKeepsPhoneRouteAndRecordsError() async {
         viewModel.startFreshSignUpFlow()
         mockOnboarding.saveStepError = NSError(
             domain: "", code: 0,
@@ -67,7 +59,7 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertTrue(viewModel.showPhoneSheet, "sheet stays open so user can retry after seeing the alert")
+        XCTAssertEqual(viewModel.route, .phone, "route stays on phone so user can retry")
         XCTAssertTrue(viewModel.showPhoneError, "alert flag is set so the view presents an alert")
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertEqual(viewModel.error, "Network error")
@@ -86,7 +78,7 @@ final class ContentViewModelTests: XCTestCase {
         await viewModel.savePhoneNumber("4165551234")
 
         XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertFalse(viewModel.showPhoneSheet)
+        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
         XCTAssertNil(viewModel.error)
     }
 
@@ -119,9 +111,7 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.checkOnboardingStatus()
 
-        XCTAssertFalse(viewModel.showOnboarding)
-        XCTAssertFalse(viewModel.showAlpacaSetup)
-        XCTAssertFalse(viewModel.isCheckingStatus)
+        XCTAssertEqual(viewModel.route, .home)
     }
 
     func testCheckOnboardingStatusRoutesToOnboardingForPartialProgress() async {
@@ -135,11 +125,11 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.checkOnboardingStatus()
 
-        XCTAssertTrue(viewModel.showOnboarding)
-        XCTAssertFalse(viewModel.showAlpacaSetup)
-        XCTAssertEqual(viewModel.onboardingResumeStep, 3)
-        XCTAssertEqual(viewModel.onboardingUserName, "Riley")
-        XCTAssertNotNil(viewModel.onboardingResumeData)
+        guard case .onboarding(let step, let data) = viewModel.route else {
+            return XCTFail("expected onboarding route, got \(viewModel.route)")
+        }
+        XCTAssertEqual(step, 3)
+        XCTAssertEqual(data?.userName, "Riley")
     }
 
     func testCheckOnboardingStatusRoutesToAlpacaSetupAfterPhase1() async {
@@ -153,10 +143,12 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.checkOnboardingStatus()
 
-        XCTAssertTrue(viewModel.showAlpacaSetup)
-        XCTAssertFalse(viewModel.showOnboarding)
-        XCTAssertEqual(viewModel.alpacaResumeStep, 1)
-        XCTAssertNotNil(viewModel.alpacaResumeData)
+        guard case .alpacaSetup(let step, let userName, let data) = viewModel.route else {
+            return XCTFail("expected alpacaSetup route, got \(viewModel.route)")
+        }
+        XCTAssertEqual(step, 1)
+        XCTAssertEqual(userName, "Riley")
+        XCTAssertNotNil(data)
     }
 
     func testCheckOnboardingStatusSurfacesRetryOnError() async {
@@ -164,15 +156,16 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.checkOnboardingStatus()
 
-        XCTAssertFalse(viewModel.isCheckingStatus, "defer must reset flag even on error")
-        XCTAssertTrue(viewModel.statusCheckFailed, "view needs a flag to show a retry prompt")
+        // Regression guard: the catch branch must replace .loading with
+        // .statusCheckFailed so an error can never leave the route stuck on .loading.
+        XCTAssertEqual(viewModel.route, .statusCheckFailed, "view needs a route to show a retry prompt")
         XCTAssertNotNil(viewModel.error)
     }
 
     func testCheckOnboardingStatusRetryClearsFailureFlagOnSuccess() async {
         mockOnboarding.statusError = URLError(.notConnectedToInternet)
         await viewModel.checkOnboardingStatus()
-        XCTAssertTrue(viewModel.statusCheckFailed)
+        XCTAssertEqual(viewModel.route, .statusCheckFailed)
 
         mockOnboarding.statusError = nil
         mockOnboarding.statusResponse = OnboardingStatusResponse(
@@ -184,7 +177,7 @@ final class ContentViewModelTests: XCTestCase {
         )
         await viewModel.checkOnboardingStatus()
 
-        XCTAssertFalse(viewModel.statusCheckFailed)
+        XCTAssertEqual(viewModel.route, .home)
         XCTAssertNil(viewModel.error)
     }
 
@@ -195,19 +188,41 @@ final class ContentViewModelTests: XCTestCase {
 
         viewModel.completeOnboarding(userName: "Riley")
 
-        XCTAssertFalse(viewModel.showOnboarding)
-        XCTAssertTrue(viewModel.showAlpacaSetup)
-        XCTAssertEqual(viewModel.onboardingUserName, "Riley")
-        XCTAssertEqual(viewModel.alpacaResumeStep, 1)
-        XCTAssertNil(viewModel.alpacaResumeData, "Alpaca resume data resets on fresh handoff")
+        guard case .alpacaSetup(let step, let userName, let data) = viewModel.route else {
+            return XCTFail("expected alpacaSetup route, got \(viewModel.route)")
+        }
+        XCTAssertEqual(step, 1)
+        XCTAssertEqual(userName, "Riley")
+        XCTAssertNil(data, "fresh handoff passes nil resume data so containers treat it as a fresh flow")
     }
 
-    func testCompleteAlpacaSetupClearsFlag() {
+    func testCompleteAlpacaSetupRoutesHome() {
         viewModel.completeOnboarding(userName: "Riley")
 
         viewModel.completeAlpacaSetup()
 
-        XCTAssertFalse(viewModel.showAlpacaSetup)
+        XCTAssertEqual(viewModel.route, .home)
+    }
+
+    // MARK: - Route equality
+
+    func testRouteEqualityDiscriminatesAssociatedValues() {
+        XCTAssertNotEqual(
+            AuthenticatedRoute.onboarding(step: 1, data: nil),
+            AuthenticatedRoute.onboarding(step: 2, data: nil)
+        )
+        XCTAssertNotEqual(
+            AuthenticatedRoute.alpacaSetup(step: 1, userName: "A", data: nil),
+            AuthenticatedRoute.alpacaSetup(step: 1, userName: "B", data: nil)
+        )
+        var dataA = OnboardingResumeManager.OnboardingResumeData()
+        dataA.userName = "A"
+        var dataB = OnboardingResumeManager.OnboardingResumeData()
+        dataB.userName = "B"
+        XCTAssertNotEqual(
+            AuthenticatedRoute.onboarding(step: 1, data: dataA),
+            AuthenticatedRoute.onboarding(step: 1, data: dataB)
+        )
     }
 
     // MARK: - signOut
@@ -219,11 +234,8 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.signOut()
 
-        XCTAssertFalse(viewModel.showPhoneSheet)
-        XCTAssertFalse(viewModel.showOnboarding)
-        XCTAssertFalse(viewModel.showAlpacaSetup)
-        XCTAssertNil(viewModel.onboardingResumeData)
-        XCTAssertNil(viewModel.alpacaResumeData)
+        XCTAssertEqual(viewModel.route, .idle)
+        XCTAssertFalse(viewModel.showPhoneError)
         XCTAssertFalse(mockAuth.isAuthenticated)
     }
 
@@ -236,8 +248,7 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.signOut()
 
-        XCTAssertFalse(viewModel.showPhoneSheet)
-        XCTAssertFalse(viewModel.showOnboarding)
+        XCTAssertEqual(viewModel.route, .idle, "routing resets even when the sign-out RPC fails")
         XCTAssertEqual(viewModel.error, "Sign-out failed")
     }
 }

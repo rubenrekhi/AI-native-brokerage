@@ -3,7 +3,7 @@ import SwiftUI
 struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    @Bindable var viewModel: HomeViewModel
+    @Bindable var viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -36,6 +36,8 @@ struct FundingMorphingView: View {
             .fixedSize()
             .modifier(SevinoGlass.card)
             .clipShape(.rect(cornerRadius: 50 * scale))
+            .frame(minWidth: 44 * scale, minHeight: 44 * scale)
+            .contentShape(Rectangle())
     }
 
     private var pillContent: some View {
@@ -47,7 +49,7 @@ struct FundingMorphingView: View {
 
     private var expandedContent: some View {
         VStack(spacing: 16 * scale) {
-            if let message = viewModel.funding.displayedError {
+            if let message = viewModel.displayedError {
                 Text(message)
                     .font(.system(size: 13 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoNegative)
@@ -71,16 +73,16 @@ struct FundingMorphingView: View {
         }
         .task(id: isExpanded) {
             if isExpanded {
-                await viewModel.funding.loadRelationships()
+                await viewModel.loadRelationships()
             }
         }
-        .sheet(isPresented: $viewModel.funding.isShowingPlaidLink) {
-            if let token = viewModel.funding.linkToken {
+        .sheet(isPresented: $viewModel.isShowingPlaidLink) {
+            if let token = viewModel.linkToken {
                 PlaidLinkSheet(
                     linkToken: token,
                     onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
                         Task {
-                            await viewModel.funding.onPlaidSuccess(
+                            await viewModel.onPlaidSuccess(
                                 publicToken: publicToken,
                                 accountId: accountId,
                                 institutionName: institutionName,
@@ -90,7 +92,7 @@ struct FundingMorphingView: View {
                         }
                     },
                     onExit: { error in
-                        viewModel.funding.onPlaidExit(error: error)
+                        viewModel.onPlaidExit(error: error)
                     }
                 )
             }
@@ -184,7 +186,7 @@ struct FundingMorphingView: View {
 
     @ViewBuilder
     private var actionRow: some View {
-        if viewModel.funding.hasLinkedBank {
+        if viewModel.hasLinkedBank {
             actionButtons
         } else {
             linkBankButton
@@ -215,7 +217,7 @@ struct FundingMorphingView: View {
 
     private var linkBankButton: some View {
         Button {
-            Task { await viewModel.funding.startBankLink() }
+            Task { await viewModel.startBankLink() }
         } label: {
             Text(L10n.Home.linkBankAccount)
                 .font(.system(size: 15 * scale, weight: .semibold))
@@ -224,7 +226,7 @@ struct FundingMorphingView: View {
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
         }
-        .disabled(viewModel.funding.isLoading)
+        .disabled(viewModel.isLoading)
     }
 
     private var infoRow: some View {
@@ -262,40 +264,30 @@ struct FundingMorphingView: View {
     }
 }
 
-#Preview("Dark") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        FundingMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
+private struct FundingMorphingPreview: View {
+    @State private var viewModel = FundingViewModel()
+
+    var body: some View {
+        ZStack {
+            Color.sevinoPrimary.ignoresSafeArea()
+            FundingMorphingView(
+                scale: 1,
+                isExpanded: true,
+                viewModel: viewModel,
+                onTap: {},
+                onDismiss: {}
+            )
+            .padding(16)
+        }
     }
-    .preferredColorScheme(.dark)
+}
+
+#Preview("Dark") {
+    FundingMorphingPreview()
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        FundingMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
-    }
-    .preferredColorScheme(.light)
+    FundingMorphingPreview()
+        .preferredColorScheme(.light)
 }

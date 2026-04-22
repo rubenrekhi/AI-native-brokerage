@@ -35,39 +35,39 @@ struct ContentView: View {
         }
     }
 
+    @ViewBuilder
     private var authenticatedView: some View {
-        Group {
-            if viewModel.isCheckingStatus {
-                loadingView
-            } else if viewModel.statusCheckFailed {
-                StatusCheckRetryView(onRetry: checkStatus)
-            } else if viewModel.showPhoneSheet {
-                PhoneNumberView(onComplete: savePhoneNumber)
-                    .alert(
-                        L10n.General.errorTitle,
-                        isPresented: phoneErrorPresented,
-                        presenting: viewModel.error
-                    ) { _ in
-                        Button(L10n.General.ok) { viewModel.clearError() }
-                    } message: { error in
-                        Text(error)
-                    }
-            } else if viewModel.showOnboarding {
-                OnboardingContainerView(
-                    initialStep: viewModel.onboardingResumeData != nil ? viewModel.onboardingResumeStep : 1,
-                    resumeData: viewModel.onboardingResumeData,
-                    onComplete: viewModel.completeOnboarding
-                )
-            } else if viewModel.showAlpacaSetup {
-                AlpacaSetupContainerView(
-                    userName: viewModel.onboardingUserName,
-                    initialStep: viewModel.alpacaResumeData != nil ? viewModel.alpacaResumeStep : 1,
-                    resumeData: viewModel.alpacaResumeData,
-                    onComplete: viewModel.completeAlpacaSetup
-                )
-            } else {
-                HomeView()
-            }
+        switch viewModel.route {
+        case .idle, .loading:
+            loadingView
+        case .statusCheckFailed:
+            StatusCheckRetryView(onRetry: checkStatus)
+        case .phone:
+            PhoneNumberView(onComplete: savePhoneNumber)
+                .alert(
+                    L10n.General.errorTitle,
+                    isPresented: phoneErrorPresented,
+                    presenting: viewModel.error
+                ) { _ in
+                    Button(L10n.General.ok) { viewModel.clearError() }
+                } message: { error in
+                    Text(error)
+                }
+        case .onboarding(let step, let data):
+            OnboardingContainerView(
+                initialStep: step,
+                resumeData: data,
+                onComplete: viewModel.completeOnboarding
+            )
+        case .alpacaSetup(let step, let userName, let data):
+            AlpacaSetupContainerView(
+                userName: userName,
+                initialStep: step,
+                resumeData: data,
+                onComplete: viewModel.completeAlpacaSetup
+            )
+        case .home:
+            HomeView()
         }
     }
 
@@ -85,6 +85,7 @@ struct ContentView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(height: 40)
+                .accessibilityHidden(true)
         }
         .preferredColorScheme(.dark)
     }

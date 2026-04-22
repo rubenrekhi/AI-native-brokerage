@@ -79,7 +79,7 @@ struct AlpacaAddressView: View {
                         HStack(spacing: 12 * scale) {
                             Image(systemName: "mappin.circle.fill")
                                 .font(.system(size: 18 * scale))
-                                .foregroundStyle(Color.sevinoNegative)
+                                .foregroundStyle(Color.sevinoAccent)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(result.title)
                                     .font(.system(size: 14 * scale))

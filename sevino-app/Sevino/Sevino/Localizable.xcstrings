@@ -24,16 +24,6 @@
         }
       }
     },
-    "%lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld of %2$lld"
-          }
-        }
-      }
-    },
     "auth.continue_with_apple" : {
       "localizations" : {
         "en" : {
@@ -684,12 +674,52 @@
         }
       }
     },
+    "home.funding_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.funding_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.funding_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load cash details"
+          }
+        }
+      }
+    },
     "home.greeting_afternoon" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Good afternoon, %@"
+          }
+        }
+      }
+    },
+    "home.greeting_afternoon_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good afternoon"
           }
         }
       }
@@ -704,12 +734,32 @@
         }
       }
     },
+    "home.greeting_evening_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good evening"
+          }
+        }
+      }
+    },
     "home.greeting_morning" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Good morning, %@"
+          }
+        }
+      }
+    },
+    "home.greeting_morning_generic" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good morning"
           }
         }
       }
@@ -724,12 +774,92 @@
         }
       }
     },
+    "home.home_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.home_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.home_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load home"
+          }
+        }
+      }
+    },
     "home.holdings_days_gain" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Day’s Gain"
+          }
+        }
+      }
+    },
+    "home.holdings_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your positions will appear here once you make your first trade."
+          }
+        }
+      }
+    },
+    "home.holdings_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No holdings yet"
+          }
+        }
+      }
+    },
+    "home.holdings_load_error_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't load your holdings. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "home.holdings_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.holdings_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load holdings"
           }
         }
       }
@@ -974,12 +1104,62 @@
         }
       }
     },
+    "home.radar_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We're still getting to know you. Check back soon for curated ideas."
+          }
+        }
+      }
+    },
+    "home.radar_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recommendations yet"
+          }
+        }
+      }
+    },
     "home.radar_expires" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Expires in %@"
+          }
+        }
+      }
+    },
+    "home.radar_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.radar_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.radar_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load radar"
           }
         }
       }
@@ -1030,6 +1210,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sidebar"
+          }
+        }
+      }
+    },
+    "home.sidebar_dismiss_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss sidebar"
           }
         }
       }
@@ -2804,6 +2994,16 @@
         }
       }
     },
+    "onboarding.progress_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
     "onboarding.referral_ai_tool" : {
       "localizations" : {
         "en" : {
@@ -3750,6 +3950,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Linked Accounts"
+          }
+        }
+      }
+    },
+    "settings.linked_accounts_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account to deposit funds into your brokerage."
+          }
+        }
+      }
+    },
+    "settings.linked_accounts_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No linked accounts"
           }
         }
       }

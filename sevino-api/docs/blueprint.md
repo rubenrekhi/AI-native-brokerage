@@ -37,7 +37,7 @@
    - [What Alpaca Owns](#41-what-alpaca-owns)
    - [Communication Protocols](#42-communication-protocols)
    - [Broker API Authentication](#43-broker-api-authentication)
-   - [SSE & WebSocket Infrastructure](#44-sse--websocket-infrastructure)
+   - [SSE Infrastructure](#44-sse-infrastructure)
    - [Key API Endpoints](#45-key-api-endpoints)
    - [Market Data](#46-market-data)
    - [Revenue Model](#47-revenue-model)
@@ -538,13 +538,13 @@ For full endpoint-level detail, see the [Alpaca Broker API Integration Architect
 
 ### 4.2 Communication Protocols
 
-Alpaca provides three communication mechanisms. Sevino uses all three.
+Alpaca's Broker API offers two communication mechanisms. Sevino uses both.
 
 **REST API (request/response):** The primary mechanism for reading data and initiating actions. Every account creation, order placement, position query, and market data lookup is a synchronous HTTP call. Used for on-demand data that doesn't require continuous updates.
 
 **Server-Sent Events (SSE):** Server-to-server event streaming for asynchronous state changes that happen outside the request/response cycle: account approvals, transfer completions, order fills. The Sevino API opens a persistent connection and receives pushed updates. SSE supports historical replay via `since`/`since_id` parameters for reconnection without gaps.
 
-**WebSocket:** A single WebSocket connection (`wss://broker-api.alpaca.markets/stream`) for real-time order lifecycle events. When a user confirms a trade, the backend receives fill/cancel/reject events within milliseconds via this stream. This is faster than SSE for trade updates and powers the real-time Trade Confirmation Card status.
+The Alpaca Broker API does not expose a WebSocket trade-updates endpoint — that feature is Trading-API-only and uses a different auth model. For broker partners, SSE is the canonical channel for all real-time events (account status, transfer status, trade events).
 
 **Protocol decision matrix:**
 
@@ -553,7 +553,7 @@ Alpaca provides three communication mechanisms. Sevino uses all three.
 | Account creation, order placement, position/balance queries, market data | REST | On-demand, request/response |
 | Account status changes (KYC approval) | SSE | Async, server-pushed |
 | Transfer status updates (deposit/withdrawal) | SSE | Async, server-pushed |
-| Order fill/cancel/reject events | WebSocket | Real-time, millisecond latency |
+| Order fill/cancel/reject events | SSE | Async, server-pushed (Broker API has no WebSocket equivalent) |
 
 ### 4.3 Broker API Authentication
 
@@ -570,29 +570,19 @@ All Alpaca API calls use **OAuth2 Client Credentials** authentication. The backe
 
 Credentials are stored as `ALPACA_API_KEY` (client ID) and `ALPACA_SECRET_KEY` (client secret) in Railway env vars. Implementation: `app/services/alpaca_broker.py`.
 
-### 4.4 SSE & WebSocket Infrastructure
+### 4.4 SSE Infrastructure
 
-**This is a key infrastructure requirement.** Two persistent connections must be maintained by the ARQ worker (not the web process):
-
-**1. SSE Event Listener (ARQ persistent task):**
-
-A long-running ARQ task opens an SSE connection to Alpaca's Events API and listens for three event streams:
+**This is a key infrastructure requirement.** Three persistent SSE connections are maintained by the ARQ worker (not the web process). They run as `asyncio.Task`s spawned in the worker's `on_startup` hook and cancelled in `on_shutdown`.
 
 | SSE Stream | Endpoint | Events | Backend Action |
 |---|---|---|---|
 | Account status | `GET /v1/events/accounts/status` | SUBMITTED → ACTIVE, ACTION_REQUIRED, REJECTED | Update `brokerage_accounts.account_status`, trigger FDIC sweep enrollment on ACTIVE |
 | Transfer status | `GET /v1/events/transfers/status` | QUEUED → PENDING → COMPLETE, REJECTED, RETURNED | Invalidate account balance cache, push notification to user |
-| Trade events | `GET /v1/events/trades` | Order fills, cancels, rejects | Update `order_events` status, invalidate positions/account cache |
+| Trade events | `GET /v2/events/trades` | Order fills, cancels, rejects | Update `order_events` status, invalidate positions/account cache |
 
-Reconnection strategy: track last received `event_id`, reconnect with `since_id` parameter to replay missed events, exponential backoff on connection failures.
+Reconnection strategy: track last received event ID (ULID), reconnect with `since_ulid` / `since_id` parameter to replay missed events, exponential backoff on connection failures.
 
-**2. WebSocket Trade Updates (ARQ persistent task):**
-
-A separate persistent task maintains a WebSocket connection to `wss://broker-api.alpaca.markets/stream` for real-time order events. This is the primary channel for trade status updates (fills arrive in milliseconds). The SSE trade events stream (above) serves as a redundancy layer.
-
-Requirements: authenticate within 10 seconds of connecting, ping/pong keepalive, auto-reconnect on disconnect, handle 406 "connection limit exceeded" error, deduplicate events by `event_id` when processing from both SSE and WebSocket.
-
-**Why both SSE and WebSocket for trades?** WebSocket gives millisecond latency for the real-time trade confirmation UX. SSE gives historical replay capability if the WebSocket drops. Together they ensure no order event is ever missed.
+**Concurrency limit.** Alpaca's Broker API caps us at **25 concurrent SSE connections per API key** ([Broker API FAQ](https://docs.alpaca.markets/docs/broker-api-faq)). All non-prod environments share one sandbox key, so the 25-slot pool covers dev + staging + PR previews combined. Current budget: 3 local dev + 1 staging + up to 21 PR previews = 25. See `docs/architecture.md` §Worker topology for details.
 
 ### 4.5 Key API Endpoints
 
@@ -743,9 +733,9 @@ The ARQ Redis pool is initialized during FastAPI's lifespan (`app/lifecycle.py`)
 3. Worker stores the result in the database.
 4. Client retrieves the result (polling, WebSocket push, or push notification — TBD per feature).
 
-**Persistent listener pattern (for SSE/WebSocket):**
+**Persistent listener pattern (for SSE):**
 
-The SSE and WebSocket listeners (§4.4) are long-running tasks that start when the worker boots and run continuously. They don't follow the enqueue/dequeue pattern — they're started in the worker's `on_startup` hook and maintain persistent connections to Alpaca.
+The SSE listeners (§4.4) are long-running tasks that start when the worker boots and run continuously. They don't follow the enqueue/dequeue pattern — they're started in the worker's `on_startup` hook and maintain persistent connections to Alpaca.
 
 ### 6.3 Task Registry
 
@@ -759,8 +749,7 @@ The SSE and WebSocket listeners (§4.4) are long-running tasks that start when t
 
 | Task | Type | What it does | Cross-references |
 |---|---|---|---|
-| Alpaca SSE listener | Persistent | Listens for account status (`/v1/events/accounts/status`), transfer status (`/v2/events/funding/status`), and trade events (`/v2/events/trades`). Updates DB rows, invalidates cache, triggers FDIC enrollment on ACTIVE. | §4.4, §3.4 |
-| Alpaca WebSocket listener | Persistent | Listens for real-time order fill/cancel/reject events via `wss://api.alpaca.markets/stream`. Updates `order_events`, invalidates cache. | §4.4, §7.4 |
+| Alpaca SSE listener | Persistent | Listens for account status (`/v1/events/accounts/status`), transfer status (`/v2/events/funding/status`), and trade events (`/v2/events/trades`). Updates DB rows, invalidates cache, triggers FDIC enrollment on ACTIVE. | §4.4, §3.4, §7.4 |
 | Radar refresh | Daily cron | AI generates new radar items per user. | §7.6 |
 | Radar expiry cleanup | Daily cron | Removes expired, non-favorited radar items. | §7.6 |
 | AI conversation processing | On-demand | Runs Claude with context, processes tool calls, stores response. | §7.8 |
@@ -884,12 +873,12 @@ Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
 8. iOS sends confirmation → API creates `order_events` row with `status: pending`, `submitted_at: now()`, and `conversation_id` (links trade to the chat thread).
 9. API submits to Alpaca: `POST /v1/trading/accounts/{id}/orders`.
 10. Alpaca returns order object with `status: new|accepted`. API updates `order_events` with `alpaca_order_id`.
-11. WebSocket listener (§4.4) receives fill/cancel/reject event → updates `order_events.status`, `filled_avg_price`, `filled_qty`, `filled_at`. Invalidates positions and account cache (§3.4).
+11. Trade events SSE listener (§4.4) receives fill/cancel/reject event → updates `order_events.status`, `filled_avg_price`, `filled_qty`, `filled_at`. Invalidates positions and account cache (§3.4).
 12. API pushes status update to iOS → Trade Execution Card renders with fill details (FR-8.12) or error (FR-8.13).
 
 **Logging — `order_events` table:**
 
-Every order gets a row in `order_events` at step 8, before Alpaca is called. This ensures we have a record even if the Alpaca call fails. The row is then updated as the order progresses through its lifecycle via WebSocket/SSE events. Fields tracked: symbol, side, order_type, qty/notional, limit_price, status, filled_avg_price, filled_qty, submitted_at, filled_at, and the `conversation_id` that links back to the AI conversation that initiated the trade.
+Every order gets a row in `order_events` at step 8, before Alpaca is called. This ensures we have a record even if the Alpaca call fails. The row is then updated as the order progresses through its lifecycle via SSE trade events. Fields tracked: symbol, side, order_type, qty/notional, limit_price, status, filled_avg_price, filled_qty, submitted_at, filled_at, and the `conversation_id` that links back to the AI conversation that initiated the trade.
 
 The `order_events` table is our audit log — it's the authoritative record of every trade the system has processed, retained for regulatory compliance (3-year minimum). If there's ever a discrepancy between our log and Alpaca's order history, Alpaca is the source of truth and we reconcile.
 
@@ -898,7 +887,7 @@ The `order_events` table is our audit log — it's the authoritative record of e
 - **Market orders** use `notional` (dollar amount) for fractional shares. Minimum $1.00. **Limit orders** use `qty`.
 - `time_in_force`: `day` (default, expires at close) or `gtc` (good 'til canceled, for limit orders).
 - Order types at MVP: `market` and `limit` only. No stop-loss, trailing stop, etc.
-- The WebSocket trade updates stream is the primary channel for real-time status (millisecond latency). SSE trade events serve as a redundancy layer for missed events.
+- The SSE trade events stream is the sole real-time channel for order status updates. The Broker API does not offer a WebSocket equivalent, and SSE's built-in `since_id` replay means no events are lost across reconnects.
 
 ---
 
@@ -1005,9 +994,9 @@ The iOS app calls the Sevino API every 5 minutes while in the foreground to refr
 
 The `order_events` table is populated at two points:
 - **On submission** (step 8 of §7.4): API creates the row with `status: pending` before calling Alpaca. This ensures a record exists even if the Alpaca call fails.
-- **On status update** (§4.4): The WebSocket listener receives fill/cancel/reject events and updates the existing row with the final status, fill price, and timestamps. The SSE trade events stream serves as a backup if the WebSocket misses an event.
+- **On status update** (§4.4): The trade events SSE listener receives fill/cancel/reject events and updates the existing row with the final status, fill price, and timestamps. SSE's built-in `since_id` replay handles gaps across worker reconnects.
 
-If there's ever a discrepancy between `order_events` and Alpaca's order history, Alpaca is the source of truth. A future reconciliation job could periodically compare and correct drift, but this isn't needed at MVP given the dual WebSocket + SSE coverage.
+If there's ever a discrepancy between `order_events` and Alpaca's order history, Alpaca is the source of truth. A future reconciliation job could periodically compare and correct drift, but this isn't needed at MVP given SSE's replay guarantees.
 
 **Key decisions:**
 
@@ -1069,7 +1058,7 @@ Three services in one Railway project, all sharing env vars and private networki
 | Service | Procfile Command | Role |
 |---|---|---|
 | Web | `uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-access-log --proxy-headers --forwarded-allow-ips='*'` | HTTP request handling |
-| Worker | `arq app.worker.WorkerSettings` | Background jobs, SSE/WebSocket listeners, cron tasks |
+| Worker | `arq app.worker.WorkerSettings` | Background jobs, SSE listeners, cron tasks |
 | Redis | Managed by Railway | ARQ job queue + caching layer |
 
 The `--proxy-headers` and `--forwarded-allow-ips='*'` flags are required for correct client IP handling behind Railway's reverse proxy (needed for rate limiting by IP).

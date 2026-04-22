@@ -27,6 +27,24 @@ final class FundingViewModel {
     var linkToken: String?
     var isShowingPlaidLink: Bool = false
 
+    // MARK: - Cash display (mock) state
+    //
+    // Rendered by the expanded `FundingMorphingView`. Hardcoded placeholder
+    // values until real balance data lands (would plug into Alpaca's account
+    // / activities endpoints). Kept on this VM rather than HomeViewModel so
+    // it matches main's per-card decomposition pattern.
+
+    private(set) var cashBalance = "$2,412.08"
+    private(set) var cashApy = "3.20%"
+    private(set) var cashThisMonth = "+$6.43"
+    private(set) var cashDaysAccrued = "22"
+    private(set) var cashLifetime = "+$41.87"
+    private(set) var cashLifetimeSince = "Oct 2025"
+    private(set) var cashBuyingPower = "$2,412.08"
+    private(set) var cashPendingDeposits = "$100.50"
+    private(set) var cashInterestPaidOut = "Monthly"
+    private(set) var cashFdicInsured = "$2,500,000"
+
     private let service: any FundingServiceProtocol
 
     init(service: any FundingServiceProtocol = FundingService.shared) {

@@ -3,13 +3,10 @@ import SwiftUI
 struct HoldingsMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
-    let viewModel: HomeViewModel
+    let viewModel: HoldingsViewModel
     @Binding var showFilter: Bool
     let onTap: () -> Void
     let onDismiss: () -> Void
-
-    @State private var displayOption = HoldingsDisplayOption.totalValue
-    @State private var sortOption = HoldingsSortOption.highToLow
 
     var body: some View {
         VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
@@ -24,6 +21,8 @@ struct HoldingsMorphingView: View {
         .fixedSize(horizontal: !isExpanded, vertical: true)
         .modifier(SevinoGlass.card)
         .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
+        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
+        .contentShape(Rectangle())
         .overlay {
             if !isExpanded {
                 Button(action: onTap) { Color.clear.contentShape(.rect) }
@@ -35,8 +34,10 @@ struct HoldingsMorphingView: View {
             if showFilter {
                 HoldingsFilterPopup(
                     scale: scale,
-                    displayOption: $displayOption,
-                    sortOption: $sortOption,
+                    displayOption: viewModel.displayOption,
+                    sortOption: viewModel.sortOption,
+                    onSelectDisplay: viewModel.setDisplayOption,
+                    onSelectSort: viewModel.setSortOption,
                     onDismiss: { withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showFilter = false } }
                 )
                 .offset(x: -20 * scale, y: 50 * scale)
@@ -57,13 +58,56 @@ struct HoldingsMorphingView: View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
-            VStack(spacing: 12 * scale) {
-                ForEach(viewModel.holdings) { holding in
-                    HoldingRow(holding: holding, scale: scale)
+            if viewModel.isLoading, viewModel.holdings.isEmpty {
+                loadingState
+            } else if viewModel.error != nil, viewModel.holdings.isEmpty {
+                errorState
+            } else if viewModel.holdings.isEmpty {
+                emptyState
+            } else {
+                LazyVStack(spacing: 12 * scale) {
+                    ForEach(viewModel.holdings) { holding in
+                        HoldingRow(holding: holding, scale: scale)
+                    }
                 }
             }
         }
         .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+    }
+
+    private var loadingState: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32 * scale)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.holdingsEmptyTitle, systemImage: "chart.pie")
+        } description: {
+            Text(L10n.Home.holdingsEmptyMessage)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var errorState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.holdingsLoadErrorTitle, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(L10n.Home.holdingsLoadErrorMessage)
+        } actions: {
+            Button(L10n.Home.holdingsLoadErrorRetry, action: retry)
+                .font(.system(size: 14 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .padding(.horizontal, 20 * scale)
+                .padding(.vertical, 10 * scale)
+                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func retry() {
+        Task { await viewModel.loadHoldings() }
     }
 
     private var headerRow: some View {
@@ -80,7 +124,7 @@ struct HoldingsMorphingView: View {
                 }
             } label: {
                 HStack(spacing: 6 * scale) {
-                    Text(displayOption.label)
+                    Text(viewModel.displayOption.label)
                         .font(.system(size: 13 * scale))
                         .foregroundStyle(Color.sevinoGreyContrast)
 
@@ -97,8 +141,10 @@ struct HoldingsMorphingView: View {
 
 private struct HoldingsFilterPopup: View {
     let scale: CGFloat
-    @Binding var displayOption: HoldingsDisplayOption
-    @Binding var sortOption: HoldingsSortOption
+    let displayOption: HoldingsDisplayOption
+    let sortOption: HoldingsSortOption
+    let onSelectDisplay: (HoldingsDisplayOption) -> Void
+    let onSelectSort: (HoldingsSortOption) -> Void
     let onDismiss: () -> Void
 
     var body: some View {
@@ -110,7 +156,7 @@ private struct HoldingsFilterPopup: View {
 
             ForEach(HoldingsDisplayOption.allCases) { option in
                 filterRow(label: option.label, isSelected: option == displayOption) {
-                    displayOption = option
+                    onSelectDisplay(option)
                     onDismiss()
                 }
             }
@@ -126,7 +172,7 @@ private struct HoldingsFilterPopup: View {
 
             ForEach(HoldingsSortOption.allCases) { option in
                 filterRow(label: option.label, isSelected: option == sortOption) {
-                    sortOption = option
+                    onSelectSort(option)
                     onDismiss()
                 }
             }
@@ -307,42 +353,32 @@ private struct HoldingRow: View {
     }
 }
 
-#Preview("Dark") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        HoldingsMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            showFilter: .constant(false),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
+private struct HoldingsMorphingPreview: View {
+    @State private var viewModel = HoldingsViewModel()
+
+    var body: some View {
+        ZStack {
+            Color.sevinoPrimary.ignoresSafeArea()
+            HoldingsMorphingView(
+                scale: 1,
+                isExpanded: true,
+                viewModel: viewModel,
+                showFilter: .constant(false),
+                onTap: {},
+                onDismiss: {}
+            )
+            .padding(16)
+        }
+        .task { await viewModel.loadHoldings() }
     }
-    .preferredColorScheme(.dark)
+}
+
+#Preview("Dark") {
+    HoldingsMorphingPreview()
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    ZStack {
-        Color.sevinoPrimary.ignoresSafeArea()
-        HoldingsMorphingView(
-            scale: 1,
-            isExpanded: true,
-            viewModel: {
-                let vm = HomeViewModel()
-                vm.loadGreeting()
-                return vm
-            }(),
-            showFilter: .constant(false),
-            onTap: {},
-            onDismiss: {}
-        )
-        .padding(16)
-    }
-    .preferredColorScheme(.light)
+    HoldingsMorphingPreview()
+        .preferredColorScheme(.light)
 }
