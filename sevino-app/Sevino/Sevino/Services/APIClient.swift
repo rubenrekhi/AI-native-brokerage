@@ -27,7 +27,7 @@ final class APIClient: APIClientProtocol {
         return d
     }()
 
-    private init(
+    init(
         baseURL: String = AppConfig.apiBaseURL,
         session: URLSession = .shared,
         tokenProvider: @escaping @Sendable () async -> String? = {

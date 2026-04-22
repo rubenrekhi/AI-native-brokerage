@@ -4,6 +4,7 @@ struct OnboardingContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onComplete: (_ userName: String) -> Void
+    let onLogOut: () -> Void
 
     @State private var viewModel: OnboardingViewModel
     @State private var animate: Bool
@@ -13,9 +14,11 @@ struct OnboardingContainerView: View {
         initialStep: Int = 1,
         resumeData: OnboardingResumeManager.OnboardingResumeData? = nil,
         onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
-        onComplete: @escaping (_ userName: String) -> Void
+        onComplete: @escaping (_ userName: String) -> Void,
+        onLogOut: @escaping () -> Void
     ) {
         self.onComplete = onComplete
+        self.onLogOut = onLogOut
         let isResuming = resumeData != nil && initialStep > 1
         _viewModel = State(initialValue: OnboardingViewModel(
             initialStep: initialStep,
@@ -26,19 +29,21 @@ struct OnboardingContainerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ProgressBar(
-                currentStep: viewModel.currentStep,
-                totalSteps: OnboardingViewModel.totalSteps,
-                scale: scale
-            )
-            .padding(.top, 8 * scale)
-            .padding(.horizontal, 32 * scale)
-            .padding(.bottom, 8 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                ProgressBar(
+                    currentStep: viewModel.currentStep,
+                    totalSteps: OnboardingViewModel.totalSteps,
+                    scale: scale
+                )
+                .padding(.top, 8 * scale)
+                .padding(.horizontal, 32 * scale)
+                .padding(.bottom, 8 * scale)
 
-            AuthHeaderView(scale: scale, onBack: goBack)
+                AuthHeaderView(scale: scale, onBack: goBack)
 
-            stepContent
+                stepContent
+            }
         }
         .background { backgroundView }
         .overlay(alignment: .bottom) { saveErrorBanner }
@@ -352,6 +357,8 @@ struct OnboardingContainerView: View {
             withAnimation(.easeInOut(duration: 0.3)) {
                 viewModel.goBack()
             }
+        } else {
+            onLogOut()
         }
     }
 
@@ -365,5 +372,5 @@ struct OnboardingContainerView: View {
 
 
 #Preview {
-    OnboardingContainerView { _ in }
+    OnboardingContainerView(onComplete: { _ in }, onLogOut: {})
 }

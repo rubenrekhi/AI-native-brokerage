@@ -27,30 +27,32 @@ struct AlpacaSetupContainerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            if viewModel.currentStep > 1 {
-                ProgressBar(
-                    currentStep: viewModel.currentStep - 1,
-                    totalSteps: AlpacaSetupViewModel.totalSteps - 1,
-                    scale: scale
-                )
-                .padding(.top, 8 * scale)
-                .padding(.horizontal, 32 * scale)
-                .padding(.bottom, 8 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                if viewModel.currentStep > 1 {
+                    ProgressBar(
+                        currentStep: viewModel.currentStep - 1,
+                        totalSteps: AlpacaSetupViewModel.totalSteps - 1,
+                        scale: scale
+                    )
+                    .padding(.top, 8 * scale)
+                    .padding(.horizontal, 32 * scale)
+                    .padding(.bottom, 8 * scale)
 
-                if viewModel.currentStep == 10 {
-                    Image("logo_white")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(height: 36 * scale)
-                        .accessibilityLabel(L10n.General.appName)
-                        .padding(.top, 8 * scale)
-                } else {
-                    AuthHeaderView(scale: scale, onBack: goBack)
+                    if viewModel.currentStep == 10 {
+                        Image("logo_white")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 36 * scale)
+                            .accessibilityLabel(L10n.General.appName)
+                            .padding(.top, 8 * scale)
+                    } else {
+                        AuthHeaderView(scale: scale, onBack: goBack)
+                    }
                 }
-            }
 
-            stepContent
+                stepContent
+            }
         }
         .background { backgroundView }
         .overlay(alignment: .bottom) { saveErrorBanner }

@@ -42,19 +42,20 @@ struct HomeView: View {
                     HomeGreetingSection(
                         scale: scale,
                         greeting: viewModel.greeting,
-                        showExplore: $showExplore
+                        showExplore: $showExplore,
+                        isHidden: anyModalOpen
                     )
                     .offset(y: -60 * scale)
 
                     VStack(spacing: 0) {
-                        HStack {
+                        HStack(spacing: 8 * scale) {
                             navSidebarButton
-                            Color.clear.frame(width: 120 * scale, height: 36 * scale)
+                            Color.clear.frame(width: 120 * scale, height: 44 * scale)
                             Spacer()
                             HStack(spacing: 8 * scale) {
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
                             }
                         }
                         .padding(.horizontal, 16 * scale)
@@ -66,7 +67,7 @@ struct HomeView: View {
                             .padding(.bottom, 20 * scale)
                             .padding(.horizontal, 16 * scale)
 
-                        HomeChatInputBar(text: $messageText, scale: scale)
+                        HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
                             .padding(.horizontal, 16 * scale)
                             .padding(.bottom, 8 * scale)
                     }
@@ -99,12 +100,14 @@ struct HomeView: View {
                     onTap: togglePortfolio
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.leading, showPortfolio ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 8) * scale)
                 .padding(.trailing, showPortfolio ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
-                .opacity(showFunding || showHoldings || showRadar ? 0 : 1)
+                .accessibilityHidden(showFunding || showHoldings || showRadar)
+                .blur(radius: showFunding || showHoldings || showRadar ? 10 : 0)
+                .brightness(showFunding || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 FundingMorphingView(
                     scale: scale,
@@ -114,12 +117,14 @@ struct HomeView: View {
                     onDismiss: dismissFunding
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showFunding ? 16 * scale : (16 + 36 + 8 + 36 + 8) * scale)
+                .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 8 + 44 + 8) * scale)
                 .padding(.leading, showFunding ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
-                .opacity(showPortfolio || showHoldings || showRadar ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showHoldings || showRadar)
+                .blur(radius: showPortfolio || showHoldings || showRadar ? 10 : 0)
+                .brightness(showPortfolio || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 HoldingsMorphingView(
                     scale: scale,
@@ -135,7 +140,9 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
-                .opacity(showPortfolio || showFunding || showRadar ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showFunding || showRadar)
+                .blur(radius: showPortfolio || showFunding || showRadar ? 10 : 0)
+                .brightness(showPortfolio || showFunding || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 RadarMorphingView(
                     scale: scale,
@@ -145,12 +152,14 @@ struct HomeView: View {
                     onDismiss: dismissRadar
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showRadar ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.trailing, showRadar ? 16 * scale : (16 + 44 + 8) * scale)
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
-                .opacity(showPortfolio || showFunding || showHoldings ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showFunding || showHoldings)
+                .blur(radius: showPortfolio || showFunding || showHoldings ? 10 : 0)
+                .brightness(showPortfolio || showFunding || showHoldings ? (colorScheme == .light ? -0.3 : -0.2) : 0)
             }
         }
         .background { HomeBackgroundView() }
@@ -326,8 +335,10 @@ struct HomeView: View {
                 .font(.system(size: 16 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
+                .contentShape(.rect)
+                .frame(minWidth: 44 * scale, minHeight: 44 * scale)
         }
-        .modifier(SevinoGlass.navCircle)
+        .modifier(SevinoGlass.navCircleClear)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 

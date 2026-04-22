@@ -8,29 +8,12 @@ struct HoldingsMorphingView: View {
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
-        VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
-            if isExpanded {
-                expandedContent
-            } else {
-                pillContent
-            }
-        }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-        .contentShape(Rectangle())
-        .overlay {
-            if !isExpanded {
-                Button(action: onTap) { Color.clear.contentShape(.rect) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.menuAccessibility)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
+        ZStack(alignment: .topTrailing) {
+            card
+
             if showFilter {
                 HoldingsFilterPopup(
                     scale: scale,
@@ -43,6 +26,31 @@ struct HoldingsMorphingView: View {
                 .offset(x: -20 * scale, y: 50 * scale)
                 .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
                 .zIndex(10)
+            }
+        }
+    }
+
+    private var card: some View {
+        VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
+            if isExpanded {
+                expandedContent
+            } else {
+                pillContent
+            }
+        }
+        .padding(isExpanded ? 20 * scale : 0)
+        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
+        .fixedSize(horizontal: !isExpanded, vertical: true)
+        .modifier(SevinoGlass.card)
+        .modifier(GlassMorphID(id: "holdings", namespace: morphNamespace))
+        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
+        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
+        .contentShape(Rectangle())
+        .overlay {
+            if !isExpanded {
+                Button(action: onTap) { Color.clear.contentShape(.rect) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.Home.menuAccessibility)
             }
         }
     }
@@ -72,7 +80,10 @@ struct HoldingsMorphingView: View {
                 }
             }
         }
-        .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
     }
 
     private var loadingState: some View {

@@ -10,53 +10,55 @@ struct AuthView: View {
     @State private var scale: CGFloat = 1
 
     var body: some View {
-        VStack(spacing: 0) {
-            AuthHeaderView(scale: scale, onBack: onBack)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                AuthHeaderView(scale: scale, onBack: onBack)
 
-            ScrollView {
-                VStack(spacing: 0) {
-                    AuthTitleView(isSignUp: isSignUp, scale: scale)
-                    SocialButtonsView(
-                        scale: scale,
-                        onGoogle: signInWithGoogle,
-                        onApple: signInWithApple
-                    )
-                    AuthDividerView(scale: scale)
-                    EmailSectionView(
-                        isSignUp: isSignUp,
-                        scale: scale,
-                        email: $email
-                    )
-                    PasswordSectionView(
-                        isSignUp: isSignUp,
-                        scale: scale,
-                        password: $password
-                    )
+                ScrollView {
+                    VStack(spacing: 0) {
+                        AuthTitleView(isSignUp: isSignUp, scale: scale)
+                        SocialButtonsView(
+                            scale: scale,
+                            onGoogle: signInWithGoogle,
+                            onApple: signInWithApple
+                        )
+                        AuthDividerView(scale: scale)
+                        EmailSectionView(
+                            isSignUp: isSignUp,
+                            scale: scale,
+                            email: $email
+                        )
+                        PasswordSectionView(
+                            isSignUp: isSignUp,
+                            scale: scale,
+                            password: $password
+                        )
 
-                    if let error = authVM.authError {
-                        Text(error)
-                            .font(.system(size: 13 * scale))
-                            .foregroundStyle(Color.sevinoNegative)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 12 * scale)
-                            .padding(.horizontal, 24 * scale)
+                        if let error = authVM.authError {
+                            Text(error)
+                                .font(.system(size: 13 * scale))
+                                .foregroundStyle(Color.sevinoNegative)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 12 * scale)
+                                .padding(.horizontal, 24 * scale)
+                        }
+
+                        SubmitButtonView(
+                            isSignUp: isSignUp,
+                            isLoading: authVM.isLoading,
+                            isFormIncomplete: isFormIncomplete,
+                            scale: scale,
+                            action: submit
+                        )
                     }
-
-                    SubmitButtonView(
-                        isSignUp: isSignUp,
-                        isLoading: authVM.isLoading,
-                        isFormIncomplete: isFormIncomplete,
-                        scale: scale,
-                        action: submit
-                    )
                 }
-            }
-            .scrollIndicators(.hidden)
+                .scrollIndicators(.hidden)
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
 
-            if isSignUp {
-                LegalDisclaimerView(scale: scale)
+                if isSignUp {
+                    LegalDisclaimerView(scale: scale)
+                }
             }
         }
         .background { AuthBackgroundView() }

@@ -21,9 +21,11 @@ struct SubmitButtonView: View {
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 14 * scale)
+            .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
         }
         .buttonStyle(.plain)
         .modifier(SevinoGlass.tintedButton(tint: .welcomeButtonDarkTint))
+        .accessibilityIdentifier("auth.submit")
         .disabled(isFormIncomplete || isLoading)
         .opacity((isFormIncomplete && !isLoading) ? 0.6 : 1)
         .padding(.top, 20 * scale)

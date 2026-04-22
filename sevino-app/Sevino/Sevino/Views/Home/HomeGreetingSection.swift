@@ -5,6 +5,7 @@ struct HomeGreetingSection: View {
     let scale: CGFloat
     let greeting: String
     @Binding var showExplore: Bool
+    let isHidden: Bool
 
     var body: some View {
         VStack(spacing: 16 * scale) {
@@ -32,6 +33,8 @@ struct HomeGreetingSection: View {
                 .padding(.horizontal, 20 * scale)
                 .padding(.vertical, 10 * scale)
                 .modifier(SevinoGlass.chip)
+                .opacity(isHidden ? 0 : 1)
+                .accessibilityHidden(isHidden)
             }
         }
     }

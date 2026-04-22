@@ -30,6 +30,7 @@ struct LoginSecuritySettingsView: View {
                     .foregroundStyle(Color.sevinoSecondary)
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 16 * scale)
+                    .contentShape(.rect(cornerRadius: 14 * scale))
             }
             .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
             .confirmationDialog(L10n.Settings.deleteConfirmTitle, isPresented: $showDeleteConfirmation) {

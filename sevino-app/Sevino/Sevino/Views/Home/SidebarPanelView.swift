@@ -16,11 +16,12 @@ struct SidebarPanelView: View {
     @State private var showSettings = false
 
     var body: some View {
-        ZStack {
-            Color.sevinoSettingsBg
-                .ignoresSafeArea()
+        SevinoGlassContainer {
+            ZStack {
+                Color.sevinoSettingsBg
+                    .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Image(colorScheme == .dark ? "logo_white" : "logo_black")
                         .resizable()
@@ -111,10 +112,11 @@ struct SidebarPanelView: View {
                 }
                 .padding(.bottom, 8 * scale)
             }
-            .padding(.horizontal, 14 * scale)
-            .padding(.top, 16 * scale)
-            .frame(width: 300 * scale, alignment: .leading)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.horizontal, 14 * scale)
+                .padding(.top, 16 * scale)
+                .frame(width: 300 * scale, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
         }
     }
 
