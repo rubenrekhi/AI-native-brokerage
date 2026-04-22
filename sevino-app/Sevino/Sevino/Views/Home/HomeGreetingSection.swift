@@ -5,6 +5,7 @@ struct HomeGreetingSection: View {
     let scale: CGFloat
     let greeting: String
     @Binding var showExplore: Bool
+    let isHidden: Bool
 
     var body: some View {
         VStack(spacing: 16 * scale) {
@@ -18,7 +19,7 @@ struct HomeGreetingSection: View {
                 .font(.system(size: 28 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if showExplore {
+            if showExplore && !isHidden {
                 HStack(spacing: 8 * scale) {
                     Button(L10n.Home.exploreButton, action: {})
                         .font(.system(size: 15 * scale))

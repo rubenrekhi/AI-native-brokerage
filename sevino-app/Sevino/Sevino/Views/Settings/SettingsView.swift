@@ -6,6 +6,7 @@ struct SettingsView: View {
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
+    @State private var authVM = AuthViewModel()
     @State private var showLegalLinks = false
     @State private var path = NavigationPath()
     @State private var baseScale: CGFloat = 1
@@ -28,15 +29,16 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button(action: {}) {
+                    Button(action: logOut) {
                         Text(L10n.Settings.logOut)
                             .font(.system(size: 16 * scale, weight: .semibold))
                             .foregroundStyle(Color.sevinoSecondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 16 * scale)
+                            .contentShape(.rect(cornerRadius: 14 * scale))
                     }
                     .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
-                    .disabled(true)
+                    .disabled(authVM.isLoading)
                     .padding(.bottom, 16 * scale)
                 }
                 .padding(.horizontal, 20 * scale)
@@ -46,12 +48,10 @@ struct SettingsView: View {
                 Color.sevinoSettingsBg
                     .ignoresSafeArea()
             }
-            .background {
-                GeometryReader { geo in
-                    Color.clear.onAppear {
-                        baseScale = geo.size.width / 393
-                    }
-                }
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.width
+            } action: { width in
+                baseScale = width / 393
             }
             .navigationBarBackButtonHidden()
             .navigationDestination(for: SettingsDestination.self) { destination in
@@ -84,8 +84,8 @@ struct SettingsView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 14 * scale, weight: .semibold))
                     .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: 40 * scale, height: 40 * scale)
-                    .modifier(SevinoGlass.navCircle)
+                    .frame(width: 44 * scale, height: 44 * scale)
+                    .modifier(SevinoGlass.navCircleClear)
 
                 Spacer()
 
@@ -93,8 +93,8 @@ struct SettingsView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 16 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: 40 * scale, height: 40 * scale)
-                    .modifier(SevinoGlass.navCircle)
+                    .frame(width: 44 * scale, height: 44 * scale)
+                    .modifier(SevinoGlass.navCircleClear)
                     .confirmationDialog(L10n.Settings.legalTitle, isPresented: $showLegalLinks) {
                         Button(L10n.Settings.privacyPolicy, action: openPrivacyPolicy)
                         Button(L10n.Settings.termsOfService, action: openTermsOfService)
@@ -142,6 +142,10 @@ struct SettingsView: View {
 
     private func navigateToAppearance() {
         path.append(SettingsDestination.appearance)
+    }
+
+    private func logOut() {
+        Task { await authVM.signOut() }
     }
 
     private func openPrivacyPolicy() {

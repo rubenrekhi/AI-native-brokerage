@@ -711,11 +711,11 @@ async def test_stream_once_heartbeat_emits_info_log(
     heartbeat_logs = [
         (event, kwargs)
         for event, kwargs in info_calls
-        if event == "sse_heartbeat"
+        if event == "sse_benign_comment" and kwargs.get("comment") == "heartbeat"
     ]
     assert len(heartbeat_logs) == 1
     _, kwargs = heartbeat_logs[0]
-    assert kwargs == {"stream": "test_stream"}
+    assert kwargs == {"stream": "test_stream", "comment": "heartbeat"}
 
 
 async def test_stream_once_diagnostic_comment_logs_and_breadcrumbs(
@@ -771,6 +771,69 @@ async def test_stream_once_diagnostic_comment_logs_and_breadcrumbs(
     ]
     assert len(diag_breadcrumbs) == 1
     assert diag_breadcrumbs[0]["data"]["comment"] == "internal server error"
+
+
+async def test_stream_once_welcome_banner_is_benign(
+    broker, fake_session, monkeypatch
+):
+    """Alpaca emits ``: welcome to the Alpaca events`` once on every
+    successful connect. It must be treated like a heartbeat (info log +
+    liveness bump, no Sentry breadcrumb, no warning) — otherwise every
+    reconnect would bury the breadcrumb stream with benign banners and
+    page on nothing."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    info_calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.logger.info",
+        lambda event, **kwargs: info_calls.append((event, kwargs)),
+    )
+    warning_calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.logger.warning",
+        lambda event, **kwargs: warning_calls.append((event, kwargs)),
+    )
+    breadcrumbs: list[dict] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.add_breadcrumb",
+        lambda **kwargs: breadcrumbs.append(kwargs),
+    )
+
+    transport = httpx.MockTransport(
+        lambda _req: _sse_response(b": welcome to the Alpaca events\n\n")
+    )
+    listener = _CaptureListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    benign = [
+        (event, kwargs)
+        for event, kwargs in info_calls
+        if event == "sse_benign_comment"
+        and kwargs.get("comment") == "welcome to the Alpaca events"
+    ]
+    assert len(benign) == 1
+
+    diag_warnings = [
+        (event, kwargs)
+        for event, kwargs in warning_calls
+        if event == "sse_diagnostic_comment"
+    ]
+    assert diag_warnings == []
+
+    diag_breadcrumbs = [
+        b for b in breadcrumbs
+        if b.get("category") == "sse" and b.get("level") == "warning"
+    ]
+    assert diag_breadcrumbs == []
 
 
 async def test_stream_once_dropped_messages_emits_sentry_capture_with_tag(

@@ -205,6 +205,69 @@ final class AuthServiceIntegrationTests: XCTestCase {
 
 Note the ID is appended **before** the assertion — if the assertion fails, teardown still has the ID to clean up.
 
+#### 5b. Test Coverage Adequacy
+
+Every PR that adds or materially changes production code must ship with the matching test categories. The auditor classifies each changed production file and checks that the PR diff touches the expected test file(s). Missing coverage is flagged — adding code without tests is a regression of test quality, not a neutral choice.
+
+**Classification (by file path of the production change):**
+
+| Changed file matches | Required test categories | Where tests live |
+|---|---|---|
+| `Sevino/ViewModels/**/*.swift` (non-placeholder) | **Unit** | `SevinoTests/{Feature}/{Name}Tests.swift` |
+| `Sevino/Services/**/*.swift` — new service, new public method, or changed protocol | **Unit** (mocked URLSession or dependencies); **Integration** only if the service hits an external system we don't own (Supabase, Alpaca, Plaid, etc.) | `SevinoTests/Services/`; integration tests gated on `INTEGRATION_TESTS=1` |
+| `Sevino/Utils/**/*.swift` containing pure logic (formatters, mappers, validators) | **Unit** | `SevinoTests/Models/` or `SevinoTests/{Feature}/` |
+| `Sevino/Views/**/*.swift` that represents a **key user flow** — auth, onboarding, KYC, funding, trading, a primary tab root | **Acceptance** (XCUITest) covering the golden path and at least one failure/validation branch | `SevinoUITests/` |
+| New external network dependency (new host, new backend API, new third-party SDK doing network I/O) | **Health check component** added to `HealthCheckService.Component` enum + corresponding probe, with **unit** test coverage for the new probe and **integration** test against the real endpoint | `Services/HealthCheckService.swift`, `SevinoTests/Services/HealthCheck*Tests.swift` |
+| Changes to `APIClient`, auth token flow, error mapping, or any cross-cutting network plumbing | **Unit** tests exercising the new branch (URLProtocol stubs) | `SevinoTests/Services/APIClientTests.swift` |
+
+**Flag as 🔴 Critical when any of these is true in the PR:**
+
+- A new `@Observable` ViewModel is added and no new `*ViewModelTests.swift` file is touched for it.
+- A new file in `Sevino/Services/` or a new public method on an existing service lands and the matching `SevinoTests/Services/` file is not updated.
+- A new external network dependency appears (new URL host in `AppConfig`, new SDK import that performs network I/O, new `SupabaseClient`/`URLSession` user outside existing services) and `HealthCheckService.Component` was not extended.
+- A key-flow view is added or substantially rewritten (>50 lines of new logic, new navigation target, new screen in Auth/Onboarding/KYC/Funding/Trading/Home root) and `SevinoUITests/` has no corresponding test.
+- A protocol is added to (or changed in) a service file but the matching `Mock{Protocol}` in `SevinoTests/Mocks/` is not updated. Mocks drifting from the real protocol means tests compile against stale contracts.
+- An existing test file is touched to **remove** tests without replacement (dropping coverage silently).
+
+**Flag as 🟡 Suggestion when:**
+
+- A utility/mapper with branching logic (2+ meaningful branches) is added with no unit tests. Simple one-line pass-throughs are exempt.
+- A new failure path is added to an existing ViewModel (new `catch` branch, new error-producing guard) but the corresponding test file is only touched for the happy path.
+- Integration tests exist for a service but are not gated behind `INTEGRATION_TESTS=1` or reachability probes — they will fail noisily in CI without the local stack.
+- A health-check component is added but `HealthCheckResult.Component.allCases` is not used anywhere that would benefit from iterating all components (e.g. a diagnostics view).
+
+**How the auditor verifies coverage:**
+
+1. Run `git diff --name-only origin/main...HEAD` (or the PR equivalent) and partition paths into **production** (`Sevino/**`) and **test** (`SevinoTests/**`, `SevinoUITests/**`).
+2. For each changed production file, look up its expected test category in the table above.
+3. Check whether the PR diff **includes** any file in the expected test path. Existence is necessary but not sufficient — also grep the test file for a reference to the new symbol (new ViewModel class name, new service method, new view title). A test file touched for an unrelated reason doesn't count as coverage.
+4. For health-check additions specifically: confirm the new `Component` case is exercised by a stubbed unit test AND has an integration counterpart gated on `INTEGRATION_TESTS=1`.
+
+**What is NOT flagged:**
+
+- PRs that touch only docs, comments, localization strings, assets, or xcconfig.
+- PRs to placeholder ViewModels (`*Placeholder.swift`) — these are explicit stubs awaiting real implementations.
+- Preview-only changes (inside `#Preview { }`).
+- Pure renames and file moves that preserve behavior, as long as the existing test file is renamed alongside.
+- Changes purely in `Views/Components/` that are leaf-level reusable pieces (unless they add stateful logic).
+
+**Example of compliant additions** (from the SEV-316 changes):
+
+| Production change | Test additions |
+|---|---|
+| New `Services/HealthCheckService.swift` | `SevinoTests/Services/HealthCheckServiceTests.swift` (unit, URLProtocol-stubbed) + `HealthCheckIntegrationTests.swift` (gated on `INTEGRATION_TESTS=1`) |
+| `Services/APIClient.swift` init visibility change to enable DI | `SevinoTests/Services/APIClientTests.swift` (unit, exercises encoding/decoding/auth/error branches) |
+| No production view changes, but new Welcome-flow coverage request | `SevinoUITests/WelcomeFlowUITests.swift` (acceptance for CTA visibility, navigation, form disabling) |
+
+When flagging a missing-test violation, the fix block must include a **concrete test file path** and **one or two test method names** that describe the coverage gap — don't just say "add tests here." Example:
+
+```
+*Fix*: Add `SevinoTests/ViewModels/TradingViewModelTests.swift` with at least:
+  - `testLoadQuotesSuccessPopulatesTickers()`
+  - `testLoadQuotesFailureSurfacesError()`
+  - `testSubmitOrderWhileOfflineSetsErrorAndDoesNotDispatch()`
+```
+
 ---
 
 ### 6. Code Organization

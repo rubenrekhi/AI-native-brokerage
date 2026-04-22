@@ -114,17 +114,17 @@ class TestMapRangeIncome:
     def test_under_25k(self):
         assert map_range("Under $25K", INCOME_RANGES) == ("0", "25000")
 
-    def test_25k_50k(self):
-        assert map_range("$25K \u2013 $50K", INCOME_RANGES) == ("25000", "50000")
+    def test_25k_49k(self):
+        assert map_range("$25K \u2013 $49K", INCOME_RANGES) == ("25000", "50000")
 
-    def test_50k_100k(self):
-        assert map_range("$50K \u2013 $100K", INCOME_RANGES) == ("50000", "100000")
+    def test_50k_99k(self):
+        assert map_range("$50K \u2013 $99K", INCOME_RANGES) == ("50000", "100000")
 
-    def test_100k_200k(self):
-        assert map_range("$100K \u2013 $200K", INCOME_RANGES) == ("100000", "200000")
+    def test_100k_199k(self):
+        assert map_range("$100K \u2013 $199K", INCOME_RANGES) == ("100000", "200000")
 
-    def test_200k_500k(self):
-        assert map_range("$200K \u2013 $500K", INCOME_RANGES) == ("200000", "500000")
+    def test_200k_499k(self):
+        assert map_range("$200K \u2013 $499K", INCOME_RANGES) == ("200000", "500000")
 
     def test_500k_plus(self):
         assert map_range("$500K+", INCOME_RANGES) == ("500000", "1000000")
@@ -372,7 +372,7 @@ def _make_profile(**overrides) -> MagicMock:
 def _make_financial(**overrides) -> MagicMock:
     """Create a mock UserFinancialProfile with all required fields."""
     defaults = {
-        "annual_income": "$50K \u2013 $100K",
+        "annual_income": "$50K \u2013 $99K",
         "net_worth": "$100K \u2013 $250K",
         "liquid_net_worth": "$25K \u2013 $50K",
         "time_horizon": "5 \u2013 10 years",

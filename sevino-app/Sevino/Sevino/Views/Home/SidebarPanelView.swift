@@ -16,11 +16,12 @@ struct SidebarPanelView: View {
     @State private var showSettings = false
 
     var body: some View {
-        ZStack {
-            Color.sevinoSettingsBg
-                .ignoresSafeArea()
+        SevinoGlassContainer {
+            ZStack {
+                Color.sevinoSettingsBg
+                    .ignoresSafeArea()
 
-            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                 HStack {
                     Image(colorScheme == .dark ? "logo_white" : "logo_black")
                         .resizable()
@@ -106,15 +107,16 @@ struct SidebarPanelView: View {
                         .font(.system(size: 24 * scale, weight: .light))
                         .foregroundStyle(Color.sevinoSecondary)
                         .frame(width: 44 * scale, height: 44 * scale)
-                        .modifier(SevinoGlass.navCircle)
+                        .modifier(SevinoGlass.navCircleClear)
                         .disabled(true)
                 }
                 .padding(.bottom, 8 * scale)
             }
-            .padding(.horizontal, 14 * scale)
-            .padding(.top, 16 * scale)
-            .frame(width: 300 * scale, alignment: .leading)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.horizontal, 14 * scale)
+                .padding(.top, 16 * scale)
+                .frame(width: 300 * scale, alignment: .leading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            }
         }
     }
 
@@ -124,7 +126,7 @@ struct SidebarPanelView: View {
             .font(.system(size: 16 * scale, weight: .medium))
             .foregroundStyle(Color.sevinoSecondary)
             .frame(width: 44 * scale, height: 44 * scale)
-            .modifier(SevinoGlass.navCircle)
+            .modifier(SevinoGlass.navCircleClear)
             .confirmationDialog(L10n.Sidebar.contactTitle, isPresented: $showContactOptions) {
                 Button(L10n.Sidebar.talkToFounders, action: { showFounderContact = true })
                 Button(L10n.Sidebar.contactUs, action: openEmail)

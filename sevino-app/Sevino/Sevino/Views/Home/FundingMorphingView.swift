@@ -3,20 +3,36 @@ import SwiftUI
 struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     @Bindable var viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
-        if isExpanded {
-            expandedCard
-        } else {
-            Button(action: onTap) {
-                pillCard
+        Group {
+            if isExpanded {
+                expandedCard
+            } else if !isHidden {
+                pillButton
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L10n.Home.fundingAccessibility)
         }
+        .modifier(GlassMorphID(id: "funding", namespace: morphNamespace))
+    }
+
+    private var pillButton: some View {
+        Button(action: onTap) {
+            Image(systemName: "dollarsign")
+                .font(.system(size: 14 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 36 * scale, height: 36 * scale)
+        }
+        .buttonStyle(.bouncePill)
+        .modifier(SevinoGlass.navCircleClear)
+        .contentShape(.rect)
+        .frame(minWidth: 44 * scale, minHeight: 44 * scale)
+        .accessibilityLabel(L10n.Home.fundingAccessibility)
     }
 
     private var expandedCard: some View {
@@ -26,22 +42,6 @@ struct FundingMorphingView: View {
             .fixedSize(horizontal: false, vertical: true)
             .modifier(SevinoGlass.card)
             .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
-    }
-
-    private var pillCard: some View {
-        pillContent
-            .fixedSize()
-            .modifier(SevinoGlass.card)
-            .clipShape(.rect(cornerRadius: 50 * scale))
-            .frame(minWidth: 44 * scale, minHeight: 44 * scale)
-            .contentShape(Rectangle())
-    }
-
-    private var pillContent: some View {
-        Image(systemName: "dollarsign")
-            .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(width: 36 * scale, height: 36 * scale)
     }
 
     private var expandedContent: some View {
@@ -54,6 +54,10 @@ struct FundingMorphingView: View {
             infoRow
             disclaimer
         }
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
         .task(id: isExpanded) {
             if isExpanded {
                 await viewModel.loadRelationships()
@@ -250,6 +254,7 @@ private struct FundingMorphingPreview: View {
             FundingMorphingView(
                 scale: 1,
                 isExpanded: true,
+                isHidden: false,
                 viewModel: viewModel,
                 onTap: {},
                 onDismiss: {}

@@ -3,55 +3,50 @@ import SwiftUI
 struct HoldingsMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     let viewModel: HoldingsViewModel
     @Binding var showFilter: Bool
     let onTap: () -> Void
     let onDismiss: () -> Void
 
+    @Namespace private var morphNamespace
+
     var body: some View {
-        VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
-            if isExpanded {
-                expandedContent
-            } else {
-                pillContent
-            }
-        }
-        .padding(isExpanded ? 20 * scale : 0)
-        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .leading : .center)
-        .fixedSize(horizontal: !isExpanded, vertical: true)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-        .contentShape(Rectangle())
-        .overlay {
-            if !isExpanded {
-                Button(action: onTap) { Color.clear.contentShape(.rect) }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(L10n.Home.menuAccessibility)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if showFilter {
-                HoldingsFilterPopup(
-                    scale: scale,
-                    displayOption: viewModel.displayOption,
-                    sortOption: viewModel.sortOption,
-                    onSelectDisplay: viewModel.setDisplayOption,
-                    onSelectSort: viewModel.setSortOption,
-                    onDismiss: { withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showFilter = false } }
-                )
-                .offset(x: -20 * scale, y: 50 * scale)
-                .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
-                .zIndex(10)
-            }
-        }
+        card
     }
 
-    private var pillContent: some View {
-        Image(systemName: "list.bullet")
-            .font(.system(size: 16 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(width: 36 * scale, height: 36 * scale)
+    private var card: some View {
+        Group {
+            if isExpanded {
+                expandedCard
+            } else if !isHidden {
+                pillButton
+            }
+        }
+        .modifier(GlassMorphID(id: "holdings", namespace: morphNamespace))
+    }
+
+    private var pillButton: some View {
+        Button(action: onTap) {
+            Image(systemName: "list.bullet")
+                .font(.system(size: 14 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(width: 36 * scale, height: 36 * scale)
+        }
+        .buttonStyle(.bouncePill)
+        .modifier(SevinoGlass.navCircleClear)
+        .contentShape(.rect)
+        .frame(minWidth: 44 * scale, minHeight: 44 * scale)
+        .accessibilityLabel(L10n.Home.menuAccessibility)
+    }
+
+    private var expandedCard: some View {
+        expandedContent
+            .padding(20 * scale)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
+            .modifier(SevinoGlass.card)
+            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 
     private var expandedContent: some View {
@@ -72,7 +67,10 @@ struct HoldingsMorphingView: View {
                 }
             }
         }
-        .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
     }
 
     private var loadingState: some View {
@@ -136,69 +134,6 @@ struct HoldingsMorphingView: View {
             }
         }
         .zIndex(1)
-    }
-}
-
-private struct HoldingsFilterPopup: View {
-    let scale: CGFloat
-    let displayOption: HoldingsDisplayOption
-    let sortOption: HoldingsSortOption
-    let onSelectDisplay: (HoldingsDisplayOption) -> Void
-    let onSelectSort: (HoldingsSortOption) -> Void
-    let onDismiss: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(L10n.Home.filterDisplayBy)
-                .font(.system(size: 11 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoGreyContrast)
-                .padding(.bottom, 6 * scale)
-
-            ForEach(HoldingsDisplayOption.allCases) { option in
-                filterRow(label: option.label, isSelected: option == displayOption) {
-                    onSelectDisplay(option)
-                    onDismiss()
-                }
-            }
-
-            Divider()
-                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
-                .padding(.vertical, 8 * scale)
-
-            Text(L10n.Home.filterSortBy)
-                .font(.system(size: 11 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoGreyContrast)
-                .padding(.bottom, 6 * scale)
-
-            ForEach(HoldingsSortOption.allCases) { option in
-                filterRow(label: option.label, isSelected: option == sortOption) {
-                    onSelectSort(option)
-                    onDismiss()
-                }
-            }
-        }
-        .padding(12 * scale)
-        .frame(width: 180 * scale)
-        .background(Color.sevinoSettingsContrast, in: .rect(cornerRadius: 16 * scale))
-        .shadow(color: Color.sevinoPrimary.opacity(0.3), radius: 12, y: 4)
-    }
-
-    private func filterRow(label: String, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 13 * scale, weight: isSelected ? .semibold : .regular))
-                    .foregroundStyle(isSelected ? Color.sevinoSecondary : Color.sevinoGreyContrast)
-                Spacer()
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11 * scale, weight: .bold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                }
-            }
-            .padding(.vertical, 6 * scale)
-            .contentShape(.rect)
-        }
     }
 }
 
@@ -362,6 +297,7 @@ private struct HoldingsMorphingPreview: View {
             HoldingsMorphingView(
                 scale: 1,
                 isExpanded: true,
+                isHidden: false,
                 viewModel: viewModel,
                 showFilter: .constant(false),
                 onTap: {},

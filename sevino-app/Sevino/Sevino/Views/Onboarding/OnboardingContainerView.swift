@@ -4,6 +4,7 @@ struct OnboardingContainerView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     let onComplete: (_ userName: String) -> Void
+    let onLogOut: () -> Void
 
     @State private var viewModel: OnboardingViewModel
     @State private var animate: Bool
@@ -13,9 +14,11 @@ struct OnboardingContainerView: View {
         initialStep: Int = 1,
         resumeData: OnboardingResumeManager.OnboardingResumeData? = nil,
         onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
-        onComplete: @escaping (_ userName: String) -> Void
+        onComplete: @escaping (_ userName: String) -> Void,
+        onLogOut: @escaping () -> Void
     ) {
         self.onComplete = onComplete
+        self.onLogOut = onLogOut
         let isResuming = resumeData != nil && initialStep > 1
         _viewModel = State(initialValue: OnboardingViewModel(
             initialStep: initialStep,
@@ -26,19 +29,21 @@ struct OnboardingContainerView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ProgressBar(
-                currentStep: viewModel.currentStep,
-                totalSteps: OnboardingViewModel.totalSteps,
-                scale: scale
-            )
-            .padding(.top, 8 * scale)
-            .padding(.horizontal, 32 * scale)
-            .padding(.bottom, 8 * scale)
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                ProgressBar(
+                    currentStep: viewModel.currentStep,
+                    totalSteps: OnboardingViewModel.totalSteps,
+                    scale: scale
+                )
+                .padding(.top, 8 * scale)
+                .padding(.horizontal, 32 * scale)
+                .padding(.bottom, 8 * scale)
 
-            AuthHeaderView(scale: scale, onBack: goBack)
+                AuthHeaderView(scale: scale, onBack: goBack)
 
-            stepContent
+                stepContent
+            }
         }
         .background { backgroundView }
         .overlay(alignment: .bottom) { saveErrorBanner }
@@ -210,7 +215,7 @@ struct OnboardingContainerView: View {
                 userPromptText: viewModel.dobString,
                 response1: L10n.Onboarding.incomeResponse1,
                 response2: L10n.Onboarding.incomeResponse2,
-                options: [L10n.Onboarding.incomeUnder25k, L10n.Onboarding.income25k50k, L10n.Onboarding.income50k100k, L10n.Onboarding.income100k200k, L10n.Onboarding.income200k500k, L10n.Onboarding.income500kPlus],
+                options: [L10n.Onboarding.incomeUnder25k, L10n.Onboarding.income25k49k, L10n.Onboarding.income50k99k, L10n.Onboarding.income100k199k, L10n.Onboarding.income200k499k, L10n.Onboarding.income500kPlus],
                 animate: animate,
                 initialSelected: viewModel.incomeSelection.isEmpty ? nil : viewModel.incomeSelection
             ) { value in
@@ -348,10 +353,12 @@ struct OnboardingContainerView: View {
 
     private func goBack() {
         if viewModel.currentStep > 1 {
-            animate = false
+            animate = !reduceMotion
             withAnimation(.easeInOut(duration: 0.3)) {
                 viewModel.goBack()
             }
+        } else {
+            onLogOut()
         }
     }
 
@@ -365,5 +372,5 @@ struct OnboardingContainerView: View {
 
 
 #Preview {
-    OnboardingContainerView { _ in }
+    OnboardingContainerView(onComplete: { _ in }, onLogOut: {})
 }

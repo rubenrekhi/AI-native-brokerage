@@ -17,35 +17,38 @@ struct BrokerageSettingsView: View {
     private var scale: CGFloat { baseScale * textMultiplier }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .padding(.bottom, 24 * scale)
-
-            accountSection
-                .padding(.bottom, 24 * scale)
-
+        SevinoGlassContainer {
             VStack(spacing: 0) {
-                navRow(title: L10n.Settings.accountDocuments)
-                navRow(title: L10n.Settings.monthlyStatements)
-                navRow(title: L10n.Settings.taxDocuments)
-                navRow(title: L10n.Settings.accountHistory)
-            }
+                header
+                    .padding(.bottom, 24 * scale)
 
-            Spacer()
+                accountSection
+                    .padding(.bottom, 24 * scale)
 
-            Button(action: {}) {
-                Text(L10n.Settings.closeAccount)
-                    .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(Color.sevinoSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16 * scale)
+                VStack(spacing: 0) {
+                    navRow(title: L10n.Settings.accountDocuments)
+                    navRow(title: L10n.Settings.monthlyStatements)
+                    navRow(title: L10n.Settings.taxDocuments)
+                    navRow(title: L10n.Settings.accountHistory)
+                }
+
+                Spacer()
+
+                Button(action: {}) {
+                    Text(L10n.Settings.closeAccount)
+                        .font(.system(size: 16 * scale, weight: .semibold))
+                        .foregroundStyle(Color.sevinoSecondary)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 16 * scale)
+                        .contentShape(.rect(cornerRadius: 14 * scale))
+                }
+                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
+                .disabled(true)
+                .padding(.bottom, 16 * scale)
             }
-            .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
-            .disabled(true)
-            .padding(.bottom, 16 * scale)
+            .padding(.horizontal, 20 * scale)
+            .padding(.top, 12 * scale)
         }
-        .padding(.horizontal, 20 * scale)
-        .padding(.top, 12 * scale)
         .background {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
@@ -99,7 +102,7 @@ struct BrokerageSettingsView: View {
 
     private func accountDetailRow(label: String, value: String, showCopy: Bool = false, isLast: Bool = false) -> some View {
         VStack(spacing: 0) {
-            HStack {
+            HStack(spacing: 0) {
                 Text(label)
                     .font(.system(size: 14 * scale))
                     .foregroundStyle(Color.sevinoSecondary)
@@ -115,8 +118,10 @@ struct BrokerageSettingsView: View {
                         .labelStyle(.iconOnly)
                         .font(.system(size: 12 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoGreyContrast)
-                        .frame(minWidth: 44, minHeight: 44)
+                        .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
                         .contentShape(Rectangle())
+                        .padding(.leading, -24 * scale)
+                        .padding(.vertical, -8 * scale)
                 }
             }
             .padding(.vertical, 8 * scale)

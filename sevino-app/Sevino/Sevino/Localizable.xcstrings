@@ -2554,42 +2554,42 @@
         }
       }
     },
-    "onboarding.income_25k_50k" : {
+    "onboarding.income_25k_49k" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "$25K – $50K"
+            "value" : "$25K – $49K"
           }
         }
       }
     },
-    "onboarding.income_50k_100k" : {
+    "onboarding.income_50k_99k" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "$50K – $100K"
+            "value" : "$50K – $99K"
           }
         }
       }
     },
-    "onboarding.income_100k_200k" : {
+    "onboarding.income_100k_199k" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "$100K – $200K"
+            "value" : "$100K – $199K"
           }
         }
       }
     },
-    "onboarding.income_200k_500k" : {
+    "onboarding.income_200k_499k" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "$200K – $500K"
+            "value" : "$200K – $499K"
           }
         }
       }

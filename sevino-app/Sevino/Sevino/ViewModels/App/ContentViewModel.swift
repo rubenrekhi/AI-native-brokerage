@@ -5,7 +5,6 @@ import Foundation
 @Observable
 final class ContentViewModel {
     private let onboardingService: any OnboardingServiceProtocol
-    private let authService: any AuthServiceProtocol
 
     // MARK: - Routing
 
@@ -22,12 +21,8 @@ final class ContentViewModel {
 
     // MARK: - Init
 
-    init(
-        onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
-        authService: any AuthServiceProtocol = AuthService.shared
-    ) {
+    init(onboardingService: any OnboardingServiceProtocol = OnboardingService.shared) {
         self.onboardingService = onboardingService
-        self.authService = authService
     }
 
     // MARK: - Auth transitions
@@ -90,16 +85,6 @@ final class ContentViewModel {
         showPhoneError = false
     }
 
-    func signOut() async {
-        error = nil
-        do {
-            try await authService.signOut()
-        } catch let caughtError {
-            error = caughtError.localizedDescription
-        }
-        resetRoutingState()
-    }
-
     // MARK: - Helpers
 
     private func apply(_ destination: OnboardingResumeManager.Destination) {
@@ -113,10 +98,5 @@ final class ContentViewModel {
         case .loading:
             break
         }
-    }
-
-    private func resetRoutingState() {
-        route = .idle
-        showPhoneError = false
     }
 }

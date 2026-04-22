@@ -4,54 +4,66 @@ import SwiftUI
 struct PortfolioMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
+    let isHidden: Bool
     let viewModel: PortfolioViewModel
     let onTap: () -> Void
 
-    var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: .leading, spacing: isExpanded ? 16 * scale : 0) {
-                pillContent
+    @Namespace private var morphNamespace
 
-                if isExpanded {
-                    PortfolioExpandedContent(scale: scale, viewModel: viewModel)
-                }
+    var body: some View {
+        Group {
+            if isExpanded {
+                expandedCard
+            } else if !isHidden {
+                pillButton
             }
-            .padding(.horizontal, isExpanded ? 16 * scale : 12 * scale)
-            .padding(.vertical, isExpanded ? 16 * scale : 0)
-            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: .leading)
-            .frame(height: isExpanded ? nil : 36 * scale)
-            .fixedSize(horizontal: !isExpanded, vertical: isExpanded)
-            .modifier(isExpanded ? SevinoGlass.card : SevinoGlass.card)
-            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 18 * scale))
-            .frame(minHeight: isExpanded ? nil : 44 * scale)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(isExpanded)
+        .modifier(GlassMorphID(id: "portfolio", namespace: morphNamespace))
+    }
+
+    private var pillButton: some View {
+        Button(action: onTap) {
+            HStack(spacing: 6 * scale) {
+                Text(viewModel.displayValue)
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundStyle(Color.sevinoSecondary)
+
+                VStack(spacing: -2 * scale) {
+                    Image(systemName: "chevron.down")
+                    Image(systemName: "chevron.down")
+                }
+                .font(.system(size: 8 * scale, weight: .bold))
+                .foregroundStyle(viewModel.isDown ? Color.sevinoNegative : Color.sevinoPositive)
+                .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 12 * scale)
+            .frame(height: 36 * scale)
+        }
+        .buttonStyle(.bouncePill)
+        .modifier(SevinoGlass.navPillClear)
+        .contentShape(.rect)
+        .frame(minHeight: 44 * scale)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
     }
 
-    private var pillContent: some View {
-        HStack(spacing: 8 * scale) {
-            Text(viewModel.displayValue)
-                .font(.system(size: isExpanded ? 36 * scale : 14 * scale, weight: isExpanded ? .bold : .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
+    private var expandedCard: some View {
+        VStack(alignment: .leading, spacing: 16 * scale) {
+            HStack(spacing: 8 * scale) {
+                Text(viewModel.displayValue)
+                    .font(.system(size: 36 * scale, weight: .bold))
+                    .foregroundStyle(Color.sevinoSecondary)
 
-            if isExpanded {
                 Text(L10n.Home.portfolioCurrency)
                     .font(.system(size: 18 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
 
-            if !isExpanded {
-                VStack(spacing: -2 * scale) {
-                    Image(systemName: "chevron.down")
-                    Image(systemName: "chevron.down")
-                }
-                .font(.system(size: 9 * scale, weight: .bold))
-                .foregroundStyle(viewModel.isDown ? Color.sevinoNegative : Color.sevinoPositive)
-                .accessibilityHidden(true)
-            }
+            PortfolioExpandedContent(scale: scale, viewModel: viewModel)
         }
+        .padding(16 * scale)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(SevinoGlass.card)
+        .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 }

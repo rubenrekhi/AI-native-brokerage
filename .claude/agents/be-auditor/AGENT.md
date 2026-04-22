@@ -469,6 +469,24 @@ with sentry_sdk.new_scope() as scope:
 
 Without this, the Sentry event is un-filterable and ops can't do things like "show all errors on the `trade_events_sse` stream."
 
+### 11.4 Happy-path observability in long-running processes
+
+Request handlers get free happy-path observability: the request-logging middleware emits a line per request (`POST /v1/x status=200 latency_ms=42`). You know the endpoint ran, you know it succeeded, you know how long it took. No per-route success log needed.
+
+**Long-running processes have no such wrapper.** SSE/WebSocket listeners, ARQ tasks, cron jobs, and polling loops run outside the request lifecycle. If the only log lines they emit are errors, warnings, and heartbeats, normal operation is invisible — the process could be broken silently, stuck on a single event, or humming along perfectly, and the logs look identical.
+
+The symptom in code review: a listener or task whose log calls are all `logger.warning`, `logger.error`, malformed-event warnings, and heartbeat/liveness pings — with no `logger.info` on the path where an event is received or state is applied. The sad paths are loud, the happy path is mute.
+
+**The rule:** for any code running outside the request lifecycle, every meaningful state change or external event arrival must produce an `info` log line on the success path, not only on failure. "Meaningful" means: an event was consumed, a DB row was mutated, a task completed its unit of work, a cron tick executed its job. Heartbeats alone do NOT satisfy this — they prove the connection is alive, not that the handler is doing anything.
+
+Checking for this during review is mechanical:
+
+1. Find the main loop / handler in the changed code (e.g. `_process_event`, `handle_event`, the body of an ARQ task).
+2. Enumerate every `logger.*` call inside it. Bucket each into: `error` / `warning` (sad path), `info` on heartbeat/tick (liveness only), `info` on actual work done (happy path).
+3. If bucket 3 is empty, flag it. The code will run in production and leave no evidence it did its job.
+
+Avoid the reverse failure mode too: don't double-log. If the caller already emits a success line (e.g. a route endpoint, where the request middleware logs the response), a per-call happy-path log inside the service is redundant. The rule is specifically about code that has no outer observability wrapper.
+
 ### Review checks:
 
 **Logging:**
@@ -481,6 +499,10 @@ Without this, the Sentry event is un-filterable and ops can't do things like "sh
 - **Operational warnings that need dashboard visibility MUST call `sentry_sdk.capture_message(level="warning")`**, not just `logger.warning(...)`. Examples that MUST escalate: background-task shutdown timeouts, cron job failures, prolonged listener silence, exhausted retry budgets, stuck jobs. If the code path writes "something unusual happened at runtime that ops needs to see" and only calls `logger.warning`, flag it — that event won't page anyone.
 - **Expected no-op paths MUST NOT capture to Sentry.** `CancelledError` during normal graceful shutdown, expected-empty result sets, normal reconnect-backoff attempts — these would be noise. If code path captures one of these to Sentry, flag it.
 - **`add_breadcrumb` is context, not an alert.** If the author uses `add_breadcrumb` where a `capture_message` was needed (i.e., the event matters on its own, not just as context for a later error), flag it.
+
+**Happy-path observability in long-running processes (catches the "silently working or silently broken" gap):**
+- **For any long-running process (SSE/WebSocket listener, ARQ task, cron, polling loop), verify the happy path produces an `info` log** — event received and handler dispatched, state change applied, task unit completed. Heartbeat/liveness logs do not count. If every log in the handler is `warning`/`error` plus heartbeats, flag it as 🟡 — the code will run in prod and leave no evidence it's doing its job, and ops will be unable to distinguish "healthy but idle" from "stuck on one event" from "silently dropping work."
+- **Do not require redundant happy-path logs inside request handlers.** The request-logging middleware already emits a per-request line; a matching `info` log inside the route or service is double-logging. This rule is specifically for code outside the request lifecycle.
 
 **Sentry scope/tags on captured events (catches the "un-searchable event" mistake):**
 - **For any `capture_exception` or `capture_message` call inside a long-running process (listener, ARQ task, cron, event handler), verify a `sentry_sdk.new_scope()` is open with tags identifying the scoping dimensions** (stream, user_id, task name, event_id, etc.). Relying on structlog contextvars alone does NOT attach those to the Sentry event — they must be explicitly set on the Sentry scope.
@@ -932,6 +954,7 @@ For every PR, run through this:
 - [ ] Logging: Using `structlog.get_logger`, not `print()`? Correlation ID bound via contextvars?
 - [ ] Sentry escalation: Do operational warnings in long-running processes (listeners, tasks, crons) call `capture_message` — not just `logger.warning`? Are expected no-op paths (graceful cancel, normal reconnects) kept out of Sentry?
 - [ ] Sentry tags: For `capture_exception`/`capture_message` outside the request lifecycle, is a `new_scope()` opened with searchable tags (stream, user_id, task, event_id)? Structlog contextvars alone do NOT attach to Sentry events.
+- [ ] Happy-path observability: For long-running processes (listeners, tasks, crons), does the handler emit an `info` log when it actually does work (event received, state applied, task unit completed)? Heartbeats don't count. Sad paths loud + happy paths silent is a bug.
 - [ ] Code quality: Functions short and single-purpose? Names specific? Guard clauses over nesting?
 - [ ] Feature architecture: Route thin? Service layer owns logic? External responses mapped at boundary?
 - [ ] No anti-patterns: No god routes, leaky abstractions, or cross-service DB sharing?

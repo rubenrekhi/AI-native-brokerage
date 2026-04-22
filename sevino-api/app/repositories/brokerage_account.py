@@ -21,6 +21,17 @@ class BrokerageAccountRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_by_alpaca_account_id(
+        db: AsyncSession, alpaca_account_id: str
+    ) -> BrokerageAccount | None:
+        result = await db.execute(
+            select(BrokerageAccount).where(
+                BrokerageAccount.alpaca_account_id == alpaca_account_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def create(
         db: AsyncSession,
         user_id: uuid.UUID,

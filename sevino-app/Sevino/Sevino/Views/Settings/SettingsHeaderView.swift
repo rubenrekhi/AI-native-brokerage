@@ -16,8 +16,8 @@ struct SettingsHeaderView: View {
                     .labelStyle(.iconOnly)
                     .font(.system(size: 14 * scale, weight: .semibold))
                     .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: 40 * scale, height: 40 * scale)
-                    .modifier(SevinoGlass.navCircle)
+                    .frame(width: 44 * scale, height: 44 * scale)
+                    .modifier(SevinoGlass.navCircleClear)
 
                 Spacer()
             }

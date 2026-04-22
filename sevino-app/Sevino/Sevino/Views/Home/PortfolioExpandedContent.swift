@@ -28,6 +28,9 @@ struct PortfolioExpandedContent: View {
                 .padding(.vertical, 12 * scale)
                 .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 24 * scale))
         }
-        .transition(.opacity.animation(.easeIn(duration: 0.25).delay(0.15)))
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
     }
 }
