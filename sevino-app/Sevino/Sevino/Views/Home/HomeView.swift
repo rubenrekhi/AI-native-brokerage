@@ -47,14 +47,14 @@ struct HomeView: View {
                     .offset(y: -60 * scale)
 
                     VStack(spacing: 0) {
-                        HStack {
+                        HStack(spacing: 8 * scale) {
                             navSidebarButton
-                            Color.clear.frame(width: 120 * scale, height: 36 * scale)
+                            Color.clear.frame(width: 120 * scale, height: 44 * scale)
                             Spacer()
                             HStack(spacing: 8 * scale) {
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
-                                Color.clear.frame(width: 36 * scale, height: 36 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
                             }
                         }
                         .padding(.horizontal, 16 * scale)
@@ -99,7 +99,7 @@ struct HomeView: View {
                     onTap: togglePortfolio
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.leading, showPortfolio ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 8) * scale)
                 .padding(.trailing, showPortfolio ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -114,7 +114,7 @@ struct HomeView: View {
                     onDismiss: dismissFunding
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showFunding ? 16 * scale : (16 + 36 + 8 + 36 + 8) * scale)
+                .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 8 + 44 + 8) * scale)
                 .padding(.leading, showFunding ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -145,7 +145,7 @@ struct HomeView: View {
                     onDismiss: dismissRadar
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showRadar ? 16 * scale : (16 + 36 + 8) * scale)
+                .padding(.trailing, showRadar ? 16 * scale : (16 + 44 + 8) * scale)
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
@@ -326,6 +326,8 @@ struct HomeView: View {
                 .font(.system(size: 16 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
                 .frame(width: 36 * scale, height: 36 * scale)
+                .contentShape(.rect)
+                .frame(minWidth: 44 * scale, minHeight: 44 * scale)
         }
         .modifier(SevinoGlass.navCircle)
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
