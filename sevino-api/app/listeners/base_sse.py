@@ -56,6 +56,17 @@ _CONNECT_TIMEOUT_SECONDS = 10.0
 # only the searchable drop-count tag would be lost.
 _DROPPED_RE = re.compile(r"dropped\s+(\d+)\s+messages", re.IGNORECASE)
 
+# Comment bodies Alpaca sends on healthy connections. Observed in sandbox:
+# * "heartbeat" — periodic keepalive.
+# * "welcome to the Alpaca events" — sent once on every successful connect.
+# Members of this set still bump ``last_message_received_at`` inside
+# ``_process_comment`` — they just skip the warning log + Sentry breadcrumb
+# that every other comment triggers. Otherwise the welcome banner would fire
+# a breadcrumb on every reconnect and bury real diagnostics. Anything NOT in
+# this set flows through the warning path so genuinely new comments from
+# Alpaca surface loudly.
+_BENIGN_COMMENTS = frozenset({"heartbeat", "welcome to the Alpaca events"})
+
 
 class BaseSSEListener(abc.ABC):
     """Long-lived Alpaca SSE consumer with checkpoint resume + auto-reconnect.
@@ -241,13 +252,16 @@ class BaseSSEListener(abc.ABC):
     def _process_comment(self, raw_line: str) -> None:
         """Handle one SSE comment line.
 
-        Alpaca uses comment lines for three things we care about:
+        Alpaca uses comment lines for four things we care about:
 
         * ``:heartbeat`` — keepalive on idle streams. Only signal proving
           the TCP connection is still alive when no business events are
           flowing. Bumping ``last_message_received_at`` here is the reason
           we bother reading comments at all — without it, the liveness
           cron false-alarms on any quiet account-status stream.
+        * ``: welcome to the Alpaca events`` — emitted once per successful
+          connect on this endpoint. Benign; treated like a heartbeat so it
+          doesn't spam Sentry breadcrumbs on every reconnect.
         * ``: you are reading too slowly, dropped N messages`` — slow
           consumer warning. Raised as its own Sentry event with the drop
           count as a searchable tag, since this is a critical op signal
@@ -267,8 +281,10 @@ class BaseSSEListener(abc.ABC):
         # the whole point of this method.
         self.last_message_received_at = time.monotonic()
 
-        if comment == "heartbeat":
-            logger.info("sse_heartbeat", stream=self.stream_name)
+        if comment in _BENIGN_COMMENTS:
+            logger.info(
+                "sse_benign_comment", stream=self.stream_name, comment=comment
+            )
             return
 
         logger.warning(

@@ -370,7 +370,8 @@ Alongside `event:` / `data:` frames, Alpaca also sends SSE comment lines (lines 
 
 | Comment | When | What we do |
 |---------|------|------------|
-| `:heartbeat` | On idle streams, proving the TCP connection is alive (Alpaca's FAQ: *"Alpaca would never stop responding, hence we also send 'heartbeat' to let partners know that the connection is alive"*) | Bump `last_message_received_at`, info-log `sse_heartbeat` |
+| `:heartbeat` | On idle streams, proving the TCP connection is alive (Alpaca's FAQ: *"Alpaca would never stop responding, hence we also send 'heartbeat' to let partners know that the connection is alive"*) | Bump `last_message_received_at`, info-log `sse_benign_comment` |
+| `: welcome to the Alpaca events` | Emitted once on every successful connect (observed against `/v1/events/accounts/status` in sandbox) | Bump liveness, info-log `sse_benign_comment`. **No** breadcrumb — would otherwise fire on every reconnect and bury real diagnostics |
 | `: you are reading too slowly, dropped N messages` | Slow-client warning — our consumer fell behind | Bump liveness, warning log, breadcrumb, plus a standalone Sentry `capture_message` tagged with `sse_dropped_messages=N` so it's searchable independent of whether the connection later drops |
 | `: internal server error` | v2/v2beta1 endpoints only — sent by Alpaca before it closes the connection | Bump liveness, warning log, Sentry breadcrumb so it attaches to the subsequent disconnect event |
 
