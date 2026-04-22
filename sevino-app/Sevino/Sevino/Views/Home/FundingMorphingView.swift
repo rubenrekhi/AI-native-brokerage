@@ -10,26 +10,28 @@ struct FundingMorphingView: View {
     @Namespace private var morphNamespace
 
     var body: some View {
-        Button(action: onTap) {
-            VStack(alignment: isExpanded ? .center : .leading, spacing: 0) {
-                if isExpanded {
-                    expandedContent
-                } else {
-                    pillContent
-                }
+        VStack(alignment: isExpanded ? .center : .leading, spacing: 0) {
+            if isExpanded {
+                expandedContent
+            } else {
+                pillContent
             }
-            .padding(isExpanded ? 20 * scale : 0)
-            .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
-            .fixedSize(horizontal: !isExpanded, vertical: true)
-            .modifier(SevinoGlass.card)
-            .modifier(GlassMorphID(id: "funding", namespace: morphNamespace))
-            .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
-            .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .disabled(isExpanded)
-        .accessibilityLabel(L10n.Home.fundingAccessibility)
+        .padding(isExpanded ? 20 * scale : 0)
+        .frame(maxWidth: isExpanded ? .infinity : nil, alignment: isExpanded ? .center : .leading)
+        .fixedSize(horizontal: !isExpanded, vertical: true)
+        .modifier(SevinoGlass.card)
+        .modifier(GlassMorphID(id: "funding", namespace: morphNamespace))
+        .clipShape(.rect(cornerRadius: isExpanded ? CardGlass.cornerRadius : 50 * scale))
+        .frame(minWidth: isExpanded ? nil : 44 * scale, minHeight: isExpanded ? nil : 44 * scale)
+        .contentShape(Rectangle())
+        .overlay {
+            if !isExpanded {
+                Button(action: onTap) { Color.clear.contentShape(.rect) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(L10n.Home.fundingAccessibility)
+            }
+        }
     }
 
     private var pillContent: some View {
@@ -49,7 +51,10 @@ struct FundingMorphingView: View {
             infoRow
             disclaimer
         }
-        .transition(.asymmetric(insertion: .opacity, removal: .identity))
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
     }
 
     private var headerSection: some View {
