@@ -88,6 +88,7 @@ async def validation_error_handler(
             "message": err["msg"],
             "type": err["type"],
         })
+    logger.warning("request_validation_error", path=request.url.path, fields=fields)
     return error_response(422, "Validation error", "VALIDATION_ERROR", {"fields": fields})
 
 
@@ -132,6 +133,12 @@ async def conflict_error_handler(
 async def incomplete_onboarding_error_handler(
     request: Request, exc: IncompleteOnboardingError
 ) -> JSONResponse:
+    logger.warning(
+        "incomplete_onboarding",
+        path=request.url.path,
+        message=exc.message,
+        missing_fields=exc.missing_fields,
+    )
     return error_response(
         422, exc.message, "INCOMPLETE_ONBOARDING",
         detail={"missing_fields": exc.missing_fields} if exc.missing_fields else None,

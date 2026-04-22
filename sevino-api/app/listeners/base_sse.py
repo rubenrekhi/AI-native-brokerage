@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 #
 # Using both decoders keeps our line-splitting identical to upstream
 # aiter_sse(). httpx.Response.aiter_lines() uses stdlib str.splitlines(),
-# which splits on \x0b \x0c \x1c \x1d \x1e \x85     in addition
+# which splits on \x0b \x0c \x1c \x1d \x1e \x85   in addition
 # to the SSE-spec-allowed \r \n \r\n — feeding that into SSEDecoder would
 # be a silent correctness divergence on any payload containing those
 # characters. SSELineDecoder is spec-compliant.
@@ -370,6 +370,13 @@ class BaseSSEListener(abc.ABC):
                     "event_type": event_type,
                     "correlation_id": correlation_id,
                 },
+            )
+
+            logger.info(
+                "sse_event_received",
+                stream=self.stream_name,
+                event_type=event_type,
+                event_id=event_ulid,
             )
 
             async with async_session() as session:
