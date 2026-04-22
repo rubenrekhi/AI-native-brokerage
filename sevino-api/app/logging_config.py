@@ -30,15 +30,17 @@ def _colorize_status(
 ) -> dict:
     """Color-code the HTTP status code for dev console."""
     status = event_dict.get("status")
-    if status is not None:
-        code = int(status)
-        if code < 300:
-            color = GREEN + BRIGHT
-        elif code < 400:
-            color = YELLOW + BRIGHT
-        else:
-            color = RED + BRIGHT
-        event_dict["status"] = f"{color}{code}{RESET_ALL}"
+    try:
+        code = int(status)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return event_dict
+    if code < 300:
+        color = GREEN + BRIGHT
+    elif code < 400:
+        color = YELLOW + BRIGHT
+    else:
+        color = RED + BRIGHT
+    event_dict["status"] = f"{color}{code}{RESET_ALL}"
     return event_dict
 
 
