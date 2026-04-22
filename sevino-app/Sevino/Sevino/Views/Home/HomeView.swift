@@ -21,6 +21,11 @@ struct HomeView: View {
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
 
+    private func modalDimBrightness(when isDimmed: Bool) -> Double {
+        guard isDimmed else { return 0 }
+        return colorScheme == .light ? -0.3 : -0.2
+    }
+
     init(
         viewModel: HomeViewModel = HomeViewModel(),
         portfolioViewModel: PortfolioViewModel = PortfolioViewModel(),
@@ -38,42 +43,44 @@ struct HomeView: View {
     var body: some View {
         SevinoGlassContainer {
             ZStack {
-                ZStack {
-                    HomeGreetingSection(
-                        scale: scale,
-                        greeting: viewModel.greeting,
-                        showExplore: $showExplore,
-                        isHidden: anyModalOpen
-                    )
-                    .offset(y: -60 * scale)
+                HomeGreetingSection(
+                    scale: scale,
+                    greeting: viewModel.greeting,
+                    showExplore: $showExplore,
+                    isHidden: anyModalOpen
+                )
+                .offset(y: -60 * scale)
+                .allowsHitTesting(!anyModalOpen)
+                .accessibilityHidden(anyModalOpen)
+                .blur(radius: anyModalOpen ? 10 : 0)
+                .brightness(modalDimBrightness(when: anyModalOpen))
 
-                    VStack(spacing: 0) {
-                        HStack(spacing: 8 * scale) {
-                            navSidebarButton
-                            Color.clear.frame(width: 120 * scale, height: 44 * scale)
-                            Spacer()
-                            HStack(spacing: 8 * scale) {
-                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                                Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                            }
-                        }
-                        .padding(.horizontal, 16 * scale)
-                        .padding(.top, 4 * scale)
-
+                VStack(spacing: 0) {
+                    HStack(spacing: 8 * scale) {
+                        navSidebarButton
+                        Color.clear.frame(width: 120 * scale, height: 44 * scale)
                         Spacer()
-
-                        HomeChatSuggestions(scale: scale, onSelect: { messageText = $0 })
-                            .padding(.bottom, 20 * scale)
-                            .padding(.horizontal, 16 * scale)
-
-                        HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
-                            .padding(.horizontal, 16 * scale)
-                            .padding(.bottom, 8 * scale)
+                        HStack(spacing: 8 * scale) {
+                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                        }
                     }
+                    .padding(.horizontal, 16 * scale)
+                    .padding(.top, 4 * scale)
+
+                    Spacer()
+
+                    HomeChatSuggestions(scale: scale, onSelect: { messageText = $0 })
+                        .padding(.bottom, 20 * scale)
+                        .padding(.horizontal, 16 * scale)
+
+                    HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
+                        .padding(.horizontal, 16 * scale)
+                        .padding(.bottom, 8 * scale)
                 }
                 .blur(radius: anyModalOpen ? 10 : 0)
-                .brightness(anyModalOpen && colorScheme == .light ? -0.3 : 0)
+                .brightness(modalDimBrightness(when: anyModalOpen))
                 .allowsHitTesting(!anyModalOpen)
 
                 Button {
@@ -107,7 +114,7 @@ struct HomeView: View {
                 .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
                 .accessibilityHidden(showFunding || showHoldings || showRadar)
                 .blur(radius: showFunding || showHoldings || showRadar ? 10 : 0)
-                .brightness(showFunding || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
+                .brightness(modalDimBrightness(when: showFunding || showHoldings || showRadar))
 
                 FundingMorphingView(
                     scale: scale,
@@ -124,7 +131,7 @@ struct HomeView: View {
                 .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
                 .accessibilityHidden(showPortfolio || showHoldings || showRadar)
                 .blur(radius: showPortfolio || showHoldings || showRadar ? 10 : 0)
-                .brightness(showPortfolio || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
+                .brightness(modalDimBrightness(when: showPortfolio || showHoldings || showRadar))
 
                 HoldingsMorphingView(
                     scale: scale,
@@ -142,7 +149,7 @@ struct HomeView: View {
                 .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
                 .accessibilityHidden(showPortfolio || showFunding || showRadar)
                 .blur(radius: showPortfolio || showFunding || showRadar ? 10 : 0)
-                .brightness(showPortfolio || showFunding || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
+                .brightness(modalDimBrightness(when: showPortfolio || showFunding || showRadar))
 
                 RadarMorphingView(
                     scale: scale,
@@ -159,7 +166,7 @@ struct HomeView: View {
                 .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
                 .accessibilityHidden(showPortfolio || showFunding || showHoldings)
                 .blur(radius: showPortfolio || showFunding || showHoldings ? 10 : 0)
-                .brightness(showPortfolio || showFunding || showHoldings ? (colorScheme == .light ? -0.3 : -0.2) : 0)
+                .brightness(modalDimBrightness(when: showPortfolio || showFunding || showHoldings))
             }
         }
         .background { HomeBackgroundView() }

@@ -19,7 +19,7 @@ struct HomeGreetingSection: View {
                 .font(.system(size: 28 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if showExplore {
+            if showExplore && !isHidden {
                 HStack(spacing: 8 * scale) {
                     Button(L10n.Home.exploreButton, action: {})
                         .font(.system(size: 15 * scale))
@@ -33,8 +33,6 @@ struct HomeGreetingSection: View {
                 .padding(.horizontal, 20 * scale)
                 .padding(.vertical, 10 * scale)
                 .modifier(SevinoGlass.chip)
-                .opacity(isHidden ? 0 : 1)
-                .accessibilityHidden(isHidden)
             }
         }
     }
