@@ -1,7 +1,7 @@
 import SwiftUI
 
 enum SevinoGlass {
-    static let containerSpacing: CGFloat = 40
+    static let containerSpacing: CGFloat = 0
 
     static let card = CardGlass()
     static let chip = ChipGlass()
