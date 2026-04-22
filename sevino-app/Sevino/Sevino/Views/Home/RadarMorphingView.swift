@@ -28,7 +28,7 @@ struct RadarMorphingView: View {
                 .foregroundStyle(Color.sevinoSecondary)
                 .frame(width: 44 * scale, height: 44 * scale)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncePill)
         .modifier(SevinoGlass.navCircleClear)
         .accessibilityLabel(L10n.Home.watchlistAccessibility)
     }

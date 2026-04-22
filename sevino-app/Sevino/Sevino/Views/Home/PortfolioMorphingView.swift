@@ -39,7 +39,7 @@ struct PortfolioMorphingView: View {
             .padding(.horizontal, 14 * scale)
             .frame(height: 44 * scale)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bouncePill)
         .modifier(SevinoGlass.navPillClear)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
     }

@@ -351,7 +351,7 @@ struct HomeView: View {
     }
 
     private func toggleSidebar() {
-        withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+        withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
             showSidebar.toggle()
         }
     }
