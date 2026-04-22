@@ -9,6 +9,26 @@ struct HoldingsMorphingView: View {
     let onDismiss: () -> Void
 
     var body: some View {
+        ZStack(alignment: .topTrailing) {
+            card
+
+            if showFilter {
+                HoldingsFilterPopup(
+                    scale: scale,
+                    displayOption: viewModel.displayOption,
+                    sortOption: viewModel.sortOption,
+                    onSelectDisplay: viewModel.setDisplayOption,
+                    onSelectSort: viewModel.setSortOption,
+                    onDismiss: { withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showFilter = false } }
+                )
+                .offset(x: -20 * scale, y: 50 * scale)
+                .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
+                .zIndex(10)
+            }
+        }
+    }
+
+    private var card: some View {
         VStack(alignment: isExpanded ? .leading : .center, spacing: 0) {
             if isExpanded {
                 expandedContent
@@ -28,21 +48,6 @@ struct HoldingsMorphingView: View {
                 Button(action: onTap) { Color.clear.contentShape(.rect) }
                     .buttonStyle(.plain)
                     .accessibilityLabel(L10n.Home.menuAccessibility)
-            }
-        }
-        .overlay(alignment: .topTrailing) {
-            if showFilter {
-                HoldingsFilterPopup(
-                    scale: scale,
-                    displayOption: viewModel.displayOption,
-                    sortOption: viewModel.sortOption,
-                    onSelectDisplay: viewModel.setDisplayOption,
-                    onSelectSort: viewModel.setSortOption,
-                    onDismiss: { withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showFilter = false } }
-                )
-                .offset(x: -20 * scale, y: 50 * scale)
-                .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
-                .zIndex(10)
             }
         }
     }
