@@ -105,7 +105,9 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showFunding && !showHoldings && !showRadar)
-                .opacity(showFunding || showHoldings || showRadar ? 0 : 1)
+                .accessibilityHidden(showFunding || showHoldings || showRadar)
+                .blur(radius: showFunding || showHoldings || showRadar ? 10 : 0)
+                .brightness(showFunding || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 FundingMorphingView(
                     scale: scale,
@@ -120,7 +122,9 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showHoldings && !showRadar)
-                .opacity(showPortfolio || showHoldings || showRadar ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showHoldings || showRadar)
+                .blur(radius: showPortfolio || showHoldings || showRadar ? 10 : 0)
+                .brightness(showPortfolio || showHoldings || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 HoldingsMorphingView(
                     scale: scale,
@@ -136,7 +140,9 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showFunding && !showRadar)
-                .opacity(showPortfolio || showFunding || showRadar ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showFunding || showRadar)
+                .blur(radius: showPortfolio || showFunding || showRadar ? 10 : 0)
+                .brightness(showPortfolio || showFunding || showRadar ? (colorScheme == .light ? -0.3 : -0.2) : 0)
 
                 RadarMorphingView(
                     scale: scale,
@@ -151,7 +157,9 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
                 .allowsHitTesting(!showPortfolio && !showFunding && !showHoldings)
-                .opacity(showPortfolio || showFunding || showHoldings ? 0 : 1)
+                .accessibilityHidden(showPortfolio || showFunding || showHoldings)
+                .blur(radius: showPortfolio || showFunding || showHoldings ? 10 : 0)
+                .brightness(showPortfolio || showFunding || showHoldings ? (colorScheme == .light ? -0.3 : -0.2) : 0)
             }
         }
         .background { HomeBackgroundView() }
