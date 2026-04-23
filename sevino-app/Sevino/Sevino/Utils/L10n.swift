@@ -362,7 +362,6 @@ enum L10n {
         static let holdingsLoadErrorMessage = String(localized: "home.holdings_load_error_message")
         static let holdingsEmptyTitle = String(localized: "home.holdings_empty_title")
         static let holdingsEmptyMessage = String(localized: "home.holdings_empty_message")
-        static let chatAboutThis = String(localized: "home.chat_about_this")
         static let dismissAccessibility = String(localized: "home.dismiss_accessibility")
         static let sidebarDismissAccessibility = String(localized: "home.sidebar_dismiss_accessibility")
         static let periodToday = String(localized: "home.period_today")

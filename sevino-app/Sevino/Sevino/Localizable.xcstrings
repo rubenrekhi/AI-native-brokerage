@@ -444,16 +444,6 @@
         }
       }
     },
-    "home.chat_about_this" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chat about this?"
-          }
-        }
-      }
-    },
     "home.chat_placeholder" : {
       "localizations" : {
         "en" : {

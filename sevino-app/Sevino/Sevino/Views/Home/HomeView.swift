@@ -75,14 +75,6 @@ struct HomeView: View {
                     .padding(.top, 4 * scale)
 
                     Spacer()
-
-                    HomeChatSuggestions(scale: scale, onSelect: { messageText = $0 })
-                        .padding(.bottom, 20 * scale)
-                        .padding(.horizontal, 16 * scale)
-
-                    HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
-                        .padding(.horizontal, 16 * scale)
-                        .padding(.bottom, 8 * scale)
                 }
                 .blur(radius: anyModalOpen ? 10 : 0)
                 .brightness(modalDimBrightness(when: anyModalOpen))
@@ -154,6 +146,21 @@ struct HomeView: View {
                 .padding(.leading, showRadar ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
+
+                VStack(spacing: 0) {
+                    Spacer()
+
+                    HomeChatSuggestions(scale: scale, onSelect: { messageText = $0 })
+                        .padding(.bottom, 20 * scale)
+                        .padding(.horizontal, 16 * scale)
+                        .blur(radius: anyModalOpen ? 10 : 0)
+                        .brightness(modalDimBrightness(when: anyModalOpen))
+                        .allowsHitTesting(!anyModalOpen)
+
+                    HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
+                        .padding(.horizontal, 16 * scale)
+                        .padding(.bottom, 8 * scale)
+                }
             }
         }
         .overlay(alignment: .topTrailing) {

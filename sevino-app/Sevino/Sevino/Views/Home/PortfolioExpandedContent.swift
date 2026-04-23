@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// The expanded-only content (gain text, chart, time selector, chat button).
 struct PortfolioExpandedContent: View {
     let scale: CGFloat
     let viewModel: PortfolioViewModel
@@ -20,13 +19,6 @@ struct PortfolioExpandedContent: View {
                 scale: scale,
                 onSelect: viewModel.setTimeRange
             )
-
-            Button(L10n.Home.chatAboutThis, action: {})
-                .font(.system(size: 15 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoSecondary)
-                .padding(.horizontal, 20 * scale)
-                .padding(.vertical, 12 * scale)
-                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 24 * scale))
         }
         .transition(.asymmetric(
             insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),

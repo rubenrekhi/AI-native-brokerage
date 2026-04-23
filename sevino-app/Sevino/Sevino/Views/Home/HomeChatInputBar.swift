@@ -54,8 +54,13 @@ struct HomeChatInputBar: View {
     }
 }
 
-#Preview("Focused") {
+#Preview("Empty") {
     HomeChatInputBar(text: .constant(""), scale: 1, isDimmed: false)
+        .padding()
+}
+
+#Preview("With text") {
+    HomeChatInputBar(text: .constant("Hello"), scale: 1, isDimmed: false)
         .padding()
 }
 
