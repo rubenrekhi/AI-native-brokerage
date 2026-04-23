@@ -115,6 +115,16 @@ Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each 
 - SSL enabled for prod/staging, disabled for dev
 - Supabase local dev: Postgres on port 54322, Studio on 54323
 
+### Worktree bootstrap
+
+New worktrees do not inherit gitignored files from the source worktree. The repo defines a root-level `.worktreeinclude` that lists the minimum set of ignored files (currently `sevino-api/.env`) required to run the backend. After `git worktree add`, run:
+
+```
+git worktreeinclude apply
+```
+
+from the new worktree to copy those files over from the source worktree. `git-worktreeinclude` is installed via `brew install satococoa/tap/git-worktreeinclude` (see `sevino-api/README.md` prerequisites). When adding a new gitignored file that downstream tooling depends on (e.g. a second `.env`, credentials file), add its path to `.worktreeinclude` — the `doc-writer` agent audits this file for drift against `.gitignore`.
+
 ### Worktree cleanup after read-only agents
 
 When you spawn an agent with `isolation: "worktree"` purely for review (e.g. `be-auditor`, `fe-auditor`), the harness preserves the worktree and its `worktree-agent-<id>` scratch branch if the agent ran any git command that moved HEAD — even though no files were modified.
