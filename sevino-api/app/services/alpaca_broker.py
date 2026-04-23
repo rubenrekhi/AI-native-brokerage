@@ -1,5 +1,5 @@
 import time
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import structlog
@@ -162,6 +162,19 @@ class AlpacaBrokerService:
             "GET",
             f"/v1/accounts/{account_id}/transfers",
             params=params or None,
+        )
+
+    async def list_assets(
+        self,
+        *,
+        status: Literal["active", "inactive"] = "active",
+        asset_class: Literal["us_equity", "crypto", "us_option"] = "us_equity",
+    ) -> list[dict[str, Any]]:
+        """GET /v1/assets — returns the full asset universe for the given filters."""
+        return await self._request(
+            "GET",
+            "/v1/assets",
+            params={"status": status, "asset_class": asset_class},
         )
 
     async def _request(
