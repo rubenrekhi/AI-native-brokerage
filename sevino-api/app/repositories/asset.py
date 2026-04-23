@@ -86,20 +86,27 @@ class AssetRepository:
         if not rows:
             return
 
-        stmt = insert(Asset).values(rows)
-        excluded = stmt.excluded
-        stmt = stmt.on_conflict_do_update(
-            index_elements=[Asset.symbol],
-            set_={
-                "name": excluded.name,
-                "exchange": excluded.exchange,
-                "tradeable": excluded.tradeable,
-                "logo_url": excluded.logo_url,
-                "alpaca_asset_id": excluded.alpaca_asset_id,
-                "synced_at": func.now(),
-            },
-        )
-        await db.execute(stmt)
+        # asyncpg caps prepared-statement parameters at 32,767. With 6
+        # columns per row the live Alpaca feed (~12k symbols) overflows a
+        # single INSERT, so chunk conservatively.
+        _COLS_PER_ROW = 6
+        chunk_size = 32_000 // _COLS_PER_ROW
+        for start in range(0, len(rows), chunk_size):
+            chunk = rows[start : start + chunk_size]
+            stmt = insert(Asset).values(chunk)
+            excluded = stmt.excluded
+            stmt = stmt.on_conflict_do_update(
+                index_elements=[Asset.symbol],
+                set_={
+                    "name": excluded.name,
+                    "exchange": excluded.exchange,
+                    "tradeable": excluded.tradeable,
+                    "logo_url": excluded.logo_url,
+                    "alpaca_asset_id": excluded.alpaca_asset_id,
+                    "synced_at": func.now(),
+                },
+            )
+            await db.execute(stmt)
 
         input_symbols = [r["symbol"] for r in rows]
         await db.execute(
