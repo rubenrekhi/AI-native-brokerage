@@ -216,7 +216,6 @@ struct HomeView: View {
             )
         }
         .task { await viewModel.load() }
-        .task { await fundingViewModel.loadFundingData() }
         .task { await holdingsViewModel.loadHoldings() }
         .task { await radarViewModel.loadRadar() }
         .task(id: portfolioViewModel.selectedTimeRange) {
@@ -247,9 +246,6 @@ struct HomeView: View {
             ),
             presenting: fundingViewModel.error
         ) { _ in
-            Button(L10n.Home.fundingLoadErrorRetry) {
-                Task { await fundingViewModel.loadFundingData() }
-            }
             Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
                 fundingViewModel.clearError()
             }

@@ -96,9 +96,81 @@ class AlpacaBrokerService:
         """PATCH /v1/accounts/{account_id} — update account (e.g. assign APR tier)."""
         return await self._request("PATCH", f"/v1/accounts/{account_id}", json=payload)
 
-    async def _request(
-        self, method: str, path: str, json: dict[str, Any] | None = None
+    async def create_ach_relationship(
+        self, account_id: str, *, processor_token: str
     ) -> dict[str, Any]:
+        """POST /v1/accounts/{id}/ach_relationships — Plaid processor path."""
+        return await self._request(
+            "POST",
+            f"/v1/accounts/{account_id}/ach_relationships",
+            json={"processor_token": processor_token},
+        )
+
+    async def list_ach_relationships(self, account_id: str) -> list[dict[str, Any]]:
+        """GET /v1/accounts/{id}/ach_relationships."""
+        return await self._request(
+            "GET", f"/v1/accounts/{account_id}/ach_relationships"
+        )
+
+    async def delete_ach_relationship(
+        self, account_id: str, relationship_id: str
+    ) -> None:
+        """DELETE /v1/accounts/{id}/ach_relationships/{rel_id}. 204 → None."""
+        await self._request(
+            "DELETE",
+            f"/v1/accounts/{account_id}/ach_relationships/{relationship_id}",
+        )
+
+    async def create_transfer(
+        self,
+        account_id: str,
+        *,
+        relationship_id: str,
+        amount: str,
+        direction: str,
+    ) -> dict[str, Any]:
+        """POST /v1/accounts/{id}/transfers — always ACH, immediate timing."""
+        return await self._request(
+            "POST",
+            f"/v1/accounts/{account_id}/transfers",
+            json={
+                "transfer_type": "ach",
+                "timing": "immediate",
+                "relationship_id": relationship_id,
+                "amount": amount,
+                "direction": direction,
+            },
+        )
+
+    async def list_transfers(
+        self,
+        account_id: str,
+        *,
+        direction: str | None = None,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/{id}/transfers. Pagination pass-through to Alpaca."""
+        params: dict[str, Any] = {}
+        if direction is not None:
+            params["direction"] = direction
+        if limit is not None:
+            params["limit"] = limit
+        if offset is not None:
+            params["offset"] = offset
+        return await self._request(
+            "GET",
+            f"/v1/accounts/{account_id}/transfers",
+            params=params or None,
+        )
+
+    async def _request(
+        self,
+        method: str,
+        path: str,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         """Make an authenticated request to the Alpaca Broker API."""
         try:
             response = await self._client.request(
@@ -106,13 +178,16 @@ class AlpacaBrokerService:
                 f"{self._base_url}{path}",
                 headers=await self._headers(),
                 json=json,
+                params=params,
             )
         except httpx.HTTPError as exc:
             logger.error("alpaca_connection_failed", error=str(exc), path=path)
             raise AlpacaBrokerUnavailableError(str(exc)) from exc
         return self._handle_response(response)
 
-    def _handle_response(self, response: httpx.Response) -> dict[str, Any]:
+    def _handle_response(self, response: httpx.Response) -> Any:
+        if response.status_code == 204:
+            return {}
         if response.status_code in (200, 201):
             return response.json()
 

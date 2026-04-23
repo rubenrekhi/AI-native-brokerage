@@ -60,10 +60,14 @@ class ConflictError(Exception):
         self,
         message: str = "Resource already exists",
         *,
+        code: str = "CONFLICT",
+        detail: dict[str, Any] | None = None,
         resource: str | None = None,
         field: str | None = None,
     ):
         self.message = message
+        self.code = code
+        self.detail = detail
         self.resource = resource
         self.field = field
 
@@ -120,14 +124,17 @@ async def not_found_error_handler(
 async def conflict_error_handler(
     request: Request, exc: ConflictError
 ) -> JSONResponse:
-    detail: dict[str, Any] | None = None
-    if exc.resource or exc.field:
+    # Prefer explicit `detail` if the caller supplied one (funding pattern:
+    # e.g. {"account_status": "SUBMITTED"}). Otherwise derive from
+    # resource/field kwargs (onboarding/generic pattern).
+    detail = exc.detail
+    if detail is None and (exc.resource or exc.field):
         detail = {}
         if exc.resource:
             detail["resource"] = exc.resource
         if exc.field:
             detail["field"] = exc.field
-    return error_response(409, exc.message, "CONFLICT", detail)
+    return error_response(409, exc.message, exc.code, detail=detail)
 
 
 async def incomplete_onboarding_error_handler(
@@ -151,9 +158,7 @@ async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
     logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
-    return error_response(
-        422, f"KYC submission failed: {exc.message}", "ALPACA_ERROR", detail=exc.detail
-    )
+    return error_response(422, exc.message, "ALPACA_ERROR", detail=exc.detail)
 
 
 async def alpaca_unavailable_handler(
@@ -161,6 +166,15 @@ async def alpaca_unavailable_handler(
 ) -> JSONResponse:
     logger.error("alpaca_unavailable", error=exc.message)
     return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
+
+
+# --- Plaid handler ---
+
+async def plaid_service_error_handler(
+    request: Request, exc: "PlaidServiceError"
+) -> JSONResponse:
+    logger.error("plaid_service_error", code=exc.code, message=exc.message)
+    return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 
 # --- SQLAlchemy handlers (registered before generic Exception) ---
@@ -265,6 +279,9 @@ def register_exception_handlers(app: FastAPI) -> None:
     from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
     app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
     app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
+    # Plaid handler
+    from app.services.plaid import PlaidServiceError
+    app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)

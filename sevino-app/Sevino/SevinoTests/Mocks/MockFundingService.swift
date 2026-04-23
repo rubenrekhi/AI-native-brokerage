@@ -1,26 +1,33 @@
 import Foundation
 @testable import Sevino
 
-final class MockFundingService: FundingServiceProtocol {
-    var fetchFundingError: Error?
-    var snapshot = FundingSnapshot(
-        cashBalance: "$100.00",
-        cashApy: "3.00%",
-        cashThisMonth: "+$1.00",
-        cashDaysAccrued: "10",
-        cashLifetime: "+$5.00",
-        cashLifetimeSince: "Jan 2026",
-        cashBuyingPower: "$100.00",
-        cashPendingDeposits: "$0.00",
-        cashInterestPaidOut: "Monthly",
-        cashFdicInsured: "$2,500,000"
-    )
+final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
 
-    private(set) var fetchFundingCallCount = 0
+    // Stubs
+    var createLinkTokenResult: Result<String, Error> = .success("link-sandbox-test")
+    var linkBankResult: Result<AchRelationshipDTO, Error>?
+    var listAchRelationshipsResult: Result<[AchRelationshipDTO], Error> = .success([])
 
-    func fetchFunding() async throws -> FundingSnapshot {
-        fetchFundingCallCount += 1
-        if let error = fetchFundingError { throw error }
-        return snapshot
+    // Call tracking
+    private(set) var createLinkTokenCalls = 0
+    private(set) var linkBankCalls: [LinkBankRequest] = []
+    private(set) var listAchRelationshipsCalls = 0
+
+    func createLinkToken() async throws -> String {
+        createLinkTokenCalls += 1
+        return try createLinkTokenResult.get()
+    }
+
+    func linkBank(_ request: LinkBankRequest) async throws -> AchRelationshipDTO {
+        linkBankCalls.append(request)
+        guard let result = linkBankResult else {
+            fatalError("linkBank called but no result stubbed")
+        }
+        return try result.get()
+    }
+
+    func listAchRelationships() async throws -> [AchRelationshipDTO] {
+        listAchRelationshipsCalls += 1
+        return try listAchRelationshipsResult.get()
     }
 }

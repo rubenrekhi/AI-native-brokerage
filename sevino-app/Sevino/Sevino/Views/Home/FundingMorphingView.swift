@@ -4,7 +4,7 @@ struct FundingMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
     let isHidden: Bool
-    let viewModel: FundingViewModel
+    @Bindable var viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -50,7 +50,7 @@ struct FundingMorphingView: View {
             earningsBadge
             statCards
             detailsTable
-            actionButtons
+            actionRow
             infoRow
             disclaimer
         }
@@ -58,6 +58,32 @@ struct FundingMorphingView: View {
             insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
             removal: .identity
         ))
+        .task(id: isExpanded) {
+            if isExpanded {
+                await viewModel.loadRelationships()
+            }
+        }
+        .sheet(isPresented: $viewModel.isShowingPlaidLink) {
+            if let token = viewModel.linkToken {
+                PlaidLinkSheet(
+                    linkToken: token,
+                    onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
+                        Task {
+                            await viewModel.onPlaidSuccess(
+                                publicToken: publicToken,
+                                accountId: accountId,
+                                institutionName: institutionName,
+                                accountMask: accountMask,
+                                accountName: accountName
+                            )
+                        }
+                    },
+                    onExit: { error in
+                        viewModel.onPlaidExit(error: error)
+                    }
+                )
+            }
+        }
     }
 
     private var headerSection: some View {
@@ -145,6 +171,15 @@ struct FundingMorphingView: View {
         }
     }
 
+    @ViewBuilder
+    private var actionRow: some View {
+        if viewModel.hasLinkedBank {
+            actionButtons
+        } else {
+            linkBankButton
+        }
+    }
+
     private var actionButtons: some View {
         HStack(spacing: 10 * scale) {
             Button(L10n.Home.deposit, action: {})
@@ -161,6 +196,20 @@ struct FundingMorphingView: View {
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
         }
+    }
+
+    private var linkBankButton: some View {
+        Button {
+            Task { await viewModel.startBankLink() }
+        } label: {
+            Text(L10n.Home.linkBankAccount)
+                .font(.system(size: 15 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoPrimary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 14 * scale)
+                .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
+        }
+        .disabled(viewModel.isLoading)
     }
 
     private var infoRow: some View {
@@ -185,6 +234,7 @@ struct FundingMorphingView: View {
             .padding(12 * scale)
             .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
         }
+        .disabled(true)
     }
 
     private var disclaimer: some View {
@@ -211,7 +261,6 @@ private struct FundingMorphingPreview: View {
             )
             .padding(16)
         }
-        .task { await viewModel.loadFundingData() }
     }
 }
 

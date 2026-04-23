@@ -1,43 +1,42 @@
 import Foundation
 
-/// A snapshot of funding/cash display data. Values are pre-formatted strings
-/// because the backend is expected to return them that way.
-struct FundingSnapshot: Equatable {
-    let cashBalance: String
-    let cashApy: String
-    let cashThisMonth: String
-    let cashDaysAccrued: String
-    let cashLifetime: String
-    let cashLifetimeSince: String
-    let cashBuyingPower: String
-    let cashPendingDeposits: String
-    let cashInterestPaidOut: String
-    let cashFdicInsured: String
-}
-
-/// Protocol for fetching funding data — enables mocking in previews and tests.
+/// Protocol for funding backend communication — enables mocking in tests.
 protocol FundingServiceProtocol {
-    func fetchFunding() async throws -> FundingSnapshot
+    func createLinkToken() async throws -> String
+    func linkBank(_ request: LinkBankRequest) async throws -> AchRelationshipDTO
+    func listAchRelationships() async throws -> [AchRelationshipDTO]
 }
 
-/// Placeholder implementation that returns canned display values. This is the
-/// default service used by `FundingViewModel` until the backend endpoint exists
-/// — it is not a test double.
-final class PlaceholderFundingService: FundingServiceProtocol {
-    static let shared = PlaceholderFundingService()
+/// Handles backend communication for the Plaid + ACH funding flows.
+final class FundingService: FundingServiceProtocol {
+    static let shared = FundingService()
 
-    func fetchFunding() async throws -> FundingSnapshot {
-        FundingSnapshot(
-            cashBalance: "$2,412.08",
-            cashApy: "3.20%",
-            cashThisMonth: "+$6.43",
-            cashDaysAccrued: "22",
-            cashLifetime: "+$41.87",
-            cashLifetimeSince: "Oct 2025",
-            cashBuyingPower: "$2,412.08",
-            cashPendingDeposits: "$100.50",
-            cashInterestPaidOut: "Monthly",
-            cashFdicInsured: "$2,500,000"
+    private let api: any APIClientProtocol
+
+    init(api: any APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
+
+    func createLinkToken() async throws -> String {
+        let response: LinkTokenResponse = try await api.post(
+            "/v1/funding/link-token",
+            body: EmptyBody()
         )
+        return response.linkToken
+    }
+
+    func linkBank(_ request: LinkBankRequest) async throws -> AchRelationshipDTO {
+        try await api.post("/v1/funding/link-bank", body: request)
+    }
+
+    func listAchRelationships() async throws -> [AchRelationshipDTO] {
+        let response: AchRelationshipListResponse = try await api.get(
+            "/v1/funding/ach-relationships"
+        )
+        return response.relationships
     }
 }
+
+/// Placeholder body for POST endpoints that take no parameters.
+/// Encodes to `{}`.
+private struct EmptyBody: Encodable {}

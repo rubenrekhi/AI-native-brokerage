@@ -484,6 +484,36 @@
         }
       }
     },
+    "home.funding_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Try again."
+          }
+        }
+      }
+    },
+    "home.funding_plaid_connection_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't connect to your bank. Try again."
+          }
+        }
+      }
+    },
+    "home.link_bank_account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account"
+          }
+        }
+      }
+    },
     "home.dismiss_accessibility" : {
       "localizations" : {
         "en" : {

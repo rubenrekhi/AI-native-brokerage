@@ -1,0 +1,10 @@
+{
+  "id": "794c3c51-d831-4e8c-a0e1-0bad1a9f0123",
+  "account_id": "9d587d7a-1b4c-4b3a-95bb-0e8e0d5e7777",
+  "status": "QUEUED",
+  "account_owner_name": "Riley Johnson",
+  "bank_account_type": "CHECKING",
+  "nickname": "Bank of America Checking",
+  "processor_token": "processor-sandbox-0asd1f-a0sd1f-a0sd1f-a0sd1f-a0sd1f",
+  "created_at": "2026-04-18T18:00:00Z"
+}
