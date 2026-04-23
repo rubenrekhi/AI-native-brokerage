@@ -13,15 +13,24 @@ struct TickerMentionPopup: View {
 
     private static let rowHeight: CGFloat = 56
     private static let maxVisibleRows = 5
-    private static let logoSize: CGFloat = 32
-    private static let horizontalPadding: CGFloat = 12
+    private static let logoSize: CGFloat = 24
+    private static let horizontalPadding: CGFloat = 16
+    private static let verticalPadding: CGFloat = 8
     private static let logoTrailingSpacing: CGFloat = 12
     private static let verticalTextSpacing: CGFloat = 2
+
+    private var contentHeight: CGFloat {
+        let rows = min(results.count, Self.maxVisibleRows)
+        let rowsHeight = Self.rowHeight * CGFloat(rows)
+        let padding = Self.verticalPadding * 2
+        return (rowsHeight + padding) * scale
+    }
 
     var body: some View {
         SevinoGlassContainer {
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    Color.clear.frame(height: Self.verticalPadding * scale)
                     ForEach(results) { result in
                         Button {
                             onSelect(result)
@@ -39,10 +48,11 @@ struct TickerMentionPopup: View {
                                 )
                         }
                     }
+                    Color.clear.frame(height: Self.verticalPadding * scale)
                 }
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(maxHeight: Self.rowHeight * scale * CGFloat(Self.maxVisibleRows))
+            .frame(height: contentHeight)
             .modifier(SevinoGlass.popup)
         }
         .background {

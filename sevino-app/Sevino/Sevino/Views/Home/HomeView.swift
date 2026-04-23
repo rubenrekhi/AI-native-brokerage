@@ -8,7 +8,8 @@ struct HomeView: View {
     @State private var fundingViewModel: FundingViewModel
     @State private var holdingsViewModel: HoldingsViewModel
     @State private var radarViewModel: RadarViewModel
-    @State private var messageText = ""
+    @State private var tickerMentionViewModel = TickerMentionViewModel()
+    @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
     @State private var showExplore = true
@@ -147,19 +148,31 @@ struct HomeView: View {
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
 
+                tickerPopupDismissButton
+
                 VStack(spacing: 0) {
                     Spacer()
 
-                    HomeChatSuggestions(scale: scale, onSelect: { messageText = $0 })
+                    HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
                         .padding(.bottom, 20 * scale)
                         .padding(.horizontal, 16 * scale)
                         .blur(radius: anyModalOpen ? 10 : 0)
                         .brightness(modalDimBrightness(when: anyModalOpen))
                         .allowsHitTesting(!anyModalOpen)
 
-                    HomeChatInputBar(text: $messageText, scale: scale, isDimmed: anyModalOpen)
-                        .padding(.horizontal, 16 * scale)
-                        .padding(.bottom, 8 * scale)
+                    HomeChatInputBar(
+                        viewModel: tickerMentionViewModel,
+                        scale: scale,
+                        isDimmed: anyModalOpen,
+                        onSend: { _ in }
+                    )
+                    .padding(.horizontal, 16 * scale)
+                    .padding(.bottom, 8 * scale)
+                    .onGeometryChange(for: CGFloat.self) { proxy in
+                        proxy.size.height
+                    } action: { newHeight in
+                        chatInputHeight = newHeight
+                    }
                 }
             }
         }
@@ -182,6 +195,18 @@ struct HomeView: View {
                 .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
             }
         }
+        .overlay(alignment: .bottom) {
+            if tickerMentionViewModel.isShowingPopup && !anyModalOpen {
+                TickerMentionPopup(
+                    results: tickerMentionViewModel.results,
+                    onSelect: { tickerMentionViewModel.selectResult($0) }
+                )
+                .padding(.horizontal, 16 * scale)
+                .padding(.bottom, chatInputHeight + 8 * scale)
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
+            }
+        }
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .background { HomeBackgroundView() }
         .background {
             GeometryReader { geo in
@@ -357,6 +382,17 @@ struct HomeView: View {
         withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
             showSidebar.toggle()
         }
+    }
+
+    @ViewBuilder
+    private var tickerPopupDismissButton: some View {
+        Button(action: tickerMentionViewModel.dismiss) {
+            Color.clear.contentShape(.rect).ignoresSafeArea()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L10n.Home.dismissAccessibility)
+        .accessibilityHidden(!tickerMentionViewModel.isShowingPopup)
+        .allowsHitTesting(tickerMentionViewModel.isShowingPopup)
     }
 
     private var navSidebarButton: some View {

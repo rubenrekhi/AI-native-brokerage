@@ -106,6 +106,38 @@ final class TickerMentionViewModel {
         activeRange = nil
     }
 
+    /// Split the current `text` around committed tokens into `[MessageSegment]` for the
+    /// outgoing message payload. Each committed `$SYMBOL` becomes a `.ticker(symbol)`
+    /// segment; surrounding runs of characters become `.text(...)` segments.
+    func makeSegments() -> [MessageSegment] {
+        var segments: [MessageSegment] = []
+        var cursor = 0
+        for token in tokens.sorted(by: { $0.range.lowerBound < $1.range.lowerBound }) {
+            if token.range.lowerBound > cursor {
+                let start = text.index(text.startIndex, offsetBy: cursor)
+                let end = text.index(text.startIndex, offsetBy: token.range.lowerBound)
+                let leading = String(text[start..<end])
+                if !leading.isEmpty { segments.append(.text(leading)) }
+            }
+            segments.append(.ticker(token.symbol))
+            cursor = token.range.upperBound
+        }
+        if cursor < text.count {
+            let start = text.index(text.startIndex, offsetBy: cursor)
+            let trailing = String(text[start..<text.endIndex])
+            if !trailing.isEmpty { segments.append(.text(trailing)) }
+        }
+        return segments
+    }
+
+    /// Reset the input to empty — called after the message is sent so the next
+    /// message starts from a clean slate.
+    func clear() {
+        dismiss()
+        tokens = []
+        text = ""
+    }
+
     // MARK: - Mention detection
 
     /// Scans backwards from the end of `text` for a `$QUERY` pattern — `$` followed by 1+ letters —

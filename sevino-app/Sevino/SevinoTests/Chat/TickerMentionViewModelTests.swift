@@ -251,4 +251,74 @@ final class TickerMentionViewModelTests: XCTestCase {
 
         XCTAssertTrue(viewModel.tokens.isEmpty)
     }
+
+    // MARK: - Message segments
+
+    func testMakeSegmentsEmptyTextReturnsEmpty() {
+        XCTAssertTrue(viewModel.makeSegments().isEmpty)
+    }
+
+    func testMakeSegmentsPlainTextWithoutTokensReturnsSingleTextSegment() {
+        viewModel.updateText("How is my portfolio?")
+        XCTAssertEqual(viewModel.makeSegments(), [.text("How is my portfolio?")])
+    }
+
+    func testMakeSegmentsSingleTokenSplitsSurroundingText() {
+        viewModel.updateText("$TSLA")
+        viewModel.updateText("$TSLA ")  // commit via space
+        viewModel.updateText("$TSLA up")
+
+        XCTAssertEqual(viewModel.makeSegments(), [
+            .ticker("TSLA"),
+            .text(" up"),
+        ])
+    }
+
+    func testMakeSegmentsLeadingAndTrailingText() async throws {
+        viewModel.updateText("Buy $TS")
+        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
+        viewModel.updateText("Buy $TSLA now")
+
+        XCTAssertEqual(viewModel.makeSegments(), [
+            .text("Buy "),
+            .ticker("TSLA"),
+            .text(" now"),
+        ])
+    }
+
+    func testMakeSegmentsMultipleTokens() async throws {
+        viewModel.updateText("$TSL")
+        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
+        viewModel.updateText("$TSLA and $AM")
+        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        viewModel.selectResult(AssetSearchResult(symbol: "AMD", name: "AMD", logoUrl: nil))
+
+        XCTAssertEqual(viewModel.makeSegments(), [
+            .ticker("TSLA"),
+            .text(" and "),
+            .ticker("AMD"),
+        ])
+    }
+
+    // MARK: - Clear
+
+    func testClearResetsEverything() async throws {
+        viewModel.updateText("$TSL")
+        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
+        viewModel.updateText("$TSLA plus $A")
+        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        XCTAssertFalse(viewModel.text.isEmpty)
+        XCTAssertFalse(viewModel.tokens.isEmpty)
+
+        viewModel.clear()
+
+        XCTAssertTrue(viewModel.text.isEmpty)
+        XCTAssertTrue(viewModel.tokens.isEmpty)
+        XCTAssertTrue(viewModel.results.isEmpty)
+        XCTAssertNil(viewModel.activeQuery)
+        XCTAssertFalse(viewModel.isShowingPopup)
+    }
 }
