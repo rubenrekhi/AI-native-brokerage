@@ -138,7 +138,7 @@ final class OnboardingResumeManagerTests: XCTestCase {
         }
     }
 
-    func testLegalNameResumesAtSSN() {
+    func testLegalNameResumesAtAddress() {
         let status = OnboardingStatusResponse(
             onboardingCompleted: false,
             onboardingStep: "legal_name",
@@ -146,13 +146,13 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
-            XCTAssertEqual(step, 3, "legal_name should resume at SSN screen")
+            XCTAssertEqual(step, 3, "legal_name should resume at address screen")
         } else {
             XCTFail("Expected .alpacaSetup")
         }
     }
 
-    func testAddressResumesAtSSN() {
+    func testAddressResumesAtCitizenship() {
         let status = OnboardingStatusResponse(
             onboardingCompleted: false,
             onboardingStep: "address",
@@ -160,13 +160,13 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
-            XCTAssertEqual(step, 3, "Steps past SSN should resume at SSN screen")
+            XCTAssertEqual(step, 4, "address should resume at citizenship screen")
         } else {
             XCTFail("Expected .alpacaSetup")
         }
     }
 
-    func testEmploymentResumesAtSSN() {
+    func testEmploymentResumesAtFundingSources() {
         let status = OnboardingStatusResponse(
             onboardingCompleted: false,
             onboardingStep: "employment",
@@ -174,7 +174,35 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
-            XCTAssertEqual(step, 3, "Steps past SSN should resume at SSN screen")
+            XCTAssertEqual(step, 6, "employment should resume at funding sources screen")
+        } else {
+            XCTFail("Expected .alpacaSetup")
+        }
+    }
+
+    func testFundingSourcesResumesAtSSN() {
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: "funding_sources",
+            profile: nil,
+            financialProfile: nil
+        )
+        if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
+            XCTAssertEqual(step, 7, "funding_sources should resume at SSN screen")
+        } else {
+            XCTFail("Expected .alpacaSetup")
+        }
+    }
+
+    func testDisclosuresResumesAtSSN() {
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: "disclosures",
+            profile: nil,
+            financialProfile: nil
+        )
+        if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
+            XCTAssertEqual(step, 7, "Steps past SSN should resume at SSN screen")
         } else {
             XCTFail("Expected .alpacaSetup")
         }
@@ -188,7 +216,7 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
-            XCTAssertEqual(step, 3, "Steps past SSN should resume at SSN screen")
+            XCTAssertEqual(step, 7, "Steps past SSN should resume at SSN screen")
         } else {
             XCTFail("Expected .alpacaSetup")
         }
@@ -248,9 +276,13 @@ final class OnboardingResumeManagerTests: XCTestCase {
             XCTAssertEqual(data.userName, "Riley")
             XCTAssertEqual(data.legalName, "Riley Johnson")
             XCTAssertTrue(data.address.contains("New York"))
-            XCTAssertEqual(data.employmentStatus, "employed")
+            XCTAssertEqual(data.streetAddress, "123 Main St")
+            XCTAssertEqual(data.city, "New York")
+            XCTAssertEqual(data.state, "NY")
+            XCTAssertEqual(data.postalCode, "10001")
+            XCTAssertEqual(data.employmentStatus, L10n.Onboarding.alpacaStatusEmployed)
             XCTAssertEqual(data.employerName, "Acme")
-            XCTAssertEqual(data.fundingSources, ["savings"])
+            XCTAssertEqual(data.fundingSources, [L10n.Onboarding.alpacaFundingSavings])
         } else {
             XCTFail("Expected .alpacaSetup")
         }

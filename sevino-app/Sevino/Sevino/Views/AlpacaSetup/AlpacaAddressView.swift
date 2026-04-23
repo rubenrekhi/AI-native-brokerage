@@ -5,16 +5,41 @@ struct AlpacaAddressView: View {
     let scale: CGFloat
     let userPromptText: String
     let animate: Bool
+    let initialAddress: ParsedAddress?
     let onContinue: (ParsedAddress) -> Void
 
-    @State private var query = ""
-    @State private var selectedAddress = ""
+    @State private var query: String
+    @State private var selectedAddress: String
     @State private var selectedCompletion: MKLocalSearchCompletion?
-    @State private var showPrompt = false
-    @State private var typed1 = ""
-    @State private var showInput = false
+    @State private var showPrompt: Bool
+    @State private var typed1: String
+    @State private var showInput: Bool
     // Root owner of this @Observable; @State is correct here. Pass to child views as a plain parameter — do not re-wrap.
     @State private var completer = AddressSearchCompleter()
+
+    init(
+        scale: CGFloat,
+        userPromptText: String,
+        animate: Bool,
+        initialAddress: ParsedAddress? = nil,
+        onContinue: @escaping (ParsedAddress) -> Void
+    ) {
+        self.scale = scale
+        self.userPromptText = userPromptText
+        self.animate = animate
+        self.initialAddress = initialAddress
+        self.onContinue = onContinue
+
+        let display = initialAddress?.fullDisplay ?? ""
+        _query = State(initialValue: display)
+        _selectedAddress = State(initialValue: display)
+        // When resuming with a saved address, skip the animated intro so the
+        // user sees their prior selection immediately and can just tap Continue.
+        let hasInitial = initialAddress != nil
+        _showPrompt = State(initialValue: hasInitial)
+        _typed1 = State(initialValue: hasInitial ? L10n.Onboarding.alpacaAddressResponse1 : "")
+        _showInput = State(initialValue: hasInitial)
+    }
 
     private var showSuggestions: Bool {
         !completer.results.isEmpty && selectedAddress.isEmpty && !query.isEmpty
@@ -121,7 +146,12 @@ struct AlpacaAddressView: View {
             .textContentType(.fullStreetAddress)
             .autocorrectionDisabled()
             .onChange(of: query) { _, newValue in
-                if selectedAddress.isEmpty {
+                // If the text drifted away from the current selection (either a
+                // pre-filled resume value or a previously picked suggestion),
+                // clear the selection so MapKit suggestions re-appear.
+                if newValue != selectedAddress {
+                    selectedAddress = ""
+                    selectedCompletion = nil
                     completer.search(newValue)
                 }
             }
@@ -156,7 +186,19 @@ struct AlpacaAddressView: View {
     }
 
     private func submit() {
-        guard !selectedAddress.isEmpty, let completion = selectedCompletion else { return }
+        guard !selectedAddress.isEmpty else { return }
+
+        // Resuming without changing anything — reuse the saved ParsedAddress so
+        // we don't re-hit MapKit (which wouldn't be able to geocode our own
+        // stored display string into a completion anyway).
+        if selectedCompletion == nil,
+           let initial = initialAddress,
+           selectedAddress == initial.fullDisplay {
+            onContinue(initial)
+            return
+        }
+
+        guard let completion = selectedCompletion else { return }
         let fallback = ParsedAddress(
             streetAddress: selectedAddress, city: "", state: "", postalCode: "", fullDisplay: selectedAddress
         )
