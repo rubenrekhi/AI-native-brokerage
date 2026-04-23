@@ -16,6 +16,7 @@ from app.lifecycle import lifespan
 from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 from app.rate_limit import limiter
+from app.routes.assets import router as assets_router
 from app.routes.funding import router as funding_router
 from app.routes.onboarding import router as onboarding_router
 
@@ -102,6 +103,7 @@ register_exception_handlers(app)
 def include_routers(app: FastAPI) -> None:
     app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
     app.include_router(funding_router, prefix="/v1/funding", tags=["funding"])
+    app.include_router(assets_router, prefix="/v1/assets", tags=["assets"])
 
 
 include_routers(app)
