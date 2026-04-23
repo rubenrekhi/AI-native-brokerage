@@ -1,4 +1,5 @@
 from app.models.ach_relationship import AchRelationship
+from app.models.asset import Asset
 from app.models.base import Base
 from app.models.brokerage_account import BrokerageAccount
 from app.models.conversation import Conversation
@@ -14,6 +15,7 @@ from app.models.user_settings import UserSettings
 
 __all__ = [
     "AchRelationship",
+    "Asset",
     "Base",
     "BrokerageAccount",
     "Conversation",
