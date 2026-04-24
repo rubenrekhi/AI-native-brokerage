@@ -18,7 +18,7 @@ from app.dependencies.portfolio import (
     AlpacaAccountContext,
     get_alpaca_account_context,
 )
-from app.schemas.portfolio import PortfolioSnapshotResponse
+from app.schemas.portfolio import HoldingsResponse, PortfolioSnapshotResponse
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.portfolio import PortfolioService
 
@@ -44,3 +44,12 @@ async def get_snapshot(
 ) -> PortfolioSnapshotResponse:
     """Equity, cash, buying power, and daily change for the home screen."""
     return await service.get_snapshot(ctx)
+
+
+@router.get("/holdings", response_model=HoldingsResponse)
+async def get_holdings(
+    ctx: AlpacaAccountContext = Depends(get_alpaca_account_context),
+    service: PortfolioService = Depends(_portfolio_service),
+) -> HoldingsResponse:
+    """Per-symbol positions joined with names, sorted by market value."""
+    return await service.get_holdings(ctx)

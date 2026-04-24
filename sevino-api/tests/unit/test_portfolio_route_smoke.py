@@ -22,3 +22,20 @@ class TestPortfolioRouteRegistration:
         success = spec["paths"]["/v1/portfolio/snapshot"]["get"]["responses"]["200"]
         ref = success["content"]["application/json"]["schema"]["$ref"]
         assert ref.endswith("/PortfolioSnapshotResponse")
+
+    async def test_holdings_route_in_openapi(self, client):
+        response = await client.get("/openapi.json")
+        spec = response.json()
+
+        assert "/v1/portfolio/holdings" in spec["paths"]
+        holdings = spec["paths"]["/v1/portfolio/holdings"]
+        assert "get" in holdings
+        assert holdings["get"]["tags"] == ["portfolio"]
+
+    async def test_holdings_response_model_in_openapi(self, client):
+        response = await client.get("/openapi.json")
+        spec = response.json()
+
+        success = spec["paths"]["/v1/portfolio/holdings"]["get"]["responses"]["200"]
+        ref = success["content"]["application/json"]["schema"]["$ref"]
+        assert ref.endswith("/HoldingsResponse")
