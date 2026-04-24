@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
     @State private var authVM = AuthViewModel()
+    @State private var settingsVM = SettingsViewModel()
     @State private var showLegalLinks = false
     @State private var showLogOutConfirmation = false
     @State private var path = NavigationPath()
@@ -60,10 +61,11 @@ struct SettingsView: View {
                 baseScale = width / 393
             }
             .navigationBarBackButtonHidden()
+            .task { await settingsVM.load() }
             .navigationDestination(for: SettingsDestination.self) { destination in
                 switch destination {
                 case .accounts:
-                    AccountsSettingsView()
+                    AccountsSettingsView(settingsVM: settingsVM)
                 case .brokerage:
                     BrokerageSettingsView()
                 case .linkedAccounts:

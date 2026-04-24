@@ -559,6 +559,9 @@ enum L10n {
         static let textSize = String(localized: "settings.text_size")
         static let textSizeSmall = String(localized: "settings.text_size_small")
         static let textSizeRegular = String(localized: "settings.text_size_regular")
+        static let loadErrorTitle = String(localized: "settings.load_error_title")
+        static let loadErrorMessage = String(localized: "settings.load_error_message")
+        static let loadErrorRetry = String(localized: "settings.load_error_retry")
     }
 
     enum TradeExecution {

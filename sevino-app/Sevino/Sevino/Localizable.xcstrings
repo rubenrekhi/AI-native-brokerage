@@ -4274,6 +4274,36 @@
         }
       }
     },
+    "settings.load_error_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't load your account details. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "settings.load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "settings.load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load account"
+          }
+        }
+      }
+    },
     "settings.log_out" : {
       "localizations" : {
         "en" : {
