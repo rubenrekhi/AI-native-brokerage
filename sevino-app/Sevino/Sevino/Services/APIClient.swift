@@ -24,6 +24,7 @@ final class APIClient: APIClientProtocol {
     private let decoder: JSONDecoder = {
         let d = JSONDecoder()
         d.keyDecodingStrategy = .convertFromSnakeCase
+        d.dateDecodingStrategy = .iso8601
         return d
     }()
 
