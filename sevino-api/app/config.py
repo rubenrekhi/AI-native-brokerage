@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
-    plaid_fernet_key: str = ""
+    plaid_fernet_key: str
     sentry_dsn: str = ""
 
     @property
