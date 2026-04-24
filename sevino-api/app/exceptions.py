@@ -177,6 +177,28 @@ async def plaid_service_error_handler(
     return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 
+# --- Phone verification handlers ---
+
+async def phone_verification_error_handler(
+    request: Request, exc: "PhoneVerificationError"
+) -> JSONResponse:
+    logger.warning("phone_verification_error", message=exc.message)
+    return error_response(
+        422, exc.message, "PHONE_VERIFICATION_FAILED", detail=exc.detail
+    )
+
+
+async def phone_verification_unavailable_handler(
+    request: Request, exc: "PhoneVerificationUnavailableError"
+) -> JSONResponse:
+    logger.error("phone_verification_unavailable", error=exc.message)
+    return error_response(
+        503,
+        "Phone verification service unavailable, please try again",
+        "PHONE_VERIFICATION_UNAVAILABLE",
+    )
+
+
 # --- SQLAlchemy handlers (registered before generic Exception) ---
 
 def _extract_column(exc: Exception) -> str | None:
@@ -282,6 +304,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     # Plaid handler
     from app.services.plaid import PlaidServiceError
     app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
+    # Phone verification handlers
+    from app.services.phone_verification import (
+        PhoneVerificationError,
+        PhoneVerificationUnavailableError,
+    )
+    app.add_exception_handler(PhoneVerificationError, phone_verification_error_handler)
+    app.add_exception_handler(
+        PhoneVerificationUnavailableError, phone_verification_unavailable_handler
+    )
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)

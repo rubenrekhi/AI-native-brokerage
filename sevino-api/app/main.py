@@ -19,6 +19,7 @@ from app.rate_limit import limiter
 from app.routes.assets import router as assets_router
 from app.routes.funding import router as funding_router
 from app.routes.onboarding import router as onboarding_router
+from app.routes.phone_auth import router as phone_auth_router
 
 configure_logging(settings.environment)
 
@@ -104,6 +105,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
     app.include_router(funding_router, prefix="/v1/funding", tags=["funding"])
     app.include_router(assets_router, prefix="/v1/assets", tags=["assets"])
+    app.include_router(phone_auth_router, prefix="/v1/auth", tags=["auth"])
 
 
 include_routers(app)
