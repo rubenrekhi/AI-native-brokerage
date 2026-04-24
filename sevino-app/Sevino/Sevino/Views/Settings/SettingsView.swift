@@ -82,10 +82,22 @@ struct SettingsView: View {
                     FaceIDSettingsView()
                 case .changePassword:
                     ChangePasswordView(vm: ChangePasswordViewModel())
-                case .accountDocuments,
-                     .monthlyStatements,
-                     .taxDocuments,
-                     .accountHistory:
+                case .accountDocuments:
+                    DocumentsListView(
+                        title: L10n.Settings.accountDocuments,
+                        documentType: nil
+                    )
+                case .monthlyStatements:
+                    DocumentsListView(
+                        title: L10n.Settings.monthlyStatements,
+                        documentType: "account_statement"
+                    )
+                case .taxDocuments:
+                    DocumentsListView(
+                        title: L10n.Settings.taxDocuments,
+                        documentType: "tax_1099"
+                    )
+                case .accountHistory:
                     EmptyView()
                 }
             }

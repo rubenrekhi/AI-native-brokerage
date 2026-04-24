@@ -605,6 +605,11 @@ enum L10n {
         static let loadErrorTitle = String(localized: "settings.load_error_title")
         static let loadErrorMessage = String(localized: "settings.load_error_message")
         static let loadErrorRetry = String(localized: "settings.load_error_retry")
+        static let documentsEmptyTitle = String(localized: "settings.documents_empty_title")
+        static let documentsEmptyMessage = String(localized: "settings.documents_empty_message")
+        static let documentDownloadErrorTitle = String(localized: "settings.document_download_error_title")
+        static let documentRowAccessibilityHint = String(localized: "settings.document_row_accessibility_hint")
+        static let documentRowLoading = String(localized: "settings.document_row_loading")
     }
 
     enum TradeExecution {

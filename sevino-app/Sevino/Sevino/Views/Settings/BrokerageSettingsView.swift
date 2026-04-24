@@ -45,9 +45,9 @@ struct BrokerageSettingsView: View {
                     .padding(.bottom, 24 * scale)
 
                 VStack(spacing: 0) {
-                    navRow(title: L10n.Settings.accountDocuments)
-                    navRow(title: L10n.Settings.monthlyStatements)
-                    navRow(title: L10n.Settings.taxDocuments)
+                    navRow(title: L10n.Settings.accountDocuments, destination: .accountDocuments)
+                    navRow(title: L10n.Settings.monthlyStatements, destination: .monthlyStatements)
+                    navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
                     navRow(title: L10n.Settings.accountHistory)
                 }
 
@@ -180,28 +180,36 @@ struct BrokerageSettingsView: View {
         .padding(.vertical, 16 * scale)
     }
 
-    private func navRow(title: String) -> some View {
-        Button(action: {}) {
-            VStack(spacing: 0) {
-                HStack {
-                    Text(title)
-                        .font(.system(size: 16 * scale))
-                        .foregroundStyle(Color.sevinoSecondary)
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoGreyContrast)
-                        .accessibilityHidden(true)
-                }
-                .padding(.vertical, 16 * scale)
-
-                Divider()
-                    .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
+    private func navRow(title: String, destination: SettingsDestination? = nil) -> some View {
+        Group {
+            if let destination {
+                NavigationLink(value: destination) { navRowLabel(title: title) }
+            } else {
+                Button(action: {}) { navRowLabel(title: title) }
+                    .disabled(true)
             }
         }
-        .disabled(true)
+    }
+
+    private func navRowLabel(title: String) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 16 * scale))
+                    .foregroundStyle(Color.sevinoSecondary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 16 * scale)
+
+            Divider()
+                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
+        }
     }
 
     private func copyAccountNumber() {

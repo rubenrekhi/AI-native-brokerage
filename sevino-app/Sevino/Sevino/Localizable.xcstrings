@@ -4244,6 +4244,56 @@
         }
       }
     },
+    "settings.document_download_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to open document"
+          }
+        }
+      }
+    },
+    "settings.documents_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Documents will appear here once your brokerage account starts generating them."
+          }
+        }
+      }
+    },
+    "settings.documents_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No documents yet"
+          }
+        }
+      }
+    },
+    "settings.document_row_accessibility_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens document"
+          }
+        }
+      }
+    },
+    "settings.document_row_loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading"
+          }
+        }
+      }
+    },
     "settings.duration_days" : {
       "localizations" : {
         "en" : {

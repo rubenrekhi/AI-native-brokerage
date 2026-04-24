@@ -8,6 +8,7 @@ protocol APIClientProtocol: Sendable {
     func delete<T: Decodable>(_ path: String) async throws -> T
     func delete(_ path: String) async throws
     func delete(_ path: String, body: some Encodable) async throws
+    func downloadFile(_ path: String, suggestedExtension: String?) async throws -> URL
 }
 
 final class APIClient: APIClientProtocol {
@@ -70,6 +71,46 @@ final class APIClient: APIClientProtocol {
     /// payload (e.g. `{"confirmation": "DELETE"}`) and returns 204 No Content.
     func delete(_ path: String, body: some Encodable) async throws {
         try await requestVoid(path, method: "DELETE", body: body)
+    }
+
+    /// Downloads the raw response body for `path` (after following redirects)
+    /// and writes it to a temp file, returning the local file URL.
+    /// Useful for binary payloads like PDF documents that can then be handed
+    /// off to QuickLook or a share sheet.
+    func downloadFile(_ path: String, suggestedExtension: String? = nil) async throws -> URL {
+        guard let url = URL(string: baseURL + path) else {
+            throw URLError(.badURL)
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "GET"
+
+        let apiKey = AppConfig.apiKey
+        if !apiKey.isEmpty {
+            urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
+
+        if let token = await tokenProvider() {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.unknown
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let apiError = try? decoder.decode(APIError.self, from: data) {
+                throw apiError
+            }
+            throw APIError.unknown
+        }
+
+        let filename = UUID().uuidString + (suggestedExtension.map { ".\($0)" } ?? "")
+        let fileURL = FileManager.default.temporaryDirectory.appendingPathComponent(filename)
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
     }
 
     /**

@@ -10,6 +10,10 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     var updateSettingsResult: Result<UserSettingsDTO, Error>?
     var updateProfileResult: Result<SettingsProfileResponse, Error>?
     var deleteAccountResult: Result<Void, Error> = .success(())
+    var listDocumentsResult: Result<[DocumentDTO], Error> = .success([])
+    var downloadDocumentResult: Result<URL, Error>?
+    var downloadDocumentHandler: ((String) async throws -> URL)?
+    var documentDownloadURLBase = "https://example.invalid/v1/settings/documents"
 
     // Call tracking
     private(set) var getProfileCalls = 0
@@ -18,6 +22,9 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     private(set) var updateSettingsCalls: [UserSettingsPatchRequest] = []
     private(set) var updateProfileCalls: [ProfileUpdateRequest] = []
     private(set) var deleteAccountCalls = 0
+    private(set) var listDocumentsCalls: [String?] = []
+    private(set) var documentDownloadURLCalls: [String] = []
+    private(set) var downloadDocumentCalls: [String] = []
 
     func getProfile() async throws -> SettingsProfileResponse {
         getProfileCalls += 1
@@ -62,5 +69,29 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     func deleteAccount() async throws {
         deleteAccountCalls += 1
         try deleteAccountResult.get()
+    }
+
+    func listDocuments(type: String?) async throws -> [DocumentDTO] {
+        listDocumentsCalls.append(type)
+        return try listDocumentsResult.get()
+    }
+
+    func documentDownloadURL(id: String) -> URL {
+        documentDownloadURLCalls.append(id)
+        guard let url = URL(string: "\(documentDownloadURLBase)/\(id)/download") else {
+            preconditionFailure("Invalid mock URL for id=\(id)")
+        }
+        return url
+    }
+
+    func downloadDocument(id: String) async throws -> URL {
+        downloadDocumentCalls.append(id)
+        if let handler = downloadDocumentHandler {
+            return try await handler(id)
+        }
+        guard let result = downloadDocumentResult else {
+            fatalError("downloadDocument called but no result stubbed")
+        }
+        return try result.get()
     }
 }

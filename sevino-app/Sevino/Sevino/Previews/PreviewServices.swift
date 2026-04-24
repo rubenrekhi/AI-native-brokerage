@@ -57,6 +57,12 @@ final class PreviewLoadedSettingsService: SettingsServiceProtocol, @unchecked Se
     }
 
     func deleteAccount() async throws {}
+
+    func listDocuments(type _: String?) async throws -> [DocumentDTO] { [] }
+    func documentDownloadURL(id: String) -> URL {
+        URL(string: "https://example.invalid/v1/settings/documents/\(id)/download")!
+    }
+    func downloadDocument(id _: String) async throws -> URL { throw PreviewUnimplemented() }
 }
 
 /// SettingsService stub that never resolves, used to render loading previews.
@@ -73,6 +79,14 @@ final class PreviewStallingSettingsService: SettingsServiceProtocol, @unchecked 
     func updateSettings(_: UserSettingsPatchRequest) async throws -> UserSettingsDTO { throw PreviewUnimplemented() }
     func updateProfile(_: ProfileUpdateRequest) async throws -> SettingsProfileResponse { throw PreviewUnimplemented() }
     func deleteAccount() async throws {}
+    func listDocuments(type _: String?) async throws -> [DocumentDTO] {
+        try await Task.sleep(for: .seconds(60))
+        throw PreviewUnimplemented()
+    }
+    func documentDownloadURL(id: String) -> URL {
+        URL(string: "https://example.invalid/v1/settings/documents/\(id)/download")!
+    }
+    func downloadDocument(id _: String) async throws -> URL { throw PreviewUnimplemented() }
 }
 
 /// SettingsService stub that always fails the profile load, used to render error previews.
@@ -83,6 +97,11 @@ final class PreviewFailingSettingsService: SettingsServiceProtocol, @unchecked S
     func updateSettings(_: UserSettingsPatchRequest) async throws -> UserSettingsDTO { throw PreviewUnimplemented() }
     func updateProfile(_: ProfileUpdateRequest) async throws -> SettingsProfileResponse { throw PreviewUnimplemented() }
     func deleteAccount() async throws {}
+    func listDocuments(type _: String?) async throws -> [DocumentDTO] { throw PreviewUnimplemented() }
+    func documentDownloadURL(id: String) -> URL {
+        URL(string: "https://example.invalid/v1/settings/documents/\(id)/download")!
+    }
+    func downloadDocument(id _: String) async throws -> URL { throw PreviewUnimplemented() }
 }
 
 /// AuthService stub for SwiftUI previews. Defaults to authenticated; `signIn` flips

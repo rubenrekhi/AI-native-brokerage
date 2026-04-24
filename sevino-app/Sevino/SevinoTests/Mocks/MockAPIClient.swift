@@ -65,4 +65,12 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         lastBody = body
         if let error = errorToThrow { throw error }
     }
+
+    func downloadFile(_ path: String, suggestedExtension: String?) async throws -> URL {
+        lastPath = path
+        lastMethod = "GET"
+        if let error = errorToThrow { throw error }
+        if let url = responseToReturn as? URL { return url }
+        throw URLError(.badServerResponse)
+    }
 }
