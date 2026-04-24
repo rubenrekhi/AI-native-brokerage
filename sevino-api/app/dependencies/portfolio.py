@@ -8,8 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.exceptions import IncompleteOnboardingError
-from app.repositories.brokerage_account import BrokerageAccountRepository
+from app.exceptions import ConflictError, IncompleteOnboardingError
+from app.repositories.brokerage_account import STATUS_ACTIVE, BrokerageAccountRepository
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,12 @@ async def get_alpaca_account_context(
     row = await BrokerageAccountRepository.get_by_user_id(db, uid)
     if row is None:
         raise IncompleteOnboardingError("Brokerage account has not been created yet")
+    if row.account_status != STATUS_ACTIVE:
+        raise ConflictError(
+            "Your brokerage account is not active yet.",
+            code="ACCOUNT_NOT_ACTIVE",
+            detail={"account_status": row.account_status},
+        )
     return AlpacaAccountContext(
         user_id=uid,
         alpaca_account_id=row.alpaca_account_id,
