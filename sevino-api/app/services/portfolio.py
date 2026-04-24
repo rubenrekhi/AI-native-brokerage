@@ -8,7 +8,6 @@ import redis.asyncio as aioredis
 
 from app.cache import cache_get_or_set
 from app.dependencies.portfolio import AlpacaAccountContext
-from app.repositories.brokerage_account import STATUS_ACTIVE
 from app.schemas.portfolio import PortfolioSnapshotResponse
 from app.services.alpaca_broker import AlpacaBrokerService
 
@@ -56,6 +55,13 @@ def range_to_alpaca_params(
 
 
 class PortfolioService:
+    """Compose Alpaca + Redis into typed portfolio responses.
+
+    Caller is expected to have passed `get_alpaca_account_context`, which
+    409s on non-ACTIVE accounts — so this service trusts that
+    `ctx.account_status == "ACTIVE"` on entry.
+    """
+
     def __init__(self, alpaca: AlpacaBrokerService, redis: aioredis.Redis):
         self._alpaca = alpaca
         self._redis = redis
@@ -63,9 +69,6 @@ class PortfolioService:
     async def get_snapshot(
         self, ctx: AlpacaAccountContext
     ) -> PortfolioSnapshotResponse:
-        if ctx.account_status != STATUS_ACTIVE:
-            return _zero_snapshot(ctx.account_status)
-
         key = f"portfolio:snapshot:{ctx.user_id}"
 
         async def fetch() -> dict:
@@ -74,19 +77,6 @@ class PortfolioService:
 
         cached = await cache_get_or_set(self._redis, key, SNAPSHOT_TTL, fetch)
         return PortfolioSnapshotResponse.model_validate(cached)
-
-
-def _zero_snapshot(status: str) -> PortfolioSnapshotResponse:
-    return PortfolioSnapshotResponse(
-        account_status=status,
-        currency="USD",
-        equity=Decimal("0"),
-        last_equity=Decimal("0"),
-        cash=Decimal("0"),
-        buying_power=Decimal("0"),
-        daily_change_abs=Decimal("0"),
-        daily_change_pct=Decimal("0"),
-    )
 
 
 def _build_snapshot(raw: dict, status: str) -> dict:

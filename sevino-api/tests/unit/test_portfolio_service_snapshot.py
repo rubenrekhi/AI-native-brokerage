@@ -36,23 +36,6 @@ def _ctx(status: str = "ACTIVE") -> AlpacaAccountContext:
     )
 
 
-class TestSnapshotShortCircuit:
-    async def test_non_active_status_returns_zeroed_snapshot(
-        self, service, alpaca, redis
-    ):
-        snapshot = await service.get_snapshot(_ctx(status="APPROVAL_PENDING"))
-        dumped = snapshot.model_dump(mode="json")
-
-        assert dumped["account_status"] == "APPROVAL_PENDING"
-        assert dumped["currency"] == "USD"
-        assert dumped["equity"] == "0.00"
-        assert dumped["last_equity"] == "0.00"
-        assert dumped["daily_change_abs"] == "0.00"
-        assert dumped["daily_change_pct"] == "0.0000"
-        alpaca.get_trading_account.assert_not_awaited()
-        redis.get.assert_not_awaited()
-
-
 class TestSnapshotHappyPath:
     async def test_active_account_builds_response_from_alpaca(
         self, service, alpaca, redis
