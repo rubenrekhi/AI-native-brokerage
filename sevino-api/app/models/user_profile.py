@@ -32,6 +32,9 @@ class UserProfile(Base, TimestampMixin):
 
     # Contact
     phone_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    phone_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Address
     street_address: Mapped[Optional[list[str]]] = mapped_column(
