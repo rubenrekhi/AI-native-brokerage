@@ -14,6 +14,8 @@ struct PersonalInfoSettingsView: View {
         case name
         case phone
         case address
+        case email
+        case riskTolerance
         var id: Self { self }
     }
 
@@ -85,6 +87,14 @@ struct PersonalInfoSettingsView: View {
                 initialPostalCode: vm.profile?.profile.postalCode ?? "",
                 onSaved: { Task { await vm.reload() } }
             )
+        case .email:
+            EditEmailSheet(email: vm.displayEmail)
+        case .riskTolerance:
+            EditRiskToleranceSheet(
+                riskTolerance: vm.displayRiskTolerance,
+                maxLossTolerance: vm.profile?.financialProfile?.maxLossTolerance,
+                riskScenarioResponse: vm.profile?.financialProfile?.riskScenarioResponse
+            )
         }
     }
 
@@ -141,7 +151,11 @@ struct PersonalInfoSettingsView: View {
 
             VStack(spacing: 0) {
                 infoRow(title: L10n.Settings.nameDetails, isEnabled: true) { activeSheet = .name }
-                infoRowWithValue(title: L10n.Settings.emailLabel, value: vm.displayEmail)
+                infoRowWithValue(
+                    title: L10n.Settings.emailLabel,
+                    value: vm.displayEmail,
+                    isEnabled: true
+                ) { activeSheet = .email }
                 infoRowWithValue(
                     title: L10n.Settings.phoneLabel,
                     value: vm.displayPhone,
@@ -152,7 +166,11 @@ struct PersonalInfoSettingsView: View {
                     value: vm.displayAddress,
                     isEnabled: true
                 ) { activeSheet = .address }
-                infoRowWithValue(title: L10n.Settings.riskTolerance, value: vm.displayRiskTolerance)
+                infoRowWithValue(
+                    title: L10n.Settings.riskTolerance,
+                    value: vm.displayRiskTolerance,
+                    isEnabled: true
+                ) { activeSheet = .riskTolerance }
             }
         }
     }

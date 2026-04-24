@@ -4680,6 +4680,86 @@
         }
       }
     },
+    "settings.edit_email_explanation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email changes require verification. Contact support to update your email."
+          }
+        }
+      }
+    },
+    "settings.edit_email_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_derivation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Based on your onboarding responses."
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_max_loss_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximum loss tolerance"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_scenario_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Market downturn response"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Risk tolerance"
+          }
+        }
+      }
+    },
+    "settings.edit_sheet_close_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "settings.edit_sheet_done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
     "settings.email" : {
       "localizations" : {
         "en" : {
