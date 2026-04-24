@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.schemas.settings import AccountValueResponse, SettingsProfileResponse
+from app.schemas.settings import (
+    AccountValueResponse,
+    SettingsProfileResponse,
+    UserSettingsPatchRequest,
+    UserSettingsResponse,
+)
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.settings import SettingsService
 
@@ -16,6 +21,25 @@ router = APIRouter()
 
 def get_alpaca(request: Request) -> AlpacaBrokerService:
     return request.app.state.alpaca
+
+
+@router.get("", response_model=UserSettingsResponse)
+async def get_settings(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserSettingsResponse:
+    settings = await SettingsService.get_settings(db, uuid.UUID(user_id))
+    return UserSettingsResponse.model_validate(settings)
+
+
+@router.patch("", response_model=UserSettingsResponse)
+async def update_settings(
+    body: UserSettingsPatchRequest,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> UserSettingsResponse:
+    settings = await SettingsService.update_settings(db, uuid.UUID(user_id), body)
+    return UserSettingsResponse.model_validate(settings)
 
 
 @router.get("/profile", response_model=SettingsProfileResponse)

@@ -1,4 +1,8 @@
-"""Integration tests for GET /v1/settings/profile against real local Postgres."""
+"""Integration tests for /v1/settings endpoints against real local Postgres.
+
+Requires: Docker + `make infra` + `make migrate`.
+Skipped automatically if Postgres is unavailable.
+"""
 
 import uuid
 
@@ -10,12 +14,212 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.main import app
 from app.repositories.ach_relationship import AchRelationshipRepository
-from tests.integration.conftest import _pg_available_sync
+from tests.integration.conftest import (
+    TEST_API_KEY,
+    TEST_USER_ID,
+    _pg_available_sync,
+)
 
 pytestmark = pytest.mark.skipif(
     not _pg_available_sync,
     reason="Local Supabase Postgres not available (run `make infra`)",
 )
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/settings (user preferences)
+# ---------------------------------------------------------------------------
+
+
+class TestGetSettings:
+    async def test_returns_defaults_when_no_row_exists(
+        self, authenticated_db_client, db_session
+    ):
+        response = await authenticated_db_client.get("/v1/settings")
+        assert response.status_code == 200
+        assert response.json() == {
+            "theme": "system",
+            "text_size": "standard",
+            "notifications_enabled": True,
+            "ai_internet_access": True,
+        }
+
+        # Confirm GET did not persist a row (read must be safe/idempotent).
+        row = await db_session.execute(
+            text("SELECT COUNT(*) FROM user_settings WHERE user_id = :uid"),
+            {"uid": uuid.UUID(TEST_USER_ID)},
+        )
+        assert row.scalar() == 0
+
+    async def test_returns_persisted_values(
+        self, authenticated_db_client, db_session
+    ):
+        await db_session.execute(
+            text(
+                "INSERT INTO user_settings "
+                "(id, user_id, theme, text_size, notifications_enabled, ai_internet_access) "
+                "VALUES (gen_random_uuid(), :uid, 'dark', 'large', false, false)"
+            ),
+            {"uid": uuid.UUID(TEST_USER_ID)},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.get("/v1/settings")
+        assert response.status_code == 200
+        assert response.json() == {
+            "theme": "dark",
+            "text_size": "large",
+            "notifications_enabled": False,
+            "ai_internet_access": False,
+        }
+
+    async def test_unauthenticated_returns_401(self, db_session):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-API-Key": TEST_API_KEY},
+        ) as client:
+            response = await client.get("/v1/settings")
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# PATCH /v1/settings
+# ---------------------------------------------------------------------------
+
+
+class TestPatchSettings:
+    async def test_creates_row_on_first_patch(
+        self, authenticated_db_client, db_session
+    ):
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={"theme": "dark"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["theme"] == "dark"
+        # Unprovided fields fall back to server defaults.
+        assert body["text_size"] == "standard"
+        assert body["notifications_enabled"] is True
+        assert body["ai_internet_access"] is True
+
+        row = await db_session.execute(
+            text(
+                "SELECT theme, text_size, notifications_enabled, ai_internet_access "
+                "FROM user_settings WHERE user_id = :uid"
+            ),
+            {"uid": uuid.UUID(TEST_USER_ID)},
+        )
+        persisted = row.one()
+        assert persisted.theme == "dark"
+        assert persisted.text_size == "standard"
+
+    async def test_partial_patch_leaves_other_fields_unchanged(
+        self, authenticated_db_client, db_session
+    ):
+        await db_session.execute(
+            text(
+                "INSERT INTO user_settings "
+                "(id, user_id, theme, text_size, notifications_enabled, ai_internet_access) "
+                "VALUES (gen_random_uuid(), :uid, 'dark', 'large', false, false)"
+            ),
+            {"uid": uuid.UUID(TEST_USER_ID)},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={"notifications_enabled": True},
+        )
+        assert response.status_code == 200
+        assert response.json() == {
+            "theme": "dark",
+            "text_size": "large",
+            "notifications_enabled": True,
+            "ai_internet_access": False,
+        }
+
+    async def test_invalid_theme_returns_422(self, authenticated_db_client):
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={"theme": "purple-unicorn"},
+        )
+        assert response.status_code == 422
+
+    async def test_invalid_text_size_returns_422(self, authenticated_db_client):
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={"text_size": "XXXL"},
+        )
+        assert response.status_code == 422
+
+    async def test_empty_body_returns_422(self, authenticated_db_client):
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={},
+        )
+        assert response.status_code == 422
+
+    async def test_unauthenticated_returns_401(self, db_session):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-API-Key": TEST_API_KEY},
+        ) as client:
+            response = await client.patch(
+                "/v1/settings",
+                json={"theme": "dark"},
+            )
+        assert response.status_code == 401
+
+    async def test_scoped_to_current_user(
+        self, authenticated_db_client, db_session
+    ):
+        # Create another user with their own settings row; verify the PATCH
+        # from TEST_USER_ID does not touch them.
+        other_user_id = uuid.uuid4()
+        await db_session.execute(
+            text(
+                "INSERT INTO auth.users ("
+                "id, instance_id, email, encrypted_password, aud, role, "
+                "raw_app_meta_data, raw_user_meta_data, created_at, updated_at, "
+                "confirmation_token, email_change, email_change_token_new, recovery_token"
+                ") VALUES ("
+                ":id, '00000000-0000-0000-0000-000000000000', :email, '', "
+                "'authenticated', 'authenticated', '{}', '{}', now(), now(), "
+                "'', '', '', ''"
+                ")"
+            ),
+            {"id": other_user_id, "email": f"other-{other_user_id}@example.com"},
+        )
+        # user_profiles row is created automatically by a trigger on auth.users.
+        await db_session.execute(
+            text(
+                "INSERT INTO user_settings "
+                "(id, user_id, theme, text_size, notifications_enabled, ai_internet_access) "
+                "VALUES (gen_random_uuid(), :uid, 'light', 'small', true, true)"
+            ),
+            {"uid": other_user_id},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.patch(
+            "/v1/settings",
+            json={"theme": "dark"},
+        )
+        assert response.status_code == 200
+
+        row = await db_session.execute(
+            text("SELECT theme FROM user_settings WHERE user_id = :uid"),
+            {"uid": other_user_id},
+        )
+        assert row.scalar() == "light"
+
+
+# ---------------------------------------------------------------------------
+# GET /v1/settings/profile
+# ---------------------------------------------------------------------------
 
 
 @pytest.fixture
@@ -127,7 +331,7 @@ class TestGetSettingsProfile:
             async with AsyncClient(
                 transport=ASGITransport(app=app),
                 base_url="http://test",
-                headers={"X-API-Key": "test-api-key-for-testing"},
+                headers={"X-API-Key": TEST_API_KEY},
             ) as client:
                 response = await client.get("/v1/settings/profile")
         finally:
@@ -136,11 +340,11 @@ class TestGetSettingsProfile:
         assert response.status_code == 404
         assert response.json()["code"] == "NOT_FOUND"
 
-    async def test_unauthenticated_returns_401(self, db_session):
+    async def test_unauthenticated_profile_returns_401(self, db_session):
         async with AsyncClient(
             transport=ASGITransport(app=app),
             base_url="http://test",
-            headers={"X-API-Key": "test-api-key-for-testing"},
+            headers={"X-API-Key": TEST_API_KEY},
         ) as client:
             response = await client.get("/v1/settings/profile")
         assert response.status_code == 401

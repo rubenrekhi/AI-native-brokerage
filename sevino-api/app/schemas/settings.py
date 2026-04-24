@@ -2,11 +2,46 @@
 
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.schemas.onboarding import FinancialProfileData, ProfileData
+
+
+class Theme(str, Enum):
+    system = "system"
+    light = "light"
+    dark = "dark"
+
+
+class TextSize(str, Enum):
+    small = "small"
+    standard = "standard"
+    large = "large"
+
+
+class UserSettingsResponse(BaseModel):
+    theme: Theme
+    text_size: TextSize
+    notifications_enabled: bool
+    ai_internet_access: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserSettingsPatchRequest(BaseModel):
+    theme: Theme | None = None
+    text_size: TextSize | None = None
+    notifications_enabled: bool | None = None
+    ai_internet_access: bool | None = None
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> "UserSettingsPatchRequest":
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("at least one field must be provided")
+        return self
 
 
 class BrokerageAccountSummary(BaseModel):

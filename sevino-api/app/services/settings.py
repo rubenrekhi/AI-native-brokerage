@@ -1,4 +1,4 @@
-"""Settings service: read-only views over brokerage state for /v1/settings/*."""
+"""Settings service: user preferences CRUD + read-only views over brokerage state."""
 
 import uuid
 
@@ -6,16 +6,19 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
+from app.models.user_settings import UserSettings
 from app.repositories.ach_relationship import AchRelationshipRepository
 from app.repositories.brokerage_account import BrokerageAccountRepository
 from app.repositories.financial_profile import FinancialProfileRepository
 from app.repositories.user_profile import UserProfileRepository
+from app.repositories.user_settings import UserSettingsRepository
 from app.schemas.onboarding import FinancialProfileData, ProfileData
 from app.schemas.settings import (
     AccountValueResponse,
     BrokerageAccountSummary,
     LinkedAccountSummary,
     SettingsProfileResponse,
+    UserSettingsPatchRequest,
 )
 from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerService
 
@@ -25,6 +28,29 @@ _ACCOUNT_VALUE_FIELDS = ("equity", "cash", "buying_power", "portfolio_value")
 
 
 class SettingsService:
+    @staticmethod
+    async def get_settings(
+        db: AsyncSession, user_id: uuid.UUID
+    ) -> UserSettings:
+        settings = await UserSettingsRepository.get_by_user_id(db, user_id)
+        if settings is not None:
+            return settings
+        return UserSettings(
+            user_id=user_id,
+            theme="system",
+            text_size="standard",
+            notifications_enabled=True,
+            ai_internet_access=True,
+        )
+
+    @staticmethod
+    async def update_settings(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        data: UserSettingsPatchRequest,
+    ) -> UserSettings:
+        fields = data.model_dump(exclude_none=True)
+        return await UserSettingsRepository.upsert(db, user_id, **fields)
 
     @staticmethod
     async def get_profile(
