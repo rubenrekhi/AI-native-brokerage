@@ -87,7 +87,12 @@ class AlpacaBrokerService:
         return await self._request("POST", "/v1/accounts", json=payload)
 
     async def get_account(self, account_id: str) -> dict[str, Any]:
-        """GET /v1/accounts/{account_id} — retrieve account details and status."""
+        """GET /v1/accounts/{account_id} — KYC/status metadata.
+
+        Use this for account lifecycle (status, identity, contact). For live
+        financial position (equity, cash, buying power), use
+        `get_trading_account`.
+        """
         return await self._request("GET", f"/v1/accounts/{account_id}")
 
     async def update_account(
@@ -95,6 +100,16 @@ class AlpacaBrokerService:
     ) -> dict[str, Any]:
         """PATCH /v1/accounts/{account_id} — update account (e.g. assign APR tier)."""
         return await self._request("PATCH", f"/v1/accounts/{account_id}", json=payload)
+
+    async def get_trading_account(self, account_id: str) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/account — live equity/cash/buying power.
+
+        Use this for live financial position. For KYC/status metadata, use
+        `get_account`.
+        """
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/account"
+        )
 
     async def create_ach_relationship(
         self, account_id: str, *, processor_token: str

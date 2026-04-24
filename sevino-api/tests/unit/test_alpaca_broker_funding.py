@@ -165,6 +165,43 @@ class TestListTransfers:
         assert captured["query"] == ""
 
 
+class TestGetTradingAccount:
+    async def test_gets_trading_account(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "id": ACCOUNT_ID,
+                    "equity": "10234.56",
+                    "cash": "1234.56",
+                    "buying_power": "2469.12",
+                    "portfolio_value": "10234.56",
+                },
+            )
+
+        service = _make_service(handler)
+        result = await service.get_trading_account(ACCOUNT_ID)
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(
+            f"/v1/trading/accounts/{ACCOUNT_ID}/account"
+        )
+        assert result["equity"] == "10234.56"
+        assert result["cash"] == "1234.56"
+
+    async def test_404_raises_not_found(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"message": "account not found"})
+
+        service = _make_service(handler)
+        with pytest.raises(NotFoundError):
+            await service.get_trading_account(ACCOUNT_ID)
+
+
 class TestErrorMapping:
     async def test_404_from_list_raises_not_found(self):
         def handler(request: httpx.Request) -> httpx.Response:
