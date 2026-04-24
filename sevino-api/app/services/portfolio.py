@@ -1,7 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from decimal import Decimal
 from enum import StrEnum
+
+import redis.asyncio as aioredis
+
+from app.cache import cache_get_or_set
+from app.dependencies.portfolio import AlpacaAccountContext
+from app.schemas.portfolio import PortfolioSnapshotResponse
+from app.services.alpaca_broker import AlpacaBrokerService
+
+SNAPSHOT_TTL = 30
 
 
 class PortfolioRange(StrEnum):
@@ -42,3 +52,50 @@ def range_to_alpaca_params(
             return {"period": "1A", "timeframe": "1D"}
         case PortfolioRange.ALL:
             return {"period": "all", "timeframe": "1W"}
+
+
+class PortfolioService:
+    """Compose Alpaca + Redis into typed portfolio responses.
+
+    Caller is expected to have passed `get_alpaca_account_context`, which
+    409s on non-ACTIVE accounts — so this service trusts that
+    `ctx.account_status == "ACTIVE"` on entry.
+    """
+
+    def __init__(self, alpaca: AlpacaBrokerService, redis: aioredis.Redis):
+        self._alpaca = alpaca
+        self._redis = redis
+
+    async def get_snapshot(
+        self, ctx: AlpacaAccountContext
+    ) -> PortfolioSnapshotResponse:
+        key = f"portfolio:snapshot:{ctx.user_id}"
+
+        async def fetch() -> dict:
+            raw = await self._alpaca.get_trading_account(ctx.alpaca_account_id)
+            return _build_snapshot(raw, ctx.account_status)
+
+        cached = await cache_get_or_set(self._redis, key, SNAPSHOT_TTL, fetch)
+        return PortfolioSnapshotResponse.model_validate(cached)
+
+
+def _build_snapshot(raw: dict, status: str) -> dict:
+    equity = Decimal(raw.get("equity") or "0")
+    last_equity = Decimal(raw.get("last_equity") or "0")
+    cash = Decimal(raw.get("cash") or "0")
+    buying_power = Decimal(raw.get("buying_power") or "0")
+    daily_abs = equity - last_equity
+    daily_pct = (
+        daily_abs / last_equity if last_equity != 0 else Decimal("0")
+    )
+    # Cache the JSON-ready dict so cache hits + misses produce the same shape.
+    return PortfolioSnapshotResponse(
+        account_status=status,
+        currency=raw.get("currency") or "USD",
+        equity=equity,
+        last_equity=last_equity,
+        cash=cash,
+        buying_power=buying_power,
+        daily_change_abs=daily_abs,
+        daily_change_pct=daily_pct,
+    ).model_dump(mode="json")
