@@ -42,6 +42,6 @@ final class SettingsService: SettingsServiceProtocol {
     }
 
     func deleteAccount() async throws {
-        try await api.delete("/v1/settings/account")
+        try await api.delete("/v1/settings/account", body: ["confirmation": "DELETE"])
     }
 }

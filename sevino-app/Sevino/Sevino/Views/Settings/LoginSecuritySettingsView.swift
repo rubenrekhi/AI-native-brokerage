@@ -1,6 +1,8 @@
 import SwiftUI
 
 struct LoginSecuritySettingsView: View {
+    @Bindable var viewModel: SettingsViewModel
+
     @Environment(\.dismiss) private var dismiss
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
@@ -25,16 +27,12 @@ struct LoginSecuritySettingsView: View {
             Spacer()
 
             Button(action: { showDeleteConfirmation = true }) {
-                Text(L10n.Settings.deleteAccount)
-                    .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(Color.sevinoSecondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16 * scale)
-                    .contentShape(.rect(cornerRadius: 14 * scale))
+                deleteLabel
             }
             .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
+            .disabled(viewModel.isDeletingAccount)
             .confirmationDialog(L10n.Settings.deleteConfirmTitle, isPresented: $showDeleteConfirmation) {
-                Button(L10n.Settings.deleteConfirmAction, role: .destructive, action: {})
+                Button(L10n.Settings.deleteConfirmAction, role: .destructive, action: deleteAccount)
             } message: {
                 Text(L10n.Settings.deleteConfirmMessage)
             }
@@ -52,10 +50,37 @@ struct LoginSecuritySettingsView: View {
             baseScale = width / 393
         }
         .navigationBarBackButtonHidden()
+        .alert(
+            L10n.Settings.deleteErrorTitle,
+            isPresented: $viewModel.showDeleteError,
+            presenting: viewModel.deleteError
+        ) { _ in
+            Button(L10n.General.ok, role: .cancel, action: viewModel.clearDeleteError)
+        } message: { message in
+            Text(message)
+        }
     }
 
     private var header: some View {
         SettingsHeaderView(title: L10n.Settings.loginSecurity, scale: scale, onBack: { dismiss() })
+    }
+
+    @ViewBuilder
+    private var deleteLabel: some View {
+        if viewModel.isDeletingAccount {
+            ProgressView()
+                .tint(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        } else {
+            Text(L10n.Settings.deleteAccount)
+                .font(.system(size: 16 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        }
     }
 
     private func navLinkRow(title: String, destination: SettingsDestination) -> some View {
@@ -113,18 +138,22 @@ struct LoginSecuritySettingsView: View {
                 .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
         }
     }
+
+    private func deleteAccount() {
+        Task { await viewModel.deleteAccount() }
+    }
 }
 
 #Preview("Dark") {
     NavigationStack {
-        LoginSecuritySettingsView()
+        LoginSecuritySettingsView(viewModel: SettingsViewModel())
     }
     .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
     NavigationStack {
-        LoginSecuritySettingsView()
+        LoginSecuritySettingsView(viewModel: SettingsViewModel())
     }
     .preferredColorScheme(.light)
 }

@@ -4,20 +4,33 @@ import Foundation
 final class SettingsViewModel {
     private let settingsService: any SettingsServiceProtocol
     private let fundingService: any FundingServiceProtocol
+    private let authService: any AuthServiceProtocol
     private let now: @Sendable () -> Date
 
     private(set) var profile: SettingsProfileResponse?
     private(set) var accountValue: AccountValueResponse?
     private(set) var isLoading = false
+    private(set) var isDeletingAccount = false
     private(set) var error: String?
+    private(set) var deleteError: String?
+
+    /// Bindable driver for the delete-account error alert. The setter discards
+    /// `deleteError` when the alert dismisses; using a computed projection keeps
+    /// the `.alert(isPresented:)` binding out of the view `body`.
+    var showDeleteError: Bool {
+        get { deleteError != nil }
+        set { if !newValue { deleteError = nil } }
+    }
 
     init(
         settingsService: any SettingsServiceProtocol = SettingsService.shared,
         fundingService: any FundingServiceProtocol = FundingService.shared,
+        authService: any AuthServiceProtocol = AuthService.shared,
         now: @escaping @Sendable () -> Date = { .now }
     ) {
         self.settingsService = settingsService
         self.fundingService = fundingService
+        self.authService = authService
         self.now = now
     }
 
@@ -54,8 +67,28 @@ final class SettingsViewModel {
         }
     }
 
+    func deleteAccount() async {
+        deleteError = nil
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+        do {
+            try await settingsService.deleteAccount()
+        } catch {
+            self.deleteError = error.localizedDescription
+            return
+        }
+        // Server delete succeeded — the account is gone. Best-effort sign-out
+        // only; surfacing a sign-out failure here would leave the user looking
+        // at an error for an account that no longer exists.
+        try? await authService.signOut()
+    }
+
     func clearError() {
         error = nil
+    }
+
+    func clearDeleteError() {
+        deleteError = nil
     }
 
     // MARK: - Derived display state

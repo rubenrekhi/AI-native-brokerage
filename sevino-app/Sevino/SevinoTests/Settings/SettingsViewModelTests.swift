@@ -6,6 +6,7 @@ final class SettingsViewModelTests: XCTestCase {
 
     private var mockSettings: MockSettingsService!
     private var mockFunding: MockFundingService!
+    private var mockAuth: MockAuthService!
     private var viewModel: SettingsViewModel!
 
     override func setUp() {
@@ -13,9 +14,11 @@ final class SettingsViewModelTests: XCTestCase {
         mockSettings.getProfileResult = .success(Self.stubProfile())
         mockSettings.getAccountValueResult = .success(Self.stubAccountValue())
         mockFunding = MockFundingService()
+        mockAuth = MockAuthService()
         viewModel = SettingsViewModel(
             settingsService: mockSettings,
-            fundingService: mockFunding
+            fundingService: mockFunding,
+            authService: mockAuth
         )
     }
 
@@ -84,6 +87,71 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(mockSettings.getAccountValueCalls, 0)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertEqual(viewModel.error, "unlink failed")
+    }
+
+    // MARK: - deleteAccount
+
+    func testDeleteAccountSuccessSignsOut() async {
+        mockAuth.isAuthenticated = true
+
+        await viewModel.deleteAccount()
+
+        XCTAssertEqual(mockSettings.deleteAccountCalls, 1)
+        XCTAssertEqual(mockAuth.signOutCalls, 1)
+        XCTAssertFalse(viewModel.isDeletingAccount)
+        XCTAssertNil(viewModel.deleteError)
+        XCTAssertFalse(viewModel.showDeleteError)
+    }
+
+    func testDeleteAccountFailureSkipsSignOutAndSurfacesError() async {
+        struct DeleteError: LocalizedError {
+            var errorDescription: String? { "cannot delete — open positions" }
+        }
+        mockSettings.deleteAccountResult = .failure(DeleteError())
+
+        await viewModel.deleteAccount()
+
+        XCTAssertEqual(mockSettings.deleteAccountCalls, 1)
+        XCTAssertEqual(mockAuth.signOutCalls, 0)
+        XCTAssertFalse(viewModel.isDeletingAccount)
+        XCTAssertEqual(viewModel.deleteError, "cannot delete — open positions")
+        XCTAssertTrue(viewModel.showDeleteError)
+        // Unrelated `error` channel stays clear so sibling screens aren't affected.
+        XCTAssertNil(viewModel.error)
+    }
+
+    func testDeleteAccountSwallowsSignOutFailure() async {
+        // After a successful server-side delete the account is gone, so a
+        // subsequent sign-out failure must not surface — the app should proceed
+        // to the unauthenticated state without a misleading error alert.
+        struct SignOutError: LocalizedError {
+            var errorDescription: String? { "session refresh failed" }
+        }
+        mockAuth.isAuthenticated = true
+        mockAuth.signOutError = SignOutError()
+
+        await viewModel.deleteAccount()
+
+        XCTAssertEqual(mockSettings.deleteAccountCalls, 1)
+        XCTAssertEqual(mockAuth.signOutCalls, 1)
+        XCTAssertFalse(viewModel.isDeletingAccount)
+        XCTAssertNil(viewModel.deleteError)
+        XCTAssertNil(viewModel.error)
+    }
+
+    func testShowDeleteErrorBindingDismissClearsError() async {
+        struct DeleteError: LocalizedError {
+            var errorDescription: String? { "boom" }
+        }
+        mockSettings.deleteAccountResult = .failure(DeleteError())
+        await viewModel.deleteAccount()
+        XCTAssertTrue(viewModel.showDeleteError)
+
+        // Simulate the alert dismissing itself via its isPresented binding.
+        viewModel.showDeleteError = false
+
+        XCTAssertNil(viewModel.deleteError)
+        XCTAssertFalse(viewModel.showDeleteError)
     }
 
     // MARK: - clearError

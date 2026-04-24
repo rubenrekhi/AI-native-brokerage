@@ -6,6 +6,8 @@ final class MockAuthService: AuthServiceProtocol {
     var isAuthenticated = false
     var accessToken: String?
     var errorToThrow: Error?
+    var signOutError: Error?
+    private(set) var signOutCalls = 0
 
     func signUp(email: String, password: String) async throws {
         if let error = errorToThrow { throw error }
@@ -17,7 +19,8 @@ final class MockAuthService: AuthServiceProtocol {
     }
 
     func signOut() async throws {
-        if let error = errorToThrow { throw error }
+        signOutCalls += 1
+        if let error = signOutError ?? errorToThrow { throw error }
         isAuthenticated = false
     }
 

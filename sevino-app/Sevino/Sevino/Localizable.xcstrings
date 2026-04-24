@@ -4234,6 +4234,16 @@
         }
       }
     },
+    "settings.delete_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to delete account"
+          }
+        }
+      }
+    },
     "settings.duration_days" : {
       "localizations" : {
         "en" : {

@@ -7,6 +7,7 @@ protocol APIClientProtocol: Sendable {
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func delete<T: Decodable>(_ path: String) async throws -> T
     func delete(_ path: String) async throws
+    func delete(_ path: String, body: some Encodable) async throws
 }
 
 final class APIClient: APIClientProtocol {
@@ -65,6 +66,12 @@ final class APIClient: APIClientProtocol {
         try await requestVoid(path, method: "DELETE")
     }
 
+    /// DELETE with a request body — used when the endpoint requires a confirmation
+    /// payload (e.g. `{"confirmation": "DELETE"}`) and returns 204 No Content.
+    func delete(_ path: String, body: some Encodable) async throws {
+        try await requestVoid(path, method: "DELETE", body: body)
+    }
+
     /**
      Throws `APIError` on non-2xx, `URLError` on network failure,
      `DecodingError` if the success body can't be decoded into `T`.
@@ -114,7 +121,11 @@ final class APIClient: APIClientProtocol {
 
     /// Same as `request` but discards the response body. For endpoints that
     /// return 204 No Content.
-    private func requestVoid(_ path: String, method: String) async throws {
+    private func requestVoid(
+        _ path: String,
+        method: String,
+        body: (some Encodable)? = nil as Empty?
+    ) async throws {
         guard let url = URL(string: baseURL + path) else {
             throw URLError(.badURL)
         }
@@ -130,6 +141,10 @@ final class APIClient: APIClientProtocol {
 
         if let token = await tokenProvider() {
             urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body {
+            urlRequest.httpBody = try encoder.encode(body)
         }
 
         let (data, response) = try await session.data(for: urlRequest)

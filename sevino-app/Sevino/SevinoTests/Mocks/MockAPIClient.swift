@@ -58,4 +58,11 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         lastMethod = "DELETE"
         if let error = errorToThrow { throw error }
     }
+
+    func delete(_ path: String, body: some Encodable) async throws {
+        lastPath = path
+        lastMethod = "DELETE"
+        lastBody = body
+        if let error = errorToThrow { throw error }
+    }
 }

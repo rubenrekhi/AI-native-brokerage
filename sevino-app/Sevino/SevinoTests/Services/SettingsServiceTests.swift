@@ -118,6 +118,7 @@ final class SettingsServiceTests: XCTestCase {
 
         XCTAssertEqual(api.lastPath, "/v1/settings/account")
         XCTAssertEqual(api.lastMethod, "DELETE")
+        XCTAssertEqual(api.lastBody as? [String: String], ["confirmation": "DELETE"])
     }
 
     func test_deleteAccount_propagatesError() async {

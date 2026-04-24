@@ -570,6 +570,7 @@ enum L10n {
         static let deleteConfirmTitle = String(localized: "settings.delete_confirm_title")
         static let deleteConfirmAction = String(localized: "settings.delete_confirm_action")
         static let deleteConfirmMessage = String(localized: "settings.delete_confirm_message")
+        static let deleteErrorTitle = String(localized: "settings.delete_error_title")
         static let nameDetails = String(localized: "settings.name_details")
         static let emailLabel = String(localized: "settings.email_label")
         static let phoneLabel = String(localized: "settings.phone_label")

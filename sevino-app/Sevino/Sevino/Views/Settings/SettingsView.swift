@@ -71,7 +71,7 @@ struct SettingsView: View {
                 case .linkedAccounts:
                     LinkedAccountsSettingsView(viewModel: settingsVM)
                 case .loginSecurity:
-                    LoginSecuritySettingsView()
+                    LoginSecuritySettingsView(viewModel: settingsVM)
                 case .personalInfo:
                     PersonalInfoSettingsView(vm: settingsVM)
                 case .appearance:
