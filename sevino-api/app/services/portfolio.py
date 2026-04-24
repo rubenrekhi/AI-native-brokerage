@@ -13,6 +13,8 @@ from app.dependencies.portfolio import AlpacaAccountContext
 from app.repositories.asset import AssetRepository
 from app.schemas.portfolio import (
     HoldingsResponse,
+    PortfolioHistoryPoint,
+    PortfolioHistoryResponse,
     PortfolioSnapshotResponse,
     Position,
 )
@@ -20,6 +22,7 @@ from app.services.alpaca_broker import AlpacaBrokerService
 
 SNAPSHOT_TTL = 30
 HOLDINGS_TTL = 30
+HISTORY_TTL = 60
 
 
 class PortfolioRange(StrEnum):
@@ -109,6 +112,21 @@ class PortfolioService:
         cached = await cache_get_or_set(self._redis, key, HOLDINGS_TTL, fetch)
         return HoldingsResponse.model_validate(cached)
 
+    async def get_history(
+        self, ctx: AlpacaAccountContext, r: PortfolioRange
+    ) -> PortfolioHistoryResponse:
+        key = f"portfolio:history:{ctx.user_id}:{r.value}"
+        params = range_to_alpaca_params(r)
+
+        async def fetch() -> dict:
+            raw = await self._alpaca.get_portfolio_history(
+                ctx.alpaca_account_id, **params
+            )
+            return _build_history(raw, r)
+
+        cached = await cache_get_or_set(self._redis, key, HISTORY_TTL, fetch)
+        return PortfolioHistoryResponse.model_validate(cached)
+
 
 def _build_snapshot(raw: dict, status: str) -> dict:
     equity = Decimal(raw.get("equity") or "0")
@@ -161,3 +179,45 @@ def _build_holdings(
         total_market_value=total,
         positions=positions,
     ).model_dump(mode="json")
+
+
+def _build_history(raw: dict, r: PortfolioRange) -> dict:
+    timestamps = raw.get("timestamp") or []
+    equities = raw.get("equity") or []
+    points: list[PortfolioHistoryPoint] = []
+    for ts, eq in zip(timestamps, equities):
+        if eq is None:
+            continue
+        eq_d = Decimal(str(eq))
+        if eq_d == 0:
+            # Pre-market / no-trade bars come back as 0; drop so the chart
+            # doesn't render a flat line down to zero before the open.
+            continue
+        points.append(PortfolioHistoryPoint(t=_to_dt(ts), v=eq_d))
+    base = Decimal(str(raw.get("base_value") or "0"))
+    end = points[-1].v if points else Decimal("0")
+    gain_abs = end - base
+    gain_pct = (gain_abs / base) if base != 0 else Decimal("0")
+    return PortfolioHistoryResponse(
+        range=r.value,
+        timeframe=raw.get("timeframe") or "",
+        currency="USD",
+        base_value=base,
+        end_value=end,
+        gain_abs=gain_abs,
+        gain_pct=gain_pct,
+        points=points,
+    ).model_dump(mode="json")
+
+
+def _to_dt(ts: int | float) -> datetime:
+    """Alpaca portfolio history timestamps come in two widths.
+
+    Older sandbox responses return seconds (10-digit int), newer ones
+    return milliseconds (13-digit int). Distinguish by magnitude: any
+    value above ~10^10 must be ms (10^10 seconds is year ~2286).
+    """
+    ts_int = int(ts)
+    if ts_int > 10_000_000_000:
+        return datetime.fromtimestamp(ts_int / 1000, tz=timezone.utc)
+    return datetime.fromtimestamp(ts_int, tz=timezone.utc)
