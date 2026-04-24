@@ -35,6 +35,20 @@ enum OnboardingDataMapper {
         status.lowercased().replacingOccurrences(of: "-", with: "_")
     }
 
+    /// Convert a normalized backend employment status back to the localized
+    /// display label used by `AlpacaEmploymentView`. Unknown values pass through
+    /// unchanged so we never lose the user's saved value.
+    static func denormalizeEmploymentStatus(_ normalized: String) -> String {
+        switch normalized {
+        case "employed": return L10n.Onboarding.alpacaStatusEmployed
+        case "self_employed": return L10n.Onboarding.alpacaStatusSelfEmployed
+        case "unemployed": return L10n.Onboarding.alpacaStatusUnemployed
+        case "student": return L10n.Onboarding.alpacaStatusStudent
+        case "retired": return L10n.Onboarding.alpacaStatusRetired
+        default: return normalized
+        }
+    }
+
     /// Map a funding source display label to Alpaca's accepted value.
     /// See: https://docs.alpaca.markets/reference/createaccount
     private static let fundingSourceMap: [String: String] = [
@@ -46,8 +60,18 @@ enum OnboardingDataMapper {
         "Inheritance": "inheritance",
     ]
 
+    private static let fundingSourceReverseMap: [String: String] = Dictionary(
+        uniqueKeysWithValues: fundingSourceMap.map { ($1, $0) }
+    )
+
     static func normalizeFundingSource(_ source: String) -> String {
         fundingSourceMap[source] ?? source.lowercased().replacingOccurrences(of: " ", with: "_")
+    }
+
+    /// Inverse of `normalizeFundingSource`. Used to hydrate the Funding Sources
+    /// screen on resume so the pre-selected chips match the option labels.
+    static func denormalizeFundingSource(_ normalized: String) -> String {
+        fundingSourceReverseMap[normalized] ?? normalized
     }
 
     /// Build the attribution string from referral source + optional extra text.

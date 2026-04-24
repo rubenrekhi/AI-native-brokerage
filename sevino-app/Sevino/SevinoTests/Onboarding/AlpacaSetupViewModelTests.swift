@@ -27,15 +27,68 @@ final class AlpacaSetupViewModelTests: XCTestCase {
     func testInitialStateHydratesFromResumeData() {
         var data = OnboardingResumeManager.AlpacaResumeData()
         data.legalName = "Jane Doe"
-        data.address = "123 Main St"
+        data.address = "123 Main St, New York, NY, 10001"
+        data.streetAddress = "123 Main St"
+        data.city = "New York"
+        data.state = "NY"
+        data.postalCode = "10001"
         data.employmentStatus = "employed"
 
         let vm = AlpacaSetupViewModel(userName: "Jane", initialStep: 4, resumeData: data, service: mock)
 
         XCTAssertEqual(vm.currentStep, 4)
         XCTAssertEqual(vm.legalName, "Jane Doe")
-        XCTAssertEqual(vm.address, "123 Main St")
+        XCTAssertEqual(vm.address, "123 Main St, New York, NY, 10001")
+        XCTAssertEqual(vm.streetAddress, "123 Main St")
+        XCTAssertEqual(vm.city, "New York")
+        XCTAssertEqual(vm.state, "NY")
+        XCTAssertEqual(vm.postalCode, "10001")
         XCTAssertEqual(vm.employmentStatus, "employed")
+
+        let parsed = vm.initialParsedAddress
+        XCTAssertNotNil(parsed)
+        XCTAssertEqual(parsed?.streetAddress, "123 Main St")
+        XCTAssertEqual(parsed?.city, "New York")
+        XCTAssertEqual(parsed?.state, "NY")
+        XCTAssertEqual(parsed?.postalCode, "10001")
+        XCTAssertEqual(parsed?.fullDisplay, "123 Main St, New York, NY, 10001")
+    }
+
+    func testInitialParsedAddressIsNilWhenPartialDataPresent() {
+        var data = OnboardingResumeManager.AlpacaResumeData()
+        data.city = "New York"
+        // street/state/postal missing
+
+        let vm = AlpacaSetupViewModel(userName: "Jane", initialStep: 3, resumeData: data, service: mock)
+
+        XCTAssertNil(vm.initialParsedAddress, "Partial address data must fall back to blank entry")
+    }
+
+    func testSubmitAddressWritesStructuredPartsAndRoundTripsThroughInitialParsedAddress() async {
+        let parsed = ParsedAddress(
+            streetAddress: "456 Elm Ave",
+            city: "Brooklyn",
+            state: "NY",
+            postalCode: "11201",
+            fullDisplay: "456 Elm Ave, Brooklyn, NY, 11201"
+        )
+
+        viewModel.submitAddress(parsed)
+        // Drain the Task spawned inside submitAddress.
+        await Task.yield()
+
+        XCTAssertEqual(viewModel.address, "456 Elm Ave, Brooklyn, NY, 11201")
+        XCTAssertEqual(viewModel.streetAddress, "456 Elm Ave")
+        XCTAssertEqual(viewModel.city, "Brooklyn")
+        XCTAssertEqual(viewModel.state, "NY")
+        XCTAssertEqual(viewModel.postalCode, "11201")
+
+        let round = viewModel.initialParsedAddress
+        XCTAssertEqual(round?.streetAddress, parsed.streetAddress)
+        XCTAssertEqual(round?.city, parsed.city)
+        XCTAssertEqual(round?.state, parsed.state)
+        XCTAssertEqual(round?.postalCode, parsed.postalCode)
+        XCTAssertEqual(round?.fullDisplay, parsed.fullDisplay)
     }
 
     // MARK: - Navigation

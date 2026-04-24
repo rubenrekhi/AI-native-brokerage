@@ -89,6 +89,46 @@ final class OnboardingDataMapperTests: XCTestCase {
         XCTAssertEqual(OnboardingDataMapper.normalizeFundingSource("Existing investments"), "investments")
     }
 
+    // MARK: - denormalizeEmploymentStatus
+
+    func testDenormalizeEmployedRoundTrip() {
+        XCTAssertEqual(
+            OnboardingDataMapper.denormalizeEmploymentStatus("employed"),
+            L10n.Onboarding.alpacaStatusEmployed
+        )
+    }
+
+    func testDenormalizeSelfEmployedRoundTrip() {
+        XCTAssertEqual(
+            OnboardingDataMapper.denormalizeEmploymentStatus("self_employed"),
+            L10n.Onboarding.alpacaStatusSelfEmployed
+        )
+    }
+
+    func testDenormalizeUnknownStatusPassesThrough() {
+        XCTAssertEqual(OnboardingDataMapper.denormalizeEmploymentStatus("weird_value"), "weird_value")
+    }
+
+    // MARK: - denormalizeFundingSource
+
+    func testDenormalizeEmploymentIncome() {
+        XCTAssertEqual(
+            OnboardingDataMapper.denormalizeFundingSource("employment_income"),
+            "Employment income"
+        )
+    }
+
+    func testDenormalizeInvestments() {
+        XCTAssertEqual(
+            OnboardingDataMapper.denormalizeFundingSource("investments"),
+            "Existing investments"
+        )
+    }
+
+    func testDenormalizeUnknownFundingSourcePassesThrough() {
+        XCTAssertEqual(OnboardingDataMapper.denormalizeFundingSource("crypto"), "crypto")
+    }
+
     // MARK: - buildAttribution
 
     func testAttributionWithExtra() {

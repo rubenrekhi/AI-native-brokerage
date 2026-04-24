@@ -173,14 +173,15 @@ struct AlpacaSetupContainerView: View {
                 viewModel.submitLegalName(name)
             }
         case 3:
-            AlpacaSSNView(scale: scale, userPromptText: viewModel.legalName, animate: animate) { ssn in
-                viewModel.submitSSN(ssn)
-            }
-        case 4:
-            AlpacaAddressView(scale: scale, userPromptText: viewModel.maskedSSN, animate: animate) { parsed in
+            AlpacaAddressView(
+                scale: scale,
+                userPromptText: viewModel.legalName,
+                animate: animate,
+                initialAddress: viewModel.initialParsedAddress
+            ) { parsed in
                 viewModel.submitAddress(parsed)
             }
-        case 5:
+        case 4:
             OnboardingSingleSelectView(
                 scale: scale,
                 userPromptText: viewModel.address,
@@ -196,7 +197,7 @@ struct AlpacaSetupContainerView: View {
             ) { value in
                 viewModel.submitCitizenship(value)
             }
-        case 6:
+        case 5:
             AlpacaEmploymentView(
                 scale: scale,
                 userPromptText: viewModel.citizenshipSelection,
@@ -207,7 +208,7 @@ struct AlpacaSetupContainerView: View {
             ) { status, employer, title in
                 viewModel.submitEmployment(status: status, employer: employer, title: title)
             }
-        case 7:
+        case 6:
             AlpacaFundingSourceView(
                 scale: scale,
                 userPromptText: viewModel.employmentStatus,
@@ -216,10 +217,14 @@ struct AlpacaSetupContainerView: View {
             ) { sources in
                 viewModel.submitFundingSources(sources)
             }
+        case 7:
+            AlpacaSSNView(scale: scale, userPromptText: viewModel.fundingSources.first ?? "", animate: animate) { ssn in
+                viewModel.submitSSN(ssn)
+            }
         case 8:
             AlpacaRegulatoryView(
                 scale: scale,
-                userPromptText: viewModel.fundingSources.first ?? "",
+                userPromptText: viewModel.maskedSSN,
                 animate: animate
             ) { seniorOfficer, affiliated, political in
                 viewModel.submitDisclosures(seniorOfficer: seniorOfficer, affiliated: affiliated, political: political)

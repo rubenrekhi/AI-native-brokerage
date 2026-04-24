@@ -28,11 +28,31 @@ final class AlpacaSetupViewModel {
     private(set) var ssnDigits: String = ""
     private(set) var maskedSSN: String = ""
     private(set) var address: String
+    private(set) var streetAddress: String
+    private(set) var city: String
+    private(set) var state: String
+    private(set) var postalCode: String
     private(set) var citizenshipSelection: String
     private(set) var employmentStatus: String
     private(set) var employerName: String
     private(set) var jobTitle: String
     private(set) var fundingSources: Set<String>
+
+    /// Returns a `ParsedAddress` reconstructed from saved parts when all four
+    /// structured fields are present, otherwise nil. Used by the Address screen
+    /// to open in its "already-selected" state on resume.
+    var initialParsedAddress: ParsedAddress? {
+        guard !streetAddress.isEmpty, !city.isEmpty, !state.isEmpty, !postalCode.isEmpty else {
+            return nil
+        }
+        return ParsedAddress(
+            streetAddress: streetAddress,
+            city: city,
+            state: state,
+            postalCode: postalCode,
+            fullDisplay: address
+        )
+    }
 
     // MARK: - Init
 
@@ -49,6 +69,10 @@ final class AlpacaSetupViewModel {
         self.currentStep = initialStep
         self.legalName = data.legalName
         self.address = data.address
+        self.streetAddress = data.streetAddress
+        self.city = data.city
+        self.state = data.state
+        self.postalCode = data.postalCode
         self.citizenshipSelection = data.citizenshipSelection
         self.employmentStatus = data.employmentStatus
         self.employerName = data.employerName
@@ -144,6 +168,10 @@ final class AlpacaSetupViewModel {
 
     func submitAddress(_ parsed: ParsedAddress) {
         address = parsed.fullDisplay
+        streetAddress = parsed.streetAddress
+        city = parsed.city
+        state = parsed.state
+        postalCode = parsed.postalCode
         Task {
             await saveAndAdvance(OnboardingPatchRequest(
                 step: "address",

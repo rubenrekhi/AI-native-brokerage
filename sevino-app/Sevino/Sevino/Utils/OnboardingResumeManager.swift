@@ -34,6 +34,10 @@ enum OnboardingResumeManager {
         var userName: String = ""
         var legalName: String = ""
         var address: String = ""
+        var streetAddress: String = ""
+        var city: String = ""
+        var state: String = ""
+        var postalCode: String = ""
         var citizenshipSelection: String = ""
         var employmentStatus: String = ""
         var employerName: String = ""
@@ -87,27 +91,29 @@ enum OnboardingResumeManager {
     private static let phase2Steps = [
         "kyc_intro",       // screen 1
         "legal_name",      // screen 2
-        "ssn",             // screen 3
-        "address",         // screen 4
-        "citizenship",     // screen 5
-        "employment",      // screen 6
-        "funding_sources", // screen 7
+        "address",         // screen 3
+        "citizenship",     // screen 4
+        "employment",      // screen 5
+        "funding_sources", // screen 6
+        "ssn",             // screen 7
         "disclosures",     // screen 8
         "agreements",      // screen 9
     ]
 
     /// Maps a Phase 2 step string to the AlpacaSetupContainerView currentStep to resume at.
-    /// Steps at or past SSN always resume at step 3 (SSN screen) since SSN is never stored.
+    /// SSN sits at step 7 (right before disclosures) because it is never persisted — keeping it
+    /// late minimizes how many already-saved screens the user re-walks after re-entering SSN.
+    /// Steps at or past SSN resume at step 7 (SSN screen) since SSN must be re-entered.
     private static let phase2ResumeStep: [String: Int] = [
         "kyc_intro": 2,
         "legal_name": 3,
-        "ssn": 3,
-        "address": 3,
-        "citizenship": 3,
-        "employment": 3,
-        "funding_sources": 3,
-        "disclosures": 3,
-        "agreements": 3,
+        "address": 4,
+        "citizenship": 5,
+        "employment": 6,
+        "funding_sources": 7,
+        "ssn": 7,
+        "disclosures": 7,
+        "agreements": 7,
     ]
 
     // MARK: - Public API
@@ -188,6 +194,13 @@ enum OnboardingResumeManager {
             let last = profile.lastName ?? ""
             data.legalName = last.isEmpty ? first : "\(first) \(last)"
 
+            // Structured address parts — used to pre-fill the Address screen on resume
+            // so the user isn't forced to re-select from MapKit autocomplete.
+            data.streetAddress = profile.streetAddress?.first ?? ""
+            data.city = profile.city ?? ""
+            data.state = profile.state ?? ""
+            data.postalCode = profile.postalCode ?? ""
+
             // Reconstruct display address
             let parts = [
                 profile.streetAddress?.first,
@@ -200,10 +213,18 @@ enum OnboardingResumeManager {
 
         if let fin = status.financialProfile {
             let empInfo = fin.employmentInfo
-            data.employmentStatus = empInfo?["employment_status"] ?? ""
+            // Backend stores the normalized Alpaca value (e.g. "self_employed");
+            // the Employment screen + chat bubbles want the display form
+            // ("Self-employed"). Same story for funding sources.
+            let storedStatus = empInfo?["employment_status"] ?? ""
+            data.employmentStatus = storedStatus.isEmpty
+                ? ""
+                : OnboardingDataMapper.denormalizeEmploymentStatus(storedStatus)
             data.employerName = empInfo?["employer_name"] ?? ""
             data.jobTitle = empInfo?["job_title"] ?? ""
-            data.fundingSources = Set(fin.fundingSources ?? [])
+            data.fundingSources = Set(
+                (fin.fundingSources ?? []).map { OnboardingDataMapper.denormalizeFundingSource($0) }
+            )
         }
 
         return data
