@@ -74,6 +74,136 @@
         }
       }
     },
+    "auth.otp_expired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That code has expired. Tap Resend to get a new one."
+          }
+        }
+      }
+    },
+    "auth.otp_input_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the 6-digit code we sent to your phone"
+          }
+        }
+      }
+    },
+    "auth.otp_input_a11y_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification code"
+          }
+        }
+      }
+    },
+    "auth.otp_invalid_code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That code isn't right. Please try again."
+          }
+        }
+      }
+    },
+    "auth.otp_network_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't reach the network. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "auth.otp_next" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        }
+      }
+    },
+    "auth.otp_resend" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend code"
+          }
+        }
+      }
+    },
+    "auth.otp_resend_countdown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend code in %llds"
+          }
+        }
+      }
+    },
+    "auth.otp_resend_prompt" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Didn't get it?"
+          }
+        }
+      }
+    },
+    "auth.otp_send_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't send the code right now. Please try again in a moment."
+          }
+        }
+      }
+    },
+    "auth.otp_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the code we sent to %@"
+          }
+        }
+      }
+    },
+    "auth.otp_too_many_attempts" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many attempts. Please wait a few minutes before trying again."
+          }
+        }
+      }
+    },
+    "auth.otp_unknown_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
     "auth.password_placeholder" : {
       "localizations" : {
         "en" : {

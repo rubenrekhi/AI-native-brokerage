@@ -31,6 +31,23 @@ enum L10n {
         static let phoneNext = String(localized: "auth.phone_next")
         static let phoneCountryCode = String(localized: "auth.phone_country_code")
         static let phonePlaceholder = String(localized: "auth.phone_placeholder")
+        static func otpTitle(_ phoneNumber: String) -> String {
+            String(format: String(localized: "auth.otp_title"), phoneNumber)
+        }
+        static let otpNext = String(localized: "auth.otp_next")
+        static let otpResendPrompt = String(localized: "auth.otp_resend_prompt")
+        static let otpResend = String(localized: "auth.otp_resend")
+        static func otpResendCountdown(_ seconds: Int) -> String {
+            String(format: String(localized: "auth.otp_resend_countdown"), seconds)
+        }
+        static let otpInputA11yLabel = String(localized: "auth.otp_input_a11y_label")
+        static let otpInputA11yHint = String(localized: "auth.otp_input_a11y_hint")
+        static let otpInvalidCode = String(localized: "auth.otp_invalid_code")
+        static let otpExpired = String(localized: "auth.otp_expired")
+        static let otpTooManyAttempts = String(localized: "auth.otp_too_many_attempts")
+        static let otpNetworkError = String(localized: "auth.otp_network_error")
+        static let otpSendFailed = String(localized: "auth.otp_send_failed")
+        static let otpUnknownError = String(localized: "auth.otp_unknown_error")
         static let emailPlaceholder = String(localized: "auth.email_placeholder")
         static let passwordPlaceholder = String(localized: "auth.password_placeholder")
         static let emailConfirmation = String(localized: "auth.email_confirmation")
