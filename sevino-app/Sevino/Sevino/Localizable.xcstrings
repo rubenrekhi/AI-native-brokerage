@@ -4134,6 +4134,36 @@
         }
       }
     },
+    "settings.log_out_confirm_action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log out"
+          }
+        }
+      }
+    },
+    "settings.log_out_confirm_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You'll need to sign in again to access your account."
+          }
+        }
+      }
+    },
+    "settings.log_out_confirm_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log out of Sevino?"
+          }
+        }
+      }
+    },
     "settings.login_security" : {
       "localizations" : {
         "en" : {

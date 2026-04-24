@@ -8,6 +8,7 @@ struct SettingsView: View {
 
     @State private var authVM = AuthViewModel()
     @State private var showLegalLinks = false
+    @State private var showLogOutConfirmation = false
     @State private var path = NavigationPath()
     @State private var baseScale: CGFloat = 1
 
@@ -29,7 +30,7 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button(action: logOut) {
+                    Button(action: confirmLogOut) {
                         Text(L10n.Settings.logOut)
                             .font(.system(size: 16 * scale, weight: .semibold))
                             .foregroundStyle(Color.sevinoSecondary)
@@ -39,6 +40,11 @@ struct SettingsView: View {
                     }
                     .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
                     .disabled(authVM.isLoading)
+                    .confirmationDialog(L10n.Settings.logOutConfirmTitle, isPresented: $showLogOutConfirmation) {
+                        Button(L10n.Settings.logOutConfirmAction, role: .destructive, action: logOut)
+                    } message: {
+                        Text(L10n.Settings.logOutConfirmMessage)
+                    }
                     .padding(.bottom, 16 * scale)
                 }
                 .padding(.horizontal, 20 * scale)
@@ -142,6 +148,10 @@ struct SettingsView: View {
 
     private func navigateToAppearance() {
         path.append(SettingsDestination.appearance)
+    }
+
+    private func confirmLogOut() {
+        showLogOutConfirmation = true
     }
 
     private func logOut() {
