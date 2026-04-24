@@ -57,6 +57,7 @@ final class PreviewLoadedSettingsService: SettingsServiceProtocol, @unchecked Se
     }
 
     func deleteAccount() async throws {}
+    func closeBrokerageAccount() async throws {}
 
     func listDocuments(type _: String?) async throws -> [DocumentDTO] { [] }
     func documentDownloadURL(id: String) -> URL {
@@ -79,6 +80,7 @@ final class PreviewStallingSettingsService: SettingsServiceProtocol, @unchecked 
     func updateSettings(_: UserSettingsPatchRequest) async throws -> UserSettingsDTO { throw PreviewUnimplemented() }
     func updateProfile(_: ProfileUpdateRequest) async throws -> SettingsProfileResponse { throw PreviewUnimplemented() }
     func deleteAccount() async throws {}
+    func closeBrokerageAccount() async throws {}
     func listDocuments(type _: String?) async throws -> [DocumentDTO] {
         try await Task.sleep(for: .seconds(60))
         throw PreviewUnimplemented()
@@ -97,6 +99,7 @@ final class PreviewFailingSettingsService: SettingsServiceProtocol, @unchecked S
     func updateSettings(_: UserSettingsPatchRequest) async throws -> UserSettingsDTO { throw PreviewUnimplemented() }
     func updateProfile(_: ProfileUpdateRequest) async throws -> SettingsProfileResponse { throw PreviewUnimplemented() }
     func deleteAccount() async throws {}
+    func closeBrokerageAccount() async throws {}
     func listDocuments(type _: String?) async throws -> [DocumentDTO] { throw PreviewUnimplemented() }
     func documentDownloadURL(id: String) -> URL {
         URL(string: "https://example.invalid/v1/settings/documents/\(id)/download")!

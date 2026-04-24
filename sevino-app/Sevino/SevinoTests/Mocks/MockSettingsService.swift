@@ -10,6 +10,12 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     var updateSettingsResult: Result<UserSettingsDTO, Error>?
     var updateProfileResult: Result<SettingsProfileResponse, Error>?
     var deleteAccountResult: Result<Void, Error> = .success(())
+    var closeBrokerageAccountResult: Result<Void, Error> = .success(())
+
+    /// Optional async handler. When set, it's awaited instead of evaluating
+    /// `closeBrokerageAccountResult` — lets tests hold the call in-flight.
+    var closeBrokerageAccountHandler: (@Sendable () async throws -> Void)?
+
     var listDocumentsResult: Result<[DocumentDTO], Error> = .success([])
     var downloadDocumentResult: Result<URL, Error>?
     var downloadDocumentHandler: ((String) async throws -> URL)?
@@ -22,6 +28,7 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     private(set) var updateSettingsCalls: [UserSettingsPatchRequest] = []
     private(set) var updateProfileCalls: [ProfileUpdateRequest] = []
     private(set) var deleteAccountCalls = 0
+    private(set) var closeBrokerageAccountCalls = 0
     private(set) var listDocumentsCalls: [String?] = []
     private(set) var documentDownloadURLCalls: [String] = []
     private(set) var downloadDocumentCalls: [String] = []
@@ -69,6 +76,15 @@ final class MockSettingsService: SettingsServiceProtocol, @unchecked Sendable {
     func deleteAccount() async throws {
         deleteAccountCalls += 1
         try deleteAccountResult.get()
+    }
+
+    func closeBrokerageAccount() async throws {
+        closeBrokerageAccountCalls += 1
+        if let handler = closeBrokerageAccountHandler {
+            try await handler()
+            return
+        }
+        try closeBrokerageAccountResult.get()
     }
 
     func listDocuments(type: String?) async throws -> [DocumentDTO] {

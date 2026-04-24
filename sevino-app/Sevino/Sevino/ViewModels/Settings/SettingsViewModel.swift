@@ -11,8 +11,11 @@ final class SettingsViewModel {
     private(set) var accountValue: AccountValueResponse?
     private(set) var isLoading = false
     private(set) var isDeletingAccount = false
+    private(set) var isClosingBrokerage = false
+    private(set) var didCloseBrokerage = false
     private(set) var error: String?
     private(set) var deleteError: String?
+    private(set) var closeBrokerageError: String?
 
     /// Bindable driver for the delete-account error alert. The setter discards
     /// `deleteError` when the alert dismisses; using a computed projection keeps
@@ -20,6 +23,13 @@ final class SettingsViewModel {
     var showDeleteError: Bool {
         get { deleteError != nil }
         set { if !newValue { deleteError = nil } }
+    }
+
+    /// Bindable driver for the close-brokerage-account error alert. Mirrors the
+    /// `showDeleteError` pattern — the setter clears the error on dismiss.
+    var showCloseBrokerageError: Bool {
+        get { closeBrokerageError != nil }
+        set { if !newValue { closeBrokerageError = nil } }
     }
 
     init(
@@ -83,12 +93,35 @@ final class SettingsViewModel {
         try? await authService.signOut()
     }
 
+    func closeBrokerageAccount() async {
+        closeBrokerageError = nil
+        isClosingBrokerage = true
+        defer { isClosingBrokerage = false }
+        do {
+            try await settingsService.closeBrokerageAccount()
+        } catch {
+            self.closeBrokerageError = error.localizedDescription
+            return
+        }
+        didCloseBrokerage = true
+    }
+
     func clearError() {
         error = nil
     }
 
     func clearDeleteError() {
         deleteError = nil
+    }
+
+    func clearCloseBrokerageError() {
+        closeBrokerageError = nil
+    }
+
+    /// Clears the one-shot success flag after the view has consumed it (post-dismiss).
+    /// Prevents the auto-dismiss `.task(id:)` from re-firing if this VM is reused.
+    func resetCloseBrokerageFlag() {
+        didCloseBrokerage = false
     }
 
     // MARK: - Derived display state

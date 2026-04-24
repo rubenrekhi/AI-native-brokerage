@@ -25,10 +25,7 @@ final class FundingService: FundingServiceProtocol {
     }
 
     func createLinkToken() async throws -> String {
-        let response: LinkTokenResponse = try await api.post(
-            "/v1/funding/link-token",
-            body: EmptyBody()
-        )
+        let response: LinkTokenResponse = try await api.post("/v1/funding/link-token")
         return response.linkToken
     }
 

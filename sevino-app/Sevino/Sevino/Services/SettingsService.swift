@@ -8,6 +8,7 @@ protocol SettingsServiceProtocol {
     func updateSettings(_ request: UserSettingsPatchRequest) async throws -> UserSettingsDTO
     func updateProfile(_ request: ProfileUpdateRequest) async throws -> SettingsProfileResponse
     func deleteAccount() async throws
+    func closeBrokerageAccount() async throws
     func listDocuments(type: String?) async throws -> [DocumentDTO]
     func documentDownloadURL(id: String) -> URL
     func downloadDocument(id: String) async throws -> URL
@@ -46,6 +47,10 @@ final class SettingsService: SettingsServiceProtocol {
 
     func deleteAccount() async throws {
         try await api.delete("/v1/settings/account", body: ["confirmation": "DELETE"])
+    }
+
+    func closeBrokerageAccount() async throws {
+        try await api.delete("/v1/settings/brokerage-account")
     }
 
     func listDocuments(type: String?) async throws -> [DocumentDTO] {

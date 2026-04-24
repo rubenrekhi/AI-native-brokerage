@@ -4224,6 +4224,56 @@
         }
       }
     },
+    "settings.close_account_confirm_action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close brokerage account"
+          }
+        }
+      }
+    },
+    "settings.close_account_confirm_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your brokerage account will be closed with Alpaca. Any linked bank accounts will be unlinked. You can reopen a new account later."
+          }
+        }
+      }
+    },
+    "settings.close_account_confirm_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close brokerage account?"
+          }
+        }
+      }
+    },
+    "settings.close_account_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to close account"
+          }
+        }
+      }
+    },
+    "settings.close_account_success" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brokerage account closed"
+          }
+        }
+      }
+    },
     "settings.coming_soon" : {
       "localizations" : {
         "en" : {

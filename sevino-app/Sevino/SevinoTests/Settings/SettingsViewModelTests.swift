@@ -139,6 +139,80 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.error)
     }
 
+    // MARK: - closeBrokerageAccount
+
+    func testCloseBrokerageAccountSuccessSetsDidCloseFlag() async {
+        await viewModel.closeBrokerageAccount()
+
+        XCTAssertEqual(mockSettings.closeBrokerageAccountCalls, 1)
+        XCTAssertTrue(viewModel.didCloseBrokerage)
+        XCTAssertFalse(viewModel.isClosingBrokerage)
+        XCTAssertNil(viewModel.closeBrokerageError)
+        XCTAssertFalse(viewModel.showCloseBrokerageError)
+    }
+
+    func testCloseBrokerageAccountFailureSurfacesErrorAndSkipsDidCloseFlag() async {
+        struct CloseError: LocalizedError {
+            var errorDescription: String? { "cannot close — open positions" }
+        }
+        mockSettings.closeBrokerageAccountResult = .failure(CloseError())
+
+        await viewModel.closeBrokerageAccount()
+
+        XCTAssertEqual(mockSettings.closeBrokerageAccountCalls, 1)
+        XCTAssertFalse(viewModel.didCloseBrokerage)
+        XCTAssertFalse(viewModel.isClosingBrokerage)
+        XCTAssertEqual(viewModel.closeBrokerageError, "cannot close — open positions")
+        XCTAssertTrue(viewModel.showCloseBrokerageError)
+        // Unrelated `error` channel stays clear so sibling screens aren't affected.
+        XCTAssertNil(viewModel.error)
+    }
+
+    func testCloseBrokerageAccountHoldsLoadingUntilServiceCompletes() async {
+        let (stream, continuation) = AsyncStream<Void>.makeStream()
+        mockSettings.closeBrokerageAccountHandler = {
+            for await _ in stream { break }
+        }
+
+        let task = Task { await viewModel.closeBrokerageAccount() }
+
+        while !viewModel.isClosingBrokerage {
+            await Task.yield()
+        }
+        XCTAssertTrue(viewModel.isClosingBrokerage)
+        XCTAssertFalse(viewModel.didCloseBrokerage)
+
+        continuation.yield()
+        continuation.finish()
+        await task.value
+
+        XCTAssertFalse(viewModel.isClosingBrokerage)
+        XCTAssertTrue(viewModel.didCloseBrokerage)
+    }
+
+    func testResetCloseBrokerageFlagClearsDidCloseFlag() async {
+        await viewModel.closeBrokerageAccount()
+        XCTAssertTrue(viewModel.didCloseBrokerage)
+
+        viewModel.resetCloseBrokerageFlag()
+
+        XCTAssertFalse(viewModel.didCloseBrokerage)
+    }
+
+    func testShowCloseBrokerageErrorBindingDismissClearsError() async {
+        struct CloseError: LocalizedError {
+            var errorDescription: String? { "boom" }
+        }
+        mockSettings.closeBrokerageAccountResult = .failure(CloseError())
+        await viewModel.closeBrokerageAccount()
+        XCTAssertTrue(viewModel.showCloseBrokerageError)
+
+        viewModel.showCloseBrokerageError = false
+
+        XCTAssertNil(viewModel.closeBrokerageError)
+        XCTAssertFalse(viewModel.showCloseBrokerageError)
+    }
+
     func testShowDeleteErrorBindingDismissClearsError() async {
         struct DeleteError: LocalizedError {
             var errorDescription: String? { "boom" }

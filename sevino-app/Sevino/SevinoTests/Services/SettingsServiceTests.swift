@@ -126,6 +126,20 @@ final class SettingsServiceTests: XCTestCase {
         await assertPropagates { try await self.service.deleteAccount() }
     }
 
+    // MARK: - closeBrokerageAccount
+
+    func test_closeBrokerageAccount_deletesBrokerageAccountPath() async throws {
+        try await service.closeBrokerageAccount()
+
+        XCTAssertEqual(api.lastPath, "/v1/settings/brokerage-account")
+        XCTAssertEqual(api.lastMethod, "DELETE")
+    }
+
+    func test_closeBrokerageAccount_propagatesError() async {
+        api.errorToThrow = TestError()
+        await assertPropagates { try await self.service.closeBrokerageAccount() }
+    }
+
     // MARK: - Helpers
 
     private struct TestError: Error, Equatable {}

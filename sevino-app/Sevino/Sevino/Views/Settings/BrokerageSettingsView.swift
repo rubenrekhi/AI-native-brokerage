@@ -9,6 +9,7 @@ struct BrokerageSettingsView: View {
     @State private var vm: SettingsViewModel
     @State private var accountName = L10n.Settings.brokerageAccountNameDefault
     @State private var renameItem: RenameItem?
+    @State private var showCloseConfirmation = false
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
@@ -48,21 +49,25 @@ struct BrokerageSettingsView: View {
                     navRow(title: L10n.Settings.accountDocuments, destination: .accountDocuments)
                     navRow(title: L10n.Settings.monthlyStatements, destination: .monthlyStatements)
                     navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
-                    navRow(title: L10n.Settings.accountHistory)
+                    navRow(title: L10n.Settings.accountHistory, destination: .accountHistory)
                 }
 
                 Spacer()
 
-                Button(action: {}) {
-                    Text(L10n.Settings.closeAccount)
-                        .font(.system(size: 16 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16 * scale)
-                        .contentShape(.rect(cornerRadius: 14 * scale))
+                Button(action: { showCloseConfirmation = true }) {
+                    closeAccountLabel
                 }
                 .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
-                .disabled(true)
+                .disabled(vm.isClosingBrokerage || vm.didCloseBrokerage)
+                .confirmationDialog(
+                    L10n.Settings.closeAccountConfirmTitle,
+                    isPresented: $showCloseConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(L10n.Settings.closeAccountConfirmAction, role: .destructive, action: closeBrokerageAccount)
+                } message: {
+                    Text(L10n.Settings.closeAccountConfirmMessage)
+                }
                 .padding(.bottom, 16 * scale)
             }
             .padding(.horizontal, 20 * scale)
@@ -81,6 +86,40 @@ struct BrokerageSettingsView: View {
         }
         .navigationBarBackButtonHidden()
         .task { await vm.load() }
+        .overlay(alignment: .top) {
+            if vm.didCloseBrokerage {
+                CloseAccountSuccessBanner(scale: scale)
+                    .padding(.top, 8 * scale)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: vm.didCloseBrokerage)
+        .task(id: vm.didCloseBrokerage) {
+            guard vm.didCloseBrokerage else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled else { return }
+            dismiss()
+            vm.resetCloseBrokerageFlag()
+        }
+        .modifier(CloseBrokerageAlertModifier(vm: vm))
+    }
+
+    @ViewBuilder
+    private var closeAccountLabel: some View {
+        if vm.isClosingBrokerage {
+            ProgressView()
+                .tint(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        } else {
+            Text(L10n.Settings.closeAccount)
+                .font(.system(size: 16 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        }
     }
 
     private var header: some View {
@@ -180,35 +219,27 @@ struct BrokerageSettingsView: View {
         .padding(.vertical, 16 * scale)
     }
 
-    private func navRow(title: String, destination: SettingsDestination? = nil) -> some View {
-        Group {
-            if let destination {
-                NavigationLink(value: destination) { navRowLabel(title: title) }
-            } else {
-                Button(action: {}) { navRowLabel(title: title) }
-                    .disabled(true)
+    private func navRow(title: String, destination: SettingsDestination) -> some View {
+        NavigationLink(value: destination) {
+            VStack(spacing: 0) {
+                HStack {
+                    Text(title)
+                        .font(.system(size: 16 * scale))
+                        .foregroundStyle(Color.sevinoSecondary)
+
+                    Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                        .accessibilityHidden(true)
+                }
+                .padding(.vertical, 16 * scale)
+                .frame(minHeight: 44)
+
+                Divider()
+                    .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
             }
-        }
-    }
-
-    private func navRowLabel(title: String) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(title)
-                    .font(.system(size: 16 * scale))
-                    .foregroundStyle(Color.sevinoSecondary)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                    .accessibilityHidden(true)
-            }
-            .padding(.vertical, 16 * scale)
-
-            Divider()
-                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
         }
     }
 
@@ -219,6 +250,45 @@ struct BrokerageSettingsView: View {
 
     private func presentRename() {
         renameItem = RenameItem(currentName: accountName)
+    }
+
+    private func closeBrokerageAccount() {
+        Task { await vm.closeBrokerageAccount() }
+    }
+}
+
+private struct CloseBrokerageAlertModifier: ViewModifier {
+    @Bindable var vm: SettingsViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Settings.closeAccountErrorTitle,
+            isPresented: $vm.showCloseBrokerageError,
+            presenting: vm.closeBrokerageError
+        ) { _ in
+            Button(L10n.General.ok, role: .cancel, action: vm.clearCloseBrokerageError)
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
+private struct CloseAccountSuccessBanner: View {
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8 * scale) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.sevinoPositive)
+            Text(L10n.Settings.closeAccountSuccess)
+                .font(.system(size: 14 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+        }
+        .padding(.horizontal, 16 * scale)
+        .padding(.vertical, 10 * scale)
+        .modifier(SevinoGlass.popup)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 

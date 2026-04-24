@@ -2,7 +2,10 @@ import Foundation
 
 protocol APIClientProtocol: Sendable {
     func get<T: Decodable>(_ path: String) async throws -> T
+    func post<T: Decodable>(_ path: String) async throws -> T
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
+    func post(_ path: String) async throws
+    func post(_ path: String, body: some Encodable) async throws
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func delete<T: Decodable>(_ path: String) async throws -> T
@@ -46,8 +49,22 @@ final class APIClient: APIClientProtocol {
         try await request(path, method: "GET")
     }
 
+    func post<T: Decodable>(_ path: String) async throws -> T {
+        try await request(path, method: "POST")
+    }
+
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
         try await request(path, method: "POST", body: body)
+    }
+
+    /// POST variant for endpoints that return 204 No Content (or whose response
+    /// body the caller doesn't care about).
+    func post(_ path: String) async throws {
+        try await requestVoid(path, method: "POST")
+    }
+
+    func post(_ path: String, body: some Encodable) async throws {
+        try await requestVoid(path, method: "POST", body: body)
     }
 
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
