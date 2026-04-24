@@ -202,7 +202,7 @@ struct HomeView: View {
                     onSelect: { tickerMentionViewModel.selectResult($0) }
                 )
                 .padding(.horizontal, 16 * scale)
-                .padding(.bottom, chatInputHeight + 8 * scale)
+                .padding(.bottom, chatInputHeight - 8 * scale)
                 .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
         }
