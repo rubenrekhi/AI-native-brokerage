@@ -18,9 +18,13 @@ from app.dependencies.portfolio import (
     AlpacaAccountContext,
     get_alpaca_account_context,
 )
-from app.schemas.portfolio import HoldingsResponse, PortfolioSnapshotResponse
+from app.schemas.portfolio import (
+    HoldingsResponse,
+    PortfolioHistoryResponse,
+    PortfolioSnapshotResponse,
+)
 from app.services.alpaca_broker import AlpacaBrokerService
-from app.services.portfolio import PortfolioService
+from app.services.portfolio import PortfolioRange, PortfolioService
 
 router = APIRouter()
 
@@ -53,3 +57,13 @@ async def get_holdings(
 ) -> HoldingsResponse:
     """Per-symbol positions joined with names, sorted by market value."""
     return await service.get_holdings(ctx)
+
+
+@router.get("/history", response_model=PortfolioHistoryResponse)
+async def get_history(
+    range: PortfolioRange,
+    ctx: AlpacaAccountContext = Depends(get_alpaca_account_context),
+    service: PortfolioService = Depends(_portfolio_service),
+) -> PortfolioHistoryResponse:
+    """Equity time series for a fixed range, for the home-screen chart."""
+    return await service.get_history(ctx, range)
