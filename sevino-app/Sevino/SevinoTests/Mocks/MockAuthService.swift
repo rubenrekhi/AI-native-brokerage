@@ -20,4 +20,15 @@ final class MockAuthService: AuthServiceProtocol {
         if let error = errorToThrow { throw error }
         isAuthenticated = false
     }
+
+    private(set) var updatePasswordCallCount = 0
+    private(set) var lastCurrentPassword: String?
+    private(set) var lastUpdatedPassword: String?
+
+    func updatePassword(currentPassword: String, newPassword: String) async throws {
+        updatePasswordCallCount += 1
+        lastCurrentPassword = currentPassword
+        lastUpdatedPassword = newPassword
+        if let error = errorToThrow { throw error }
+    }
 }

@@ -214,20 +214,6 @@ private struct StatusCheckRetryView: View {
 
 // MARK: - Previews
 
-@Observable
-private final class PreviewAuthService: AuthServiceProtocol {
-    var isAuthenticated: Bool
-    var accessToken: String? { nil }
-
-    init(isAuthenticated: Bool = false) {
-        self.isAuthenticated = isAuthenticated
-    }
-
-    func signUp(email: String, password: String) async throws {}
-    func signIn(email: String, password: String) async throws { isAuthenticated = true }
-    func signOut() async throws { isAuthenticated = false }
-}
-
 #Preview("Logged Out") {
     ContentView()
 }

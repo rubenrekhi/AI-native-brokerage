@@ -4004,6 +4004,106 @@
         }
       }
     },
+    "settings.change_password_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Password"
+          }
+        }
+      }
+    },
+    "settings.change_password_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
+    "settings.change_password_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a new password for your Sevino account. You'll use it the next time you sign in."
+          }
+        }
+      }
+    },
+    "settings.change_password_success" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password updated"
+          }
+        }
+      }
+    },
+    "settings.confirm_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm new password"
+          }
+        }
+      }
+    },
+    "settings.current_password_incorrect_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current password is incorrect."
+          }
+        }
+      }
+    },
+    "settings.current_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current password"
+          }
+        }
+      }
+    },
+    "settings.new_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New password"
+          }
+        }
+      }
+    },
+    "settings.password_mismatch_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwords don't match."
+          }
+        }
+      }
+    },
+    "settings.password_requirements_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New password doesn't meet the requirements."
+          }
+        }
+      }
+    },
     "settings.close_accessibility" : {
       "localizations" : {
         "en" : {

@@ -1,5 +1,6 @@
 #if DEBUG
 import Foundation
+import Observation
 
 struct PreviewUnimplemented: Error {}
 
@@ -82,6 +83,23 @@ final class PreviewFailingSettingsService: SettingsServiceProtocol, @unchecked S
     func updateSettings(_: UserSettingsPatchRequest) async throws -> UserSettingsDTO { throw PreviewUnimplemented() }
     func updateProfile(_: ProfileUpdateRequest) async throws -> SettingsProfileResponse { throw PreviewUnimplemented() }
     func deleteAccount() async throws {}
+}
+
+/// AuthService stub for SwiftUI previews. Defaults to authenticated; `signIn` flips
+/// the flag to mimic the live listener. All write methods are no-ops.
+@Observable
+final class PreviewAuthService: AuthServiceProtocol {
+    var isAuthenticated: Bool
+    var accessToken: String? { nil }
+
+    init(isAuthenticated: Bool = true) {
+        self.isAuthenticated = isAuthenticated
+    }
+
+    func signUp(email: String, password: String) async throws {}
+    func signIn(email: String, password: String) async throws { isAuthenticated = true }
+    func signOut() async throws { isAuthenticated = false }
+    func updatePassword(currentPassword: String, newPassword: String) async throws {}
 }
 
 /// FundingService stub that satisfies the protocol without performing any work.

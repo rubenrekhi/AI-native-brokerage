@@ -9,6 +9,22 @@ protocol AuthServiceProtocol {
     func signUp(email: String, password: String) async throws
     func signIn(email: String, password: String) async throws
     func signOut() async throws
+    func updatePassword(currentPassword: String, newPassword: String) async throws
+}
+
+enum PasswordChangeError: LocalizedError {
+    case sessionMissingEmail
+    case incorrectCurrentPassword
+    case updateFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .sessionMissingEmail, .updateFailed:
+            L10n.Settings.changePasswordGenericError
+        case .incorrectCurrentPassword:
+            L10n.Settings.currentPasswordIncorrectError
+        }
+    }
 }
 
 /**
@@ -53,6 +69,26 @@ final class AuthService: AuthServiceProtocol {
 
     func signOut() async throws {
         try await client.auth.signOut()
+    }
+
+    // Reauthenticates by signing in with the current password before applying
+    // the change — Supabase's `update(user:)` only checks the session JWT, so
+    // without this step anyone on an unlocked device could rotate the password.
+    func updatePassword(currentPassword: String, newPassword: String) async throws {
+        let session = try await client.auth.session
+        guard let email = session.user.email else {
+            throw PasswordChangeError.sessionMissingEmail
+        }
+        do {
+            _ = try await client.auth.signIn(email: email, password: currentPassword)
+        } catch {
+            throw PasswordChangeError.incorrectCurrentPassword
+        }
+        do {
+            _ = try await client.auth.update(user: UserAttributes(password: newPassword))
+        } catch {
+            throw PasswordChangeError.updateFailed
+        }
     }
 
     // Used by APIClient to attach the JWT to requests

@@ -17,7 +17,7 @@ struct LoginSecuritySettingsView: View {
 
             VStack(spacing: 0) {
                 navRow(title: L10n.Settings.email)
-                navRow(title: L10n.Settings.changePassword)
+                navLinkRow(title: L10n.Settings.changePassword, destination: .changePassword)
                 navRow(title: L10n.Settings.manageFaceId)
                 navRow(title: L10n.Settings.activeSessions)
             }
@@ -62,26 +62,37 @@ struct LoginSecuritySettingsView: View {
 
     private func navRow(title: String) -> some View {
         Button(action: {}) {
-            VStack(spacing: 0) {
-                HStack {
-                    Text(title)
-                        .font(.system(size: 16 * scale))
-                        .foregroundStyle(Color.sevinoSecondary)
-
-                    Spacer()
-
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 13 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoGreyContrast)
-                        .accessibilityHidden(true)
-                }
-                .padding(.vertical, 16 * scale)
-
-                Divider()
-                    .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
-            }
+            rowContent(title: title)
         }
         .disabled(true)
+    }
+
+    private func navLinkRow(title: String, destination: SettingsDestination) -> some View {
+        NavigationLink(value: destination) {
+            rowContent(title: title)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func rowContent(title: String) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 16 * scale))
+                    .foregroundStyle(Color.sevinoSecondary)
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 16 * scale)
+
+            Divider()
+                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
+        }
     }
 }
 
