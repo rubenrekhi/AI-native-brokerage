@@ -1,6 +1,10 @@
 from decimal import Decimal
 
-from app.schemas.portfolio import PortfolioSnapshotResponse
+from app.schemas.portfolio import (
+    HoldingsResponse,
+    Position,
+    PortfolioSnapshotResponse,
+)
 
 
 def _make_snapshot(**overrides) -> PortfolioSnapshotResponse:
@@ -70,3 +74,96 @@ class TestPortfolioSnapshotResponse:
         except Exception:
             return
         raise AssertionError("PortfolioSnapshotResponse should be frozen")
+
+
+def _make_position(**overrides) -> Position:
+    data = {
+        "symbol": "TSLA",
+        "name": "Tesla Inc",
+        "qty": Decimal("3.5"),
+        "avg_entry_price": Decimal("240.00"),
+        "current_price": Decimal("250.00"),
+        "market_value": Decimal("875.00"),
+        "cost_basis": Decimal("840.00"),
+        "unrealized_pl": Decimal("35.00"),
+        "unrealized_plpc": Decimal("0.0417"),
+    }
+    data.update(overrides)
+    return Position(**data)
+
+
+def _make_holdings(**overrides) -> HoldingsResponse:
+    data = {
+        "account_status": "ACTIVE",
+        "currency": "USD",
+        "cash": Decimal("100.00"),
+        "total_market_value": Decimal("1575.00"),
+        "positions": [
+            _make_position(),
+            _make_position(
+                symbol="AAPL",
+                name="Apple Inc",
+                qty=Decimal("4"),
+                avg_entry_price=Decimal("170.00"),
+                current_price=Decimal("175.00"),
+                market_value=Decimal("700.00"),
+                cost_basis=Decimal("680.00"),
+                unrealized_pl=Decimal("20.00"),
+                unrealized_plpc=Decimal("0.0294"),
+            ),
+        ],
+    }
+    data.update(overrides)
+    return HoldingsResponse(**data)
+
+
+class TestHoldingsResponse:
+    def test_round_trip_two_positions_matches_json_shape(self):
+        holdings = _make_holdings()
+        dumped = holdings.model_dump(mode="json")
+
+        assert dumped["account_status"] == "ACTIVE"
+        assert dumped["currency"] == "USD"
+        assert dumped["cash"] == "100.00"
+        assert dumped["total_market_value"] == "1575.00"
+        assert len(dumped["positions"]) == 2
+
+        first = dumped["positions"][0]
+        assert first["symbol"] == "TSLA"
+        assert first["name"] == "Tesla Inc"
+        assert first["qty"] == "3.5"
+        assert first["avg_entry_price"] == "240.00"
+        assert first["current_price"] == "250.00"
+        assert first["market_value"] == "875.00"
+        assert first["cost_basis"] == "840.00"
+        assert first["unrealized_pl"] == "35.00"
+        assert first["unrealized_plpc"] == "0.0417"
+
+        revived = HoldingsResponse.model_validate(dumped)
+        assert revived == holdings
+
+    def test_fractional_qty_round_trips_exactly(self):
+        position = _make_position(qty=Decimal("0.125"))
+        dumped = position.model_dump(mode="json")
+
+        assert dumped["qty"] == "0.125"
+        assert Position.model_validate(dumped).qty == Decimal("0.125")
+
+    def test_negative_unrealized_fields_keep_signs(self):
+        position = _make_position(
+            unrealized_pl=Decimal("-42.18"),
+            unrealized_plpc=Decimal("-0.0502"),
+        )
+        dumped = position.model_dump(mode="json")
+
+        assert dumped["unrealized_pl"] == "-42.18"
+        assert dumped["unrealized_plpc"] == "-0.0502"
+
+    def test_empty_positions_list_validates(self):
+        holdings = _make_holdings(
+            positions=[], total_market_value=Decimal("0.00")
+        )
+        dumped = holdings.model_dump(mode="json")
+
+        assert dumped["positions"] == []
+        assert dumped["total_market_value"] == "0.00"
