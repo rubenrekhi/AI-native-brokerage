@@ -325,9 +325,14 @@ enum L10n {
 
     enum Home {
         static let chatPlaceholder = String(localized: "home.chat_placeholder")
-        static let attachAccessibility = String(localized: "home.attach_accessibility")
         static let micAccessibility = String(localized: "home.mic_accessibility")
         static let sendAccessibility = String(localized: "home.send_accessibility")
+        static let quickCommandsTitle = String(localized: "home.quick_commands_title")
+        static let quickCommandsAllowWebSearch = String(localized: "home.quick_commands_allow_web_search")
+        static let quickCommandsDiscover = String(localized: "home.quick_commands_discover")
+        static let quickCommandsDiscoverPlaceholder = String(localized: "home.quick_commands_discover_placeholder")
+        static let quickCommandsButtonAccessibility = String(localized: "home.quick_commands_button_accessibility")
+        static let quickCommandsCloseAccessibility = String(localized: "home.quick_commands_close_accessibility")
         static func greetingMorning(_ name: String) -> String {
             String(format: String(localized: "home.greeting_morning"), name)
         }

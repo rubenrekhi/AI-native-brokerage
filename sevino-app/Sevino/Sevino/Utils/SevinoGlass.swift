@@ -24,6 +24,10 @@ enum SevinoGlass {
     static func conditionalChip(isSelected: Bool) -> ConditionalChipGlass {
         ConditionalChipGlass(isSelected: isSelected)
     }
+
+    static func sheet<S: Shape>(shape: S) -> SheetGlass<S> {
+        SheetGlass(shape: shape)
+    }
 }
 
 struct SevinoGlassContainer<Content: View>: View {
@@ -201,6 +205,18 @@ struct ConditionalChipGlass: ViewModifier {
             content.modifier(SevinoGlass.chip)
         } else {
             content
+        }
+    }
+}
+
+struct SheetGlass<S: Shape>: ViewModifier {
+    let shape: S
+
+    func body(content: Content) -> some View {
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(.ultraThinMaterial, in: shape)
         }
     }
 }

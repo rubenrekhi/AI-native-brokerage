@@ -11,4 +11,7 @@ extension Color {
 
     /// Star/favourite yellow — #FFD60A
     static let homeStarActive = Color(red: 1.0, green: 0.84, blue: 0.04)
+
+    static let homePopupDivider = Color.sevinoGreyAccent.opacity(0.3)
+    static let homeDragHandle = Color.sevinoGreyContrast.opacity(0.5)
 }

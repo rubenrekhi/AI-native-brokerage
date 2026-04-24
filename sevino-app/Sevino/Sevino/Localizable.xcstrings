@@ -404,16 +404,6 @@
         }
       }
     },
-    "home.attach_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Attach"
-          }
-        }
-      }
-    },
     "home.buying_power" : {
       "localizations" : {
         "en" : {
@@ -480,36 +470,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deposit"
-          }
-        }
-      }
-    },
-    "home.funding_generic_error" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Something went wrong. Try again."
-          }
-        }
-      }
-    },
-    "home.funding_plaid_connection_error" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't connect to your bank. Try again."
-          }
-        }
-      }
-    },
-    "home.link_bank_account" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Link a bank account"
           }
         }
       }
@@ -664,6 +624,16 @@
         }
       }
     },
+    "home.funding_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Try again."
+          }
+        }
+      }
+    },
     "home.funding_load_error_dismiss" : {
       "localizations" : {
         "en" : {
@@ -690,6 +660,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't load cash details"
+          }
+        }
+      }
+    },
+    "home.funding_plaid_connection_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't connect to your bank. Try again."
           }
         }
       }
@@ -760,36 +740,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Average Cost"
-          }
-        }
-      }
-    },
-    "home.home_load_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        }
-      }
-    },
-    "home.home_load_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "home.home_load_error_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't load home"
           }
         }
       }
@@ -904,6 +854,36 @@
         }
       }
     },
+    "home.home_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.home_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.home_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load home"
+          }
+        }
+      }
+    },
     "home.interest_paid_out" : {
       "localizations" : {
         "en" : {
@@ -920,6 +900,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lifetime earned"
+          }
+        }
+      }
+    },
+    "home.link_bank_account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account"
           }
         }
       }
@@ -1100,6 +1090,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't load portfolio"
+          }
+        }
+      }
+    },
+    "home.quick_commands_allow_web_search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow web search"
+          }
+        }
+      }
+    },
+    "home.quick_commands_button_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick commands"
+          }
+        }
+      }
+    },
+    "home.quick_commands_close_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "home.quick_commands_discover" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discover"
+          }
+        }
+      }
+    },
+    "home.quick_commands_discover_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "start typing to search for a stock"
+          }
+        }
+      }
+    },
+    "home.quick_commands_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Commands"
           }
         }
       }
@@ -1934,6 +1984,36 @@
         }
       }
     },
+    "onboarding.alpaca_save_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your answer"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
     "onboarding.alpaca_ssn_placeholder" : {
       "localizations" : {
         "en" : {
@@ -2030,66 +2110,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Something went wrong"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't save your answer"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't save your answer"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
           }
         }
       }
@@ -2234,6 +2254,26 @@
         }
       }
     },
+    "onboarding.dob_day" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DD"
+          }
+        }
+      }
+    },
+    "onboarding.dob_month" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MM"
+          }
+        }
+      }
+    },
     "onboarding.dob_response1" : {
       "localizations" : {
         "en" : {
@@ -2250,26 +2290,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This helps me personalize your investment timeline."
-          }
-        }
-      }
-    },
-    "onboarding.dob_month" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MM"
-          }
-        }
-      }
-    },
-    "onboarding.dob_day" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DD"
           }
         }
       }
@@ -3630,6 +3650,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Be honest — there's no right answer."
+          }
+        }
+      }
+    },
+    "onboarding.save_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "onboarding.save_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your answer"
+          }
+        }
+      }
+    },
+    "onboarding.save_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
           }
         }
       }
