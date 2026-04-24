@@ -4600,6 +4600,86 @@
         }
       }
     },
+    "settings.edit_address_city_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "City"
+          }
+        }
+      }
+    },
+    "settings.edit_address_missing_field_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill in street, city, state, and postal code to save."
+          }
+        }
+      }
+    },
+    "settings.edit_address_line1_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Street address"
+          }
+        }
+      }
+    },
+    "settings.edit_address_line1_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search your address"
+          }
+        }
+      }
+    },
+    "settings.edit_address_line2_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apt, suite, etc. (optional)"
+          }
+        }
+      }
+    },
+    "settings.edit_address_postal_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Postal code"
+          }
+        }
+      }
+    },
+    "settings.edit_address_state_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "State"
+          }
+        }
+      }
+    },
+    "settings.edit_address_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit mailing address"
+          }
+        }
+      }
+    },
     "settings.email" : {
       "localizations" : {
         "en" : {

@@ -74,10 +74,10 @@ final class EditProfileViewModelTests: XCTestCase {
         XCTAssertEqual(service.updateProfileCalls.count, 0)
     }
 
-    func testSaveAddressSendsAllFields() async {
+    func testSaveAddressSendsAllFieldsTrimmed() async {
         await viewModel.saveAddress(
-            street: ["123 Main St", "Apt 4"],
-            city: "Cleveland",
+            street: ["  123 Main St  ", "Apt 4"],
+            city: "  Cleveland ",
             state: "OH",
             postalCode: "44110"
         )
@@ -90,6 +90,44 @@ final class EditProfileViewModelTests: XCTestCase {
         XCTAssertEqual(request.postalCode, "44110")
         XCTAssertNil(request.firstName)
         XCTAssertNil(request.phoneNumber)
+    }
+
+    func testSaveAddressDropsBlankStreetLines() async {
+        await viewModel.saveAddress(
+            street: ["123 Main St", "   "],
+            city: "Cleveland",
+            state: "OH",
+            postalCode: "44110"
+        )
+
+        let request = service.updateProfileCalls[0]
+        XCTAssertEqual(request.streetAddress, ["123 Main St"])
+    }
+
+    func testSaveAddressRejectsMissingRequiredField() async {
+        await viewModel.saveAddress(
+            street: ["123 Main St"],
+            city: "",
+            state: "OH",
+            postalCode: "44110"
+        )
+
+        XCTAssertFalse(viewModel.didSave)
+        XCTAssertEqual(viewModel.error, L10n.Settings.editAddressMissingFieldError)
+        XCTAssertEqual(service.updateProfileCalls.count, 0)
+    }
+
+    func testSaveAddressRejectsAllBlankStreetLines() async {
+        await viewModel.saveAddress(
+            street: ["   ", ""],
+            city: "Cleveland",
+            state: "OH",
+            postalCode: "44110"
+        )
+
+        XCTAssertFalse(viewModel.didSave)
+        XCTAssertEqual(viewModel.error, L10n.Settings.editAddressMissingFieldError)
+        XCTAssertEqual(service.updateProfileCalls.count, 0)
     }
 
     func testServiceErrorSurfacesAsLocalizedDescription() async {

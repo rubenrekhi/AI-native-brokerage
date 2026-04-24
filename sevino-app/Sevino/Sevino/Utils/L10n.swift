@@ -633,6 +633,14 @@ enum L10n {
         static let editProfileCancel = String(localized: "settings.edit_profile_cancel")
         static let editProfileGenericError = String(localized: "settings.edit_profile_generic_error")
         static let editProfileSuccess = String(localized: "settings.edit_profile_success")
+        static let editAddressTitle = String(localized: "settings.edit_address_title")
+        static let editAddressLine1Label = String(localized: "settings.edit_address_line1_label")
+        static let editAddressLine1Placeholder = String(localized: "settings.edit_address_line1_placeholder")
+        static let editAddressLine2Label = String(localized: "settings.edit_address_line2_label")
+        static let editAddressCityLabel = String(localized: "settings.edit_address_city_label")
+        static let editAddressStateLabel = String(localized: "settings.edit_address_state_label")
+        static let editAddressPostalLabel = String(localized: "settings.edit_address_postal_label")
+        static let editAddressMissingFieldError = String(localized: "settings.edit_address_missing_field_error")
     }
 
     enum TradeExecution {

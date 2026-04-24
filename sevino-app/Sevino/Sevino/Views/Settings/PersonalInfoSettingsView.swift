@@ -13,6 +13,7 @@ struct PersonalInfoSettingsView: View {
     private enum ActiveSheet: Identifiable {
         case name
         case phone
+        case address
         var id: Self { self }
     }
 
@@ -75,7 +76,32 @@ struct PersonalInfoSettingsView: View {
                 currentPhone: vm.profile?.profile.phoneNumber,
                 onSaved: { Task { await vm.reload() } }
             )
+        case .address:
+            EditAddressSheet(
+                initialLine1: currentLine1,
+                initialLine2: currentLine2,
+                initialCity: vm.profile?.profile.city ?? "",
+                initialState: vm.profile?.profile.state ?? "",
+                initialPostalCode: vm.profile?.profile.postalCode ?? "",
+                onSaved: { Task { await vm.reload() } }
+            )
         }
+    }
+
+    /// First non-empty street line — the backend stores the wire shape as a
+    /// list so an empty leading line is possible for legacy rows.
+    private var currentLine1: String {
+        let lines = vm.profile?.profile.streetAddress ?? []
+        return lines.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty } ?? ""
+    }
+
+    /// Second line if the stored address was saved as two parts; empty
+    /// otherwise. We pick the second entry (not "the line after line1") so an
+    /// inadvertent leading blank doesn't shift a real apt/suite into line 1.
+    private var currentLine2: String {
+        let lines = vm.profile?.profile.streetAddress ?? []
+        guard lines.count >= 2 else { return "" }
+        return lines[1]
     }
 
     private var header: some View {
@@ -121,7 +147,11 @@ struct PersonalInfoSettingsView: View {
                     value: vm.displayPhone,
                     isEnabled: true
                 ) { activeSheet = .phone }
-                infoRowWithValue(title: L10n.Settings.mailingAddress, value: vm.displayAddress)
+                infoRowWithValue(
+                    title: L10n.Settings.mailingAddress,
+                    value: vm.displayAddress,
+                    isEnabled: true
+                ) { activeSheet = .address }
                 infoRowWithValue(title: L10n.Settings.riskTolerance, value: vm.displayRiskTolerance)
             }
         }
