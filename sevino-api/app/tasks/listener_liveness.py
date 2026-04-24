@@ -1,3 +1,4 @@
+import os
 import time
 
 import sentry_sdk
@@ -19,6 +20,11 @@ async def check_listener_liveness(ctx: dict) -> dict:
     The cron runs inside the same ``ctx`` as :func:`app.worker.startup`, so
     ``ctx["listeners"]`` is the same list populated at worker startup.
     """
+    railway_env = os.environ.get("RAILWAY_ENVIRONMENT_NAME", "")
+    if railway_env.startswith("pr-"):
+        logger.debug("listener_liveness_skipped_pr_preview", railway_env=railway_env)
+        return {"checked": 0, "silent": 0, "skipped": "pr-preview"}
+
     listeners = ctx.get("listeners") or []
     now = time.monotonic()
     silent: list[dict] = []
@@ -40,6 +46,8 @@ async def check_listener_liveness(ctx: dict) -> dict:
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("sse_stream", listener.stream_name)
                 scope.set_tag("alert_type", "sse_silence")
+                if railway_env:
+                    scope.set_tag("railway_environment", railway_env)
                 scope.set_context(
                     "sse_silence",
                     {

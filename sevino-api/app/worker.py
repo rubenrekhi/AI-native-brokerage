@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import signal
 import time
 
@@ -125,7 +126,7 @@ async def startup(ctx: dict) -> None:
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
-            environment=settings.environment,
+            environment=os.environ.get("RAILWAY_ENVIRONMENT_NAME") or settings.environment,
             traces_sample_rate=0.1,
             before_send=sentry_before_send,
         )
