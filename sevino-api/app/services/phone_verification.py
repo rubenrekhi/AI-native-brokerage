@@ -37,7 +37,12 @@ class PhoneVerificationService:
     def __init__(self) -> None:
         self._base_url = settings.supabase_url
         self._anon_key = settings.supabase_anon_key
-        self._client = httpx.AsyncClient(timeout=10.0)
+        # Short connect timeout (GoTrue is in the same region as the API) but a
+        # longer read timeout — Supabase dispatches the OTP synchronously
+        # through Twilio Verify, which can take several seconds under load.
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=15.0, write=5.0, pool=5.0)
+        )
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -91,7 +96,10 @@ class PhoneVerificationService:
         if response.status_code == 204:
             return {}
         if 200 <= response.status_code < 300:
-            return response.json()
+            try:
+                return response.json()
+            except Exception:
+                return {}
 
         try:
             body = response.json()
