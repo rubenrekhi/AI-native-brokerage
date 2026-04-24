@@ -10,7 +10,9 @@ runs, so handlers trust `ctx.account_status == "ACTIVE"`.
 from fastapi import APIRouter, Depends, Request
 
 import redis.asyncio as aioredis
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.database import get_db
 from app.dependencies import get_redis
 from app.dependencies.portfolio import (
     AlpacaAccountContext,
@@ -30,8 +32,9 @@ def get_alpaca(request: Request) -> AlpacaBrokerService:
 def _portfolio_service(
     alpaca: AlpacaBrokerService = Depends(get_alpaca),
     redis: aioredis.Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
 ) -> PortfolioService:
-    return PortfolioService(alpaca, redis)
+    return PortfolioService(alpaca, redis, db)
 
 
 @router.get("/snapshot", response_model=PortfolioSnapshotResponse)

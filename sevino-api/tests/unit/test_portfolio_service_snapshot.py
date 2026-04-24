@@ -24,8 +24,13 @@ def redis():
 
 
 @pytest.fixture
-def service(alpaca, redis):
-    return PortfolioService(alpaca=alpaca, redis=redis)
+def db():
+    return AsyncMock()
+
+
+@pytest.fixture
+def service(alpaca, redis, db):
+    return PortfolioService(alpaca=alpaca, redis=redis, db=db)
 
 
 def _ctx(status: str = "ACTIVE") -> AlpacaAccountContext:
