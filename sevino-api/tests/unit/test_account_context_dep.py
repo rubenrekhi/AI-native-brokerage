@@ -1,0 +1,52 @@
+import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from app.dependencies.portfolio import (
+    AlpacaAccountContext,
+    get_alpaca_account_context,
+)
+from app.exceptions import IncompleteOnboardingError
+
+
+@pytest.fixture
+def db_mock():
+    return AsyncMock()
+
+
+async def test_returns_context_on_happy_path(db_mock):
+    user_uuid = uuid.uuid4()
+    row = SimpleNamespace(
+        alpaca_account_id="acc_abc",
+        account_status="ACTIVE",
+    )
+    with patch(
+        "app.dependencies.portfolio.BrokerageAccountRepository.get_by_user_id",
+        new=AsyncMock(return_value=row),
+    ) as get_mock:
+        ctx = await get_alpaca_account_context(user_id=str(user_uuid), db=db_mock)
+
+    assert ctx == AlpacaAccountContext(
+        user_id=user_uuid,
+        alpaca_account_id="acc_abc",
+        account_status="ACTIVE",
+    )
+    get_mock.assert_awaited_once_with(db_mock, user_uuid)
+
+
+async def test_missing_row_raises_incomplete_onboarding(db_mock):
+    user_uuid = uuid.uuid4()
+    with patch(
+        "app.dependencies.portfolio.BrokerageAccountRepository.get_by_user_id",
+        new=AsyncMock(return_value=None),
+    ):
+        with pytest.raises(IncompleteOnboardingError) as exc_info:
+            await get_alpaca_account_context(user_id=str(user_uuid), db=db_mock)
+    assert "Brokerage account has not been created yet" in str(exc_info.value.message)
+
+
+async def test_invalid_uuid_raises_value_error(db_mock):
+    with pytest.raises(ValueError):
+        await get_alpaca_account_context(user_id="not-a-uuid", db=db_mock)
