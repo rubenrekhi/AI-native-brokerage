@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 
+import sentry_sdk
 import structlog
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,7 +46,7 @@ async def send_verification(
 
 
 @router.post("/phone/confirm", response_model=ConfirmVerificationResponse)
-@limiter.limit("10/minute")
+@limiter.limit("5/minute")
 @limiter.limit("30/minute", key_func=get_remote_address)
 async def confirm_verification(
     request: Request,
@@ -56,17 +57,39 @@ async def confirm_verification(
     phone_verification: PhoneVerificationService = Depends(get_phone_verification),
 ) -> ConfirmVerificationResponse:
     """Confirm the OTP; on success mark phone_verified_at on the user profile."""
-    await phone_verification.confirm(
+    result = await phone_verification.confirm(
         user_jwt=access_token,
         phone_number=body.phone_number,
         token=body.code,
     )
-    verified_at = datetime.now(timezone.utc)
-    await UserProfileRepository.update_fields(
-        db,
-        uuid.UUID(user_id),
-        phone_number=body.phone_number,
-        phone_verified_at=verified_at,
+    # GoTrue returns the authoritative, normalized phone on its user object —
+    # trust that over the request body so we persist what Supabase has actually
+    # bound to the auth.users row.
+    confirmed_phone = (
+        (result or {}).get("user", {}).get("phone") or body.phone_number
     )
+    verified_at = datetime.now(timezone.utc)
+    try:
+        await UserProfileRepository.update_fields(
+            db,
+            uuid.UUID(user_id),
+            phone_number=confirmed_phone,
+            phone_verified_at=verified_at,
+        )
+    except Exception as exc:
+        # GoTrue already flipped the phone on auth.users but we failed to mirror
+        # it onto user_profiles — the two stores are now out of sync. Surface
+        # loudly so the drift can be reconciled.
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("operation", "phone_confirm_db_write")
+            scope.set_context(
+                "phone_confirm",
+                {"user_id": user_id, "phone": confirmed_phone},
+            )
+            sentry_sdk.capture_message(
+                f"phone_confirm_db_write_failed: {exc!r}",
+                level="error",
+            )
+        raise
     logger.info("phone_verification_confirmed", user_id=user_id)
     return ConfirmVerificationResponse(phone_verified_at=verified_at)

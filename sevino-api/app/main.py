@@ -105,7 +105,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
     app.include_router(funding_router, prefix="/v1/funding", tags=["funding"])
     app.include_router(assets_router, prefix="/v1/assets", tags=["assets"])
-    app.include_router(phone_auth_router, prefix="/auth", tags=["auth"])
+    app.include_router(phone_auth_router, prefix="/v1/auth", tags=["auth"])
 
 
 include_routers(app)
