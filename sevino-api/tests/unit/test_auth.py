@@ -13,7 +13,7 @@ from jwt.exceptions import (
 from starlette.datastructures import State
 from starlette.requests import Request
 
-from app.auth import get_current_user
+from app.auth import get_access_token, get_current_user
 from app.exceptions import AuthenticationError
 
 
@@ -129,3 +129,18 @@ async def test_valid_token_returns_user_id():
 
     assert result == "user-abc-123"
     assert req.state.user_id == "user-abc-123"
+
+
+# ---------------------------------------------------------------------------
+# get_access_token
+# ---------------------------------------------------------------------------
+
+
+async def test_get_access_token_returns_raw_bearer_token():
+    token = await get_access_token(credentials=_creds("raw-jwt-xyz"))
+    assert token == "raw-jwt-xyz"
+
+
+async def test_get_access_token_missing_credentials_raises():
+    with pytest.raises(AuthenticationError, match="Missing authorization header"):
+        await get_access_token(credentials=None)

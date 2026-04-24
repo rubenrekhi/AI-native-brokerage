@@ -53,3 +53,16 @@ async def get_current_user(
 
     request.state.user_id = user_id
     return user_id
+
+
+async def get_access_token(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+) -> str:
+    """Return the raw Bearer token string.
+
+    Pair with ``get_current_user`` on handlers that need to forward the
+    caller's JWT to another service (e.g. Supabase GoTrue).
+    """
+    if credentials is None:
+        raise AuthenticationError("Missing authorization header")
+    return credentials.credentials
