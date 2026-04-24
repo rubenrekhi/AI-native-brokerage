@@ -101,6 +101,137 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.error)
     }
 
+    // MARK: - Derived display fields
+
+    func testDisplayFieldsUsePlaceholderWhenProfileMissing() {
+        XCTAssertEqual(viewModel.displayName, L10n.Settings.missingValuePlaceholder)
+        XCTAssertEqual(viewModel.displayEmail, L10n.Settings.missingValuePlaceholder)
+        XCTAssertEqual(viewModel.displayPhone, L10n.Settings.missingValuePlaceholder)
+        XCTAssertEqual(viewModel.displayAddress, L10n.Settings.missingValuePlaceholder)
+        XCTAssertEqual(viewModel.displayRiskTolerance, L10n.Settings.missingValuePlaceholder)
+        XCTAssertNil(viewModel.displayMemberDuration)
+    }
+
+    func testDisplayNamePrefersPreferredName() async {
+        mockSettings.getProfileResult = .success(Self.stubProfile(preferred: "Rye", first: "Riley", last: "Ready"))
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.displayName, "Rye")
+    }
+
+    func testDisplayNameFallsBackToFirstAndLast() async {
+        mockSettings.getProfileResult = .success(Self.stubProfile(preferred: nil, first: "Riley", last: "Ready"))
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.displayName, "Riley Ready")
+    }
+
+    func testDisplayInitialsUsesUpToTwoInitials() async {
+        mockSettings.getProfileResult = .success(Self.stubProfile(preferred: "Ready Riley Rose", first: nil, last: nil))
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.displayInitials, "RR")
+    }
+
+    func testDisplayAddressComposesLinesAndOmitsMissingSegments() async {
+        mockSettings.getProfileResult = .success(Self.stubProfile(
+            streetLines: ["123 Main St", ""],
+            city: "Cleveland",
+            state: nil,
+            postal: "44110"
+        ))
+        await viewModel.load()
+
+        XCTAssertEqual(viewModel.displayAddress, "123 Main St, Cleveland, 44110")
+    }
+
+    // MARK: - formatPhone
+
+    func testFormatPhoneFormatsUSNumbers() {
+        XCTAssertEqual(SettingsViewModel.formatPhone("+11234567890"), "+1 (123) 456 7890")
+        XCTAssertEqual(SettingsViewModel.formatPhone("1234567890"), "(123) 456 7890")
+    }
+
+    func testFormatPhonePassesThroughUnrecognizedFormats() {
+        XCTAssertEqual(SettingsViewModel.formatPhone("+44 20 7946 0958"), "+44 20 7946 0958")
+    }
+
+    func testFormatPhoneReturnsPlaceholderForEmpty() {
+        XCTAssertEqual(SettingsViewModel.formatPhone(nil), L10n.Settings.missingValuePlaceholder)
+        XCTAssertEqual(SettingsViewModel.formatPhone(""), L10n.Settings.missingValuePlaceholder)
+    }
+
+    // MARK: - riskToleranceLabel
+
+    func testRiskToleranceAggressiveWhenBuyingMoreAndHighLoss() {
+        let label = SettingsViewModel.riskToleranceLabel(maxLoss: "40%+", scenario: "buy_more")
+        XCTAssertEqual(label, L10n.Settings.riskAggressive)
+    }
+
+    func testRiskToleranceConservativeWhenLowLoss() {
+        let label = SettingsViewModel.riskToleranceLabel(maxLoss: "0-5%", scenario: "sell")
+        XCTAssertEqual(label, L10n.Settings.riskConservative)
+    }
+
+    func testRiskToleranceModerateDefaultForMidScenarios() {
+        let label = SettingsViewModel.riskToleranceLabel(maxLoss: "15-25%", scenario: "hold")
+        XCTAssertEqual(label, L10n.Settings.riskModerate)
+    }
+
+    func testRiskToleranceNilWhenBothInputsMissing() {
+        XCTAssertNil(SettingsViewModel.riskToleranceLabel(maxLoss: nil, scenario: nil))
+        XCTAssertNil(SettingsViewModel.riskToleranceLabel(maxLoss: "", scenario: ""))
+    }
+
+    func testRiskToleranceAcceptsRawUILabels() {
+        // The DB stores whatever the user picked during onboarding, which may
+        // be the UI label form rather than the canonical enum.
+        let label = SettingsViewModel.riskToleranceLabel(
+            maxLoss: "25 – 40% decline",
+            scenario: "Hold and do nothing — Wait for recovery"
+        )
+        XCTAssertEqual(label, L10n.Settings.riskModerate)
+
+        let aggressive = SettingsViewModel.riskToleranceLabel(
+            maxLoss: "40%+",
+            scenario: "Buy more and capitalize on the dip"
+        )
+        XCTAssertEqual(aggressive, L10n.Settings.riskAggressive)
+    }
+
+    // MARK: - formatMemberDuration
+
+    func testFormatMemberDurationReturnsNoneForNegativeRange() {
+        let end = Date(timeIntervalSince1970: 0)
+        let start = Date(timeIntervalSince1970: 86_400)
+        XCTAssertEqual(
+            SettingsViewModel.formatMemberDuration(from: start, to: end, calendar: .current),
+            L10n.Settings.durationNone
+        )
+    }
+
+    func testFormatMemberDurationReturnsNoneWhenIdentical() {
+        let d = Date(timeIntervalSince1970: 1_700_000_000)
+        XCTAssertEqual(
+            SettingsViewModel.formatMemberDuration(from: d, to: d, calendar: .current),
+            L10n.Settings.durationNone
+        )
+    }
+
+    func testFormatMemberDurationIncludesMonthsWeeksDays() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let start = calendar.date(from: DateComponents(year: 2026, month: 1, day: 1))!
+        // Expect 3 months, 1 week, 2 days -> April 10, 2026
+        let end = calendar.date(from: DateComponents(year: 2026, month: 4, day: 10))!
+
+        let result = SettingsViewModel.formatMemberDuration(from: start, to: end, calendar: calendar)
+
+        XCTAssertTrue(result.contains("3"))
+        XCTAssertTrue(result.contains("1"))
+        XCTAssertTrue(result.contains("2"))
+    }
+
     // MARK: - Fixtures
 
     private static func stubProfile() -> SettingsProfileResponse {
@@ -117,6 +248,72 @@ final class SettingsViewModelTests: XCTestCase {
         """#.utf8)
         // swiftlint:disable:next force_try
         return try! decoder.decode(SettingsProfileResponse.self, from: json)
+    }
+
+    private static func stubProfile(
+        preferred: String?,
+        first: String?,
+        last: String?
+    ) -> SettingsProfileResponse {
+        stubProfile(
+            preferred: preferred,
+            first: first,
+            last: last,
+            streetLines: nil,
+            city: nil,
+            state: nil,
+            postal: nil
+        )
+    }
+
+    private static func stubProfile(
+        streetLines: [String]?,
+        city: String?,
+        state: String?,
+        postal: String?
+    ) -> SettingsProfileResponse {
+        stubProfile(
+            preferred: "Riley",
+            first: nil,
+            last: nil,
+            streetLines: streetLines,
+            city: city,
+            state: state,
+            postal: postal
+        )
+    }
+
+    private static func stubProfile(
+        preferred: String?,
+        first: String?,
+        last: String?,
+        streetLines: [String]?,
+        city: String?,
+        state: String?,
+        postal: String?
+    ) -> SettingsProfileResponse {
+        var profile: [String: Any] = [:]
+        if let preferred { profile["preferred_name"] = preferred }
+        if let first { profile["first_name"] = first }
+        if let last { profile["last_name"] = last }
+        if let streetLines { profile["street_address"] = streetLines }
+        if let city { profile["city"] = city }
+        if let state { profile["state"] = state }
+        if let postal { profile["postal_code"] = postal }
+
+        let payload: [String: Any] = [
+            "profile": profile,
+            "financial_profile": NSNull(),
+            "brokerage": NSNull(),
+            "linked_accounts": [],
+            "member_since": NSNull()
+        ]
+        // swiftlint:disable:next force_try
+        let data = try! JSONSerialization.data(withJSONObject: payload)
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        // swiftlint:disable:next force_try
+        return try! decoder.decode(SettingsProfileResponse.self, from: data)
     }
 
     private static func stubAccountValue() -> AccountValueResponse {

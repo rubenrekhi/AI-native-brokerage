@@ -14,16 +14,6 @@
         }
       }
     },
-    "%@ • %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ • %2$@"
-          }
-        }
-      }
-    },
     "auth.continue_with_apple" : {
       "localizations" : {
         "en" : {
@@ -470,6 +460,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deposit"
+          }
+        }
+      }
+    },
+    "home.dictation_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
+    "home.dictation_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input failed. Please try again."
+          }
+        }
+      }
+    },
+    "home.dictation_open_settings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        }
+      }
+    },
+    "home.dictation_permission_denied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow microphone and speech recognition access in Settings to use voice input."
+          }
+        }
+      }
+    },
+    "home.dictation_permission_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input"
+          }
+        }
+      }
+    },
+    "home.dictation_unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input is unavailable on this device."
           }
         }
       }
@@ -934,16 +984,6 @@
         }
       }
     },
-    "home.mic_stop_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stop voice input"
-          }
-        }
-      }
-    },
     "home.mic_recording_state" : {
       "localizations" : {
         "en" : {
@@ -964,72 +1004,22 @@
         }
       }
     },
+    "home.mic_stop_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop voice input"
+          }
+        }
+      }
+    },
     "home.mic_stop_hint" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Double tap to stop dictation"
-          }
-        }
-      }
-    },
-    "home.dictation_failed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input failed. Please try again."
-          }
-        }
-      }
-    },
-    "home.dictation_unavailable" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input is unavailable on this device."
-          }
-        }
-      }
-    },
-    "home.dictation_permission_denied" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allow microphone and speech recognition access in Settings to use voice input."
-          }
-        }
-      }
-    },
-    "home.dictation_permission_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input"
-          }
-        }
-      }
-    },
-    "home.dictation_open_settings" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open Settings"
-          }
-        }
-      }
-    },
-    "home.dictation_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not now"
           }
         }
       }
@@ -4094,6 +4084,82 @@
         }
       }
     },
+    "settings.duration_days" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld day"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld days"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings.duration_months" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld month"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld months"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings.duration_none" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Less than a day"
+          }
+        }
+      }
+    },
+    "settings.duration_weeks" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "settings.email" : {
       "localizations" : {
         "en" : {
@@ -4314,6 +4380,16 @@
         }
       }
     },
+    "settings.loading_personal_info" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading personal info"
+          }
+        }
+      }
+    },
     "settings.log_out" : {
       "localizations" : {
         "en" : {
@@ -4380,6 +4456,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Manage FaceID"
+          }
+        }
+      }
+    },
+    "settings.missing_value_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
           }
         }
       }
@@ -4504,6 +4590,36 @@
         }
       }
     },
+    "settings.risk_aggressive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggressive"
+          }
+        }
+      }
+    },
+    "settings.risk_conservative" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservative"
+          }
+        }
+      }
+    },
+    "settings.risk_moderate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderate"
+          }
+        }
+      }
+    },
     "settings.risk_tolerance" : {
       "localizations" : {
         "en" : {
@@ -4604,6 +4720,16 @@
         }
       }
     },
+    "settings.tier_free" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free Tier"
+          }
+        }
+      }
+    },
     "settings.title" : {
       "localizations" : {
         "en" : {
@@ -4615,6 +4741,26 @@
       }
     },
     "settings.unavailable_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      }
+    },
+    "settings.unknown_bank_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown bank"
+          }
+        }
+      }
+    },
+    "settings.unknown_value" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -4670,26 +4816,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't unlink account"
-          }
-        }
-      }
-    },
-    "settings.unknown_bank_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unknown bank"
-          }
-        }
-      }
-    },
-    "settings.unknown_value" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "—"
           }
         }
       }
@@ -4924,16 +5050,6 @@
         }
       }
     },
-    "transfer.amount_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Amount"
-          }
-        }
-      }
-    },
     "transfer.amount_empty_cta" : {
       "localizations" : {
         "en" : {
@@ -4950,6 +5066,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Amount exceeds available"
+          }
+        }
+      }
+    },
+    "transfer.amount_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
           }
         }
       }

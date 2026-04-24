@@ -73,7 +73,7 @@ struct SettingsView: View {
                 case .loginSecurity:
                     LoginSecuritySettingsView()
                 case .personalInfo:
-                    PersonalInfoSettingsView()
+                    PersonalInfoSettingsView(vm: settingsVM)
                 case .appearance:
                     AppearanceSettingsView()
                 case .changePassword,

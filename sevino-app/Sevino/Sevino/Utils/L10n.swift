@@ -554,6 +554,22 @@ enum L10n {
         static let phoneLabel = String(localized: "settings.phone_label")
         static let mailingAddress = String(localized: "settings.mailing_address")
         static let riskTolerance = String(localized: "settings.risk_tolerance")
+        static let riskAggressive = String(localized: "settings.risk_aggressive")
+        static let riskModerate = String(localized: "settings.risk_moderate")
+        static let riskConservative = String(localized: "settings.risk_conservative")
+        static let tierFree = String(localized: "settings.tier_free")
+        static let missingValuePlaceholder = String(localized: "settings.missing_value_placeholder")
+        static let loadingPersonalInfo = String(localized: "settings.loading_personal_info")
+        static let durationNone = String(localized: "settings.duration_none")
+        static func durationMonths(_ count: Int) -> String {
+            String(format: String(localized: "settings.duration_months"), count)
+        }
+        static func durationWeeks(_ count: Int) -> String {
+            String(format: String(localized: "settings.duration_weeks"), count)
+        }
+        static func durationDays(_ count: Int) -> String {
+            String(format: String(localized: "settings.duration_days"), count)
+        }
         static func usingSevino(_ duration: String) -> String {
             String(format: String(localized: "settings.using_sevino"), duration)
         }

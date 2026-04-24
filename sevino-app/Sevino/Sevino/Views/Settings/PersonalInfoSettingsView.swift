@@ -5,18 +5,7 @@ struct PersonalInfoSettingsView: View {
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
-    // TODO: Replace with real user data from ViewModel
-    private let userName = "Ready Riley"
-    private let userTier = "Free Tier"
-    private let userSince = "3 months, 2 weeks, 2 days"
-    private let userEmail = "ready.riley@sevino.ai"
-    private let userPhone = "+1 (123) 456 7890"
-    private let userAddress = "123 Invest Circle, 44110, Cleveland, OH"
-    private let userRiskTolerance = "Aggressive"
-
-    private var initials: String {
-        userName.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined()
-    }
+    let vm: SettingsViewModel
 
     @State private var baseScale: CGFloat = 1
 
@@ -28,15 +17,12 @@ struct PersonalInfoSettingsView: View {
                 header
                     .padding(.bottom, 24 * scale)
 
-                profileCard
-                    .padding(.bottom, 24 * scale)
-
-                VStack(spacing: 0) {
-                    infoRow(title: L10n.Settings.nameDetails)
-                    infoRowWithValue(title: L10n.Settings.emailLabel, value: userEmail)
-                    infoRowWithValue(title: L10n.Settings.phoneLabel, value: userPhone)
-                    infoRowWithValue(title: L10n.Settings.mailingAddress, value: userAddress)
-                    infoRowWithValue(title: L10n.Settings.riskTolerance, value: userRiskTolerance)
+                if vm.profile != nil {
+                    content
+                } else if vm.error != nil {
+                    errorState
+                } else {
+                    loadingState
                 }
             }
             .padding(.horizontal, 20 * scale)
@@ -54,16 +40,62 @@ struct PersonalInfoSettingsView: View {
             }
         }
         .navigationBarBackButtonHidden()
+        .task {
+            if vm.profile == nil {
+                await vm.load()
+            }
+        }
     }
 
     private var header: some View {
         SettingsHeaderView(title: L10n.Settings.personalInfo, scale: scale, onBack: { dismiss() })
     }
 
+    private var loadingState: some View {
+        ProgressView()
+            .tint(Color.sevinoSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 60 * scale)
+            .accessibilityLabel(L10n.Settings.loadingPersonalInfo)
+    }
+
+    private var errorState: some View {
+        ContentUnavailableView {
+            Label(L10n.Settings.loadErrorTitle, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(L10n.Settings.loadErrorMessage)
+        } actions: {
+            Button(L10n.Settings.loadErrorRetry) {
+                Task { await vm.reload() }
+            }
+            .font(.system(size: 14 * scale, weight: .medium))
+            .foregroundStyle(Color.sevinoSecondary)
+            .padding(.horizontal, 20 * scale)
+            .padding(.vertical, 10 * scale)
+            .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+        }
+        .padding(.top, 40 * scale)
+    }
+
+    private var content: some View {
+        VStack(spacing: 0) {
+            profileCard
+                .padding(.bottom, 24 * scale)
+
+            VStack(spacing: 0) {
+                infoRow(title: L10n.Settings.nameDetails)
+                infoRowWithValue(title: L10n.Settings.emailLabel, value: vm.displayEmail)
+                infoRowWithValue(title: L10n.Settings.phoneLabel, value: vm.displayPhone)
+                infoRowWithValue(title: L10n.Settings.mailingAddress, value: vm.displayAddress)
+                infoRowWithValue(title: L10n.Settings.riskTolerance, value: vm.displayRiskTolerance)
+            }
+        }
+    }
+
     private var profileCard: some View {
         VStack(alignment: .leading, spacing: 12 * scale) {
             HStack(spacing: 12 * scale) {
-                Text(initials)
+                Text(vm.displayInitials)
                     .font(.system(size: 18 * scale, weight: .bold))
                     .foregroundStyle(Color.sevinoPrimary)
                     .frame(width: 48 * scale, height: 48 * scale)
@@ -77,11 +109,11 @@ struct PersonalInfoSettingsView: View {
                     )
 
                 VStack(alignment: .leading, spacing: 4 * scale) {
-                    Text(userName)
+                    Text(vm.displayName)
                         .font(.system(size: 16 * scale, weight: .bold))
                         .foregroundStyle(Color.sevinoSecondary)
 
-                    Text(userTier)
+                    Text(vm.displayTier)
                         .font(.system(size: 11 * scale, weight: .semibold))
                         .foregroundStyle(Color.sevinoWarning)
                         .padding(.horizontal, 8 * scale)
@@ -90,9 +122,11 @@ struct PersonalInfoSettingsView: View {
                 }
             }
 
-            Text(L10n.Settings.usingSevino(userSince))
-                .font(.system(size: 13 * scale))
-                .foregroundStyle(Color.sevinoGreyContrast)
+            if let duration = vm.displayMemberDuration {
+                Text(L10n.Settings.usingSevino(duration))
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16 * scale)
@@ -154,16 +188,53 @@ struct PersonalInfoSettingsView: View {
     }
 }
 
-#Preview("Dark") {
+// MARK: - Previews
+
+#if DEBUG
+#Preview("Loaded") {
     NavigationStack {
-        PersonalInfoSettingsView()
+        PersonalInfoSettingsView(vm: .previewLoaded())
     }
     .preferredColorScheme(.dark)
 }
 
-#Preview("Light") {
+#Preview("Loading") {
     NavigationStack {
-        PersonalInfoSettingsView()
+        PersonalInfoSettingsView(vm: SettingsViewModel(
+            settingsService: PreviewStallingSettingsService(),
+            fundingService: PreviewNoopFundingService()
+        ))
     }
-    .preferredColorScheme(.light)
+    .preferredColorScheme(.dark)
 }
+
+#Preview("Error") {
+    NavigationStack {
+        PersonalInfoSettingsView(vm: .previewError())
+    }
+    .preferredColorScheme(.dark)
+}
+
+private extension SettingsViewModel {
+    /// Returns a VM whose `profile` is populated synchronously so the preview
+    /// renders the loaded state on first paint (no flash of the loading
+    /// spinner).
+    static func previewLoaded() -> SettingsViewModel {
+        let vm = SettingsViewModel(
+            settingsService: PreviewLoadedSettingsService(),
+            fundingService: PreviewNoopFundingService()
+        )
+        vm.seedProfileForPreview(PreviewLoadedSettingsService.decodedProfile())
+        return vm
+    }
+
+    static func previewError() -> SettingsViewModel {
+        let vm = SettingsViewModel(
+            settingsService: PreviewFailingSettingsService(),
+            fundingService: PreviewNoopFundingService()
+        )
+        vm.seedErrorForPreview("Preview error")
+        return vm
+    }
+}
+#endif
