@@ -5,15 +5,16 @@ struct LinkedAccountsSettingsView: View {
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
-    // TODO: Replace with real linked accounts from ViewModel
-    @State private var accounts = [
-        LinkedAccount(name: "Total Checking", bankName: "Chase Bank", lastFour: "6813", logoDomain: "chase.com"),
-        LinkedAccount(name: "Business Checking", bankName: "Mercury", lastFour: "9247", logoDomain: "mercury.com"),
-    ]
+    @Bindable var viewModel: SettingsViewModel
+
     @State private var expandedAccountId: UUID?
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
+
+    private var accounts: [AchRelationshipDTO] {
+        viewModel.profile?.linkedAccounts ?? []
+    }
 
     var body: some View {
         SevinoGlassContainer {
@@ -29,8 +30,9 @@ struct LinkedAccountsSettingsView: View {
                             account: account,
                             scale: scale,
                             isExpanded: expandedAccountId == account.id,
+                            isBusy: viewModel.isLoading,
                             onToggle: { toggleExpanded(account.id) },
-                            onCopy: { copyAccountNumber(account.lastFour) },
+                            onCopy: { copyAccountNumber(account.accountMask ?? "") },
                             onUnlink: { unlink(account.id) }
                         )
                     }
@@ -56,14 +58,24 @@ struct LinkedAccountsSettingsView: View {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
         }
-        .background {
-            GeometryReader { geo in
-                Color.clear.onAppear {
-                    baseScale = geo.size.width / 393
-                }
-            }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            baseScale = width / 393
         }
         .navigationBarBackButtonHidden()
+        .alert(
+            L10n.Settings.unlinkErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.General.ok, role: .cancel, action: viewModel.clearError)
+        } message: { message in
+            Text(message)
+        }
     }
 
     private var header: some View {
@@ -85,34 +97,56 @@ struct LinkedAccountsSettingsView: View {
         }
     }
 
-    private func copyAccountNumber(_ lastFour: String) {
-        UIPasteboard.general.string = lastFour
+    private func copyAccountNumber(_ mask: String) {
+        guard !mask.isEmpty else { return }
+        UIPasteboard.general.string = mask
     }
 
     private func unlink(_ id: UUID) {
-        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-            accounts.removeAll { $0.id == id }
-        }
+        Task { await viewModel.unlinkAccount(id) }
     }
 }
 
 private struct LinkedAccountRow: View {
-    let account: LinkedAccount
+    let account: AchRelationshipDTO
     let scale: CGFloat
     let isExpanded: Bool
+    let isBusy: Bool
     let onToggle: () -> Void
     let onCopy: () -> Void
     let onUnlink: () -> Void
 
     @State private var showUnlinkConfirmation = false
 
+    private var displayName: String {
+        account.nickname ?? account.accountType ?? account.institutionName ?? ""
+    }
+
+    private var bankName: String {
+        account.institutionName ?? ""
+    }
+
+    private var mask: String {
+        account.accountMask ?? ""
+    }
+
+    private var hasMask: Bool { !mask.isEmpty }
+
+    private var accountNumberValue: String {
+        hasMask ? "••••\(mask)" : L10n.Settings.unknownValue
+    }
+
+    private var titleText: String {
+        hasMask ? "\(displayName) • \(mask)" : displayName
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             Button(action: onToggle) {
                 HStack(spacing: 10 * scale) {
-                    BankLogoView(domain: account.logoDomain, bankName: account.bankName, size: 28 * scale)
+                    BankLogoView(bankName: bankName, size: 28 * scale)
 
-                    Text("\(account.name) • \(account.lastFour)")
+                    Text(titleText)
                         .font(.system(size: 16 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoSecondary)
 
@@ -140,14 +174,14 @@ private struct LinkedAccountRow: View {
             VStack(spacing: 0) {
                 detailRow(
                     label: L10n.Settings.accountName,
-                    value: account.name,
-                    subtitle: account.bankName
+                    value: displayName,
+                    subtitle: bankName
                 )
                 Divider().foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
                 detailRow(
                     label: L10n.Settings.accountNumberLabel,
-                    value: "****\(account.lastFour)",
-                    showCopy: true
+                    value: accountNumberValue,
+                    showCopy: hasMask
                 )
             }
             .padding(14 * scale)
@@ -162,6 +196,7 @@ private struct LinkedAccountRow: View {
                     .contentShape(.rect(cornerRadius: 14 * scale))
             }
             .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
+            .disabled(isBusy)
             .confirmationDialog(L10n.Settings.unlinkConfirmTitle, isPresented: $showUnlinkConfirmation) {
                 Button(L10n.Settings.unlinkConfirmAction, role: .destructive, action: onUnlink)
             } message: {
@@ -210,39 +245,37 @@ private struct LinkedAccountRow: View {
 }
 
 private struct BankLogoView: View {
-    let domain: String
     let bankName: String
     let size: CGFloat
 
+    private var initial: String {
+        bankName.first.map(String.init) ?? "•"
+    }
+
+    private var accessibilityLabel: String {
+        bankName.isEmpty ? L10n.Settings.unknownBankAccessibility : bankName
+    }
+
     var body: some View {
-        AsyncImage(url: URL(string: "https://www.google.com/s2/favicons?domain=\(domain)&sz=128")) { phase in
-            switch phase {
-            case .success(let image):
-                image
-                    .resizable()
-                    .scaledToFill()
-            default:
-                Text(String(bankName.prefix(1)))
-                    .font(.system(size: size * 0.5, weight: .bold))
-                    .foregroundStyle(Color.sevinoSecondary)
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(.circle)
-        .accessibilityLabel(bankName)
+        Text(initial)
+            .font(.system(size: size * 0.5, weight: .bold))
+            .foregroundStyle(Color.sevinoSecondary)
+            .frame(width: size, height: size)
+            .background(Color.sevinoGreyAccent.opacity(0.2), in: .circle)
+            .accessibilityLabel(accessibilityLabel)
     }
 }
 
 #Preview("Dark") {
     NavigationStack {
-        LinkedAccountsSettingsView()
+        LinkedAccountsSettingsView(viewModel: SettingsViewModel())
     }
     .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
     NavigationStack {
-        LinkedAccountsSettingsView()
+        LinkedAccountsSettingsView(viewModel: SettingsViewModel())
     }
     .preferredColorScheme(.light)
 }

@@ -69,7 +69,7 @@ struct SettingsView: View {
                 case .brokerage:
                     BrokerageSettingsView()
                 case .linkedAccounts:
-                    LinkedAccountsSettingsView()
+                    LinkedAccountsSettingsView(viewModel: settingsVM)
                 case .loginSecurity:
                     LoginSecuritySettingsView()
                 case .personalInfo:
