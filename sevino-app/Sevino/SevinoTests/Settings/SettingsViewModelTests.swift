@@ -46,6 +46,36 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.error, "load failed")
     }
 
+    func testLoadHandlesPartialFailure() async {
+        // Profile succeeds but account value fails — the profile still
+        // populates so downstream screens have something to render while the
+        // error channel surfaces the failure.
+        struct AccountValueError: LocalizedError {
+            var errorDescription: String? { "account value failed" }
+        }
+        mockSettings.getAccountValueResult = .failure(AccountValueError())
+
+        await viewModel.load()
+
+        XCTAssertNotNil(viewModel.profile)
+        XCTAssertNil(viewModel.accountValue)
+        XCTAssertEqual(viewModel.error, "account value failed")
+        XCTAssertFalse(viewModel.isLoading)
+    }
+
+    func testReloadRefetchesData() async {
+        await viewModel.load()
+        XCTAssertEqual(mockSettings.getProfileCalls, 1)
+        XCTAssertEqual(mockSettings.getAccountValueCalls, 1)
+
+        await viewModel.reload()
+
+        XCTAssertEqual(mockSettings.getProfileCalls, 2)
+        XCTAssertEqual(mockSettings.getAccountValueCalls, 2)
+        XCTAssertNotNil(viewModel.profile)
+        XCTAssertNotNil(viewModel.accountValue)
+    }
+
     func testLoadClearsPreviousError() async {
         struct LoadError: LocalizedError {
             var errorDescription: String? { "boom" }
