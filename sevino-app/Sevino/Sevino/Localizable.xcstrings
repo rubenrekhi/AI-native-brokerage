@@ -3964,6 +3964,46 @@
         }
       }
     },
+    "settings.biometric_auth_reason" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate to enable biometric unlock"
+          }
+        }
+      }
+    },
+    "settings.biometric_toggle_helper" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use %@ to unlock Sevino when you open the app."
+          }
+        }
+      }
+    },
+    "settings.biometrics_unavailable_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrics aren't available on this device. Enable Face ID or Touch ID in your device settings to use biometric unlock."
+          }
+        }
+      }
+    },
+    "settings.biometrics_unavailable_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrics unavailable"
+          }
+        }
+      }
+    },
     "settings.brokerage" : {
       "localizations" : {
         "en" : {
@@ -4124,6 +4164,16 @@
         }
       }
     },
+    "settings.coming_soon" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coming soon"
+          }
+        }
+      }
+    },
     "settings.consumer_terms" : {
       "localizations" : {
         "en" : {
@@ -4276,6 +4326,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Email"
+          }
+        }
+      }
+    },
+    "settings.email_support_note" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Contact support to change your email."
+          }
+        }
+      }
+    },
+    "settings.face_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Face ID"
           }
         }
       }
@@ -4600,6 +4670,16 @@
         }
       }
     },
+    "settings.optic_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optic ID"
+          }
+        }
+      }
+    },
     "settings.personal_info" : {
       "localizations" : {
         "en" : {
@@ -4836,6 +4916,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Settings"
+          }
+        }
+      }
+    },
+    "settings.touch_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touch ID"
           }
         }
       }

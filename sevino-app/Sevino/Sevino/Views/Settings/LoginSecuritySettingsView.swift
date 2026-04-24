@@ -16,10 +16,10 @@ struct LoginSecuritySettingsView: View {
                 .padding(.bottom, 24 * scale)
 
             VStack(spacing: 0) {
-                navRow(title: L10n.Settings.email)
+                navLinkRow(title: L10n.Settings.email, destination: .emailSettings)
                 navLinkRow(title: L10n.Settings.changePassword, destination: .changePassword)
-                navRow(title: L10n.Settings.manageFaceId)
-                navRow(title: L10n.Settings.activeSessions)
+                navLinkRow(title: L10n.Settings.manageFaceId, destination: .manageFaceId)
+                comingSoonRow(title: L10n.Settings.activeSessions)
             }
 
             Spacer()
@@ -46,12 +46,10 @@ struct LoginSecuritySettingsView: View {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
         }
-        .background {
-            GeometryReader { geo in
-                Color.clear.onAppear {
-                    baseScale = geo.size.width / 393
-                }
-            }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            baseScale = width / 393
         }
         .navigationBarBackButtonHidden()
     }
@@ -60,18 +58,39 @@ struct LoginSecuritySettingsView: View {
         SettingsHeaderView(title: L10n.Settings.loginSecurity, scale: scale, onBack: { dismiss() })
     }
 
-    private func navRow(title: String) -> some View {
-        Button(action: {}) {
-            rowContent(title: title)
-        }
-        .disabled(true)
-    }
-
     private func navLinkRow(title: String, destination: SettingsDestination) -> some View {
         NavigationLink(value: destination) {
             rowContent(title: title)
         }
         .buttonStyle(.plain)
+    }
+
+    private func comingSoonRow(title: String) -> some View {
+        VStack(spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    Text(title)
+                        .font(.system(size: 16 * scale))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+
+                    Text(L10n.Settings.comingSoon)
+                        .font(.system(size: 12 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoGreyContrast.opacity(0.7))
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoGreyContrast.opacity(0.5))
+                    .accessibilityHidden(true)
+            }
+            .padding(.vertical, 16 * scale)
+
+            Divider()
+                .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func rowContent(title: String) -> some View {

@@ -76,11 +76,13 @@ struct SettingsView: View {
                     PersonalInfoSettingsView(vm: settingsVM)
                 case .appearance:
                     AppearanceSettingsView()
+                case .emailSettings:
+                    EmailSettingsView(vm: settingsVM)
+                case .manageFaceId:
+                    FaceIDSettingsView()
                 case .changePassword:
                     ChangePasswordView(vm: ChangePasswordViewModel())
-                case .emailSettings,
-                     .manageFaceId,
-                     .accountDocuments,
+                case .accountDocuments,
                      .monthlyStatements,
                      .taxDocuments,
                      .accountHistory:
