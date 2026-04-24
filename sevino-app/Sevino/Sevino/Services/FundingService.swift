@@ -5,6 +5,7 @@ protocol FundingServiceProtocol {
     func createLinkToken() async throws -> String
     func linkBank(_ request: LinkBankRequest) async throws -> AchRelationshipDTO
     func listAchRelationships() async throws -> [AchRelationshipDTO]
+    func deleteAchRelationship(id: UUID) async throws
     func createTransfer(
         relationshipId: String,
         amount: Decimal,
@@ -40,6 +41,10 @@ final class FundingService: FundingServiceProtocol {
             "/v1/funding/ach-relationships"
         )
         return response.relationships
+    }
+
+    func deleteAchRelationship(id: UUID) async throws {
+        try await api.delete("/v1/funding/ach-relationships/\(id.uuidString)")
     }
 
     func createTransfer(

@@ -74,6 +74,14 @@ struct SettingsView: View {
                     PersonalInfoSettingsView()
                 case .appearance:
                     AppearanceSettingsView()
+                case .changePassword,
+                     .emailSettings,
+                     .manageFaceId,
+                     .accountDocuments,
+                     .monthlyStatements,
+                     .taxDocuments,
+                     .accountHistory:
+                    EmptyView()
                 }
             }
         }

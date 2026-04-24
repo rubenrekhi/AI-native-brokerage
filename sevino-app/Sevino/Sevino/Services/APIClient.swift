@@ -6,6 +6,7 @@ protocol APIClientProtocol: Sendable {
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func delete<T: Decodable>(_ path: String) async throws -> T
+    func delete(_ path: String) async throws
 }
 
 final class APIClient: APIClientProtocol {
@@ -59,6 +60,11 @@ final class APIClient: APIClientProtocol {
         try await request(path, method: "DELETE")
     }
 
+    /// DELETE variant for endpoints that return 204 No Content with an empty body.
+    func delete(_ path: String) async throws {
+        try await requestVoid(path, method: "DELETE")
+    }
+
     /**
      Throws `APIError` on non-2xx, `URLError` on network failure,
      `DecodingError` if the success body can't be decoded into `T`.
@@ -104,6 +110,40 @@ final class APIClient: APIClientProtocol {
         }
 
         return try decoder.decode(T.self, from: data)
+    }
+
+    /// Same as `request` but discards the response body. For endpoints that
+    /// return 204 No Content.
+    private func requestVoid(_ path: String, method: String) async throws {
+        guard let url = URL(string: baseURL + path) else {
+            throw URLError(.badURL)
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let apiKey = AppConfig.apiKey
+        if !apiKey.isEmpty {
+            urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
+
+        if let token = await tokenProvider() {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, response) = try await session.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.unknown
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let apiError = try? decoder.decode(APIError.self, from: data) {
+                throw apiError
+            }
+            throw APIError.unknown
+        }
     }
 }
 
