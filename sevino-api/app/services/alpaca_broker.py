@@ -177,6 +177,57 @@ class AlpacaBrokerService:
             params={"status": status, "asset_class": asset_class},
         )
 
+    async def get_trading_account(self, account_id: str) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/account.
+
+        Returns the trading account object (equity, cash, buying_power, status, ...).
+        Money fields are strings in the upstream response — pass through unchanged.
+        """
+        return await self._request(
+            "GET",
+            f"/v1/trading/accounts/{account_id}/account",
+        )
+
+    async def get_positions(self, account_id: str) -> list[dict[str, Any]]:
+        """GET /v1/trading/accounts/{account_id}/positions.
+
+        Returns a (possibly empty) list of position dicts. Does NOT include
+        company name — caller must join with the `assets` table.
+        """
+        return await self._request(
+            "GET",
+            f"/v1/trading/accounts/{account_id}/positions",
+        )
+
+    async def get_portfolio_history(
+        self,
+        account_id: str,
+        *,
+        period: str | None = None,
+        timeframe: str | None = None,
+        start: str | None = None,
+    ) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/account/portfolio/history.
+
+        Returns parallel arrays: `timestamp`, `equity`, `profit_loss`,
+        `profit_loss_pct` + `base_value`, `timeframe`. Values are numeric
+        (not strings) in the upstream response.
+        """
+        params = {
+            k: v
+            for k, v in {
+                "period": period,
+                "timeframe": timeframe,
+                "start": start,
+            }.items()
+            if v is not None
+        }
+        return await self._request(
+            "GET",
+            f"/v1/trading/accounts/{account_id}/account/portfolio/history",
+            params=params,
+        )
+
     async def _request(
         self,
         method: str,
