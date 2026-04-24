@@ -23,16 +23,18 @@ final class FundingViewModel {
 
     // MARK: - Cash display (mock) state
 
-    private(set) var cashBalance = "$2,412.08"
-    private(set) var cashApy = "3.20%"
-    private(set) var cashThisMonth = "+$6.43"
-    private(set) var cashDaysAccrued = "22"
-    private(set) var cashLifetime = "+$41.87"
-    private(set) var cashLifetimeSince = "Oct 2025"
-    private(set) var cashBuyingPower = "$2,412.08"
-    private(set) var cashPendingDeposits = "$100.50"
-    private(set) var cashInterestPaidOut = "Monthly"
-    private(set) var cashFdicInsured = "$2,500,000"
+    private(set) var cashBalance: Decimal = 2412.08
+    private(set) var cashApy: Decimal = 0.032
+    private(set) var cashThisMonthEarned: Decimal = 6.43
+    private(set) var cashDaysAccrued: Int = 22
+    private(set) var cashLifetimeEarned: Decimal = 41.87
+    private(set) var cashLifetimeSince: Date = DateComponents(
+        calendar: .current, year: 2025, month: 10, day: 1
+    ).date ?? Date()
+    private(set) var cashBuyingPower: Decimal = 2412.08
+    private(set) var cashPendingDeposits: Decimal = 100.50
+    private(set) var cashInterestPaidOut: PaidOutCadence = .monthly
+    private(set) var cashFdicInsuredLimit: Decimal = 2_500_000
 
     private let service: any FundingServiceProtocol
 
@@ -68,6 +70,10 @@ final class FundingViewModel {
         } catch {
             localError = L10n.Home.fundingGenericError
         }
+    }
+
+    func requestBankLink() {
+        Task { await startBankLink() }
     }
 
     func startBankLink() async {
