@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict
 
 from app.schemas._types import MoneyStr, PctStr, QtyStr
@@ -40,3 +42,23 @@ class HoldingsResponse(BaseModel):
     cash: MoneyStr
     total_market_value: MoneyStr
     positions: list[Position]
+
+
+class PortfolioHistoryPoint(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    t: datetime
+    v: MoneyStr
+
+
+class PortfolioHistoryResponse(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    range: str
+    timeframe: str
+    currency: str
+    base_value: MoneyStr
+    end_value: MoneyStr
+    gain_abs: MoneyStr
+    gain_pct: PctStr
+    points: list[PortfolioHistoryPoint]

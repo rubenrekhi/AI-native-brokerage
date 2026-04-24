@@ -1,9 +1,12 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from app.schemas.portfolio import (
     HoldingsResponse,
-    Position,
+    PortfolioHistoryPoint,
+    PortfolioHistoryResponse,
     PortfolioSnapshotResponse,
+    Position,
 )
 
 
@@ -167,3 +170,74 @@ class TestHoldingsResponse:
 
         assert dumped["positions"] == []
         assert dumped["total_market_value"] == "0.00"
+
+
+def _make_history(**overrides) -> PortfolioHistoryResponse:
+    data = {
+        "range": "1M",
+        "timeframe": "1D",
+        "currency": "USD",
+        "base_value": Decimal("1000.00"),
+        "end_value": Decimal("1084.92"),
+        "gain_abs": Decimal("84.92"),
+        "gain_pct": Decimal("0.0849"),
+        "points": [
+            PortfolioHistoryPoint(
+                t=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
+                v=Decimal("1000.00"),
+            ),
+            PortfolioHistoryPoint(
+                t=datetime(2026, 1, 2, 0, 0, tzinfo=timezone.utc),
+                v=Decimal("1020.50"),
+            ),
+        ],
+    }
+    data.update(overrides)
+    return PortfolioHistoryResponse(**data)
+
+
+class TestPortfolioHistoryResponse:
+    def test_round_trip_two_points_matches_json_shape(self):
+        history = _make_history()
+        dumped = history.model_dump(mode="json")
+
+        assert dumped["range"] == "1M"
+        assert dumped["timeframe"] == "1D"
+        assert dumped["currency"] == "USD"
+        assert dumped["base_value"] == "1000.00"
+        assert dumped["end_value"] == "1084.92"
+        assert dumped["gain_abs"] == "84.92"
+        assert dumped["gain_pct"] == "0.0849"
+        assert len(dumped["points"]) == 2
+        assert dumped["points"][0]["v"] == "1000.00"
+        assert dumped["points"][1]["v"] == "1020.50"
+
+        revived = PortfolioHistoryResponse.model_validate(dumped)
+        assert revived == history
+
+    def test_timestamp_serializes_as_iso8601_string(self):
+        history = _make_history()
+        dumped = history.model_dump(mode="json")
+
+        # Pydantic v2 emits UTC as "Z" suffix for tz-aware datetimes.
+        assert isinstance(dumped["points"][0]["t"], str)
+        assert dumped["points"][0]["t"] in (
+            "2026-01-01T00:00:00Z",
+            "2026-01-01T00:00:00+00:00",
+        )
+
+    def test_empty_points_list_validates(self):
+        history = _make_history(points=[])
+        dumped = history.model_dump(mode="json")
+
+        assert dumped["points"] == []
+
+    def test_negative_gain_fields_keep_signs(self):
+        history = _make_history(
+            gain_abs=Decimal("-125.40"),
+            gain_pct=Decimal("-0.1127"),
+        )
+        dumped = history.model_dump(mode="json")
+
+        assert dumped["gain_abs"] == "-125.40"
+        assert dumped["gain_pct"] == "-0.1127"
