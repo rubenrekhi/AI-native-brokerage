@@ -1054,6 +1054,26 @@
         }
       }
     },
+    "home.portfolio_distribution_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "home.portfolio_distribution_segment_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
     "home.portfolio_load_error_dismiss" : {
       "localizations" : {
         "en" : {
