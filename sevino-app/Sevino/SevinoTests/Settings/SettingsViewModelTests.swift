@@ -10,6 +10,8 @@ final class SettingsViewModelTests: XCTestCase {
 
     override func setUp() {
         mockSettings = MockSettingsService()
+        mockSettings.getProfileResult = .success(Self.stubProfile())
+        mockSettings.getAccountValueResult = .success(Self.stubAccountValue())
         mockFunding = MockFundingService()
         viewModel = SettingsViewModel(
             settingsService: mockSettings,
@@ -22,8 +24,8 @@ final class SettingsViewModelTests: XCTestCase {
     func testLoadSuccessPopulatesProfileAndAccountValue() async {
         await viewModel.load()
 
-        XCTAssertEqual(viewModel.profile?.displayName, "Riley")
-        XCTAssertEqual(viewModel.accountValue?.totalValue, "$1,000.00")
+        XCTAssertEqual(viewModel.profile?.profile.preferredName, "Riley")
+        XCTAssertEqual(viewModel.accountValue?.equity, Decimal(string: "1000.00"))
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
     }
@@ -32,7 +34,7 @@ final class SettingsViewModelTests: XCTestCase {
         struct LoadError: LocalizedError {
             var errorDescription: String? { "load failed" }
         }
-        mockSettings.profileResult = .failure(LoadError())
+        mockSettings.getProfileResult = .failure(LoadError())
 
         await viewModel.load()
 
@@ -45,13 +47,11 @@ final class SettingsViewModelTests: XCTestCase {
         struct LoadError: LocalizedError {
             var errorDescription: String? { "boom" }
         }
-        mockSettings.profileResult = .failure(LoadError())
+        mockSettings.getProfileResult = .failure(LoadError())
         await viewModel.load()
         XCTAssertNotNil(viewModel.error)
 
-        mockSettings.profileResult = .success(
-            SettingsProfileResponse(displayName: "Riley", email: nil, phoneNumber: nil, kycStatus: nil)
-        )
+        mockSettings.getProfileResult = .success(Self.stubProfile())
         await viewModel.load()
 
         XCTAssertNil(viewModel.error)
@@ -92,12 +92,39 @@ final class SettingsViewModelTests: XCTestCase {
         struct LoadError: LocalizedError {
             var errorDescription: String? { "boom" }
         }
-        mockSettings.profileResult = .failure(LoadError())
+        mockSettings.getProfileResult = .failure(LoadError())
         await viewModel.load()
         XCTAssertNotNil(viewModel.error)
 
         viewModel.clearError()
 
         XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - Fixtures
+
+    private static func stubProfile() -> SettingsProfileResponse {
+        let decoder = JSONDecoder()
+        decoder.keyDecodingStrategy = .convertFromSnakeCase
+        let json = Data(#"""
+        {
+          "profile": { "preferred_name": "Riley", "first_name": "Riley" },
+          "financial_profile": null,
+          "brokerage": null,
+          "linked_accounts": [],
+          "member_since": null
+        }
+        """#.utf8)
+        // swiftlint:disable:next force_try
+        return try! decoder.decode(SettingsProfileResponse.self, from: json)
+    }
+
+    private static func stubAccountValue() -> AccountValueResponse {
+        AccountValueResponse(
+            equity: Decimal(string: "1000.00") ?? 0,
+            cash: Decimal(string: "500.00") ?? 0,
+            buyingPower: Decimal(string: "2000.00") ?? 0,
+            portfolioValue: Decimal(string: "1500.00") ?? 0
+        )
     }
 }

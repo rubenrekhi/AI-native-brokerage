@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum KYCStatus: String {
+enum KYCStatus: String, Decodable {
     case onboarding = "ONBOARDING"
     case submitted = "SUBMITTED"
     case submissionFailed = "SUBMISSION_FAILED"
