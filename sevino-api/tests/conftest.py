@@ -30,12 +30,18 @@ def mock_arq():
 
 
 @pytest.fixture
-async def client(mock_db, mock_arq):
+def mock_redis():
+    return AsyncMock()
+
+
+@pytest.fixture
+async def client(mock_db, mock_arq, mock_redis):
     async def _override_get_db():
         yield mock_db
 
     app.dependency_overrides[get_db] = _override_get_db
     app.state.arq = mock_arq
+    app.state.redis = mock_redis
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -54,7 +60,7 @@ def mock_current_user():
 
 
 @pytest.fixture
-async def authenticated_client(mock_db, mock_arq, mock_current_user):
+async def authenticated_client(mock_db, mock_arq, mock_redis, mock_current_user):
     """AsyncClient with auth dependency overridden to return mock_current_user."""
     from app.auth import get_current_user
 
@@ -64,6 +70,7 @@ async def authenticated_client(mock_db, mock_arq, mock_current_user):
     app.dependency_overrides[get_db] = _override_get_db
     app.dependency_overrides[get_current_user] = lambda: mock_current_user
     app.state.arq = mock_arq
+    app.state.redis = mock_redis
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
