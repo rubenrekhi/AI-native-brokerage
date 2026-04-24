@@ -8,6 +8,13 @@ struct PersonalInfoSettingsView: View {
     let vm: SettingsViewModel
 
     @State private var baseScale: CGFloat = 1
+    @State private var activeSheet: ActiveSheet?
+
+    private enum ActiveSheet: Identifiable {
+        case name
+        case phone
+        var id: Self { self }
+    }
 
     private var scale: CGFloat { baseScale * textMultiplier }
 
@@ -44,6 +51,30 @@ struct PersonalInfoSettingsView: View {
             if vm.profile == nil {
                 await vm.load()
             }
+        }
+        .sheet(item: $activeSheet) { sheet in
+            editProfileSheet(for: sheet)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(.clear)
+        }
+    }
+
+    @ViewBuilder
+    private func editProfileSheet(for sheet: ActiveSheet) -> some View {
+        switch sheet {
+        case .name:
+            EditNameSheet(
+                currentFirstName: vm.profile?.profile.firstName,
+                currentMiddleName: vm.profile?.profile.middleName,
+                currentLastName: vm.profile?.profile.lastName,
+                onSaved: { Task { await vm.reload() } }
+            )
+        case .phone:
+            EditPhoneSheet(
+                currentPhone: vm.profile?.profile.phoneNumber,
+                onSaved: { Task { await vm.reload() } }
+            )
         }
     }
 
@@ -83,9 +114,13 @@ struct PersonalInfoSettingsView: View {
                 .padding(.bottom, 24 * scale)
 
             VStack(spacing: 0) {
-                infoRow(title: L10n.Settings.nameDetails)
+                infoRow(title: L10n.Settings.nameDetails, isEnabled: true) { activeSheet = .name }
                 infoRowWithValue(title: L10n.Settings.emailLabel, value: vm.displayEmail)
-                infoRowWithValue(title: L10n.Settings.phoneLabel, value: vm.displayPhone)
+                infoRowWithValue(
+                    title: L10n.Settings.phoneLabel,
+                    value: vm.displayPhone,
+                    isEnabled: true
+                ) { activeSheet = .phone }
                 infoRowWithValue(title: L10n.Settings.mailingAddress, value: vm.displayAddress)
                 infoRowWithValue(title: L10n.Settings.riskTolerance, value: vm.displayRiskTolerance)
             }
@@ -133,8 +168,12 @@ struct PersonalInfoSettingsView: View {
         .modifier(SevinoGlass.card)
     }
 
-    private func infoRow(title: String) -> some View {
-        Button(action: {}) {
+    private func infoRow(
+        title: String,
+        isEnabled: Bool = false,
+        action: @escaping () -> Void = {}
+    ) -> some View {
+        Button(action: action) {
             VStack(spacing: 0) {
                 HStack {
                     Text(title)
@@ -154,11 +193,16 @@ struct PersonalInfoSettingsView: View {
                     .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
             }
         }
-        .disabled(true)
+        .disabled(!isEnabled)
     }
 
-    private func infoRowWithValue(title: String, value: String) -> some View {
-        Button(action: {}) {
+    private func infoRowWithValue(
+        title: String,
+        value: String,
+        isEnabled: Bool = false,
+        action: @escaping () -> Void = {}
+    ) -> some View {
+        Button(action: action) {
             VStack(spacing: 0) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4 * scale) {
@@ -184,7 +228,7 @@ struct PersonalInfoSettingsView: View {
                     .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
             }
         }
-        .disabled(true)
+        .disabled(!isEnabled)
     }
 }
 

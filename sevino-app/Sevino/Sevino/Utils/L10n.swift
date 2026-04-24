@@ -621,6 +621,18 @@ enum L10n {
         static let documentDownloadErrorTitle = String(localized: "settings.document_download_error_title")
         static let documentRowAccessibilityHint = String(localized: "settings.document_row_accessibility_hint")
         static let documentRowLoading = String(localized: "settings.document_row_loading")
+        static let editNameTitle = String(localized: "settings.edit_name_title")
+        static let editNameFirstLabel = String(localized: "settings.edit_name_first_label")
+        static let editNameMiddleLabel = String(localized: "settings.edit_name_middle_label")
+        static let editNameLastLabel = String(localized: "settings.edit_name_last_label")
+        static let editNameValidationError = String(localized: "settings.edit_name_validation_error")
+        static let editPhoneTitle = String(localized: "settings.edit_phone_title")
+        static let editPhoneLabel = String(localized: "settings.edit_phone_label")
+        static let editPhoneValidationError = String(localized: "settings.edit_phone_validation_error")
+        static let editProfileSave = String(localized: "settings.edit_profile_save")
+        static let editProfileCancel = String(localized: "settings.edit_profile_cancel")
+        static let editProfileGenericError = String(localized: "settings.edit_profile_generic_error")
+        static let editProfileSuccess = String(localized: "settings.edit_profile_success")
     }
 
     enum TradeExecution {
