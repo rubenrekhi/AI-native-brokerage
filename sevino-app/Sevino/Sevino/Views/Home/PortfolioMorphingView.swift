@@ -13,12 +13,28 @@ struct PortfolioMorphingView: View {
     var body: some View {
         Group {
             if isExpanded {
-                expandedCard
+                PortfolioCard(
+                    data: cardData,
+                    scale: scale,
+                    isInteractive: true,
+                    onTimeRangeChanged: viewModel.setTimeRange
+                )
             } else if !isHidden {
                 pillButton
             }
         }
         .modifier(GlassMorphID(id: "portfolio", namespace: morphNamespace))
+    }
+
+    private var cardData: PortfolioCardData {
+        PortfolioCardData(
+            displayValue: viewModel.displayValue,
+            isDown: viewModel.isDown,
+            gainText: viewModel.gainText,
+            periodLabel: viewModel.periodLabel,
+            chartPoints: viewModel.chartPoints,
+            selectedTimeRange: viewModel.selectedTimeRange
+        )
     }
 
     private var pillButton: some View {
@@ -44,26 +60,5 @@ struct PortfolioMorphingView: View {
         .contentShape(.rect)
         .frame(minHeight: 44 * scale)
         .accessibilityLabel(L10n.Home.portfolioAccessibility)
-    }
-
-    private var expandedCard: some View {
-        VStack(alignment: .leading, spacing: 16 * scale) {
-            HStack(spacing: 8 * scale) {
-                Text(viewModel.displayValue)
-                    .font(.system(size: 36 * scale, weight: .bold))
-                    .foregroundStyle(Color.sevinoSecondary)
-
-                Text(L10n.Home.portfolioCurrency)
-                    .font(.system(size: 18 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-            }
-
-            PortfolioExpandedContent(scale: scale, viewModel: viewModel)
-        }
-        .padding(16 * scale)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fixedSize(horizontal: false, vertical: true)
-        .modifier(SevinoGlass.card)
-        .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
     }
 }
