@@ -111,6 +111,12 @@ class AlpacaBrokerService:
             "GET", f"/v1/trading/accounts/{account_id}/account"
         )
 
+    async def close_account(self, account_id: str) -> dict[str, Any]:
+        """POST /v1/accounts/{account_id}/actions/close — initiate account closure."""
+        return await self._request(
+            "POST", f"/v1/accounts/{account_id}/actions/close"
+        )
+
     async def create_ach_relationship(
         self, account_id: str, *, processor_token: str
     ) -> dict[str, Any]:

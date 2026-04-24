@@ -177,6 +177,28 @@ async def plaid_service_error_handler(
     return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 
+# --- Supabase admin handlers ---
+
+async def supabase_admin_error_handler(
+    request: Request, exc: "SupabaseAdminError"
+) -> JSONResponse:
+    logger.error(
+        "supabase_admin_error", status_code=exc.status_code, message=exc.message
+    )
+    return error_response(502, exc.message, "SUPABASE_ADMIN_ERROR", detail=exc.detail)
+
+
+async def supabase_admin_unavailable_handler(
+    request: Request, exc: "SupabaseAdminUnavailableError"
+) -> JSONResponse:
+    logger.error("supabase_admin_unavailable", error=exc.message)
+    return error_response(
+        503,
+        "Account service unavailable, please try again",
+        "SUPABASE_ADMIN_UNAVAILABLE",
+    )
+
+
 # --- Phone verification handlers ---
 
 async def phone_verification_error_handler(
@@ -304,6 +326,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     # Plaid handler
     from app.services.plaid import PlaidServiceError
     app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
+    # Supabase admin handlers
+    from app.services.supabase_admin import (
+        SupabaseAdminError,
+        SupabaseAdminUnavailableError,
+    )
+    app.add_exception_handler(SupabaseAdminError, supabase_admin_error_handler)
+    app.add_exception_handler(
+        SupabaseAdminUnavailableError, supabase_admin_unavailable_handler
+    )
     # Phone verification handlers
     from app.services.phone_verification import (
         PhoneVerificationError,

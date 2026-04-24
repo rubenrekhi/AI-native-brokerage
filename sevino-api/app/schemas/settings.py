@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 from app.schemas.onboarding import FinancialProfileData, ProfileData
 
@@ -78,3 +78,16 @@ class AccountValueResponse(BaseModel):
     cash: str
     buying_power: str
     portfolio_value: str
+
+
+class DeleteAccountRequest(BaseModel):
+    """Body for DELETE /v1/settings/account. Requires literal "DELETE" string."""
+
+    confirmation: str
+
+    @field_validator("confirmation")
+    @classmethod
+    def must_be_delete(cls, v: str) -> str:
+        if v != "DELETE":
+            raise ValueError('confirmation must be the literal string "DELETE"')
+        return v

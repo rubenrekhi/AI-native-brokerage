@@ -2,7 +2,7 @@ import ssl as _ssl
 from typing import Any
 
 from arq.connections import RedisSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     redis_url: str
     supabase_url: str
     supabase_anon_key: str
+    supabase_service_role_key: str = ""
     api_key: str = ""
     alpaca_api_key: str
     alpaca_secret_key: str
@@ -93,6 +94,18 @@ class Settings(BaseSettings):
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    @model_validator(mode="after")
+    def require_service_role_key_outside_dev(self) -> "Settings":
+        # The service-role key is required for privileged admin operations
+        # (e.g. DELETE /v1/settings/account). Allow empty in dev for
+        # convenience, fail fast at boot in staging/prod so a misconfigured
+        # deploy can't surface as a per-request 503.
+        if self.environment != "dev" and not self.supabase_service_role_key:
+            raise ValueError(
+                "SUPABASE_SERVICE_ROLE_KEY is required outside of dev"
+            )
+        return self
 
 
 settings = Settings()
