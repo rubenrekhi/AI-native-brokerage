@@ -20,7 +20,12 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
         encoding="utf-8",
     )
-    await app.state.redis.ping()
+    try:
+        await app.state.redis.ping()
+    except Exception:
+        await app.state.redis.aclose()
+        await app.state.arq.aclose()
+        raise
     logger.info("redis client ready")
     app.state.alpaca = AlpacaBrokerService()
     app.state.plaid = PlaidService()
