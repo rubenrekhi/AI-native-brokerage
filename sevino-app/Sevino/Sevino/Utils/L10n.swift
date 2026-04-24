@@ -433,6 +433,22 @@ enum L10n {
         static let homeLoadErrorTitle = String(localized: "home.home_load_error_title")
         static let homeLoadErrorRetry = String(localized: "home.home_load_error_retry")
         static let homeLoadErrorDismiss = String(localized: "home.home_load_error_dismiss")
+
+        // MARK: - Single stock card stats
+        static let stockStatBid = String(localized: "home.stock_stat_bid")
+        static let stockStatAsk = String(localized: "home.stock_stat_ask")
+        static let stockStatLastSale = String(localized: "home.stock_stat_last_sale")
+        static let stockStatOpen = String(localized: "home.stock_stat_open")
+        static let stockStatHigh = String(localized: "home.stock_stat_high")
+        static let stockStatLow = String(localized: "home.stock_stat_low")
+        static let stockStatExchange = String(localized: "home.stock_stat_exchange")
+        static let stockStatMarketCap = String(localized: "home.stock_stat_market_cap")
+        static let stockStatPeRatio = String(localized: "home.stock_stat_pe_ratio")
+        static let stockStatFiftyTwoWeekHigh = String(localized: "home.stock_stat_fifty_two_week_high")
+        static let stockStatFiftyTwoWeekLow = String(localized: "home.stock_stat_fifty_two_week_low")
+        static let stockStatVolume = String(localized: "home.stock_stat_volume")
+        static let stockStatAvgVolume = String(localized: "home.stock_stat_avg_volume")
+        static let stockStatMarginReq = String(localized: "home.stock_stat_margin_req")
     }
 
     enum Sidebar {
