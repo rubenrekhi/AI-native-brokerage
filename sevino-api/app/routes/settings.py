@@ -13,6 +13,7 @@ from app.schemas.settings import (
     AccountValueResponse,
     DeleteAccountRequest,
     DocumentListResponse,
+    ProfileUpdateRequest,
     SettingsProfileResponse,
     UserSettingsPatchRequest,
     UserSettingsResponse,
@@ -58,6 +59,19 @@ async def get_settings_profile(
 ) -> SettingsProfileResponse:
     """Aggregate profile view for settings screens."""
     return await SettingsService.get_profile(db, uuid.UUID(user_id))
+
+
+@router.patch("/profile", response_model=SettingsProfileResponse)
+async def update_settings_profile(
+    body: ProfileUpdateRequest,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> SettingsProfileResponse:
+    """Update profile fields, syncing to Alpaca when the brokerage is ACTIVE."""
+    return await SettingsService.update_profile(
+        db, uuid.UUID(user_id), body, alpaca
+    )
 
 
 @router.get("/account-value", response_model=AccountValueResponse)

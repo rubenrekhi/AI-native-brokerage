@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.schemas.onboarding import FinancialProfileData, ProfileData
 
@@ -97,6 +97,58 @@ class DocumentResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     documents: list[DocumentResponse]
+
+
+class ProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    first_name: str | None = Field(default=None, min_length=1)
+    middle_name: str | None = Field(default=None, min_length=1)
+    last_name: str | None = Field(default=None, min_length=1)
+    preferred_name: str | None = Field(default=None, min_length=1)
+    phone_number: str | None = Field(default=None, min_length=1)
+    street_address: list[str] | None = Field(default=None, min_length=1)
+    city: str | None = Field(default=None, min_length=1)
+    state: str | None = Field(default=None, min_length=1)
+    postal_code: str | None = Field(default=None, min_length=1)
+
+    @field_validator(
+        "first_name",
+        "middle_name",
+        "last_name",
+        "preferred_name",
+        "phone_number",
+        "city",
+        "state",
+        "postal_code",
+        mode="before",
+    )
+    @classmethod
+    def _strip_strings(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            stripped = v.strip()
+            return stripped if stripped else None
+        return v
+
+    @field_validator("street_address", mode="before")
+    @classmethod
+    def _strip_address_lines(cls, v: Any) -> Any:
+        if isinstance(v, list):
+            return [line.strip() if isinstance(line, str) else line for line in v]
+        return v
+
+    @field_validator("street_address")
+    @classmethod
+    def _reject_blank_address_lines(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None and any(not line for line in v):
+            raise ValueError("street_address lines must not be blank")
+        return v
+
+    @model_validator(mode="after")
+    def at_least_one_field(self) -> "ProfileUpdateRequest":
+        if not self.model_dump(exclude_none=True):
+            raise ValueError("at least one field must be provided")
+        return self
 
 
 class DeleteAccountRequest(BaseModel):

@@ -28,6 +28,7 @@ from app.schemas.settings import (
     DocumentListResponse,
     DocumentResponse,
     LinkedAccountSummary,
+    ProfileUpdateRequest,
     SettingsProfileResponse,
     UserSettingsPatchRequest,
 )
@@ -75,6 +76,39 @@ class SettingsService:
     ) -> UserSettings:
         fields = data.model_dump(exclude_none=True)
         return await UserSettingsRepository.upsert(db, user_id, **fields)
+
+    @staticmethod
+    async def update_profile(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        data: ProfileUpdateRequest,
+        alpaca: AlpacaBrokerService,
+    ) -> SettingsProfileResponse:
+        """Update the user's profile, syncing Alpaca-tracked fields when the
+        brokerage account is ACTIVE.
+
+        Alpaca is the source of truth for regulated contact/identity fields on
+        an open account, so we PATCH it whenever one of those fields changes.
+        `preferred_name` is Sevino-only and never flows to Alpaca.
+        """
+        fields = data.model_dump(exclude_none=True)
+        await UserProfileRepository.update_fields(db, user_id, **fields)
+
+        alpaca_payload = _build_alpaca_profile_update_payload(fields)
+        if alpaca_payload:
+            brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+            if brokerage is not None and brokerage.account_status == STATUS_ACTIVE:
+                logger.info(
+                    "profile_update_syncing_alpaca",
+                    user_id=str(user_id),
+                    alpaca_account_id=brokerage.alpaca_account_id,
+                    sections=sorted(alpaca_payload.keys()),
+                )
+                await alpaca.update_account(
+                    brokerage.alpaca_account_id, alpaca_payload
+                )
+
+        return await SettingsService.get_profile(db, user_id)
 
     @staticmethod
     async def get_profile(
@@ -321,6 +355,29 @@ class SettingsService:
             user_id=str(user_id),
             alpaca_account_id=brokerage.alpaca_account_id,
         )
+
+
+_ALPACA_CONTACT_FIELDS = ("phone_number", "street_address", "city", "state", "postal_code")
+_ALPACA_IDENTITY_MAP = {
+    "first_name": "given_name",
+    "middle_name": "middle_name",
+    "last_name": "family_name",
+}
+
+
+def _build_alpaca_profile_update_payload(fields: dict) -> dict:
+    contact = {k: fields[k] for k in _ALPACA_CONTACT_FIELDS if k in fields}
+    identity = {
+        alpaca_key: fields[local_key]
+        for local_key, alpaca_key in _ALPACA_IDENTITY_MAP.items()
+        if local_key in fields
+    }
+    payload: dict = {}
+    if contact:
+        payload["contact"] = contact
+    if identity:
+        payload["identity"] = identity
+    return payload
 
 
 async def _require_active_brokerage_for_close(db: AsyncSession, user_id: uuid.UUID):

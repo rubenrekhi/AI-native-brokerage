@@ -352,6 +352,247 @@ def patch_profile_repo(mocker, profile):
     )
 
 
+class TestUpdateProfile:
+    @pytest.fixture
+    def patch_update_fields(self, mocker):
+        return mocker.patch(
+            "app.services.settings.UserProfileRepository.update_fields",
+            new_callable=AsyncMock,
+        )
+
+    @pytest.fixture
+    def patch_get_profile(self, mocker):
+        """Stub the refreshed-profile read; shape is asserted by other tests."""
+        from datetime import datetime, timezone
+
+        from app.schemas.onboarding import ProfileData
+        from app.schemas.settings import SettingsProfileResponse
+
+        response = SettingsProfileResponse(
+            profile=ProfileData(first_name="Ada", last_name="Lovelace"),
+            financial_profile=None,
+            brokerage=None,
+            linked_accounts=[],
+            member_since=datetime(2026, 1, 1, tzinfo=timezone.utc),
+        )
+        return mocker.patch(
+            "app.services.settings.SettingsService.get_profile",
+            new_callable=AsyncMock,
+            return_value=response,
+        )
+
+    async def test_updates_db_and_syncs_alpaca_when_active(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        body = {
+            "first_name": "Ada",
+            "middle_name": "Augusta",
+            "last_name": "Lovelace",
+            "phone_number": "+15551112222",
+            "street_address": ["1 Analytical Way"],
+            "city": "London",
+            "state": "LN",
+            "postal_code": "10001",
+        }
+
+        response = await client.patch("/v1/settings/profile", json=body)
+
+        assert response.status_code == 200
+        patch_update_fields.assert_awaited_once_with(
+            ANY, uuid.UUID(TEST_USER_ID), **body
+        )
+        alpaca_mock.update_account.assert_awaited_once_with(
+            "alpaca_acc_42",
+            {
+                "contact": {
+                    "phone_number": "+15551112222",
+                    "street_address": ["1 Analytical Way"],
+                    "city": "London",
+                    "state": "LN",
+                    "postal_code": "10001",
+                },
+                "identity": {
+                    "given_name": "Ada",
+                    "middle_name": "Augusta",
+                    "family_name": "Lovelace",
+                },
+            },
+        )
+        patch_get_profile.assert_awaited_once()
+
+    async def test_sends_only_submitted_fields_to_alpaca(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 200
+        alpaca_mock.update_account.assert_awaited_once_with(
+            "alpaca_acc_42", {"contact": {"city": "Paris"}}
+        )
+
+    async def test_identity_only_update_omits_contact_section(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        response = await client.patch(
+            "/v1/settings/profile", json={"first_name": "Ada"}
+        )
+
+        assert response.status_code == 200
+        alpaca_mock.update_account.assert_awaited_once_with(
+            "alpaca_acc_42", {"identity": {"given_name": "Ada"}}
+        )
+
+    async def test_preferred_name_does_not_hit_alpaca(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        response = await client.patch(
+            "/v1/settings/profile", json={"preferred_name": "Addie"}
+        )
+
+        assert response.status_code == 200
+        patch_update_fields.assert_awaited_once_with(
+            ANY, uuid.UUID(TEST_USER_ID), preferred_name="Addie"
+        )
+        alpaca_mock.update_account.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "non_active_status",
+        ["SUBMITTED", "APPROVED", "ACTION_REQUIRED", "ACCOUNT_CLOSED", "REJECTED"],
+    )
+    async def test_skips_alpaca_when_brokerage_not_active(
+        self,
+        client,
+        patch_repo,
+        brokerage,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+        non_active_status,
+    ):
+        brokerage.account_status = non_active_status
+
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 200
+        patch_update_fields.assert_awaited_once()
+        alpaca_mock.update_account.assert_not_called()
+
+    async def test_skips_alpaca_when_no_brokerage(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        patch_repo.return_value = None
+
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 200
+        alpaca_mock.update_account.assert_not_called()
+
+    async def test_empty_body_returns_422(self, client):
+        response = await client.patch("/v1/settings/profile", json={})
+        assert response.status_code == 422
+
+    async def test_404_when_profile_missing(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        alpaca_mock,
+    ):
+        from app.exceptions import NotFoundError
+
+        patch_update_fields.side_effect = NotFoundError(
+            "User profile not found", resource="user_profile"
+        )
+
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+        alpaca_mock.update_account.assert_not_called()
+
+    async def test_alpaca_failure_surfaces_error(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        from app.services.alpaca_broker import AlpacaBrokerError
+
+        alpaca_mock.update_account.side_effect = AlpacaBrokerError(
+            status_code=400, message="bad contact"
+        )
+
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "ALPACA_ERROR"
+        patch_get_profile.assert_not_called()
+
+    async def test_alpaca_unavailable_surfaces_503(
+        self,
+        client,
+        patch_repo,
+        patch_update_fields,
+        patch_get_profile,
+        alpaca_mock,
+    ):
+        from app.services.alpaca_broker import AlpacaBrokerUnavailableError
+
+        alpaca_mock.update_account.side_effect = AlpacaBrokerUnavailableError(
+            "upstream timeout"
+        )
+
+        response = await client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+
+        assert response.status_code == 503
+        patch_get_profile.assert_not_called()
+
+    async def test_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.patch(
+            "/v1/settings/profile", json={"city": "Paris"}
+        )
+        assert response.status_code == 401
+
+
 class TestDeleteAccount:
     async def test_full_cascade_happy_path(
         self,
