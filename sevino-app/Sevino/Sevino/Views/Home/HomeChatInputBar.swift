@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct HomeChatInputBar: View {
     @Bindable var viewModel: TickerMentionViewModel
@@ -9,6 +12,23 @@ struct HomeChatInputBar: View {
     @FocusState private var isFocused: Bool
     @State private var selection = AttributedTextSelection()
     @State private var showDiscoverPrompt = false
+    @State private var inputVM: HomeChatInputViewModel
+
+    init(
+        viewModel: TickerMentionViewModel,
+        scale: CGFloat,
+        isDimmed: Bool,
+        onSend: @escaping ([MessageSegment]) -> Void,
+        onQuickCommands: @escaping () -> Void,
+        inputViewModel: HomeChatInputViewModel? = nil
+    ) {
+        self.viewModel = viewModel
+        self.scale = scale
+        self.isDimmed = isDimmed
+        self.onSend = onSend
+        self.onQuickCommands = onQuickCommands
+        _inputVM = State(initialValue: inputViewModel ?? HomeChatInputViewModel(mention: viewModel))
+    }
 
     private var hasText: Bool {
         !viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -18,6 +38,13 @@ struct HomeChatInputBar: View {
         Binding(
             get: { TickerMentionAttributedText.make(text: viewModel.text, tokens: viewModel.tokens, scale: scale) },
             set: { viewModel.updateText(String($0.characters)) }
+        )
+    }
+
+    private var alertPresented: Binding<Bool> {
+        Binding(
+            get: { inputVM.alert != nil },
+            set: { if !$0 { inputVM.alert = nil } }
         )
     }
 
@@ -68,11 +95,17 @@ struct HomeChatInputBar: View {
 
                 Spacer()
 
-                Button(L10n.Home.micAccessibility, systemImage: "mic", action: {})
-                    .labelStyle(.iconOnly)
-                    .font(.system(size: 18 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                    .frame(width: 44 * scale, height: 44 * scale)
+                Button(
+                    inputVM.isRecording ? L10n.Home.micStopAccessibility : L10n.Home.micAccessibility,
+                    systemImage: inputVM.isRecording ? "mic.fill" : "mic",
+                    action: toggleDictation
+                )
+                .labelStyle(.iconOnly)
+                .font(.system(size: 18 * scale, weight: .medium))
+                .foregroundStyle(inputVM.isRecording ? Color.sevinoNegative : Color.sevinoGreyContrast)
+                .frame(width: 44 * scale, height: 44 * scale)
+                .accessibilityValue(inputVM.isRecording ? L10n.Home.micRecordingState : "")
+                .accessibilityHint(inputVM.isRecording ? L10n.Home.micStopHint : L10n.Home.micStartHint)
 
                 Button(L10n.Home.sendAccessibility, systemImage: "arrow.up", action: sendMessage)
                     .labelStyle(.iconOnly)
@@ -91,6 +124,7 @@ struct HomeChatInputBar: View {
             if newValue {
                 isFocused = false
                 viewModel.dismiss()
+                inputVM.stopIfRecording()
             }
         }
         .onChange(of: viewModel.caretToEndTick) { _, _ in
@@ -106,12 +140,33 @@ struct HomeChatInputBar: View {
         .onChange(of: viewModel.text) { _, newValue in
             if newValue != "$" { showDiscoverPrompt = false }
         }
+        .alert(L10n.Home.dictationPermissionTitle, isPresented: alertPresented) {
+            #if canImport(UIKit)
+            Button(L10n.Home.dictationOpenSettings) { openAppSettings() }
+            #endif
+            Button(L10n.Home.dictationDismiss, role: .cancel) {}
+        } message: {
+            Text(inputVM.alert?.message ?? "")
+        }
     }
 
     private func sendMessage() {
         guard hasText else { return }
+        inputVM.stopIfRecording()
         onSend(viewModel.makeSegments())
     }
+
+    private func toggleDictation() {
+        if !inputVM.isRecording { isFocused = false }
+        inputVM.toggleDictation()
+    }
+
+    #if canImport(UIKit)
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+    #endif
 }
 
 #Preview("Empty") {

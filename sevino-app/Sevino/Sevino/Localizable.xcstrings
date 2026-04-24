@@ -934,6 +934,106 @@
         }
       }
     },
+    "home.mic_stop_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop voice input"
+          }
+        }
+      }
+    },
+    "home.mic_recording_state" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording"
+          }
+        }
+      }
+    },
+    "home.mic_start_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double tap to start dictation"
+          }
+        }
+      }
+    },
+    "home.mic_stop_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double tap to stop dictation"
+          }
+        }
+      }
+    },
+    "home.dictation_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input failed. Please try again."
+          }
+        }
+      }
+    },
+    "home.dictation_unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input is unavailable on this device."
+          }
+        }
+      }
+    },
+    "home.dictation_permission_denied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow microphone and speech recognition access in Settings to use voice input."
+          }
+        }
+      }
+    },
+    "home.dictation_permission_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input"
+          }
+        }
+      }
+    },
+    "home.dictation_open_settings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        }
+      }
+    },
+    "home.dictation_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not now"
+          }
+        }
+      }
+    },
     "home.pending_deposits" : {
       "localizations" : {
         "en" : {
