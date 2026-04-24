@@ -161,6 +161,179 @@ class TestGetAccountValue:
 
 
 # ---------------------------------------------------------------------------
+# GET /v1/settings/documents + /documents/{id}/download
+# ---------------------------------------------------------------------------
+
+
+class TestListDocuments:
+    async def test_returns_mapped_documents(
+        self, client, patch_repo, alpaca_mock
+    ):
+        alpaca_mock.list_documents.return_value = [
+            {
+                "id": "doc-1",
+                "type": "account_statement",
+                "date": "2026-03-31",
+                "name": "March Statement",
+            },
+            {
+                "id": "doc-2",
+                "type": "tax_1099",
+                "date": "2026-02-15",
+            },
+        ]
+
+        response = await client.get("/v1/settings/documents")
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "documents": [
+                {
+                    "id": "doc-1",
+                    "type": "account_statement",
+                    "date": "2026-03-31",
+                    "name": "March Statement",
+                },
+                {
+                    "id": "doc-2",
+                    "type": "tax_1099",
+                    "date": "2026-02-15",
+                    "name": None,
+                },
+            ]
+        }
+        alpaca_mock.list_documents.assert_awaited_once_with(
+            "alpaca_acc_42", document_type=None, start=None, end=None
+        )
+
+    async def test_blank_name_normalized_to_null(
+        self, client, patch_repo, alpaca_mock
+    ):
+        alpaca_mock.list_documents.return_value = [
+            {"id": "doc-3", "type": "tax_1099", "date": "2026-02-15", "name": "   "},
+        ]
+
+        response = await client.get("/v1/settings/documents")
+
+        assert response.status_code == 200
+        assert response.json()["documents"][0]["name"] is None
+
+    async def test_skips_malformed_document_without_500(
+        self, client, patch_repo, alpaca_mock
+    ):
+        alpaca_mock.list_documents.return_value = [
+            {"id": "doc-1", "type": "account_statement", "date": "2026-03-31"},
+            {"type": "account_statement", "date": "2026-02-28"},  # missing id
+        ]
+
+        response = await client.get("/v1/settings/documents")
+
+        assert response.status_code == 200
+        assert [d["id"] for d in response.json()["documents"]] == ["doc-1"]
+
+    async def test_forwards_type_filter(self, client, patch_repo, alpaca_mock):
+        alpaca_mock.list_documents.return_value = []
+
+        response = await client.get(
+            "/v1/settings/documents",
+            params={"type": "tax_1099", "start": "2026-01-01", "end": "2026-12-31"},
+        )
+
+        assert response.status_code == 200
+        alpaca_mock.list_documents.assert_awaited_once_with(
+            "alpaca_acc_42",
+            document_type="tax_1099",
+            start="2026-01-01",
+            end="2026-12-31",
+        )
+
+    async def test_rejects_malformed_type_filter(self, client, patch_repo):
+        response = await client.get(
+            "/v1/settings/documents", params={"type": "Bad Value!"}
+        )
+        assert response.status_code == 422
+
+    async def test_rejects_malformed_date_filter(self, client, patch_repo):
+        response = await client.get(
+            "/v1/settings/documents", params={"start": "not-a-date"}
+        )
+        assert response.status_code == 422
+
+    async def test_404_when_no_brokerage(
+        self, client, patch_repo, alpaca_mock
+    ):
+        patch_repo.return_value = None
+
+        response = await client.get("/v1/settings/documents")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+        alpaca_mock.list_documents.assert_not_called()
+
+    async def test_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.get("/v1/settings/documents")
+        assert response.status_code == 401
+
+
+DOC_UUID = "11111111-2222-3333-4444-555555555555"
+
+
+class TestDownloadDocument:
+    async def test_streams_pdf_bytes(self, client, patch_repo, alpaca_mock):
+        pdf_chunks = [b"%PDF-1.4\n", b"fake"]
+
+        async def _iter():
+            for c in pdf_chunks:
+                yield c
+
+        alpaca_mock.stream_document.return_value = _iter()
+
+        response = await client.get(f"/v1/settings/documents/{DOC_UUID}/download")
+
+        assert response.status_code == 200
+        assert response.content == b"".join(pdf_chunks)
+        assert response.headers["content-type"] == "application/pdf"
+        assert f'filename="{DOC_UUID}.pdf"' in response.headers["content-disposition"]
+        alpaca_mock.stream_document.assert_awaited_once_with(
+            "alpaca_acc_42", DOC_UUID
+        )
+
+    async def test_404_surfaces_before_streaming(
+        self, client, patch_repo, alpaca_mock
+    ):
+        """Alpaca 404 must reach the client as 404, not a truncated 200."""
+        from app.exceptions import NotFoundError
+
+        alpaca_mock.stream_document.side_effect = NotFoundError(
+            "Alpaca resource not found", resource="alpaca_account"
+        )
+
+        response = await client.get(f"/v1/settings/documents/{DOC_UUID}/download")
+
+        assert response.status_code == 404
+
+    async def test_rejects_non_uuid_document_id(self, client, patch_repo):
+        response = await client.get("/v1/settings/documents/not-a-uuid/download")
+        assert response.status_code == 422
+
+    async def test_404_when_no_brokerage(
+        self, client, patch_repo, alpaca_mock
+    ):
+        patch_repo.return_value = None
+
+        response = await client.get(f"/v1/settings/documents/{DOC_UUID}/download")
+
+        assert response.status_code == 404
+        alpaca_mock.stream_document.assert_not_called()
+
+    async def test_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.get(
+            f"/v1/settings/documents/{DOC_UUID}/download"
+        )
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
 # DELETE /v1/settings/account
 # ---------------------------------------------------------------------------
 

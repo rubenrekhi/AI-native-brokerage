@@ -1,6 +1,7 @@
 """Pydantic models for /v1/settings/* endpoints."""
 
 import uuid
+from datetime import date as _date
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -78,6 +79,24 @@ class AccountValueResponse(BaseModel):
     cash: str
     buying_power: str
     portfolio_value: str
+
+
+class DocumentResponse(BaseModel):
+    id: str
+    type: str
+    date: _date | None = None
+    name: str | None = None
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def _blank_name_to_none(cls, v: Any) -> Any:
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
+
+class DocumentListResponse(BaseModel):
+    documents: list[DocumentResponse]
 
 
 class DeleteAccountRequest(BaseModel):

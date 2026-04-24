@@ -1,8 +1,10 @@
 """FastAPI router for /v1/settings/*."""
 
 import uuid
+from datetime import date
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -10,6 +12,7 @@ from app.database import get_db
 from app.schemas.settings import (
     AccountValueResponse,
     DeleteAccountRequest,
+    DocumentListResponse,
     SettingsProfileResponse,
     UserSettingsPatchRequest,
     UserSettingsResponse,
@@ -65,6 +68,49 @@ async def get_account_value(
 ) -> AccountValueResponse:
     return await SettingsService.get_account_value(
         db, alpaca=alpaca, user_id=uuid.UUID(user_id)
+    )
+
+
+@router.get("/documents", response_model=DocumentListResponse)
+async def list_documents(
+    document_type: str | None = Query(
+        None, alias="type", pattern=r"^[a-z][a-z0-9_]{0,63}$"
+    ),
+    start: date | None = None,
+    end: date | None = None,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> DocumentListResponse:
+    return await SettingsService.list_documents(
+        db,
+        alpaca=alpaca,
+        user_id=uuid.UUID(user_id),
+        document_type=document_type,
+        start=start,
+        end=end,
+    )
+
+
+@router.get("/documents/{document_id}/download")
+async def download_document(
+    document_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> StreamingResponse:
+    stream = await SettingsService.download_document(
+        db,
+        alpaca=alpaca,
+        user_id=uuid.UUID(user_id),
+        document_id=str(document_id),
+    )
+    return StreamingResponse(
+        stream,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{document_id}.pdf"'
+        },
     )
 
 

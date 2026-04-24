@@ -1,9 +1,12 @@
 """Settings service: user preferences CRUD + read-only views over brokerage state."""
 
 import uuid
+from collections.abc import AsyncIterator
+from datetime import date
 
 import sentry_sdk
 import structlog
+from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
@@ -17,6 +20,8 @@ from app.schemas.onboarding import FinancialProfileData, ProfileData
 from app.schemas.settings import (
     AccountValueResponse,
     BrokerageAccountSummary,
+    DocumentListResponse,
+    DocumentResponse,
     LinkedAccountSummary,
     SettingsProfileResponse,
     UserSettingsPatchRequest,
@@ -125,6 +130,68 @@ class SettingsService:
             cash=account["cash"],
             buying_power=account["buying_power"],
             portfolio_value=account["portfolio_value"],
+        )
+
+    @staticmethod
+    async def list_documents(
+        db: AsyncSession,
+        *,
+        alpaca: AlpacaBrokerService,
+        user_id: uuid.UUID,
+        document_type: str | None = None,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> DocumentListResponse:
+        brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+        if brokerage is None:
+            raise NotFoundError(
+                "Brokerage account not found", resource="brokerage_account"
+            )
+
+        raw = await alpaca.list_documents(
+            brokerage.alpaca_account_id,
+            document_type=document_type,
+            start=start.isoformat() if start else None,
+            end=end.isoformat() if end else None,
+        )
+        documents: list[DocumentResponse] = []
+        for d in raw:
+            try:
+                documents.append(DocumentResponse.model_validate(d))
+            except ValidationError as exc:
+                # Skip malformed entries rather than 500 the whole list if
+                # Alpaca adds/drops a field on a single doc.
+                logger.warning(
+                    "alpaca_document_malformed",
+                    user_id=str(user_id),
+                    alpaca_account_id=brokerage.alpaca_account_id,
+                    raw=d,
+                    error=str(exc),
+                )
+        return DocumentListResponse(documents=documents)
+
+    @staticmethod
+    async def download_document(
+        db: AsyncSession,
+        *,
+        alpaca: AlpacaBrokerService,
+        user_id: uuid.UUID,
+        document_id: str,
+    ) -> AsyncIterator[bytes]:
+        brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+        if brokerage is None:
+            raise NotFoundError(
+                "Brokerage account not found", resource="brokerage_account"
+            )
+
+        logger.info(
+            "document_download",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+            document_id=document_id,
+        )
+        return await alpaca.stream_document(
+            brokerage.alpaca_account_id, document_id
         )
 
     @staticmethod

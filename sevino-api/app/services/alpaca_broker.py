@@ -1,4 +1,5 @@
 import time
+from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 import httpx
@@ -26,6 +27,15 @@ class AlpacaBrokerUnavailableError(Exception):
     def __init__(self, message: str = "Brokerage service unavailable"):
         self.message = message
         super().__init__(message)
+
+
+async def _stream_response_bytes(response: httpx.Response) -> AsyncIterator[bytes]:
+    """Yield body chunks of an already-sent streaming response, guaranteeing close."""
+    try:
+        async for chunk in response.aiter_bytes():
+            yield chunk
+    finally:
+        await response.aclose()
 
 
 class AlpacaBrokerService:
@@ -185,6 +195,62 @@ class AlpacaBrokerService:
             params=params or None,
         )
 
+    async def list_documents(
+        self,
+        account_id: str,
+        *,
+        document_type: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/{account_id}/documents — statements, 1099s, etc."""
+        params = {
+            k: v
+            for k, v in {"type": document_type, "start": start, "end": end}.items()
+            if v
+        }
+        return await self._request(
+            "GET",
+            f"/v1/accounts/{account_id}/documents",
+            params=params or None,
+        )
+
+    async def stream_document(
+        self, account_id: str, document_id: str
+    ) -> AsyncIterator[bytes]:
+        """GET /v1/accounts/{account_id}/documents/{document_id}/download — yields PDF chunks.
+
+        Alpaca 301s to an S3 URL; redirects are followed transparently. The
+        response body is streamed rather than buffered so multi-MB tax
+        packets don't pin per-request memory on the dyno.
+
+        The upstream request is sent eagerly so a non-2xx status (e.g.
+        404 for an unknown document) raises before the caller begins
+        iterating — otherwise FastAPI would have already flushed 200
+        headers by the time the error surfaced.
+        """
+        path = f"/v1/accounts/{account_id}/documents/{document_id}/download"
+        request = self._client.build_request(
+            "GET",
+            f"{self._base_url}{path}",
+            headers=await self._headers(),
+        )
+        try:
+            response = await self._client.send(
+                request, stream=True, follow_redirects=True
+            )
+        except httpx.HTTPError as exc:
+            logger.error("alpaca_connection_failed", error=str(exc), path=path)
+            raise AlpacaBrokerUnavailableError(str(exc)) from exc
+
+        if response.status_code not in (200, 201):
+            try:
+                await response.aread()
+                self._handle_response(response)  # always raises
+            finally:
+                await response.aclose()
+        return _stream_response_bytes(response)
+
     async def list_assets(
         self,
         *,
@@ -206,8 +272,20 @@ class AlpacaBrokerService:
         params: dict[str, Any] | None = None,
     ) -> Any:
         """Make an authenticated request to the Alpaca Broker API."""
+        response = await self._execute(method, path, json=json, params=params)
+        return self._handle_response(response)
+
+    async def _execute(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        """Execute the HTTP request, mapping transport errors to AlpacaBrokerUnavailableError."""
         try:
-            response = await self._client.request(
+            return await self._client.request(
                 method,
                 f"{self._base_url}{path}",
                 headers=await self._headers(),
@@ -217,7 +295,6 @@ class AlpacaBrokerService:
         except httpx.HTTPError as exc:
             logger.error("alpaca_connection_failed", error=str(exc), path=path)
             raise AlpacaBrokerUnavailableError(str(exc)) from exc
-        return self._handle_response(response)
 
     def _handle_response(self, response: httpx.Response) -> Any:
         if response.status_code == 204:
