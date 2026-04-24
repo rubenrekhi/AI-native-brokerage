@@ -39,4 +39,5 @@ async def get_snapshot(
     ctx: AlpacaAccountContext = Depends(get_alpaca_account_context),
     service: PortfolioService = Depends(_portfolio_service),
 ) -> PortfolioSnapshotResponse:
+    """Equity, cash, buying power, and daily change for the home screen."""
     return await service.get_snapshot(ctx)
