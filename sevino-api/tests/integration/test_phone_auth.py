@@ -1,4 +1,4 @@
-"""Integration tests for /auth/phone/* endpoints against real local Postgres.
+"""Integration tests for /v1/auth/phone/* endpoints against real local Postgres.
 
 Requires: Docker + `make infra` + `make migrate`.
 Skipped automatically if Postgres is unavailable.
@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import text
 
-from app.auth import get_access_token
+from app.auth import get_access_token, get_current_user
 from app.main import app
 from app.routes.phone_auth import get_phone_verification
 from app.services.phone_verification import (
@@ -33,7 +33,9 @@ CODE = "123456"
 def mock_phone_service():
     service = AsyncMock()
     service.send = AsyncMock(return_value=None)
-    service.confirm = AsyncMock(return_value={"access_token": "new-jwt"})
+    service.confirm = AsyncMock(
+        return_value={"access_token": "new-jwt", "user": {"phone": PHONE}}
+    )
     return service
 
 
@@ -52,7 +54,7 @@ def override_phone_service(mock_phone_service):
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/phone/send-verification
+# POST /v1/auth/phone/send-verification
 # ---------------------------------------------------------------------------
 
 
@@ -61,7 +63,7 @@ class TestSendVerification:
         self, authenticated_db_client, override_phone_service
     ):
         response = await authenticated_db_client.post(
-            "/auth/phone/send-verification",
+            "/v1/auth/phone/send-verification",
             json={"phone_number": PHONE},
         )
         assert response.status_code == 200
@@ -74,7 +76,7 @@ class TestSendVerification:
         self, authenticated_db_client, override_phone_service
     ):
         response = await authenticated_db_client.post(
-            "/auth/phone/send-verification",
+            "/v1/auth/phone/send-verification",
             json={"phone_number": "5551234567"},
         )
         assert response.status_code == 422
@@ -87,7 +89,7 @@ class TestSendVerification:
             "Invalid phone number", detail={"code": "invalid_phone"}
         )
         response = await authenticated_db_client.post(
-            "/auth/phone/send-verification",
+            "/v1/auth/phone/send-verification",
             json={"phone_number": PHONE},
         )
         assert response.status_code == 422
@@ -102,7 +104,7 @@ class TestSendVerification:
             "connection refused"
         )
         response = await authenticated_db_client.post(
-            "/auth/phone/send-verification",
+            "/v1/auth/phone/send-verification",
             json={"phone_number": PHONE},
         )
         assert response.status_code == 503
@@ -110,7 +112,7 @@ class TestSendVerification:
 
 
 # ---------------------------------------------------------------------------
-# POST /auth/phone/confirm
+# POST /v1/auth/phone/confirm
 # ---------------------------------------------------------------------------
 
 
@@ -119,7 +121,7 @@ class TestConfirmVerification:
         self, authenticated_db_client, override_phone_service, db_session
     ):
         response = await authenticated_db_client.post(
-            "/auth/phone/confirm",
+            "/v1/auth/phone/confirm",
             json={"phone_number": PHONE, "code": CODE},
         )
         assert response.status_code == 200
@@ -149,7 +151,7 @@ class TestConfirmVerification:
             "Token has expired or is invalid", detail={"code": "otp_expired"}
         )
         response = await authenticated_db_client.post(
-            "/auth/phone/confirm",
+            "/v1/auth/phone/confirm",
             json={"phone_number": PHONE, "code": "999999"},
         )
         assert response.status_code == 422
@@ -167,7 +169,7 @@ class TestConfirmVerification:
         self, authenticated_db_client, override_phone_service
     ):
         response = await authenticated_db_client.post(
-            "/auth/phone/confirm",
+            "/v1/auth/phone/confirm",
             json={"phone_number": PHONE, "code": "abc"},
         )
         assert response.status_code == 422
@@ -178,8 +180,50 @@ class TestConfirmVerification:
     ):
         override_phone_service.confirm.side_effect = PhoneVerificationUnavailableError()
         response = await authenticated_db_client.post(
-            "/auth/phone/confirm",
+            "/v1/auth/phone/confirm",
             json={"phone_number": PHONE, "code": CODE},
         )
         assert response.status_code == 503
         assert response.json()["code"] == "PHONE_VERIFICATION_UNAVAILABLE"
+
+    async def test_persists_phone_returned_by_gotrue_not_request_body(
+        self, authenticated_db_client, override_phone_service, db_session
+    ):
+        # Simulate Supabase normalizing the phone (e.g. stripping punctuation).
+        # We must persist GoTrue's version, since that's what's bound to
+        # auth.users — not whatever the client submitted.
+        canonical_phone = "+15559876543"
+        override_phone_service.confirm.return_value = {
+            "access_token": "new-jwt",
+            "user": {"phone": canonical_phone},
+        }
+
+        response = await authenticated_db_client.post(
+            "/v1/auth/phone/confirm",
+            json={"phone_number": PHONE, "code": CODE},
+        )
+        assert response.status_code == 200
+
+        row = await db_session.execute(
+            text("SELECT phone_number FROM user_profiles WHERE id = :id"),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        assert row.one().phone_number == canonical_phone
+
+    async def test_missing_user_profile_returns_404(
+        self, authenticated_db_client, override_phone_service
+    ):
+        # Auth says the user exists (overridden above), but there's no
+        # corresponding user_profiles row — the repo should surface NotFound.
+        missing_user_id = str(uuid.uuid4())
+        app.dependency_overrides[get_current_user] = lambda: missing_user_id
+        try:
+            response = await authenticated_db_client.post(
+                "/v1/auth/phone/confirm",
+                json={"phone_number": PHONE, "code": CODE},
+            )
+        finally:
+            app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"

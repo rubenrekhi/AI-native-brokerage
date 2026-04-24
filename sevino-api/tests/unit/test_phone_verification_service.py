@@ -44,7 +44,7 @@ class TestSend:
         service = _make_service(handler)
         result = await service.send(user_jwt=USER_JWT, phone_number=PHONE)
 
-        assert result is None or isinstance(result, dict)
+        assert result is None
         assert captured["method"] == "PUT"
         assert captured["url"].endswith("/auth/v1/user")
         assert captured["body"] == {"phone": PHONE}
@@ -97,6 +97,16 @@ class TestSend:
         service = _make_service(handler)
         with pytest.raises(PhoneVerificationUnavailableError):
             await service.send(user_jwt=USER_JWT, phone_number=PHONE)
+
+    async def test_401_raises_phone_verification_error(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(401, json={"msg": "invalid jwt"})
+
+        service = _make_service(handler)
+        with pytest.raises(PhoneVerificationError) as info:
+            await service.send(user_jwt="expired", phone_number=PHONE)
+
+        assert "invalid jwt" in info.value.message
 
     async def test_network_failure_raises_unavailable(self):
         def handler(request: httpx.Request) -> httpx.Response:
@@ -196,6 +206,15 @@ class TestHandleResponse:
         )
         assert service._handle_response(response) == {}
 
+    def test_empty_2xx_body_returns_empty_dict(self):
+        service = PhoneVerificationService.__new__(PhoneVerificationService)
+        response = httpx.Response(
+            status_code=200,
+            text="",
+            request=httpx.Request("PUT", "http://localhost/auth/v1/user"),
+        )
+        assert service._handle_response(response) == {}
+
     def test_non_json_body_falls_back_to_text(self):
         service = PhoneVerificationService.__new__(PhoneVerificationService)
         response = httpx.Response(
@@ -207,3 +226,15 @@ class TestHandleResponse:
             service._handle_response(response)
 
         assert info.value.detail == {"message": "not json"}
+
+    def test_error_description_used_when_msg_and_message_absent(self):
+        service = PhoneVerificationService.__new__(PhoneVerificationService)
+        response = httpx.Response(
+            status_code=400,
+            json={"error_description": "Rate limit on sms send"},
+            request=httpx.Request("PUT", "http://localhost/auth/v1/user"),
+        )
+        with pytest.raises(PhoneVerificationError) as info:
+            service._handle_response(response)
+
+        assert "Rate limit on sms send" in info.value.message
