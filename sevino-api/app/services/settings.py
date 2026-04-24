@@ -3,16 +3,21 @@
 import uuid
 from collections.abc import AsyncIterator
 from datetime import date
+from decimal import Decimal, InvalidOperation
 
 import sentry_sdk
 import structlog
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import NotFoundError
+from app.exceptions import ConflictError, NotFoundError
 from app.models.user_settings import UserSettings
 from app.repositories.ach_relationship import AchRelationshipRepository
-from app.repositories.brokerage_account import BrokerageAccountRepository
+from app.repositories.brokerage_account import (
+    STATUS_ACCOUNT_CLOSED,
+    STATUS_ACTIVE,
+    BrokerageAccountRepository,
+)
 from app.repositories.financial_profile import FinancialProfileRepository
 from app.repositories.user_profile import UserProfileRepository
 from app.repositories.user_settings import UserSettingsRepository
@@ -26,7 +31,11 @@ from app.schemas.settings import (
     SettingsProfileResponse,
     UserSettingsPatchRequest,
 )
-from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerService
+from app.services.alpaca_broker import (
+    PENDING_TRANSFER_STATUSES,
+    AlpacaBrokerError,
+    AlpacaBrokerService,
+)
 from app.services.supabase_admin import (
     SupabaseAdminError,
     SupabaseAdminService,
@@ -39,7 +48,7 @@ _ACCOUNT_VALUE_FIELDS = ("equity", "cash", "buying_power", "portfolio_value")
 # Alpaca account states where no live account exists to close. Everything else
 # (ONBOARDING, SUBMITTED, APPROVED, ACTIVE, ACTION_REQUIRED, etc.) represents an
 # account that must be closed to honor a delete request.
-_BROKERAGE_TERMINAL_STATUSES = frozenset({"ACCOUNT_CLOSED", "REJECTED"})
+_BROKERAGE_TERMINAL_STATUSES = frozenset({STATUS_ACCOUNT_CLOSED, "REJECTED"})
 
 
 class SettingsService:
@@ -273,3 +282,139 @@ class SettingsService:
             return
 
         logger.info("delete_account_completed", user_id=str(user_id))
+
+    @staticmethod
+    async def close_brokerage_account(
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        alpaca: AlpacaBrokerService,
+    ) -> None:
+        """Close the user's Alpaca brokerage account, leaving the Sevino profile intact.
+
+        Unlike `delete_account`, this leaves `user_profiles` and auth rows in
+        place — the user keeps their login and can re-onboard later. Only the
+        brokerage side is torn down. Safety gates block closure while funds or
+        positions are still at Alpaca.
+
+        Order: Alpaca close → DB status update. If the DB commit fails after
+        Alpaca has been told to close, the client gets a 500 while the local
+        row stays `ACTIVE`; reconciliation is expected to rebuild status from
+        Alpaca out-of-band. Mirrors the tradeoff documented in `delete_account`.
+        """
+        brokerage = await _require_active_brokerage_for_close(db, user_id)
+        await _block_if_open_positions(alpaca, brokerage, user_id)
+        await _block_if_pending_transfers(alpaca, brokerage, user_id)
+        await _block_if_non_zero_cash(alpaca, brokerage, user_id)
+
+        logger.info(
+            "close_brokerage_closing_alpaca",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+        )
+        await alpaca.close_account(brokerage.alpaca_account_id)
+        await BrokerageAccountRepository.update_status(
+            db, brokerage.id, STATUS_ACCOUNT_CLOSED
+        )
+        await db.commit()
+        logger.info(
+            "close_brokerage_completed",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+        )
+
+
+async def _require_active_brokerage_for_close(db: AsyncSession, user_id: uuid.UUID):
+    brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+    if brokerage is None or brokerage.account_status != STATUS_ACTIVE:
+        raise NotFoundError(
+            "Active brokerage account not found",
+            resource="brokerage_account",
+        )
+    return brokerage
+
+
+async def _block_if_open_positions(
+    alpaca: AlpacaBrokerService, brokerage, user_id: uuid.UUID
+) -> None:
+    positions = await alpaca.list_positions(brokerage.alpaca_account_id)
+    if not positions:
+        return
+    logger.warning(
+        "close_brokerage_blocked_open_positions",
+        user_id=str(user_id),
+        alpaca_account_id=brokerage.alpaca_account_id,
+        position_count=len(positions),
+    )
+    raise ConflictError(
+        "Close all positions before closing your account",
+        code="OPEN_POSITIONS",
+        detail={"position_count": len(positions)},
+    )
+
+
+async def _block_if_pending_transfers(
+    alpaca: AlpacaBrokerService, brokerage, user_id: uuid.UUID
+) -> None:
+    transfers = await alpaca.list_transfers(brokerage.alpaca_account_id)
+    pending = [
+        t for t in transfers if t.get("status") in PENDING_TRANSFER_STATUSES
+    ]
+    if not pending:
+        return
+    logger.warning(
+        "close_brokerage_blocked_pending_transfers",
+        user_id=str(user_id),
+        alpaca_account_id=brokerage.alpaca_account_id,
+        pending_count=len(pending),
+    )
+    raise ConflictError(
+        "Wait for pending transfers to settle before closing your account",
+        code="PENDING_TRANSFERS",
+        detail={"pending_count": len(pending)},
+    )
+
+
+async def _block_if_non_zero_cash(
+    alpaca: AlpacaBrokerService, brokerage, user_id: uuid.UUID
+) -> None:
+    # Alpaca rejects close with a generic 40310000 error if cash > 0, so
+    # pre-flight the check to surface a structured NON_ZERO_BALANCE conflict
+    # the client can branch on.
+    trading_account = await alpaca.get_trading_account(brokerage.alpaca_account_id)
+    cash_raw = trading_account.get("cash")
+    if cash_raw is None:
+        logger.error(
+            "close_brokerage_cash_missing",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+        )
+        raise AlpacaBrokerError(
+            status_code=502,
+            message="Alpaca trading-account response missing cash field",
+        )
+    try:
+        cash_balance = Decimal(cash_raw)
+    except InvalidOperation as exc:
+        logger.error(
+            "close_brokerage_cash_unparseable",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+            cash_raw=cash_raw,
+        )
+        raise AlpacaBrokerError(
+            status_code=502,
+            message="Alpaca cash value unparseable",
+            detail={"cash_raw": str(cash_raw)},
+        ) from exc
+    if cash_balance > 0:
+        logger.warning(
+            "close_brokerage_blocked_non_zero_cash",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+            cash_balance=str(cash_balance),
+        )
+        raise ConflictError(
+            "Withdraw your cash balance before closing your account",
+            code="NON_ZERO_BALANCE",
+            detail={"cash_balance": str(cash_balance)},
+        )

@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.brokerage_account import BrokerageAccount
 
 STATUS_ACTIVE = "ACTIVE"
+STATUS_ACCOUNT_CLOSED = "ACCOUNT_CLOSED"
 
 
 class BrokerageAccountRepository:

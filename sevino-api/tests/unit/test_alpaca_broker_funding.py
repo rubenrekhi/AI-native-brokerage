@@ -202,6 +202,35 @@ class TestGetTradingAccount:
             await service.get_trading_account(ACCOUNT_ID)
 
 
+class TestListPositions:
+    async def test_gets_positions(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(
+                200,
+                json=[{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}],
+            )
+
+        service = _make_service(handler)
+        result = await service.list_positions(ACCOUNT_ID)
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(
+            f"/v1/trading/accounts/{ACCOUNT_ID}/positions"
+        )
+        assert result == [{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}]
+
+    async def test_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        service = _make_service(handler)
+        assert await service.list_positions(ACCOUNT_ID) == []
+
+
 class TestListDocuments:
     async def test_returns_documents(self):
         captured: dict = {}

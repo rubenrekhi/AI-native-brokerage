@@ -127,3 +127,14 @@ async def delete_account(
         db, uuid.UUID(user_id), alpaca, supabase_admin
     )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/brokerage-account", status_code=status.HTTP_204_NO_CONTENT)
+async def close_brokerage_account(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> Response:
+    """Close the Alpaca brokerage account while keeping the Sevino profile."""
+    await SettingsService.close_brokerage_account(db, uuid.UUID(user_id), alpaca)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

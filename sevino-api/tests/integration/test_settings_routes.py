@@ -2,7 +2,7 @@
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import ANY, AsyncMock, Mock
 
 import httpx
 import pytest
@@ -567,6 +567,238 @@ class TestDeleteAccount:
             "DELETE",
             "/v1/settings/account",
             json={"confirmation": "DELETE"},
+        )
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# DELETE /v1/settings/brokerage-account
+# ---------------------------------------------------------------------------
+
+
+class TestCloseBrokerageAccount:
+    @pytest.fixture(autouse=True)
+    def _default_alpaca_state(self, alpaca_mock):
+        alpaca_mock.list_positions.return_value = []
+        alpaca_mock.list_transfers.return_value = []
+        alpaca_mock.get_trading_account.return_value = {
+            "id": "alpaca_acc_42",
+            "cash": "0",
+            "equity": "0",
+            "buying_power": "0",
+            "portfolio_value": "0",
+        }
+        alpaca_mock.close_account.return_value = {"id": "alpaca_acc_42"}
+
+    @pytest.fixture
+    def patch_update_status(self, mocker):
+        return mocker.patch(
+            "app.services.settings.BrokerageAccountRepository.update_status",
+            new_callable=AsyncMock,
+        )
+
+    async def test_happy_path_closes_and_updates_status(
+        self,
+        client,
+        db_mock,
+        patch_repo,
+        patch_update_status,
+        alpaca_mock,
+        brokerage,
+    ):
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 204
+        assert response.content == b""
+        alpaca_mock.list_positions.assert_awaited_once_with("alpaca_acc_42")
+        alpaca_mock.list_transfers.assert_awaited_once_with("alpaca_acc_42")
+        alpaca_mock.close_account.assert_awaited_once_with("alpaca_acc_42")
+        patch_update_status.assert_awaited_once_with(
+            ANY, brokerage.id, "ACCOUNT_CLOSED"
+        )
+        db_mock.commit.assert_awaited()
+
+    async def test_404_when_no_brokerage_account(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        patch_repo.return_value = None
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["code"] == "NOT_FOUND"
+        assert body["detail"] == {"resource": "brokerage_account"}
+        alpaca_mock.list_positions.assert_not_called()
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "non_active_status",
+        ["SUBMITTED", "APPROVED", "ACTION_REQUIRED", "ACCOUNT_CLOSED", "REJECTED"],
+    )
+    async def test_404_when_brokerage_not_active(
+        self,
+        client,
+        patch_repo,
+        alpaca_mock,
+        brokerage,
+        patch_update_status,
+        non_active_status,
+    ):
+        brokerage.account_status = non_active_status
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+        alpaca_mock.list_positions.assert_not_called()
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    async def test_409_when_open_positions_exist(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        alpaca_mock.list_positions.return_value = [
+            {"symbol": "AAPL", "qty": "3"},
+            {"symbol": "TSLA", "qty": "1"},
+        ]
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "OPEN_POSITIONS"
+        assert "Close all positions" in body["error"]
+        assert body["detail"] == {"position_count": 2}
+        alpaca_mock.list_transfers.assert_not_called()
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "pending_status",
+        ["QUEUED", "APPROVAL_PENDING", "PENDING", "SENT_TO_CLEARING"],
+    )
+    async def test_409_when_pending_transfers_exist(
+        self,
+        client,
+        patch_repo,
+        alpaca_mock,
+        patch_update_status,
+        pending_status,
+    ):
+        alpaca_mock.list_transfers.return_value = [
+            {"id": "t1", "status": pending_status},
+            {"id": "t2", "status": "COMPLETE"},
+        ]
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "PENDING_TRANSFERS"
+        assert body["detail"] == {"pending_count": 1}
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    async def test_allows_close_when_only_settled_transfers(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        alpaca_mock.list_transfers.return_value = [
+            {"id": "t1", "status": "COMPLETE"},
+            {"id": "t2", "status": "CANCELED"},
+            {"id": "t3", "status": "RETURNED"},
+        ]
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 204
+        alpaca_mock.close_account.assert_awaited_once_with("alpaca_acc_42")
+        patch_update_status.assert_awaited_once()
+
+    async def test_409_when_non_zero_cash_balance(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        alpaca_mock.get_trading_account.return_value = {
+            "id": "alpaca_acc_42",
+            "cash": "670.50",
+            "equity": "670.50",
+            "buying_power": "670.50",
+            "portfolio_value": "670.50",
+        }
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "NON_ZERO_BALANCE"
+        assert "Withdraw" in body["error"]
+        assert body["detail"] == {"cash_balance": "670.50"}
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    async def test_allows_close_when_cash_balance_is_zero_string_variants(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        alpaca_mock.get_trading_account.return_value = {
+            "id": "alpaca_acc_42",
+            "cash": "0.00",
+        }
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 204
+        alpaca_mock.close_account.assert_awaited_once_with("alpaca_acc_42")
+
+    async def test_alpaca_close_failure_skips_status_update(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        from app.services.alpaca_broker import AlpacaBrokerError
+
+        alpaca_mock.close_account.side_effect = AlpacaBrokerError(
+            status_code=400, message="cannot close"
+        )
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "ALPACA_ERROR"
+        patch_update_status.assert_not_called()
+
+    @pytest.mark.parametrize(
+        "cash_value",
+        ["N/A", "unknown", ""],
+    )
+    async def test_502_when_cash_value_unparseable(
+        self, client, patch_repo, alpaca_mock, patch_update_status, cash_value
+    ):
+        alpaca_mock.get_trading_account.return_value = {
+            "id": "alpaca_acc_42",
+            "cash": cash_value,
+        }
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "ALPACA_ERROR"
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    async def test_502_when_cash_field_missing(
+        self, client, patch_repo, alpaca_mock, patch_update_status
+    ):
+        alpaca_mock.get_trading_account.return_value = {"id": "alpaca_acc_42"}
+
+        response = await client.delete("/v1/settings/brokerage-account")
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "ALPACA_ERROR"
+        alpaca_mock.close_account.assert_not_called()
+        patch_update_status.assert_not_called()
+
+    async def test_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.delete(
+            "/v1/settings/brokerage-account"
         )
         assert response.status_code == 401
 

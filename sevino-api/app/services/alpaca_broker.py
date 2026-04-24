@@ -11,6 +11,12 @@ from app.exceptions import NotFoundError
 logger = structlog.get_logger(__name__)
 
 
+# Alpaca transfer states that are still in-flight: money hasn't settled yet.
+PENDING_TRANSFER_STATUSES = frozenset(
+    {"QUEUED", "APPROVAL_PENDING", "PENDING", "SENT_TO_CLEARING"}
+)
+
+
 class AlpacaBrokerError(Exception):
     """Raised when the Alpaca Broker API returns an error."""
 
@@ -125,6 +131,12 @@ class AlpacaBrokerService:
         """POST /v1/accounts/{account_id}/actions/close — initiate account closure."""
         return await self._request(
             "POST", f"/v1/accounts/{account_id}/actions/close"
+        )
+
+    async def list_positions(self, account_id: str) -> list[dict[str, Any]]:
+        """GET /v1/trading/accounts/{account_id}/positions — open positions."""
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/positions"
         )
 
     async def create_ach_relationship(
