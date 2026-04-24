@@ -143,3 +143,60 @@ async def authenticated_db_client(db_session, test_user):
         yield ac
 
     app.dependency_overrides.pop(get_current_user, None)
+
+
+async def _insert_brokerage_account(
+    db_session: AsyncSession,
+    user_id: uuid.UUID,
+    account_status: str,
+) -> dict:
+    account_id = uuid.uuid4()
+    alpaca_account_id = f"alpaca_{uuid.uuid4()}"
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO brokerage_accounts (
+                id, user_id, alpaca_account_id, account_status,
+                kyc_submitted_at, activated_at
+            ) VALUES (
+                :id, :user_id, :alpaca_id, :status,
+                now(), CASE WHEN :status = 'ACTIVE' THEN now() ELSE NULL END
+            )
+            """
+        ),
+        {
+            "id": account_id,
+            "user_id": user_id,
+            "alpaca_id": alpaca_account_id,
+            "status": account_status,
+        },
+    )
+    await db_session.flush()
+    return {
+        "id": account_id,
+        "user_id": user_id,
+        "alpaca_account_id": alpaca_account_id,
+        "account_status": account_status,
+    }
+
+
+@pytest.fixture
+async def test_brokerage_account(db_session: AsyncSession, test_user: uuid.UUID) -> dict:
+    """ACTIVE brokerage_accounts row for test_user.
+
+    Mutually exclusive with test_brokerage_account_pending in the same test
+    (brokerage_accounts.user_id is UNIQUE).
+    """
+    return await _insert_brokerage_account(db_session, test_user, "ACTIVE")
+
+
+@pytest.fixture
+async def test_brokerage_account_pending(
+    db_session: AsyncSession, test_user: uuid.UUID
+) -> dict:
+    """APPROVAL_PENDING brokerage_accounts row for test_user.
+
+    Mutually exclusive with test_brokerage_account in the same test
+    (brokerage_accounts.user_id is UNIQUE).
+    """
+    return await _insert_brokerage_account(db_session, test_user, "APPROVAL_PENDING")
