@@ -578,6 +578,54 @@ enum L10n {
         static let errorSubmittingOrder = String(localized: "trade_execution.error_submitting_order")
     }
 
+    enum Transfer {
+        static let depositBadge = String(localized: "transfer.deposit_badge")
+        static let withdrawBadge = String(localized: "transfer.withdraw_badge")
+        static let fromLabel = String(localized: "transfer.from_label")
+        static let toLabel = String(localized: "transfer.to_label")
+        static let amountLabel = String(localized: "transfer.amount_label")
+        static let amountEmptyCta = String(localized: "transfer.amount_empty_cta")
+        static let amountExceedsCta = String(localized: "transfer.amount_exceeds_cta")
+        static func confirmDepositAmount(_ amount: String) -> String {
+            String(format: String(localized: "transfer.confirm_deposit_amount"), amount)
+        }
+        static func confirmWithdrawAmount(_ amount: String) -> String {
+            String(format: String(localized: "transfer.confirm_withdraw_amount"), amount)
+        }
+        static func exceedsAvailable(_ amount: String) -> String {
+            String(format: String(localized: "transfer.exceeds_available"), amount)
+        }
+        static func bankAccountFormat(_ institution: String, _ mask: String) -> String {
+            String(format: String(localized: "transfer.bank_account_format"), institution, mask)
+        }
+        static func bankTypeMaskFormat(_ type: String, _ mask: String) -> String {
+            String(format: String(localized: "transfer.bank_type_mask_format"), type, mask)
+        }
+        static let brokerageName = String(localized: "transfer.brokerage_name")
+        static let brokerageSubtitle = String(localized: "transfer.brokerage_subtitle")
+        static let disclaimer = String(localized: "transfer.disclaimer")
+        static let noBanksTitle = String(localized: "transfer.no_banks_title")
+        static let noBanksMessage = String(localized: "transfer.no_banks_message")
+        static let linkBankCta = String(localized: "transfer.link_bank_cta")
+        static let linkAnotherCta = String(localized: "transfer.link_another_cta")
+        static let linkedAccountsHeader = String(localized: "transfer.linked_accounts_header")
+        static let statusQueued = String(localized: "transfer.status_queued")
+        static let statusComplete = String(localized: "transfer.status_complete")
+        static let statusFailed = String(localized: "transfer.status_failed")
+        static let statusUnknown = String(localized: "transfer.status_unknown")
+        static let receiptLabel = String(localized: "transfer.receipt_label")
+        static let submittedLabel = String(localized: "transfer.submitted_label")
+        static let estimatedArrivalLabel = String(localized: "transfer.estimated_arrival_label")
+        static let settlesLabel = String(localized: "transfer.settles_label")
+        static let sourceLabel = String(localized: "transfer.source_label")
+        static let reasonLabel = String(localized: "transfer.reason_label")
+        static let closeAccessibility = String(localized: "transfer.close_accessibility")
+        static let selectAccountAccessibility = String(localized: "transfer.select_account_accessibility")
+        static func failedHeader(_ direction: String) -> String {
+            String(format: String(localized: "transfer.failed_header"), direction)
+        }
+    }
+
     enum Welcome {
         static let page1Title = String(localized: "welcome.page1_title")
         static let page1Subtitle = String(localized: "welcome.page1_subtitle")

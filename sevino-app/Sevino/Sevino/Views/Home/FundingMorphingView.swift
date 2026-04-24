@@ -7,6 +7,8 @@ struct FundingMorphingView: View {
     @Bindable var viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
+    var onDeposit: (() -> Void)?
+    var onWithdraw: (() -> Void)?
 
     @Namespace private var morphNamespace
 
@@ -55,6 +57,8 @@ struct FundingMorphingView: View {
         CashDetailCard(
             data: cashCardData,
             scale: scale,
+            onDeposit: onDeposit,
+            onWithdraw: onWithdraw,
             onLinkBank: viewModel.requestBankLink,
             isLinkBankDisabled: viewModel.isLoading
         )

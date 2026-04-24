@@ -5,6 +5,12 @@ protocol FundingServiceProtocol {
     func createLinkToken() async throws -> String
     func linkBank(_ request: LinkBankRequest) async throws -> AchRelationshipDTO
     func listAchRelationships() async throws -> [AchRelationshipDTO]
+    func createTransfer(
+        relationshipId: String,
+        amount: Decimal,
+        direction: TransferDirection
+    ) async throws -> TransferResponse
+    func listTransfers() async throws -> [TransferResponse]
 }
 
 /// Handles backend communication for the Plaid + ACH funding flows.
@@ -34,6 +40,38 @@ final class FundingService: FundingServiceProtocol {
             "/v1/funding/ach-relationships"
         )
         return response.relationships
+    }
+
+    func createTransfer(
+        relationshipId: String,
+        amount: Decimal,
+        direction: TransferDirection
+    ) async throws -> TransferResponse {
+        try await api.post(
+            "/v1/funding/transfers",
+            body: TransferRequest(
+                relationshipId: relationshipId,
+                amount: Self.formatAmount(amount),
+                direction: direction.apiValue
+            )
+        )
+    }
+
+    /// Fixed-point decimal string formatter for the wire format. Uses en_US_POSIX to
+    /// guarantee a `.` decimal separator and no thousands grouping regardless of the
+    /// user's locale — the backend parses these as literal decimal strings.
+    private static func formatAmount(_ amount: Decimal) -> String {
+        amount.formatted(
+            .number
+                .precision(.fractionLength(2))
+                .grouping(.never)
+                .locale(Locale(identifier: "en_US_POSIX"))
+        )
+    }
+
+    func listTransfers() async throws -> [TransferResponse] {
+        let response: TransferListResponse = try await api.get("/v1/funding/transfers")
+        return response.transfers
     }
 }
 

@@ -8,6 +8,7 @@ struct HomeView: View {
     @State private var fundingViewModel: FundingViewModel
     @State private var holdingsViewModel: HoldingsViewModel
     @State private var radarViewModel: RadarViewModel
+    @State private var transferViewModel: TransferViewModel
     @State private var tickerMentionViewModel = TickerMentionViewModel()
     @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
@@ -37,13 +38,15 @@ struct HomeView: View {
         portfolioViewModel: PortfolioViewModel = PortfolioViewModel(),
         fundingViewModel: FundingViewModel = FundingViewModel(),
         holdingsViewModel: HoldingsViewModel = HoldingsViewModel(),
-        radarViewModel: RadarViewModel = RadarViewModel()
+        radarViewModel: RadarViewModel = RadarViewModel(),
+        transferViewModel: TransferViewModel = TransferViewModel()
     ) {
         self._viewModel = State(initialValue: viewModel)
         self._portfolioViewModel = State(initialValue: portfolioViewModel)
         self._fundingViewModel = State(initialValue: fundingViewModel)
         self._holdingsViewModel = State(initialValue: holdingsViewModel)
         self._radarViewModel = State(initialValue: radarViewModel)
+        self._transferViewModel = State(initialValue: transferViewModel)
     }
 
     var body: some View {
@@ -115,7 +118,9 @@ struct HomeView: View {
                     isHidden: showPortfolio || showHoldings || showRadar,
                     viewModel: fundingViewModel,
                     onTap: toggleFunding,
-                    onDismiss: dismissFunding
+                    onDismiss: dismissFunding,
+                    onDeposit: { startTransfer(.deposit) },
+                    onWithdraw: { startTransfer(.withdraw) }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 44) * scale)
@@ -284,6 +289,11 @@ struct HomeView: View {
         } message: { message in
             Text(message)
         }
+        .modifier(TransferSheetPresenter(
+            transferViewModel: transferViewModel,
+            fundingViewModel: fundingViewModel,
+            scale: scale
+        ))
         .alert(
             L10n.Home.radarLoadErrorTitle,
             isPresented: Binding(
@@ -366,6 +376,16 @@ struct HomeView: View {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showFunding = false
         }
+    }
+
+    private func startTransfer(_ direction: TransferDirection) {
+        // Collapse the cash detail modal first; the transfer card sheet then appears
+        // over the home screen. When chat is built, this state will move to the chat
+        // screen's MCP renderer.
+        withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            showFunding = false
+        }
+        transferViewModel.start(direction: direction)
     }
 
     private func toggleHoldings() {

@@ -4844,6 +4844,336 @@
         }
       }
     },
+    "transfer.amount_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "transfer.amount_empty_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an amount"
+          }
+        }
+      }
+    },
+    "transfer.amount_exceeds_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount exceeds available"
+          }
+        }
+      }
+    },
+    "transfer.bank_account_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ••••%2$@"
+          }
+        }
+      }
+    },
+    "transfer.bank_type_mask_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ••••%2$@"
+          }
+        }
+      }
+    },
+    "transfer.brokerage_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uninvested Cash"
+          }
+        }
+      }
+    },
+    "transfer.brokerage_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brokerage"
+          }
+        }
+      }
+    },
+    "transfer.close_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "transfer.confirm_deposit_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit %@"
+          }
+        }
+      }
+    },
+    "transfer.confirm_withdraw_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdraw %@"
+          }
+        }
+      }
+    },
+    "transfer.deposit_badge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DEPOSIT"
+          }
+        }
+      }
+    },
+    "transfer.disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funds available to invest instantly · Settles in 1-3 days"
+          }
+        }
+      }
+    },
+    "transfer.estimated_arrival_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated arrival"
+          }
+        }
+      }
+    },
+    "transfer.exceeds_available" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exceeds available · %@"
+          }
+        }
+      }
+    },
+    "transfer.failed_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · FAILED"
+          }
+        }
+      }
+    },
+    "transfer.from_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From"
+          }
+        }
+      }
+    },
+    "transfer.link_another_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link another account"
+          }
+        }
+      }
+    },
+    "transfer.link_bank_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link Bank Account"
+          }
+        }
+      }
+    },
+    "transfer.linked_accounts_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LINKED ACCOUNTS"
+          }
+        }
+      }
+    },
+    "transfer.no_banks_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account to start moving money."
+          }
+        }
+      }
+    },
+    "transfer.no_banks_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No linked bank accounts"
+          }
+        }
+      }
+    },
+    "transfer.reason_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REASON"
+          }
+        }
+      }
+    },
+    "transfer.receipt_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECEIPT"
+          }
+        }
+      }
+    },
+    "transfer.select_account_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select bank account"
+          }
+        }
+      }
+    },
+    "transfer.settles_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETTLES"
+          }
+        }
+      }
+    },
+    "transfer.source_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SOURCE"
+          }
+        }
+      }
+    },
+    "transfer.status_complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Complete"
+          }
+        }
+      }
+    },
+    "transfer.status_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        }
+      }
+    },
+    "transfer.status_queued" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Queued"
+          }
+        }
+      }
+    },
+    "transfer.status_unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
+    "transfer.submitted_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SUBMITTED"
+          }
+        }
+      }
+    },
+    "transfer.to_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To"
+          }
+        }
+      }
+    },
+    "transfer.withdraw_badge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WITHDRAW"
+          }
+        }
+      }
+    },
     "welcome.log_in" : {
       "localizations" : {
         "en" : {
