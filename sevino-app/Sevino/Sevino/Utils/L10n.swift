@@ -467,6 +467,7 @@ enum L10n {
     }
 
     enum Sidebar {
+        static let accountPillFallback = String(localized: "sidebar.account_pill_fallback")
         static let chatAccessibility = String(localized: "sidebar.chat_accessibility")
         static let contactTitle = String(localized: "sidebar.contact_title")
         static let talkToFounders = String(localized: "sidebar.talk_to_founders")
@@ -475,7 +476,6 @@ enum L10n {
         static let textFounders = String(localized: "sidebar.text_founders")
         static let searchPlaceholder = String(localized: "sidebar.search_placeholder")
         static let chatsHeader = String(localized: "sidebar.chats_header")
-        static let userName = String(localized: "sidebar.user_name")
         static let newChatAccessibility = String(localized: "sidebar.new_chat_accessibility")
     }
 

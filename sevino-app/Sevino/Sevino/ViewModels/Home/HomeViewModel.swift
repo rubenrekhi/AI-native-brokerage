@@ -6,6 +6,7 @@ final class HomeViewModel {
     private let chatService: any ChatServiceProtocol
 
     private(set) var greeting = ""
+    private(set) var preferredName: String?
     private(set) var chats: [ChatItem] = []
 
     private(set) var isLoading = false
@@ -36,6 +37,7 @@ final class HomeViewModel {
             // A failed name lookup falls back to a generic greeting rather than
             // blocking the rest of the home screen.
             let resolvedName: String? = try? await name
+            preferredName = resolvedName?.isEmpty == false ? resolvedName : nil
             greeting = Self.greeting(for: resolvedName, at: Date.now)
             chats = resolvedChats
         } catch let caughtError {

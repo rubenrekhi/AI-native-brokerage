@@ -5020,6 +5020,16 @@
         }
       }
     },
+    "sidebar.account_pill_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
+          }
+        }
+      }
+    },
     "sidebar.call_founders" : {
       "localizations" : {
         "en" : {
@@ -5106,16 +5116,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Text"
-          }
-        }
-      }
-    },
-    "sidebar.user_name" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ready Riley"
           }
         }
       }

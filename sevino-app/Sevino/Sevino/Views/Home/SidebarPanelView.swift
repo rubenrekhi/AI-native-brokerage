@@ -6,6 +6,7 @@ struct SidebarPanelView: View {
 
     let scale: CGFloat
     let chats: [ChatItem]
+    let userName: String?
     let founderPhoneURL: URL?
     let founderTextURL: URL?
     let contactEmailURL: URL?
@@ -83,7 +84,7 @@ struct SidebarPanelView: View {
                 HStack {
                     Button(action: { showSettings = true }) {
                         HStack(spacing: 6 * scale) {
-                            Text(L10n.Sidebar.userName)
+                            Text(userName ?? L10n.Sidebar.accountPillFallback)
                                 .font(.system(size: 15 * scale, weight: .medium))
                                 .foregroundStyle(Color.sevinoSecondary)
 

@@ -247,6 +247,7 @@ struct HomeView: View {
             SidebarPanelView(
                 scale: scale,
                 chats: viewModel.chats,
+                userName: viewModel.preferredName,
                 founderPhoneURL: viewModel.founderPhoneURL(),
                 founderTextURL: viewModel.founderTextURL(),
                 contactEmailURL: viewModel.contactEmailURL()
