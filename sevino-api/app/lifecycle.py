@@ -20,11 +20,24 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
         encoding="utf-8",
     )
+    await app.state.redis.ping()
     logger.info("redis client ready")
     app.state.alpaca = AlpacaBrokerService()
     app.state.plaid = PlaidService()
     yield
-    app.state.plaid.close()
-    await app.state.alpaca.close()
-    await app.state.redis.aclose()
-    await app.state.arq.aclose()
+    try:
+        app.state.plaid.close()
+    except Exception:
+        logger.exception("plaid close failed")
+    try:
+        await app.state.alpaca.close()
+    except Exception:
+        logger.exception("alpaca close failed")
+    try:
+        await app.state.redis.aclose()
+    except Exception:
+        logger.exception("redis close failed")
+    try:
+        await app.state.arq.aclose()
+    except Exception:
+        logger.exception("arq close failed")
