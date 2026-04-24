@@ -1,6 +1,6 @@
 import Foundation
 
-struct Holding: Identifiable {
+struct Holding: Identifiable, Codable {
     var id: String { ticker }
     let ticker: String
     let isCash: Bool
