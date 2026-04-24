@@ -8,6 +8,7 @@ struct AlpacaAgreementsView: View {
     @State private var typedHeading = ""
     @State private var showAgreements = false
     @State private var agreed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let agreements: [IdentifiableOption] = [
         L10n.Onboarding.alpacaAgreementCustomer,
@@ -117,16 +118,9 @@ struct AlpacaAgreementsView: View {
             return
         }
         try? await Task.sleep(for: .milliseconds(400))
-        await typeOut(L10n.Onboarding.alpacaAgreementsHeading) { typedHeading = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaAgreementsHeading, reduceMotion: reduceMotion) { typedHeading = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showAgreements = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

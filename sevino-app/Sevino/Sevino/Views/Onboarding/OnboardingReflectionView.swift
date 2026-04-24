@@ -14,6 +14,7 @@ struct OnboardingReflectionView: View {
     @State private var typedStatDesc = ""
     @State private var showSource = false
     @State private var showButton = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var content: ReflectionContent {
         ReflectionContent.select(for: worries, name: userName)
@@ -110,27 +111,19 @@ struct OnboardingReflectionView: View {
             return
         }
         try? await Task.sleep(for: .milliseconds(400))
-        await typeOut(content.heading) { typedHeading = $0 }
+        await TypewriterAnimation.typeOut(content.heading, reduceMotion: reduceMotion) { typedHeading = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.body1) { typedBody1 = $0 }
+        await TypewriterAnimation.typeOut(content.body1, reduceMotion: reduceMotion) { typedBody1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.body2) { typedBody2 = $0 }
+        await TypewriterAnimation.typeOut(content.body2, reduceMotion: reduceMotion) { typedBody2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
-        await typeOut(content.statNumber, speed: .milliseconds(80)) { typedStat = $0 }
+        await TypewriterAnimation.typeOut(content.statNumber, speed: .milliseconds(68), reduceMotion: reduceMotion) { typedStat = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.statDescription) { typedStatDesc = $0 }
+        await TypewriterAnimation.typeOut(content.statDescription, reduceMotion: reduceMotion) { typedStatDesc = $0 }
         try? await Task.sleep(for: .milliseconds(200))
         showSource = true
         try? await Task.sleep(for: .milliseconds(200))
         showButton = true
-    }
-
-    private func typeOut(_ text: String, speed: Duration = .milliseconds(25), update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
-        for i in 1...text.count {
-            try? await Task.sleep(for: speed)
-            update(String(text.prefix(i)))
-        }
     }
 }
 

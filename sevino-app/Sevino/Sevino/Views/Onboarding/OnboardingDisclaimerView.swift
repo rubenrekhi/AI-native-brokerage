@@ -11,6 +11,7 @@ struct OnboardingDisclaimerView: View {
     @State private var typed2 = ""
     @State private var typed3 = ""
     @State private var showButton = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,21 +94,13 @@ struct OnboardingDisclaimerView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(line1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(line1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(line2) { typed2 = $0 }
+        await TypewriterAnimation.typeOut(line2, reduceMotion: reduceMotion) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(line3) { typed3 = $0 }
+        await TypewriterAnimation.typeOut(line3, reduceMotion: reduceMotion) { typed3 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showButton = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

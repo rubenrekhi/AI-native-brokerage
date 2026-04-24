@@ -43,6 +43,7 @@ struct OnboardingSingleSelectView: View {
     @State private var typed2 = ""
     @State private var typed3 = ""
     @State private var showOptions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -164,25 +165,17 @@ struct OnboardingSingleSelectView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(response1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(response1, reduceMotion: reduceMotion) { typed1 = $0 }
         if !response2.isEmpty {
             try? await Task.sleep(for: .milliseconds(200))
-            await typeOut(response2) { typed2 = $0 }
+            await TypewriterAnimation.typeOut(response2, reduceMotion: reduceMotion) { typed2 = $0 }
         }
         if !response3.isEmpty {
             try? await Task.sleep(for: .milliseconds(200))
-            await typeOut(response3) { typed3 = $0 }
+            await TypewriterAnimation.typeOut(response3, reduceMotion: reduceMotion) { typed3 = $0 }
         }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showOptions = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

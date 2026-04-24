@@ -13,6 +13,7 @@ struct OnboardingReferralView: View {
     @State private var typed2 = ""
     @State private var typed3 = ""
     @State private var showOptions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let sources: [IdentifiableOption] = [
         L10n.Onboarding.referralTiktok, L10n.Onboarding.referralInstagram,
@@ -183,20 +184,13 @@ struct OnboardingReferralView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.referralResponse1(userName)) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.referralResponse1(userName), reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.referralResponse2) { typed2 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.referralResponse2, reduceMotion: reduceMotion) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.referralResponse3) { typed3 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.referralResponse3, reduceMotion: reduceMotion) { typed3 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showOptions = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

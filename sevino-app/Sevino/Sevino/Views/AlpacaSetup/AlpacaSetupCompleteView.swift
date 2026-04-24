@@ -12,6 +12,7 @@ struct AlpacaSetupCompleteView: View {
     @State private var typedCta = ""
     @State private var showButton = false
     @State private var submitFailed = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -98,21 +99,13 @@ struct AlpacaSetupCompleteView: View {
             return
         }
 
-        await typeOut(L10n.Onboarding.alpacaCompleteHeading(userName)) { typedHeading = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaCompleteHeading(userName), reduceMotion: reduceMotion) { typedHeading = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.alpacaCompleteBody) { typedBody = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaCompleteBody, reduceMotion: reduceMotion) { typedBody = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.alpacaCompleteCta) { typedCta = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaCompleteCta, reduceMotion: reduceMotion) { typedCta = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showButton = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 
