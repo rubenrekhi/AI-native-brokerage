@@ -6,8 +6,17 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
+from app.repositories.ach_relationship import AchRelationshipRepository
 from app.repositories.brokerage_account import BrokerageAccountRepository
-from app.schemas.settings import AccountValueResponse
+from app.repositories.financial_profile import FinancialProfileRepository
+from app.repositories.user_profile import UserProfileRepository
+from app.schemas.onboarding import FinancialProfileData, ProfileData
+from app.schemas.settings import (
+    AccountValueResponse,
+    BrokerageAccountSummary,
+    LinkedAccountSummary,
+    SettingsProfileResponse,
+)
 from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerService
 
 logger = structlog.get_logger(__name__)
@@ -16,6 +25,32 @@ _ACCOUNT_VALUE_FIELDS = ("equity", "cash", "buying_power", "portfolio_value")
 
 
 class SettingsService:
+
+    @staticmethod
+    async def get_profile(
+        db: AsyncSession, user_id: uuid.UUID
+    ) -> SettingsProfileResponse:
+        profile = await UserProfileRepository.get_by_id(db, user_id)
+        if profile is None:
+            raise NotFoundError("User profile not found", resource="user_profile")
+
+        financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
+        brokerage = await BrokerageAccountRepository.get_by_user_id(db, user_id)
+        linked = await AchRelationshipRepository.list_active_for_user(db, user_id)
+
+        return SettingsProfileResponse(
+            profile=ProfileData.model_validate(profile),
+            financial_profile=(
+                FinancialProfileData.model_validate(financial) if financial else None
+            ),
+            brokerage=(
+                BrokerageAccountSummary.model_validate(brokerage) if brokerage else None
+            ),
+            linked_accounts=[
+                LinkedAccountSummary.model_validate(rel) for rel in linked
+            ],
+            member_since=profile.created_at,
+        )
 
     @staticmethod
     async def get_account_value(

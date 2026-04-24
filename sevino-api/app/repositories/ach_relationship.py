@@ -78,10 +78,12 @@ class AchRelationshipRepository:
     ) -> list[AchRelationship]:
         """Excludes rows where status = 'CANCELED'."""
         result = await db.execute(
-            select(AchRelationship).where(
+            select(AchRelationship)
+            .where(
                 AchRelationship.user_id == user_id,
                 AchRelationship.status != STATUS_CANCELED,
             )
+            .order_by(AchRelationship.created_at.desc())
         )
         return list(result.scalars().all())
 
