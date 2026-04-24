@@ -96,15 +96,7 @@ struct ContentView: View {
     }
 
     private var loadingView: some View {
-        ZStack {
-            OnboardingBackgroundView()
-            Image("logo_white")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 40)
-                .accessibilityHidden(true)
-        }
-        .preferredColorScheme(.dark)
+        LoadingLogoView()
     }
 
     @ViewBuilder
@@ -147,6 +139,39 @@ struct ContentView: View {
 
     private func signOut() {
         Task { await authVM.signOut() }
+    }
+}
+
+// MARK: - Loading logo
+
+private struct LoadingLogoView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathing = false
+
+    var body: some View {
+        ZStack {
+            OnboardingBackgroundView()
+            GeometryReader { proxy in
+                let scale = proxy.size.width / 393
+                Image("logo_white")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 40 * scale)
+                    .scaleEffect(isBreathing ? 1.06 : 0.96)
+                    .opacity(isBreathing ? 1.0 : 0.7)
+                    .accessibilityHidden(true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task { startBreathingAnimation() }
+    }
+
+    private func startBreathingAnimation() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            isBreathing = true
+        }
     }
 }
 
@@ -217,4 +242,8 @@ private final class PreviewAuthService: AuthServiceProtocol {
 
 #Preview("Status Check Retry") {
     StatusCheckRetryView(onRetry: {})
+}
+
+#Preview("Loading Logo") {
+    LoadingLogoView()
 }
