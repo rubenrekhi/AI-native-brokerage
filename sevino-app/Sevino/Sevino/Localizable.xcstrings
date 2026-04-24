@@ -4404,6 +4404,126 @@
         }
       }
     },
+    "trade_execution.error_submitting_order" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Error submitting order"
+          }
+        }
+      }
+    },
+    "trade_execution.hold_to_confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to confirm"
+          }
+        }
+      }
+    },
+    "trade_execution.hold_to_confirm_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press and hold for two seconds to confirm"
+          }
+        }
+      }
+    },
+    "trade_execution.label_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "trade_execution.label_current_price" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current Price"
+          }
+        }
+      }
+    },
+    "trade_execution.label_estimated_shares" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated Shares"
+          }
+        }
+      }
+    },
+    "trade_execution.label_estimated_total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated Total"
+          }
+        }
+      }
+    },
+    "trade_execution.label_order_type" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order Type"
+          }
+        }
+      }
+    },
+    "trade_execution.order_submitted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order submitted"
+          }
+        }
+      }
+    },
+    "trade_execution.side_buy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BUY"
+          }
+        }
+      }
+    },
+    "trade_execution.side_sell" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SELL"
+          }
+        }
+      }
+    },
+    "trade_execution.ticker_exchange_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ | %2$@"
+          }
+        }
+      }
+    },
     "welcome.log_in" : {
       "localizations" : {
         "en" : {

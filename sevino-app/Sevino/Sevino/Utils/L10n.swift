@@ -527,6 +527,23 @@ enum L10n {
         static let textSizeRegular = String(localized: "settings.text_size_regular")
     }
 
+    enum TradeExecution {
+        static let sideBuy = String(localized: "trade_execution.side_buy")
+        static let sideSell = String(localized: "trade_execution.side_sell")
+        static func tickerExchangeFormat(_ ticker: String, _ exchange: String) -> String {
+            String(format: String(localized: "trade_execution.ticker_exchange_format"), ticker, exchange)
+        }
+        static let labelOrderType = String(localized: "trade_execution.label_order_type")
+        static let labelAmount = String(localized: "trade_execution.label_amount")
+        static let labelEstimatedShares = String(localized: "trade_execution.label_estimated_shares")
+        static let labelCurrentPrice = String(localized: "trade_execution.label_current_price")
+        static let labelEstimatedTotal = String(localized: "trade_execution.label_estimated_total")
+        static let holdToConfirm = String(localized: "trade_execution.hold_to_confirm")
+        static let holdToConfirmA11yHint = String(localized: "trade_execution.hold_to_confirm_a11y_hint")
+        static let orderSubmitted = String(localized: "trade_execution.order_submitted")
+        static let errorSubmittingOrder = String(localized: "trade_execution.error_submitting_order")
+    }
+
     enum Welcome {
         static let page1Title = String(localized: "welcome.page1_title")
         static let page1Subtitle = String(localized: "welcome.page1_subtitle")
