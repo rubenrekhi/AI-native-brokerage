@@ -16,4 +16,15 @@ enum TransferDirection: String, Codable, Equatable, Hashable, Identifiable {
         case .withdraw: "OUTGOING"
         }
     }
+
+    /// Parses the wire value returned in `TransferResponse.direction`.
+    /// Returns nil for unrecognized values so callers can render a neutral
+    /// state rather than silently misclassifying the transfer.
+    init?(apiValue: String) {
+        switch apiValue.uppercased() {
+        case "INCOMING": self = .deposit
+        case "OUTGOING": self = .withdraw
+        default: return nil
+        }
+    }
 }

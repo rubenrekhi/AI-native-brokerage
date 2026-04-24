@@ -98,7 +98,7 @@ struct SettingsView: View {
                         documentType: "tax_1099"
                     )
                 case .accountHistory:
-                    EmptyView()
+                    AccountHistoryView()
                 }
             }
         }

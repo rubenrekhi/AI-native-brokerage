@@ -3874,6 +3874,66 @@
         }
       }
     },
+    "settings.account_history_deposit_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit"
+          }
+        }
+      }
+    },
+    "settings.account_history_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your deposits and withdrawals will appear here."
+          }
+        }
+      }
+    },
+    "settings.account_history_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No transfers yet"
+          }
+        }
+      }
+    },
+    "settings.account_history_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load history"
+          }
+        }
+      }
+    },
+    "settings.account_history_unknown_bank" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bank transfer"
+          }
+        }
+      }
+    },
+    "settings.account_history_withdrawal_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdrawal"
+          }
+        }
+      }
+    },
     "settings.account_name" : {
       "localizations" : {
         "en" : {
