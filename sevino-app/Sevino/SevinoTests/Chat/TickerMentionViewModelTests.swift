@@ -8,7 +8,7 @@ final class TickerMentionViewModelTests: XCTestCase {
     private var viewModel: TickerMentionViewModel!
 
     private static let debounce: Duration = .milliseconds(10)
-    private static let postDebounceWait: UInt64 = 60_000_000 // 60ms in ns, well past debounce
+    private static let postDebounceWait: Duration = .milliseconds(60) // well past debounce
 
     override func setUp() {
         mockService = MockAssetSearchService()
@@ -24,7 +24,7 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel.updateText("$T")
         XCTAssertEqual(viewModel.activeQuery, "T")
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertTrue(viewModel.isShowingPopup)
         XCTAssertEqual(mockService.searchCallCount, 1)
         XCTAssertEqual(mockService.receivedQueries, ["T"])
@@ -34,7 +34,7 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel.updateText("$20")
         XCTAssertNil(viewModel.activeQuery)
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertFalse(viewModel.isShowingPopup)
         XCTAssertEqual(mockService.searchCallCount, 0)
     }
@@ -43,7 +43,7 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel.updateText("Buy $")
         XCTAssertNil(viewModel.activeQuery)
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertFalse(viewModel.isShowingPopup)
         XCTAssertEqual(mockService.searchCallCount, 0)
     }
@@ -57,12 +57,12 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testSelectResultInsertsTokenAndDismissesPopup() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertTrue(viewModel.isShowingPopup)
 
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla, Inc.", logoUrl: nil))
 
-        XCTAssertEqual(viewModel.text, "$TSLA")
+        XCTAssertEqual(viewModel.text, "$TSLA ")
         XCTAssertEqual(viewModel.tokens.count, 1)
         XCTAssertEqual(viewModel.tokens.first?.symbol, "TSLA")
         XCTAssertEqual(viewModel.tokens.first?.range, 0..<5)
@@ -73,11 +73,11 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testSelectResultReplacesQueryInPlaceWithSurroundingText() async throws {
         viewModel.updateText("Buy $TS")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
 
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla, Inc.", logoUrl: nil))
 
-        XCTAssertEqual(viewModel.text, "Buy $TSLA")
+        XCTAssertEqual(viewModel.text, "Buy $TSLA ")
         XCTAssertEqual(viewModel.tokens.first?.range, 4..<9)
     }
 
@@ -92,11 +92,26 @@ final class TickerMentionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.tokens.first?.range, 0..<5)
     }
 
-    func testSpaceAfterLowercaseDoesNotCommit() {
+    func testSpaceAfterLowercaseNormalizesToUppercaseAndCommits() async throws {
         viewModel.updateText("$tsla")
         viewModel.updateText("$tsla ")
+        try await Task.sleep(for: .milliseconds(10))
 
-        XCTAssertTrue(viewModel.tokens.isEmpty)
+        XCTAssertEqual(viewModel.text, "$TSLA ")
+        XCTAssertEqual(viewModel.tokens.count, 1)
+        XCTAssertEqual(viewModel.tokens.first?.symbol, "TSLA")
+        XCTAssertEqual(viewModel.tokens.first?.range, 0..<5)
+    }
+
+    func testNewlineAfterLowercaseNormalizesAndCommits() async throws {
+        viewModel.updateText("$amd")
+        viewModel.updateText("$amd\n")
+        try await Task.sleep(for: .milliseconds(10))
+
+        XCTAssertEqual(viewModel.text, "$AMD\n")
+        XCTAssertEqual(viewModel.tokens.count, 1)
+        XCTAssertEqual(viewModel.tokens.first?.symbol, "AMD")
+        XCTAssertEqual(viewModel.tokens.first?.range, 0..<4)
     }
 
     func testSpaceAfterTooLongQueryDoesNotCommit() {
@@ -110,14 +125,14 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testDeletingPastDollarDismissesPopup() async throws {
         viewModel.updateText("$T")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertTrue(viewModel.isShowingPopup)
 
         viewModel.updateText("$")
         XCTAssertNil(viewModel.activeQuery)
         XCTAssertFalse(viewModel.isShowingPopup)
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertTrue(viewModel.results.isEmpty)
     }
 
@@ -125,7 +140,7 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel.updateText("$T")
         viewModel.dismiss()
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertNil(viewModel.activeQuery)
         XCTAssertTrue(viewModel.results.isEmpty)
         XCTAssertFalse(viewModel.isShowingPopup)
@@ -139,7 +154,7 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel.updateText("$TSL")
         viewModel.updateText("$TSLA")
 
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
 
         XCTAssertEqual(mockService.searchCallCount, 1)
         XCTAssertEqual(mockService.receivedQueries, ["TSLA"])
@@ -183,12 +198,12 @@ final class TickerMentionViewModelTests: XCTestCase {
         viewModel = TickerMentionViewModel(service: gatedService, debounceInterval: .milliseconds(1))
 
         viewModel.updateText("$TS")
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await Task.sleep(for: .milliseconds(20))
         viewModel.updateText("$TSLA")
-        try await Task.sleep(nanoseconds: 20_000_000)
+        try await Task.sleep(for: .milliseconds(20))
 
         await gate.release()
-        try await Task.sleep(nanoseconds: 30_000_000)
+        try await Task.sleep(for: .milliseconds(30))
 
         XCTAssertEqual(viewModel.activeQuery, "TSLA")
         XCTAssertEqual(viewModel.results.map(\.symbol), ["TSLA"])
@@ -198,14 +213,14 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testMultipleTokensTrackedInArray() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
 
         viewModel.updateText("$TSLA and $AM")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "AMD", name: "Advanced Micro Devices", logoUrl: nil))
 
-        XCTAssertEqual(viewModel.text, "$TSLA and $AMD")
+        XCTAssertEqual(viewModel.text, "$TSLA and $AMD ")
         XCTAssertEqual(viewModel.tokens.map(\.symbol), ["TSLA", "AMD"])
         XCTAssertEqual(viewModel.tokens.map(\.range), [0..<5, 10..<14])
     }
@@ -226,24 +241,24 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testRemoveTokenShiftsTrailingTokenRanges() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
 
         viewModel.updateText("$TSLA $AM")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "AMD", name: "AMD", logoUrl: nil))
 
         let firstId = viewModel.tokens[0].id
         viewModel.removeToken(id: firstId)
 
-        XCTAssertEqual(viewModel.text, " $AMD")
+        XCTAssertEqual(viewModel.text, " $AMD ")
         XCTAssertEqual(viewModel.tokens.map(\.symbol), ["AMD"])
         XCTAssertEqual(viewModel.tokens.map(\.range), [1..<5])
     }
 
     func testEditingTokenCharactersDropsIt() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
 
         // User edits inside the token, breaking the `$TSLA` literal.
@@ -276,7 +291,7 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testMakeSegmentsLeadingAndTrailingText() async throws {
         viewModel.updateText("Buy $TS")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
         viewModel.updateText("Buy $TSLA now")
 
@@ -289,16 +304,17 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testMakeSegmentsMultipleTokens() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
         viewModel.updateText("$TSLA and $AM")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "AMD", name: "AMD", logoUrl: nil))
 
         XCTAssertEqual(viewModel.makeSegments(), [
             .ticker("TSLA"),
             .text(" and "),
             .ticker("AMD"),
+            .text(" "),
         ])
     }
 
@@ -306,10 +322,10 @@ final class TickerMentionViewModelTests: XCTestCase {
 
     func testClearResetsEverything() async throws {
         viewModel.updateText("$TSL")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         viewModel.selectResult(AssetSearchResult(symbol: "TSLA", name: "Tesla", logoUrl: nil))
         viewModel.updateText("$TSLA plus $A")
-        try await Task.sleep(nanoseconds: Self.postDebounceWait)
+        try await Task.sleep(for: Self.postDebounceWait)
         XCTAssertFalse(viewModel.text.isEmpty)
         XCTAssertFalse(viewModel.tokens.isEmpty)
 

@@ -37,8 +37,8 @@ extension Color {
     /// Warning/action-required orange — #E08A00 (same in both modes)
     static let sevinoWarning = adaptive(light: 0xE08A00, dark: 0xE08A00)
 
-    /// Selection highlight background — #C9DAF0 (same in both modes)
-    static let sevinoHighlightBg = adaptive(light: 0xC9DAF0, dark: 0xC9DAF0)
+    /// Selection highlight background — light: #C9DAF0, dark: #0F203A
+    static let sevinoHighlightBg = adaptive(light: 0xC9DAF0, dark: 0x0F203A)
 
     /// Selection highlight text — #0088FF (same in both modes)
     static let sevinoHighlightText = adaptive(light: 0x0088FF, dark: 0x0088FF)

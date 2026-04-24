@@ -6,28 +6,43 @@ struct HomeChatInputBar: View {
     let isDimmed: Bool
     let onSend: ([MessageSegment]) -> Void
     @FocusState private var isFocused: Bool
+    @State private var selection = AttributedTextSelection()
 
     private var hasText: Bool {
         !viewModel.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var textBinding: Binding<String> {
+    private var attributedTextBinding: Binding<AttributedString> {
         Binding(
-            get: { viewModel.text },
-            set: { viewModel.updateText($0) }
+            get: { TickerMentionAttributedText.make(text: viewModel.text, tokens: viewModel.tokens, scale: scale) },
+            set: { viewModel.updateText(String($0.characters)) }
         )
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            TextField(L10n.Home.chatPlaceholder, text: textBinding, axis: .vertical)
+            TextEditor(text: attributedTextBinding, selection: $selection)
                 .font(.system(size: 16 * scale))
                 .foregroundStyle(Color.sevinoSecondary)
-                .lineLimit(1...5)
+                .scrollContentBackground(.hidden)
                 .focused($isFocused)
+                .frame(minHeight: 20 * scale, maxHeight: 100 * scale)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 16 * scale)
                 .padding(.top, 14 * scale)
                 .padding(.bottom, 8 * scale)
+                .accessibilityLabel(L10n.Home.chatPlaceholder)
+                .overlay(alignment: .topLeading) {
+                    if viewModel.text.isEmpty {
+                        Text(L10n.Home.chatPlaceholder)
+                            .font(.system(size: 16 * scale))
+                            .foregroundStyle(Color.sevinoGreyAccent)
+                            .padding(.leading, 16 * scale + 5)
+                            .padding(.top, 14 * scale + 8)
+                            .allowsHitTesting(false)
+                            .accessibilityHidden(true)
+                    }
+                }
 
             HStack(spacing: 0) {
                 Button(L10n.Home.attachAccessibility, systemImage: "plus", action: {})
@@ -62,6 +77,10 @@ struct HomeChatInputBar: View {
                 isFocused = false
                 viewModel.dismiss()
             }
+        }
+        .onChange(of: viewModel.caretToEndTick) { _, _ in
+            let attr = TickerMentionAttributedText.make(text: viewModel.text, tokens: viewModel.tokens, scale: scale)
+            selection = AttributedTextSelection(insertionPoint: attr.endIndex)
         }
     }
 

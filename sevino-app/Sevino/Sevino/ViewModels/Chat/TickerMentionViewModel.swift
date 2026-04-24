@@ -40,6 +40,10 @@ final class TickerMentionViewModel {
     /// The letters following the active `$` trigger, if any. `nil` when no mention is being typed.
     private(set) var activeQuery: String?
 
+    /// Bumps whenever a token commit should move the caret to the end of the text.
+    /// Views observe this and reset their text selection accordingly.
+    private(set) var caretToEndTick: Int = 0
+
     /// True when there is an active query AND results are available to display.
     var isShowingPopup: Bool {
         activeQuery != nil && !results.isEmpty
@@ -75,12 +79,14 @@ final class TickerMentionViewModel {
     /// Replace the active `$QUERY` with `$SYMBOL` and dismiss the popup.
     func selectResult(_ result: AssetSearchResult) {
         guard let range = activeRange else { return }
-        let replacement = "$\(result.symbol)"
+        let symbolText = "$\(result.symbol)"
+        let replacement = "\(symbolText) "
         replaceCharacters(in: range, with: replacement)
-        let newRange = range.lowerBound..<(range.lowerBound + replacement.count)
+        let newRange = range.lowerBound..<(range.lowerBound + symbolText.count)
         shiftTokens(after: range.upperBound, by: replacement.count - range.count)
         tokens.append(TickerToken(symbol: result.symbol, range: newRange))
         sortTokens()
+        caretToEndTick &+= 1
         dismiss()
     }
 
@@ -191,16 +197,34 @@ final class TickerMentionViewModel {
               text.count == previousText.count + 1
         else { return }
         let splitIdx = text.index(text.startIndex, offsetBy: previousRange.upperBound, limitedBy: text.endIndex)
-        guard let splitIdx, splitIdx < text.endIndex, text[splitIdx] == " " else { return }
+        guard let splitIdx, splitIdx < text.endIndex,
+              text[splitIdx] == " " || text[splitIdx].isNewline
+        else { return }
         let lowerIdx = text.index(text.startIndex, offsetBy: previousRange.lowerBound)
         guard text[lowerIdx..<splitIdx] == "$\(previousQuery)" else { return }
-        tokens.append(TickerToken(symbol: previousQuery.uppercased(), range: previousRange))
-        sortTokens()
+        let upperSymbol = previousQuery.uppercased()
+        if previousQuery == upperSymbol {
+            tokens.append(TickerToken(symbol: upperSymbol, range: previousRange))
+            sortTokens()
+            caretToEndTick &+= 1
+        } else {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                guard previousRange.upperBound <= self.text.count else { return }
+                let start = self.text.index(self.text.startIndex, offsetBy: previousRange.lowerBound)
+                let end = self.text.index(self.text.startIndex, offsetBy: previousRange.upperBound)
+                guard self.text[start..<end] == "$\(previousQuery)" else { return }
+                self.replaceCharacters(in: previousRange, with: "$\(upperSymbol)")
+                self.tokens.append(TickerToken(symbol: upperSymbol, range: previousRange))
+                self.sortTokens()
+                self.caretToEndTick &+= 1
+            }
+        }
     }
 
     private func isValidTicker(_ query: String) -> Bool {
         guard (1...5).contains(query.count) else { return false }
-        return query.allSatisfy { ("A"..."Z").contains($0) }
+        return query.allSatisfy { $0.isLetter && $0.isASCII }
     }
 
     // MARK: - Token reconciliation
