@@ -514,6 +514,8 @@ enum L10n {
         static let kycInactive = String(localized: "settings.kyc_inactive")
         static let kycClosed = String(localized: "settings.kyc_closed")
         static let brokerageAccountType = String(localized: "settings.brokerage_account_type")
+        static let brokerageAccountNameDefault = String(localized: "settings.brokerage_account_name_default")
+        static let unavailableValue = String(localized: "settings.unavailable_value")
         static let accountNumber = String(localized: "settings.account_number")
         static let accountValue = String(localized: "settings.account_value")
         static let netDeposits = String(localized: "settings.net_deposits")

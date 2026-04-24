@@ -1,20 +1,39 @@
 import SwiftUI
 
 struct BrokerageSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
+    private static let usdCurrency: Decimal.FormatStyle.Currency = .currency(code: "USD")
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
-    // TODO: Replace with real data from ViewModel
-    private let accountNumber = "A3793803408"
-    private let accountValue = "$1092.82"
-    private let netDeposits = "$800.00"
-
-    @State private var accountName = "Growth 💰"
+    @State private var vm: SettingsViewModel
+    @State private var accountName = L10n.Settings.brokerageAccountNameDefault
     @State private var renameItem: RenameItem?
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
+
+    private var accountNumber: String {
+        vm.profile?.brokerage?.accountNumber ?? L10n.Settings.unavailableValue
+    }
+
+    private var accountValueText: String {
+        guard let equity = vm.accountValue?.equity else { return L10n.Settings.unavailableValue }
+        return equity.formatted(Self.usdCurrency)
+    }
+
+    private var netDepositsText: String {
+        guard let cash = vm.accountValue?.cash else { return L10n.Settings.unavailableValue }
+        return cash.formatted(Self.usdCurrency)
+    }
+
+    private var isInitialLoad: Bool {
+        vm.isLoading && vm.profile == nil && vm.accountValue == nil
+    }
+
+    init(vm: SettingsViewModel = SettingsViewModel()) {
+        _vm = State(initialValue: vm)
+    }
 
     var body: some View {
         SevinoGlassContainer {
@@ -61,6 +80,7 @@ struct BrokerageSettingsView: View {
             }
         }
         .navigationBarBackButtonHidden()
+        .task { await vm.load() }
     }
 
     private var header: some View {
@@ -91,9 +111,17 @@ struct BrokerageSettingsView: View {
             }
 
             VStack(spacing: 0) {
-                accountDetailRow(label: L10n.Settings.accountNumber, value: accountNumber, showCopy: true)
-                accountDetailRow(label: L10n.Settings.accountValue, value: accountValue)
-                accountDetailRow(label: L10n.Settings.netDeposits, value: netDeposits, isLast: true)
+                if isInitialLoad {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24 * scale)
+                } else if let error = vm.error, vm.profile == nil && vm.accountValue == nil {
+                    errorState(message: error)
+                } else {
+                    accountDetailRow(label: L10n.Settings.accountNumber, value: accountNumber, showCopy: true)
+                    accountDetailRow(label: L10n.Settings.accountValue, value: accountValueText)
+                    accountDetailRow(label: L10n.Settings.netDeposits, value: netDepositsText, isLast: true)
+                }
             }
             .padding(14 * scale)
             .modifier(SevinoGlass.card)
@@ -133,6 +161,25 @@ struct BrokerageSettingsView: View {
         }
     }
 
+    private func errorState(message: String) -> some View {
+        VStack(spacing: 12 * scale) {
+            Text(message)
+                .font(.system(size: 14 * scale))
+                .foregroundStyle(Color.sevinoNegative)
+                .multilineTextAlignment(.center)
+
+            Button(action: { Task { await vm.reload() } }) {
+                Text(L10n.General.tryAgain)
+                    .font(.system(size: 14 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, 16 * scale)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16 * scale)
+    }
+
     private func navRow(title: String) -> some View {
         Button(action: {}) {
             VStack(spacing: 0) {
@@ -158,7 +205,8 @@ struct BrokerageSettingsView: View {
     }
 
     private func copyAccountNumber() {
-        UIPasteboard.general.string = accountNumber
+        guard let number = vm.profile?.brokerage?.accountNumber else { return }
+        UIPasteboard.general.string = number
     }
 
     private func presentRename() {

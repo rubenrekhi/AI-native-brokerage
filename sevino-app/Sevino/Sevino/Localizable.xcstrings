@@ -3984,6 +3984,16 @@
         }
       }
     },
+    "settings.brokerage_account_name_default" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Growth 💰"
+          }
+        }
+      }
+    },
     "settings.brokerage_account_type" : {
       "localizations" : {
         "en" : {
@@ -4600,6 +4610,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Settings"
+          }
+        }
+      }
+    },
+    "settings.unavailable_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
           }
         }
       }
