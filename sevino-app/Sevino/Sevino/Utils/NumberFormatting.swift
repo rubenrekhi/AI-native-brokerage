@@ -2,13 +2,15 @@ import Foundation
 
 extension Decimal {
     /// "$1,084.92"
-    func asCurrency(locale: Locale = .current) -> String {
-        currencyFormatter(locale: locale, signed: false).string(from: nsDecimal) ?? "\(self)"
+    func asCurrency(currencyCode: String = "USD", locale: Locale = .current) -> String {
+        currencyFormatter(currencyCode: currencyCode, locale: locale, signed: false)
+            .string(from: nsDecimal) ?? "\(self)"
     }
 
     /// "+$232.82" or "-$1,049.32"
-    func asSignedCurrency(locale: Locale = .current) -> String {
-        currencyFormatter(locale: locale, signed: true).string(from: nsDecimal) ?? "\(self)"
+    func asSignedCurrency(currencyCode: String = "USD", locale: Locale = .current) -> String {
+        currencyFormatter(currencyCode: currencyCode, locale: locale, signed: true)
+            .string(from: nsDecimal) ?? "\(self)"
     }
 
     /// "+27.31%" or "-8.38%"  (input is a factor of 1)
@@ -26,13 +28,13 @@ extension Decimal {
 
 private let _cache = NSCache<NSString, NumberFormatter>()
 
-private func currencyFormatter(locale: Locale, signed: Bool) -> NumberFormatter {
-    let key = "cur-\(signed)-\(locale.identifier)" as NSString
+private func currencyFormatter(currencyCode: String, locale: Locale, signed: Bool) -> NumberFormatter {
+    let key = "cur-\(signed)-\(currencyCode)-\(locale.identifier)" as NSString
     if let f = _cache.object(forKey: key) { return f }
     let f = NumberFormatter()
     f.numberStyle = .currency
     f.locale = locale
-    f.currencyCode = "USD"
+    f.currencyCode = currencyCode
     if signed { f.positivePrefix = f.plusSign + (f.currencySymbol ?? "$") }
     _cache.setObject(f, forKey: key)
     return f

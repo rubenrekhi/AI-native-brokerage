@@ -11,22 +11,37 @@ protocol APIClientProtocol: Sendable {
 final class APIClient: APIClientProtocol {
     static let shared = APIClient()
 
+    static func makeEncoder() -> JSONEncoder {
+        let e = JSONEncoder()
+        e.keyEncodingStrategy = .convertToSnakeCase
+        return e
+    }
+
+    /// Mirrors what the live client uses on the wire — tests should call this
+    /// instead of building their own `JSONDecoder` so backend-decoder drift
+    /// (e.g. snake-case keys, fractional-second timestamps) is caught here too.
+    static func makeDecoder() -> JSONDecoder {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        d.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let raw = try container.decode(String.self)
+            if let date = _isoFractional.date(from: raw) { return date }
+            if let date = _isoPlain.date(from: raw) { return date }
+            throw DecodingError.dataCorruptedError(
+                in: container,
+                debugDescription: "Invalid ISO-8601 date: \(raw)"
+            )
+        }
+        return d
+    }
+
     private let baseURL: String
     private let session: URLSession
     private let tokenProvider: @Sendable () async -> String?
 
-    private let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        return e
-    }()
-
-    private let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .iso8601
-        return d
-    }()
+    private let encoder: JSONEncoder = APIClient.makeEncoder()
+    private let decoder: JSONDecoder = APIClient.makeDecoder()
 
     init(
         baseURL: String = AppConfig.apiBaseURL,
@@ -110,3 +125,18 @@ final class APIClient: APIClientProtocol {
 
 // Used as the default type for the optional body parameter
 private struct Empty: Encodable {}
+
+// Pydantic v2 emits ISO-8601 with fractional seconds by default
+// (e.g. "2026-04-24T12:34:56.789012+00:00"); some serializers strip them.
+// Try the fractional variant first, then fall back to plain.
+private let _isoFractional: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+
+private let _isoPlain: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime]
+    return f
+}()

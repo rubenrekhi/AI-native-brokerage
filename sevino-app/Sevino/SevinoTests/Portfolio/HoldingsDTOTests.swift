@@ -5,9 +5,7 @@ import XCTest
 final class HoldingsDTOTests: XCTestCase {
 
     private func makeDecoder() -> JSONDecoder {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        return d
+        APIClient.makeDecoder()
     }
 
     func test_decodesTwoPositions() throws {
