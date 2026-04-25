@@ -70,18 +70,23 @@ struct DocumentsListView: View {
     }
 
     private var list: some View {
-        VStack(spacing: 0) {
-            ForEach(viewModel.documents) { doc in
-                DocumentRow(
-                    document: doc,
-                    scale: scale,
-                    isDownloading: viewModel.downloadingDocumentId == doc.id,
-                    isDisabled: viewModel.downloadingDocumentId != nil
-                        && viewModel.downloadingDocumentId != doc.id,
-                    onTap: { open(doc) }
-                )
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(viewModel.documents) { doc in
+                    DocumentRow(
+                        document: doc,
+                        scale: scale,
+                        isDownloading: viewModel.downloadingDocumentId == doc.id,
+                        isDisabled: viewModel.downloadingDocumentId != nil
+                            && viewModel.downloadingDocumentId != doc.id,
+                        onTap: { open(doc) }
+                    )
+                }
             }
+            .padding(.bottom, 16 * scale)
         }
+        .scrollIndicators(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     private func loadIfNeeded() async {
