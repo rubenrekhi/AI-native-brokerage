@@ -11,4 +11,5 @@ enum SettingsDestination: Hashable {
     case statements
     case taxDocuments
     case accountHistory
+    case tradeHistory
 }

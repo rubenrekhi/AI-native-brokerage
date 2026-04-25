@@ -139,6 +139,38 @@ class AlpacaBrokerService:
             "GET", f"/v1/trading/accounts/{account_id}/positions"
         )
 
+    async def list_orders(
+        self,
+        account_id: str,
+        *,
+        status: Literal["open", "closed", "all"] | None = None,
+        side: Literal["buy", "sell"] | None = None,
+        symbols: str | None = None,
+        after: str | None = None,
+        until: str | None = None,
+        limit: int | None = None,
+        direction: Literal["asc", "desc"] | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/trading/accounts/{account_id}/orders — order history."""
+        params = {
+            k: v
+            for k, v in {
+                "status": status,
+                "side": side,
+                "symbols": symbols,
+                "after": after,
+                "until": until,
+                "limit": limit,
+                "direction": direction,
+            }.items()
+            if v is not None
+        }
+        return await self._request(
+            "GET",
+            f"/v1/trading/accounts/{account_id}/orders",
+            params=params or None,
+        )
+
     async def create_ach_relationship(
         self, account_id: str, *, processor_token: str
     ) -> dict[str, Any]:

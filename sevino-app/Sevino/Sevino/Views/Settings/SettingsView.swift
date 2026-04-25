@@ -97,6 +97,8 @@ struct SettingsView: View {
                     )
                 case .accountHistory:
                     AccountHistoryView()
+                case .tradeHistory:
+                    TradeHistoryView()
                 }
             }
         }

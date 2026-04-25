@@ -47,3 +47,35 @@ async def test_close_account_posts_to_actions_close_endpoint(mocker):
     request_mock.assert_awaited_once_with(
         service, "POST", "/v1/accounts/alpaca_acc_42/actions/close"
     )
+
+
+async def test_list_orders_drops_none_params(mocker):
+    service = _service()
+    request_mock = mocker.patch.object(
+        AlpacaBrokerService, "_request", autospec=True, return_value=[]
+    )
+
+    await service.list_orders("alpaca_acc_42", status="all", limit=50, direction="desc")
+
+    request_mock.assert_awaited_once_with(
+        service,
+        "GET",
+        "/v1/trading/accounts/alpaca_acc_42/orders",
+        params={"status": "all", "limit": 50, "direction": "desc"},
+    )
+
+
+async def test_list_orders_no_params_passes_none(mocker):
+    service = _service()
+    request_mock = mocker.patch.object(
+        AlpacaBrokerService, "_request", autospec=True, return_value=[]
+    )
+
+    await service.list_orders("alpaca_acc_42")
+
+    request_mock.assert_awaited_once_with(
+        service,
+        "GET",
+        "/v1/trading/accounts/alpaca_acc_42/orders",
+        params=None,
+    )

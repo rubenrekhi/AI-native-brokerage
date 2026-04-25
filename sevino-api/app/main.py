@@ -17,6 +17,7 @@ from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 from app.rate_limit import limiter
 from app.routes.assets import router as assets_router
+from app.routes.brokerage import router as brokerage_router
 from app.routes.funding import router as funding_router
 from app.routes.onboarding import router as onboarding_router
 from app.routes.phone_auth import router as phone_auth_router
@@ -108,6 +109,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(assets_router, prefix="/v1/assets", tags=["assets"])
     app.include_router(phone_auth_router, prefix="/v1/auth", tags=["auth"])
     app.include_router(settings_router, prefix="/v1/settings", tags=["settings"])
+    app.include_router(brokerage_router, prefix="/v1/brokerage", tags=["brokerage"])
 
 
 include_routers(app)

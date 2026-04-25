@@ -50,6 +50,7 @@ struct BrokerageSettingsView: View {
                     navRow(title: L10n.Settings.statements, destination: .statements)
                     navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
                     navRow(title: L10n.Settings.accountHistory, destination: .accountHistory)
+                    navRow(title: L10n.Settings.tradeHistory, destination: .tradeHistory)
                 }
 
                 Spacer()
