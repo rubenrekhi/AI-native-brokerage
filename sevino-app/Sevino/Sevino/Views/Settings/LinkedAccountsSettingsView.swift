@@ -17,7 +17,9 @@ struct LinkedAccountsSettingsView: View {
     }
 
     var body: some View {
-        SevinoGlassContainer {
+        @Bindable var plaidLink = viewModel.plaidLink
+
+        return SevinoGlassContainer {
             VStack(spacing: 0) {
                 header
                     .padding(.bottom, 24 * scale)
@@ -40,7 +42,7 @@ struct LinkedAccountsSettingsView: View {
                     Spacer()
                 }
 
-                Button(action: {}) {
+                Button(action: plaidLink.requestBankLink) {
                     Text(L10n.Settings.addAccount)
                         .font(.system(size: 16 * scale, weight: .semibold))
                         .foregroundStyle(Color.sevinoSecondary)
@@ -48,7 +50,7 @@ struct LinkedAccountsSettingsView: View {
                         .padding(.vertical, 16 * scale)
                 }
                 .modifier(SevinoGlass.card)
-                .disabled(true)
+                .disabled(viewModel.isLoading || plaidLink.isLoading)
                 .padding(.bottom, 16 * scale)
             }
             .padding(.horizontal, 20 * scale)
@@ -75,6 +77,36 @@ struct LinkedAccountsSettingsView: View {
             Button(L10n.General.ok, role: .cancel, action: viewModel.clearError)
         } message: { message in
             Text(message)
+        }
+        .alert(
+            L10n.Settings.linkErrorTitle,
+            isPresented: $plaidLink.showError,
+            presenting: plaidLink.displayedError
+        ) { _ in
+            Button(L10n.General.ok, role: .cancel, action: plaidLink.clearErrors)
+        } message: { message in
+            Text(message)
+        }
+        .sheet(isPresented: $plaidLink.showPlaidLink) {
+            if let token = plaidLink.linkToken {
+                PlaidLinkSheet(
+                    linkToken: token,
+                    onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
+                        Task {
+                            await plaidLink.onPlaidSuccess(
+                                publicToken: publicToken,
+                                accountId: accountId,
+                                institutionName: institutionName,
+                                accountMask: accountMask,
+                                accountName: accountName
+                            )
+                        }
+                    },
+                    onExit: { error in
+                        plaidLink.onPlaidExit(error: error)
+                    }
+                )
+            }
         }
     }
 

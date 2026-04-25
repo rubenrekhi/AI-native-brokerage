@@ -18,8 +18,7 @@ final class FundingViewModel {
 
     // MARK: - Plaid sheet state
 
-    var linkToken: String?
-    var isShowingPlaidLink: Bool = false
+    let plaidLink: PlaidLinkCoordinator
 
     // MARK: - Cash display (mock) state
 
@@ -40,14 +39,20 @@ final class FundingViewModel {
 
     init(service: any FundingServiceProtocol = FundingService.shared) {
         self.service = service
+        self.plaidLink = PlaidLinkCoordinator(service: service)
+        self.plaidLink.onLinked = { [weak self] in
+            await self?.loadRelationships()
+        }
     }
 
     // MARK: - Derived
 
     var hasLinkedBank: Bool { !relationships.isEmpty }
 
+    /// Coalesces relationship-load errors with Plaid-flow errors so views can
+    /// observe a single error stream regardless of which call failed.
     var displayedError: String? {
-        serverError?.localizedDescription ?? localError
+        plaidLink.displayedError ?? serverError?.localizedDescription ?? localError
     }
 
     var error: String? { displayedError }
@@ -56,6 +61,7 @@ final class FundingViewModel {
     func clearErrors() {
         serverError = nil
         localError = nil
+        plaidLink.clearErrors()
     }
 
     // MARK: - Actions
@@ -72,60 +78,9 @@ final class FundingViewModel {
         }
     }
 
+    /// Exposed so callers continue to drive the link flow through the VM
+    /// (preserves the existing `viewModel.requestBankLink` call site).
     func requestBankLink() {
-        Task { await startBankLink() }
-    }
-
-    func startBankLink() async {
-        clearErrors()
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            linkToken = try await service.createLinkToken()
-            isShowingPlaidLink = true
-        } catch let apiError as APIError {
-            serverError = apiError
-        } catch {
-            localError = L10n.Home.fundingGenericError
-        }
-    }
-
-    func onPlaidSuccess(
-        publicToken: String,
-        accountId: String,
-        institutionName: String?,
-        accountMask: String?,
-        accountName: String?
-    ) async {
-        do {
-            _ = try await service.linkBank(
-                LinkBankRequest(
-                    publicToken: publicToken,
-                    accountId: accountId,
-                    institutionName: institutionName,
-                    accountMask: accountMask,
-                    accountName: accountName,
-                    nickname: nil
-                )
-            )
-            await loadRelationships()
-        } catch let apiError as APIError {
-            serverError = apiError
-            if apiError.code == "BANK_ALREADY_LINKED" {
-                await loadRelationships()
-            }
-        } catch {
-            localError = L10n.Home.fundingGenericError
-        }
-        linkToken = nil
-        isShowingPlaidLink = false
-    }
-
-    func onPlaidExit(error plaidError: Error?) {
-        if plaidError != nil {
-            localError = L10n.Home.fundingPlaidConnectionError
-        }
-        linkToken = nil
-        isShowingPlaidLink = false
+        plaidLink.requestBankLink()
     }
 }

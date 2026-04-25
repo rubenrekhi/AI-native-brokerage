@@ -258,6 +258,60 @@ final class SettingsViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showDeleteError)
     }
 
+    // MARK: - Plaid coordinator wiring
+
+    func testPlaidLinkSuccessRefreshesProfile() async {
+        let rel = AchRelationshipDTO(
+            id: UUID(),
+            alpacaRelationshipId: "rel_abc",
+            institutionName: "First Platypus Bank",
+            accountMask: "0000",
+            accountType: "CHECKING",
+            nickname: nil,
+            status: "QUEUED"
+        )
+        mockFunding.createLinkTokenResult = .success("link-sandbox-abc")
+        mockFunding.linkBankResult = .success(rel)
+        // Drive setup through the public API rather than mutating sheet state.
+        await viewModel.plaidLink.startBankLink()
+        XCTAssertEqual(viewModel.plaidLink.linkToken, "link-sandbox-abc")
+        XCTAssertTrue(viewModel.plaidLink.isShowingPlaidLink)
+
+        await viewModel.plaidLink.onPlaidSuccess(
+            publicToken: "public-sandbox-token",
+            accountId: "acct_1",
+            institutionName: "First Platypus Bank",
+            accountMask: "0000",
+            accountName: "Checking"
+        )
+
+        XCTAssertEqual(mockFunding.linkBankCalls.count, 1)
+        XCTAssertEqual(mockFunding.linkBankCalls.first?.publicToken, "public-sandbox-token")
+        // setUp seeds an initial getProfileResult; the post-link refresh adds one more call.
+        XCTAssertEqual(mockSettings.getProfileCalls, 1)
+        XCTAssertNil(viewModel.plaidLink.linkToken)
+        XCTAssertFalse(viewModel.plaidLink.isShowingPlaidLink)
+        XCTAssertNil(viewModel.plaidLink.displayedError)
+    }
+
+    func testPlaidLinkAlreadyLinkedStillRefreshesProfile() async {
+        let apiError = APIError(error: "Already linked", code: "BANK_ALREADY_LINKED")
+        mockFunding.linkBankResult = .failure(apiError)
+
+        await viewModel.plaidLink.onPlaidSuccess(
+            publicToken: "pt",
+            accountId: "acct",
+            institutionName: nil,
+            accountMask: nil,
+            accountName: nil
+        )
+
+        XCTAssertEqual(viewModel.plaidLink.serverError, apiError)
+        XCTAssertEqual(mockSettings.getProfileCalls, 1,
+                       "BANK_ALREADY_LINKED should still refresh the profile")
+        XCTAssertFalse(viewModel.plaidLink.isShowingPlaidLink)
+    }
+
     // MARK: - clearError
 
     func testClearErrorResetsErrorProperty() async {

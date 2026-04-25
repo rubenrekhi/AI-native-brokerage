@@ -5610,6 +5610,16 @@
         }
       }
     },
+    "settings.link_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't link account"
+          }
+        }
+      }
+    },
     "settings.using_sevino" : {
       "localizations" : {
         "en" : {

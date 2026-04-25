@@ -568,6 +568,7 @@ enum L10n {
         static let unlinkConfirmAction = String(localized: "settings.unlink_confirm_action")
         static let unlinkConfirmMessage = String(localized: "settings.unlink_confirm_message")
         static let unlinkErrorTitle = String(localized: "settings.unlink_error_title")
+        static let linkErrorTitle = String(localized: "settings.link_error_title")
         static let unknownBankAccessibility = String(localized: "settings.unknown_bank_accessibility")
         static let unknownValue = String(localized: "settings.unknown_value")
         static let email = String(localized: "settings.email")

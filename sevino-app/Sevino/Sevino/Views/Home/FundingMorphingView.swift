@@ -54,13 +54,15 @@ struct FundingMorphingView: View {
     }
 
     private var expandedCard: some View {
-        CashDetailCard(
+        @Bindable var plaidLink = viewModel.plaidLink
+
+        return CashDetailCard(
             data: cashCardData,
             scale: scale,
             onDeposit: onDeposit,
             onWithdraw: onWithdraw,
-            onLinkBank: viewModel.requestBankLink,
-            isLinkBankDisabled: viewModel.isLoading
+            onLinkBank: plaidLink.requestBankLink,
+            isLinkBankDisabled: viewModel.isLoading || plaidLink.isLoading
         )
         .padding(20 * scale)
         .frame(maxWidth: .infinity)
@@ -76,13 +78,13 @@ struct FundingMorphingView: View {
                 await viewModel.loadRelationships()
             }
         }
-        .sheet(isPresented: $viewModel.isShowingPlaidLink) {
-            if let token = viewModel.linkToken {
+        .sheet(isPresented: $plaidLink.showPlaidLink) {
+            if let token = plaidLink.linkToken {
                 PlaidLinkSheet(
                     linkToken: token,
                     onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
                         Task {
-                            await viewModel.onPlaidSuccess(
+                            await plaidLink.onPlaidSuccess(
                                 publicToken: publicToken,
                                 accountId: accountId,
                                 institutionName: institutionName,
@@ -92,7 +94,7 @@ struct FundingMorphingView: View {
                         }
                     },
                     onExit: { error in
-                        viewModel.onPlaidExit(error: error)
+                        plaidLink.onPlaidExit(error: error)
                     }
                 )
             }

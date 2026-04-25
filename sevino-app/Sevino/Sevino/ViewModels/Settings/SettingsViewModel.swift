@@ -17,6 +17,8 @@ final class SettingsViewModel {
     private(set) var deleteError: String?
     private(set) var closeBrokerageError: String?
 
+    let plaidLink: PlaidLinkCoordinator
+
     /// Bindable driver for the delete-account error alert. The setter discards
     /// `deleteError` when the alert dismisses; using a computed projection keeps
     /// the `.alert(isPresented:)` binding out of the view `body`.
@@ -42,6 +44,18 @@ final class SettingsViewModel {
         self.fundingService = fundingService
         self.authService = authService
         self.now = now
+        self.plaidLink = PlaidLinkCoordinator(service: fundingService)
+        self.plaidLink.onLinked = { [weak self] in
+            await self?.refreshProfileAfterLink()
+        }
+    }
+
+    private func refreshProfileAfterLink() async {
+        // Best-effort refresh — the link itself succeeded, so any failure here
+        // shouldn't surface as an error to the user.
+        if let refreshed = try? await settingsService.getProfile() {
+            profile = refreshed
+        }
     }
 
     func load() async {
