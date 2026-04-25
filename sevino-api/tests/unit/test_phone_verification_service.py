@@ -6,6 +6,7 @@ import httpx
 import pytest
 
 from app.services.phone_verification import (
+    PhoneNumberTakenError,
     PhoneVerificationError,
     PhoneVerificationService,
     PhoneVerificationUnavailableError,
@@ -77,6 +78,35 @@ class TestSend:
             await service.send(user_jwt=USER_JWT, phone_number=PHONE)
 
         assert "validation failed" in info.value.message
+
+    async def test_phone_exists_code_raises_phone_number_taken(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                422,
+                json={
+                    "error_code": "phone_exists",
+                    "msg": "phone exists",
+                },
+            )
+
+        service = _make_service(handler)
+        with pytest.raises(PhoneNumberTakenError):
+            await service.send(user_jwt=USER_JWT, phone_number=PHONE)
+
+    async def test_already_registered_message_raises_phone_number_taken(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                422,
+                json={
+                    "msg": "A user with this phone number has already been registered",
+                },
+            )
+
+        service = _make_service(handler)
+        with pytest.raises(PhoneNumberTakenError) as info:
+            await service.send(user_jwt=USER_JWT, phone_number=PHONE)
+
+        assert "already been registered" in info.value.message
 
     async def test_429_raises_phone_verification_error(self):
         def handler(request: httpx.Request) -> httpx.Response:

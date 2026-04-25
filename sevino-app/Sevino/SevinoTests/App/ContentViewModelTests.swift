@@ -5,11 +5,16 @@ import XCTest
 final class ContentViewModelTests: XCTestCase {
 
     private var mockOnboarding: MockOnboardingService!
+    private var mockPhoneVerification: MockPhoneVerificationService!
     private var viewModel: ContentViewModel!
 
     override func setUp() {
         mockOnboarding = MockOnboardingService()
-        viewModel = ContentViewModel(onboardingService: mockOnboarding)
+        mockPhoneVerification = MockPhoneVerificationService()
+        viewModel = ContentViewModel(
+            onboardingService: mockOnboarding,
+            phoneVerificationService: mockPhoneVerification
+        )
     }
 
     // MARK: - Initial state
@@ -43,6 +48,8 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
         XCTAssertEqual(mockOnboarding.savedSteps.last?.step, "welcome")
         XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
+        XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers, ["4165551234"],
+                       "OTP must be dispatched before navigation so the user lands on the verification screen with a code on the way")
     }
 
     func testSavePhoneNumberFailureKeepsPhoneRouteAndRecordsError() async {
@@ -58,6 +65,40 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.showPhoneError, "alert flag is set so the view presents an alert")
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertEqual(viewModel.error, "Network error")
+        XCTAssertTrue(mockPhoneVerification.sentPhoneNumbers.isEmpty,
+                      "saveStep failure short-circuits before any OTP send")
+    }
+
+    func testSavePhoneNumberSendOTPFailureKeepsPhoneRoute() async {
+        viewModel.startFreshSignUpFlow()
+        mockPhoneVerification.sendOTPError = NSError(
+            domain: "", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "SMS provider down"]
+        )
+
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertEqual(viewModel.route, .phone,
+                       "send-OTP failure must NOT advance — the verification screen would be unusable without a code on the way")
+        XCTAssertTrue(viewModel.showPhoneError)
+        XCTAssertEqual(viewModel.error, "SMS provider down")
+        XCTAssertEqual(mockOnboarding.savedSteps.count, 1, "saveStep already happened")
+    }
+
+    func testSavePhoneNumberPhoneTakenShowsLocalizedMessage() async {
+        viewModel.startFreshSignUpFlow()
+        mockPhoneVerification.sendOTPError = APIError(
+            error: "ignored backend message",
+            code: "PHONE_NUMBER_TAKEN"
+        )
+
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertEqual(viewModel.route, .phone,
+                       "duplicate-phone keeps user on the entry screen so they can pick a different number")
+        XCTAssertTrue(viewModel.showPhoneError)
+        XCTAssertEqual(viewModel.error, L10n.Auth.phoneNumberTaken,
+                       "PHONE_NUMBER_TAKEN gets the dedicated copy, not the generic backend message")
     }
 
     func testSavePhoneNumberRetrySuccessClearsErrorFlag() async {
@@ -75,6 +116,26 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertFalse(viewModel.showPhoneError)
         XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
         XCTAssertNil(viewModel.error)
+    }
+
+    func testSavePhoneNumberPhoneTakenThenRetryWithNewNumberAdvances() async {
+        viewModel.startFreshSignUpFlow()
+        mockPhoneVerification.sendOTPError = APIError(
+            error: "ignored backend message",
+            code: "PHONE_NUMBER_TAKEN"
+        )
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phone)
+        XCTAssertEqual(viewModel.error, L10n.Auth.phoneNumberTaken)
+
+        mockPhoneVerification.sendOTPError = nil
+        await viewModel.savePhoneNumber("4165559999")
+
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165559999"))
+        XCTAssertNil(viewModel.error)
+        XCTAssertFalse(viewModel.showPhoneError)
+        XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers.last, "4165559999",
+                       "OTP must be dispatched against the new number after the duplicate-phone retry")
     }
 
     // MARK: - Phone verification transitions

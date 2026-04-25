@@ -244,6 +244,16 @@
         }
       }
     },
+    "auth.phone_number_taken" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone number is already in use. Please use a different number."
+          }
+        }
+      }
+    },
     "auth.phone_placeholder" : {
       "localizations" : {
         "en" : {

@@ -17,6 +17,16 @@ class PhoneVerificationError(Exception):
         super().__init__(message)
 
 
+class PhoneNumberTakenError(PhoneVerificationError):
+    """Raised when the phone is already attached to a different auth.users row.
+
+    Distinct from generic `PhoneVerificationError` so the API returns a
+    machine-readable code (`PHONE_NUMBER_TAKEN`) and the iOS client can keep
+    the user on the phone-entry screen with a tailored message instead of
+    advancing to the OTP screen.
+    """
+
+
 class PhoneVerificationUnavailableError(Exception):
     """Raised when GoTrue is unreachable (network timeout, connection refused, etc.)."""
 
@@ -123,4 +133,16 @@ class PhoneVerificationService:
         if response.status_code >= 500:
             raise PhoneVerificationUnavailableError(message)
 
+        if self._is_phone_taken(body, message):
+            raise PhoneNumberTakenError(message=message, detail=body)
+
         raise PhoneVerificationError(message=message, detail=body)
+
+    @staticmethod
+    def _is_phone_taken(body: dict[str, Any], message: str) -> bool:
+        # GoTrue tags duplicate-phone rejections with `error_code=phone_exists`
+        # in newer releases. Fall back to a substring match so older versions
+        # (which only set `msg`) still hit the dedicated error path.
+        if isinstance(body, dict) and body.get("error_code") == "phone_exists":
+            return True
+        return "already been registered" in message.lower()

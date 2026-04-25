@@ -210,6 +210,18 @@ async def phone_verification_error_handler(
     )
 
 
+async def phone_number_taken_handler(
+    request: Request, exc: "PhoneNumberTakenError"
+) -> JSONResponse:
+    logger.info("phone_number_taken", message=exc.message)
+    return error_response(
+        409,
+        "This phone number is already in use. Please use a different number.",
+        "PHONE_NUMBER_TAKEN",
+        detail=exc.detail,
+    )
+
+
 async def phone_verification_unavailable_handler(
     request: Request, exc: "PhoneVerificationUnavailableError"
 ) -> JSONResponse:
@@ -337,9 +349,15 @@ def register_exception_handlers(app: FastAPI) -> None:
     )
     # Phone verification handlers
     from app.services.phone_verification import (
+        PhoneNumberTakenError,
         PhoneVerificationError,
         PhoneVerificationUnavailableError,
     )
+    # Both handlers can be registered in any order — Starlette dispatches by
+    # walking `type(exc).__mro__`, so the subclass handler always wins for
+    # `PhoneNumberTakenError` regardless of insertion order. Listing the
+    # subclass first just keeps the dispatch order obvious to readers.
+    app.add_exception_handler(PhoneNumberTakenError, phone_number_taken_handler)
     app.add_exception_handler(PhoneVerificationError, phone_verification_error_handler)
     app.add_exception_handler(
         PhoneVerificationUnavailableError, phone_verification_unavailable_handler

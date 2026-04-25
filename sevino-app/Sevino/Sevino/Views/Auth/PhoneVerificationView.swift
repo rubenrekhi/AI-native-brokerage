@@ -6,12 +6,13 @@ import SwiftUI
 /// its state into:
 /// - the `OTPInputView` (boxes auto-submit on the 6th digit through the VM)
 /// - the resend pill / live-countdown caption
-/// - the muted-red error line under the box row
+/// - the alert presented when `vm.error` flips non-nil
 ///
 /// Lifecycle:
-/// 1. `.task` fires `vm.onAppear()` once on appear — sends the initial OTP and
-///    starts the 30s cooldown. Re-entry from SwiftUI's `.task` is gated inside
-///    the VM, so re-renders don't spam the backend.
+/// 1. `.task` fires `vm.onAppear()` once on appear — primes the 30s resend
+///    cooldown. The initial OTP was already dispatched by `ContentViewModel`
+///    before routing here, so this view never makes a network call on entry.
+///    Re-entry from SwiftUI's `.task` is gated inside the VM.
 /// 2. Local `otpInput` state is the binding the boxes read/write; we mirror it
 ///    to `vm.otp` via `onCodeChange` so the canonical value lives on the VM,
 ///    but reads stay synchronous from SwiftUI's perspective.
@@ -52,7 +53,6 @@ struct PhoneVerificationView: View {
                     VStack(spacing: 0) {
                         titleSection
                         otpSection
-                        errorSection
                         nextButton
                         resendSection
                     }
@@ -65,7 +65,7 @@ struct PhoneVerificationView: View {
         .preferredColorScheme(.dark)
         .background(scaleAnchor)
         .task {
-            await vm.onAppear()
+            vm.onAppear()
             otpFieldFocused = true
         }
         .onChange(of: vm.isVerified) { _, verified in
@@ -78,7 +78,19 @@ struct PhoneVerificationView: View {
                 otpInput = newValue
             }
         }
-        .sensoryFeedback(.error, trigger: vm.error)
+        .alert(
+            L10n.General.errorTitle,
+            isPresented: errorPresented,
+            presenting: vm.error
+        ) { _ in
+            Button(L10n.General.ok, action: vm.clearError)
+        } message: { error in
+            Text(error.errorDescription ?? "")
+        }
+        // Only buzz on the nil → error transition; the error → nil transition
+        // happens when the user taps OK to dismiss the alert and shouldn't fire
+        // a second haptic on what is otherwise an acknowledgment tap.
+        .sensoryFeedback(.error, trigger: vm.error) { _, new in new != nil }
         .sensoryFeedback(.success, trigger: vm.isVerified)
     }
 
@@ -105,18 +117,6 @@ struct PhoneVerificationView: View {
         .accessibilityFocused($otpFieldFocused)
         .padding(.top, 32 * scale)
         .padding(.horizontal, 32 * scale)
-    }
-
-    @ViewBuilder
-    private var errorSection: some View {
-        if let message = vm.error?.errorDescription {
-            Text(message)
-                .font(.system(size: 13 * scale))
-                .foregroundStyle(Color.sevinoNegative)
-                .multilineTextAlignment(.center)
-                .padding(.top, 12 * scale)
-                .padding(.horizontal, 24 * scale)
-        }
     }
 
     private var nextButton: some View {
@@ -184,6 +184,13 @@ struct PhoneVerificationView: View {
     /// boxes red since the entered code may still be valid.
     private var isOTPRejected: Bool {
         vm.error == .invalidCode || vm.error == .expired
+    }
+
+    private var errorPresented: Binding<Bool> {
+        Binding(
+            get: { vm.error != nil },
+            set: { if !$0 { vm.clearError() } }
+        )
     }
 }
 

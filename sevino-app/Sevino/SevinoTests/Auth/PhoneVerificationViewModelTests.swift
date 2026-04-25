@@ -130,30 +130,30 @@ struct PhoneVerificationViewModelTests {
 
     // MARK: - onAppear
 
-    @Test("onAppear sends the initial OTP")
-    func onAppearSends() async {
+    @Test("onAppear does not send OTP — the parent already dispatched it before navigating here")
+    func onAppearDoesNotSend() {
         let mock = MockPhoneVerificationService()
         let vm = makeVM(mock: mock)
-        await vm.onAppear()
-        #expect(mock.sentPhoneNumbers == ["(555) 123-4567"])
+        vm.onAppear()
+        #expect(mock.sentPhoneNumbers.isEmpty)
+        #expect(vm.error == nil)
     }
 
-    @Test("onAppear is idempotent across repeated calls")
-    func onAppearIdempotent() async {
+    @Test("onAppear is idempotent across repeated calls (no duplicate cooldown)")
+    func onAppearIdempotent() {
         let mock = MockPhoneVerificationService()
-        let vm = makeVM(mock: mock)
-        await vm.onAppear()
-        await vm.onAppear()
-        #expect(mock.sentPhoneNumbers.count == 1)
-    }
+        let clock = MockClock()
+        clock.pauseSleeps = true
+        let vm = makeVM(mock: mock, clock: clock)
 
-    @Test("onAppear send failure surfaces a VerificationError")
-    func onAppearFailureSetsError() async {
-        let mock = MockPhoneVerificationService()
-        mock.sendOTPError = URLError(.notConnectedToInternet)
-        let vm = makeVM(mock: mock)
-        await vm.onAppear()
-        #expect(vm.error == .network)
+        vm.onAppear()
+        let firstTask = vm.cooldownTask
+        vm.onAppear()
+
+        #expect(vm.cooldownTask == firstTask, "second call must not replace the in-flight cooldown")
+        #expect(mock.sentPhoneNumbers.isEmpty)
+
+        vm.cooldownTask?.cancel()
     }
 
     // MARK: - clearError
@@ -172,14 +172,14 @@ struct PhoneVerificationViewModelTests {
 
     // MARK: - resend & cooldown
 
-    @Test("Initial send populates secondsRemaining = 30 and !canResend")
-    func initialSendStartsCooldown() async {
+    @Test("onAppear populates secondsRemaining = 30 and !canResend")
+    func initialOnAppearStartsCooldown() {
         let mock = MockPhoneVerificationService()
         let clock = MockClock()
         clock.pauseSleeps = true
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
 
         #expect(vm.secondsRemaining == PhoneVerificationViewModel.cooldownSeconds)
         #expect(!vm.canResend)
@@ -193,7 +193,7 @@ struct PhoneVerificationViewModelTests {
         let clock = MockClock()
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
         await vm.cooldownTask?.value
 
         #expect(vm.secondsRemaining == 0)
@@ -206,7 +206,7 @@ struct PhoneVerificationViewModelTests {
         let clock = MockClock()
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
         await vm.cooldownTask?.value
 
         #expect(vm.canResend)
@@ -219,10 +219,10 @@ struct PhoneVerificationViewModelTests {
         clock.pauseSleeps = true
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
         await vm.resendOTP()
 
-        #expect(mock.sentPhoneNumbers.count == 1)
+        #expect(mock.sentPhoneNumbers.isEmpty, "cooldown blocks the resend before the service is called")
 
         vm.cooldownTask?.cancel()
     }
@@ -233,28 +233,30 @@ struct PhoneVerificationViewModelTests {
         let clock = MockClock()
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
         await vm.cooldownTask?.value
 
         await vm.resendOTP()
         await vm.cooldownTask?.value
 
-        #expect(mock.sentPhoneNumbers.count == 2)
+        #expect(mock.sentPhoneNumbers.count == 1)
         #expect(clock.sleepCalls.count == PhoneVerificationViewModel.cooldownSeconds * 2)
     }
 
-    @Test("Send failure leaves the cooldown un-started so the user can retry")
-    func sendFailureDoesNotStartCooldown() async {
+    @Test("Resend failure surfaces error and keeps user able to retry")
+    func resendFailureSurfacesError() async {
         let mock = MockPhoneVerificationService()
-        mock.sendOTPError = URLError(.notConnectedToInternet)
         let clock = MockClock()
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
+        await vm.cooldownTask?.value
 
-        #expect(vm.secondsRemaining == 0)
-        #expect(vm.canResend)
-        #expect(clock.sleepCalls.isEmpty)
+        mock.sendOTPError = URLError(.notConnectedToInternet)
+        await vm.resendOTP()
+
+        #expect(vm.error == .network)
+        #expect(vm.canResend, "no new cooldown started, so user can retry immediately")
     }
 
     @Test("Successful confirm blocks future resends via canResend")
@@ -263,7 +265,7 @@ struct PhoneVerificationViewModelTests {
         let clock = MockClock()
         let vm = makeVM(mock: mock, clock: clock)
 
-        await vm.onAppear()
+        vm.onAppear()
         await vm.cooldownTask?.value
         await vm.updateOTP("123456")
 

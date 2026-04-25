@@ -48,6 +48,7 @@ enum L10n {
         static let otpNetworkError = String(localized: "auth.otp_network_error")
         static let otpSendFailed = String(localized: "auth.otp_send_failed")
         static let otpUnknownError = String(localized: "auth.otp_unknown_error")
+        static let phoneNumberTaken = String(localized: "auth.phone_number_taken")
         static let emailPlaceholder = String(localized: "auth.email_placeholder")
         static let passwordPlaceholder = String(localized: "auth.password_placeholder")
         static let emailConfirmation = String(localized: "auth.email_confirmation")

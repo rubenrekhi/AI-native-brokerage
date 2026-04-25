@@ -3,9 +3,10 @@ import Foundation
 /// View-model for the phone OTP entry screen.
 ///
 /// Lifecycle:
-/// 1. View calls `onAppear()` once on appearance — sends the initial OTP via the
-///    service and starts the resend cooldown. Subsequent calls are no-ops, so
-///    SwiftUI re-renders that re-trigger `.task` don't spam the backend.
+/// 1. The parent (`ContentViewModel.savePhoneNumber`) dispatches the initial
+///    OTP before routing here, so the user never lands on this screen unless
+///    the send actually succeeded. The view calls `onAppear()` once on
+///    appearance — that just primes the resend cooldown.
 /// 2. The view drives `updateOTP(_:)` from the OTP TextField; the VM strips non-digits,
 ///    caps at 6, and auto-confirms when the 6th digit lands.
 /// 3. On a successful confirm `isVerified` becomes `true`; the view observes it to
@@ -32,7 +33,7 @@ final class PhoneVerificationViewModel {
     private(set) var secondsRemaining: Int = 0
 
     @ObservationIgnored
-    private var didSendInitialOTP: Bool = false
+    private var didStartCooldown: Bool = false
 
     /// Drives the cooldown countdown. Exposed so tests can `await` its completion
     /// to drain the loop deterministically; the view observes `secondsRemaining`
@@ -56,10 +57,13 @@ final class PhoneVerificationViewModel {
         self.clock = clock
     }
 
-    func onAppear() async {
-        guard !didSendInitialOTP else { return }
-        didSendInitialOTP = true
-        await sendOTP()
+    /// Starts the resend cooldown on first call. Idempotent across SwiftUI
+    /// `.task` re-runs. The OTP itself was already sent by `ContentViewModel`
+    /// before navigating here, so this method intentionally does no network.
+    func onAppear() {
+        guard !didStartCooldown else { return }
+        didStartCooldown = true
+        startCooldown()
     }
 
     func updateOTP(_ newValue: String) async {

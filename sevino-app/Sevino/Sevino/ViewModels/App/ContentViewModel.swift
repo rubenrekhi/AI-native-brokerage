@@ -5,6 +5,7 @@ import Foundation
 @Observable
 final class ContentViewModel {
     private let onboardingService: any OnboardingServiceProtocol
+    private let phoneVerificationService: any PhoneVerificationServiceProtocol
 
     // MARK: - Routing
 
@@ -21,8 +22,12 @@ final class ContentViewModel {
 
     // MARK: - Init
 
-    init(onboardingService: any OnboardingServiceProtocol = OnboardingService.shared) {
+    init(
+        onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
+        phoneVerificationService: any PhoneVerificationServiceProtocol = PhoneVerificationService.shared
+    ) {
         self.onboardingService = onboardingService
+        self.phoneVerificationService = phoneVerificationService
     }
 
     // MARK: - Auth transitions
@@ -46,10 +51,13 @@ final class ContentViewModel {
 
     // MARK: - Async operations
 
-    /// Saves the phone number and advances to OTP verification on success. On failure,
-    /// the route stays on `.phone` and `error` is set so the view can surface an alert
-    /// and allow a retry. Onboarding starts only after the OTP confirms (see
-    /// `onPhoneVerified()`), so an unverified phone never reaches the 18-step flow.
+    /// Persists the phone number and dispatches the OTP, then advances to the
+    /// verification screen. The OTP send is part of the precondition so a
+    /// duplicate-phone rejection (`PHONE_NUMBER_TAKEN`) keeps the user on
+    /// `.phone` with a tailored error rather than stranding them on the OTP
+    /// screen with no code on the way. Onboarding only starts after the OTP
+    /// confirms (see `onPhoneVerified()`), so an unverified phone never
+    /// reaches the 18-step flow.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
         showPhoneError = false
@@ -59,11 +67,22 @@ final class ContentViewModel {
             try await onboardingService.saveStep(
                 OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
             )
+            try await phoneVerificationService.sendOTP(phoneNumber: phoneNumber)
             route = .phoneVerification(phoneNumber: phoneNumber)
         } catch let caughtError {
-            error = caughtError.localizedDescription
+            error = phoneSaveErrorMessage(for: caughtError)
             showPhoneError = true
         }
+    }
+
+    /// Translates phone-step errors into a user-facing string. The duplicate
+    /// case gets the dedicated copy so the user understands why advancing was
+    /// blocked; everything else falls back to the backend's localized message.
+    private func phoneSaveErrorMessage(for error: Error) -> String {
+        if let apiError = error as? APIError, apiError.code == "PHONE_NUMBER_TAKEN" {
+            return L10n.Auth.phoneNumberTaken
+        }
+        return error.localizedDescription
     }
 
     /// Called by `PhoneVerificationView` once the OTP confirm succeeds. Advances
