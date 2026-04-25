@@ -87,9 +87,9 @@ struct SettingsView: View {
                         title: L10n.Settings.accountDocuments,
                         documentType: nil
                     )
-                case .monthlyStatements:
+                case .statements:
                     DocumentsListView(
-                        title: L10n.Settings.monthlyStatements,
+                        title: L10n.Settings.statements,
                         documentType: "account_statement"
                     )
                 case .taxDocuments:

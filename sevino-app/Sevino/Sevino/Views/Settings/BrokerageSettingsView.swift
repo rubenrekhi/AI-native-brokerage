@@ -47,7 +47,7 @@ struct BrokerageSettingsView: View {
 
                 VStack(spacing: 0) {
                     navRow(title: L10n.Settings.accountDocuments, destination: .accountDocuments)
-                    navRow(title: L10n.Settings.monthlyStatements, destination: .monthlyStatements)
+                    navRow(title: L10n.Settings.statements, destination: .statements)
                     navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
                     navRow(title: L10n.Settings.accountHistory, destination: .accountHistory)
                 }

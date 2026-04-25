@@ -5210,12 +5210,12 @@
         }
       }
     },
-    "settings.monthly_statements" : {
+    "settings.statements" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Monthly and annual statements"
+            "value" : "Statements"
           }
         }
       }

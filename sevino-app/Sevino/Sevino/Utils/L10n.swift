@@ -539,7 +539,7 @@ enum L10n {
         static let netDeposits = String(localized: "settings.net_deposits")
         static let copyAccessibility = String(localized: "settings.copy_accessibility")
         static let accountDocuments = String(localized: "settings.account_documents")
-        static let monthlyStatements = String(localized: "settings.monthly_statements")
+        static let statements = String(localized: "settings.statements")
         static let taxDocuments = String(localized: "settings.tax_documents")
         static let accountHistory = String(localized: "settings.account_history")
         static let accountHistoryEmptyTitle = String(localized: "settings.account_history_empty_title")

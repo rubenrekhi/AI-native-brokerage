@@ -9,7 +9,7 @@ enum SettingsDestination: Hashable {
     case emailSettings
     case manageFaceId
     case accountDocuments
-    case monthlyStatements
+    case statements
     case taxDocuments
     case accountHistory
 }
