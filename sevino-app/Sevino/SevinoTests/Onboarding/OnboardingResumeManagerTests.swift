@@ -14,7 +14,6 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .home = OnboardingResumeManager.destination(from: status) {
-            // pass
         } else {
             XCTFail("Expected .home")
         }
@@ -28,7 +27,6 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: nil
         )
         if case .home = OnboardingResumeManager.destination(from: status) {
-            // pass
         } else {
             XCTFail("Expected .home")
         }

@@ -59,7 +59,6 @@ class AlpacaBrokerService:
         await self._client.aclose()
 
     async def _get_token(self) -> str:
-        """Get a valid access token, refreshing if expired."""
         if self._access_token and time.time() < (self._token_expires_at - 60):
             return self._access_token
 
@@ -315,7 +314,6 @@ class AlpacaBrokerService:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """Make an authenticated request to the Alpaca Broker API."""
         response = await self._execute(method, path, json=json, params=params)
         return self._handle_response(response)
 

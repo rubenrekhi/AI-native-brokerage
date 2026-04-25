@@ -1,5 +1,3 @@
-"""Pydantic models for /v1/assets/* endpoints."""
-
 from pydantic import BaseModel, ConfigDict, Field
 
 

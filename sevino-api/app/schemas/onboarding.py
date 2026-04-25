@@ -41,11 +41,6 @@ class OnboardingStep(str, Enum):
     submitted = "submitted"
 
 
-# ---------------------------------------------------------------------------
-# Request models
-# ---------------------------------------------------------------------------
-
-
 class OnboardingPatchRequest(BaseModel):
     """Incremental save — called after every screen. All fields optional except step."""
 
@@ -108,11 +103,6 @@ class OnboardingSubmitRequest(BaseModel):
         if digits[3:5] == "00" or digits[5:] == "0000":
             raise ValueError("Invalid SSN format")
         return v
-
-
-# ---------------------------------------------------------------------------
-# Response models
-# ---------------------------------------------------------------------------
 
 
 class ProfileData(BaseModel):

@@ -172,7 +172,6 @@ class TestWorkerStartup:
             "app.worker.AlpacaBrokerService",
             MagicMock(return_value=fake_broker),
         )
-        # Empty registry — the realistic case today (SEV-213+ will populate it).
         monkeypatch.setattr(
             "app.worker.build_listeners", MagicMock(return_value=[])
         )

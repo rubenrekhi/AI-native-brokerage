@@ -1,5 +1,3 @@
-"""FastAPI router for /v1/funding/*."""
-
 import uuid
 
 import structlog

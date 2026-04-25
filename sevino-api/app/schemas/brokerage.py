@@ -1,5 +1,3 @@
-"""Pydantic models for /v1/brokerage/* endpoints."""
-
 from pydantic import BaseModel, ConfigDict
 
 

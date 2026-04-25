@@ -253,6 +253,5 @@ private func XCTAssertThrowsErrorAsync<T>(
         _ = try await expression()
         XCTFail("Expected error to be thrown", file: file, line: line)
     } catch {
-        // Expected
     }
 }

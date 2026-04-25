@@ -21,7 +21,6 @@ struct HomeView: View {
     @State private var showRadar = false
     @State private var showSidebar = false
     @State private var showQuickCommands = false
-    // TODO: wire web search flag to outgoing chat requests (placeholder state)
     @State private var webSearchEnabled = false
     @State private var bottomSafeArea: CGFloat = 0
 

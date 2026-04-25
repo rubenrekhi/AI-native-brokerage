@@ -1,5 +1,3 @@
-"""FastAPI router for /v1/settings/*."""
-
 import uuid
 from datetime import date
 

@@ -164,7 +164,6 @@ enum OnboardingResumeManager {
         }
 
         if let profile = status.profile, let dob = profile.dateOfBirth {
-            // Convert YYYY-MM-DD to MM-DD-YYYY for the DOB view
             let parts = dob.split(separator: "-")
             if parts.count == 3 {
                 data.dobString = "\(parts[1])-\(parts[2])-\(parts[0])"

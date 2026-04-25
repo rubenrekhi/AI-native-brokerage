@@ -1,5 +1,3 @@
-"""Pydantic models for /v1/settings/* endpoints."""
-
 import uuid
 from datetime import date as _date
 from datetime import datetime

@@ -21,7 +21,6 @@ struct OnboardingDOBView: View {
         self.userPromptText = userPromptText
         self.animate = animate
         self.onContinue = onContinue
-        // Parse MM-DD-YYYY into components
         let parts = initialDOB.split(separator: "-")
         if parts.count == 3 {
             _month = State(initialValue: String(parts[0]))

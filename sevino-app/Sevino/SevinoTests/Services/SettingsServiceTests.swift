@@ -153,7 +153,6 @@ final class SettingsServiceTests: XCTestCase {
             _ = try await call()
             XCTFail("expected error to propagate", file: file, line: line)
         } catch is TestError {
-            // expected
         } catch {
             XCTFail("unexpected error: \(error)", file: file, line: line)
         }

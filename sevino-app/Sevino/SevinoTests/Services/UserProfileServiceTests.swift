@@ -78,7 +78,6 @@ final class UserProfileServiceTests: XCTestCase {
             _ = try await service.fetchPreferredName()
             XCTFail("expected error to propagate")
         } catch is TestError {
-            // expected
         } catch {
             XCTFail("unexpected error: \(error)")
         }

@@ -1,5 +1,3 @@
-"""Pydantic models for /v1/funding/* endpoints."""
-
 import uuid
 from decimal import Decimal
 from typing import Literal
