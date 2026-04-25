@@ -189,30 +189,47 @@ private struct StatusCheckRetryView: View {
     var body: some View {
         ZStack {
             OnboardingBackgroundView()
-            VStack(spacing: 16) {
-                Text(L10n.General.connectionErrorTitle)
-                    .font(.dmSerif(size: 28))
-                    .foregroundStyle(Color.welcomeText)
-                    .multilineTextAlignment(.center)
+            GeometryReader { proxy in
+                let scale = proxy.size.width / 393
+                SevinoGlassContainer {
+                    VStack(spacing: 16 * scale) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 26 * scale, weight: .light))
+                            .foregroundStyle(Color.welcomeText)
+                            .accessibilityHidden(true)
 
-                Text(L10n.General.connectionErrorBody)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.welcomeText.opacity(0.8))
-                    .multilineTextAlignment(.center)
+                        VStack(spacing: 6 * scale) {
+                            Text(L10n.General.connectionErrorTitle)
+                                .font(.system(size: 22 * scale, weight: .semibold))
+                                .foregroundStyle(Color.welcomeText)
+                                .multilineTextAlignment(.center)
 
-                Button(action: onRetry) {
-                    Text(L10n.General.tryAgain)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.welcomeButtonDarkTint)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
+                            Text(L10n.General.connectionErrorBody)
+                                .font(.system(size: 11 * scale))
+                                .foregroundStyle(Color.welcomeText.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                        }
+
+                        Button(action: onRetry) {
+                            Text(L10n.General.tryAgain)
+                                .font(.system(size: 12 * scale, weight: .semibold))
+                                .foregroundStyle(Color.welcomeButtonDarkTint)
+                                .padding(.horizontal, 20 * scale)
+                                .padding(.vertical, 8 * scale)
+                                .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
+                        .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
+                        .padding(.top, 2 * scale)
+                    }
+                    .padding(.horizontal, 22 * scale)
+                    .padding(.vertical, 26 * scale)
+                    .frame(maxWidth: .infinity)
+                    .modifier(SevinoGlass.card)
                 }
-                .buttonStyle(.plain)
-                .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
-                .padding(.top, 8)
+                .padding(.horizontal, 72 * scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(.horizontal, 32)
         }
         .preferredColorScheme(.dark)
     }
