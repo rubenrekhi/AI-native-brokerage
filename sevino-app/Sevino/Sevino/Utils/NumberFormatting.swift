@@ -19,14 +19,17 @@ extension Decimal {
     }
 
     /// "57" or "0.125"
-    func asShareCount() -> String {
-        shareFormatter.string(from: nsDecimal) ?? "\(self)"
+    func asShareCount(locale: Locale = .current) -> String {
+        shareFormatter(locale: locale).string(from: nsDecimal) ?? "\(self)"
     }
 
     private var nsDecimal: NSDecimalNumber { NSDecimalNumber(decimal: self) }
 }
 
-private let _cache = NSCache<NSString, NumberFormatter>()
+// `NSCache` is documented thread-safe; the cache is only mutated through its
+// own atomic methods, so the global is safe to share across actors despite
+// being non-`Sendable`.
+nonisolated(unsafe) private let _cache = NSCache<NSString, NumberFormatter>()
 
 private func currencyFormatter(currencyCode: String, locale: Locale, signed: Bool) -> NumberFormatter {
     let key = "cur-\(signed)-\(currencyCode)-\(locale.identifier)" as NSString
@@ -53,11 +56,15 @@ private func percentFormatter(locale: Locale, signed: Bool) -> NumberFormatter {
     return f
 }
 
-private let shareFormatter: NumberFormatter = {
+private func shareFormatter(locale: Locale) -> NumberFormatter {
+    let key = "share-\(locale.identifier)" as NSString
+    if let f = _cache.object(forKey: key) { return f }
     let f = NumberFormatter()
     f.numberStyle = .decimal
+    f.locale = locale
     f.minimumFractionDigits = 0
     f.maximumFractionDigits = 9
     f.usesGroupingSeparator = true
+    _cache.setObject(f, forKey: key)
     return f
-}()
+}

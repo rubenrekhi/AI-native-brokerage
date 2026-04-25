@@ -6,6 +6,7 @@ final class NumberFormattingTests: XCTestCase {
 
     private let usLocale = Locale(identifier: "en_US")
     private let gbLocale = Locale(identifier: "en_GB")
+    private let deLocale = Locale(identifier: "de_DE")
 
     // MARK: - asCurrency
 
@@ -48,6 +49,11 @@ final class NumberFormattingTests: XCTestCase {
     func testAsShareCount_fractional_preservesSignificantDigits() {
         let value = Decimal(string: "0.125")!
         XCTAssertEqual(value.asShareCount(), "0.125")
+    }
+
+    func testAsShareCount_germanLocale_usesCommaDecimal() {
+        let value = Decimal(string: "0.125")!
+        XCTAssertEqual(value.asShareCount(locale: deLocale), "0,125")
     }
 
     // MARK: - Locale override
