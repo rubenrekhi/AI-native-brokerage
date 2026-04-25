@@ -4,9 +4,10 @@ import Foundation
 final class MockPortfolioService: PortfolioServiceProtocol {
     var fetchPortfolioError: Error?
     var snapshot = PortfolioSnapshot(
-        displayValue: "$1,000.00",
-        isDown: false,
-        gainText: "+$10.00 (+1.00%)",
+        accountStatus: "ACTIVE",
+        equity: Decimal(string: "1000.00")!,
+        dailyChangeAbs: Decimal(string: "10.00")!,
+        dailyChangePct: Decimal(string: "0.0100")!,
         chartPoints: [0.1, 0.2, 0.3]
     )
 

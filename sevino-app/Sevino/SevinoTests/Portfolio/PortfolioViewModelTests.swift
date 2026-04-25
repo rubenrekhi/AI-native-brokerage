@@ -27,9 +27,10 @@ final class PortfolioViewModelTests: XCTestCase {
 
     func testLoadPortfolioSuccessPopulatesSnapshotFields() async {
         mockService.snapshot = PortfolioSnapshot(
-            displayValue: "$2,500.00",
-            isDown: false,
-            gainText: "+$42.00 (+1.70%)",
+            accountStatus: "ACTIVE",
+            equity: Decimal(string: "2500.00")!,
+            dailyChangeAbs: Decimal(string: "42.00")!,
+            dailyChangePct: Decimal(string: "0.0170")!,
             chartPoints: [0.1, 0.5, 0.9]
         )
 
@@ -45,9 +46,10 @@ final class PortfolioViewModelTests: XCTestCase {
 
     func testLoadPortfolioCopiesIsDownTrueFromSnapshot() async {
         mockService.snapshot = PortfolioSnapshot(
-            displayValue: "$900.00",
-            isDown: true,
-            gainText: "-$100.00 (-10.00%)",
+            accountStatus: "ACTIVE",
+            equity: Decimal(string: "900.00")!,
+            dailyChangeAbs: Decimal(string: "-100.00")!,
+            dailyChangePct: Decimal(string: "-0.1000")!,
             chartPoints: [0.9, 0.5, 0.1]
         )
 

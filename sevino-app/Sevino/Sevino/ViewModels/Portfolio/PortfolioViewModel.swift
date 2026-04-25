@@ -13,7 +13,7 @@ final class PortfolioViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
 
-    init(service: any PortfolioServiceProtocol = PlaceholderPortfolioService.shared) {
+    init(service: any PortfolioServiceProtocol = APIPortfolioService.shared) {
         self.service = service
     }
 
