@@ -54,6 +54,10 @@ struct OTPInputView: View {
                     onCodeChange(filtered)
                 }
             }
+            // Pop the numeric keyboard the moment the screen appears so the user
+            // can start typing immediately. `@AccessibilityFocusState` only drives
+            // VoiceOver — the @FocusState here is what actually raises the keyboard.
+            .onAppear { isFocused = true }
     }
 
     /// Strips non-digit characters and caps the length at `digitCount`.
