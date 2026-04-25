@@ -23,11 +23,12 @@ def error_response(
     message: str,
     code: str,
     detail: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> JSONResponse:
     body: dict[str, Any] = {"error": message, "code": code}
     if detail is not None:
         body["detail"] = detail
-    return JSONResponse(status_code=status_code, content=body)
+    return JSONResponse(status_code=status_code, content=body, headers=headers)
 
 
 # ---------------------------------------------------------------------------
@@ -158,14 +159,23 @@ async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
     logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
-    return error_response(422, exc.message, "ALPACA_ERROR", detail=exc.detail)
+    # Upstream 5xx is a broker outage we masked as 422 ("validation error"),
+    # which is misleading. Surface it as 502 so clients can distinguish "your
+    # input was rejected" (422) from "the brokerage is broken" (502).
+    sevino_status = 502 if exc.status_code >= 500 else 422
+    return error_response(sevino_status, exc.message, "ALPACA_ERROR", detail=exc.detail)
 
 
 async def alpaca_unavailable_handler(
     request: Request, exc: "AlpacaBrokerUnavailableError"
 ) -> JSONResponse:
     logger.error("alpaca_unavailable", error=exc.message)
-    return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
+    return error_response(
+        503,
+        "Brokerage service unavailable, please try again",
+        "ALPACA_UNAVAILABLE",
+        headers={"Retry-After": "30"},
+    )
 
 
 # --- Plaid handler ---

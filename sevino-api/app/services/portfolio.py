@@ -113,10 +113,14 @@ class PortfolioService:
         return HoldingsResponse.model_validate(cached)
 
     async def get_history(
-        self, ctx: AlpacaAccountContext, r: PortfolioRange
+        self,
+        ctx: AlpacaAccountContext,
+        r: PortfolioRange,
+        *,
+        now: datetime | None = None,
     ) -> PortfolioHistoryResponse:
         key = f"portfolio:history:{ctx.user_id}:{r.value}"
-        params = range_to_alpaca_params(r)
+        params = range_to_alpaca_params(r, now=now)
 
         async def fetch() -> dict:
             raw = await self._alpaca.get_portfolio_history(
