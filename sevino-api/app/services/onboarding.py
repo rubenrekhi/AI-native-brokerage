@@ -1,3 +1,4 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -91,7 +92,9 @@ EMPLOYMENT_STATUS_MAP: dict[str, str] = {
     "retired": "retired",
 }
 
-# Fields that belong to user_profiles vs user_financial_profiles
+# Fields that belong to user_profiles vs user_financial_profiles.
+# Note: tax_id_last_4 is intentionally excluded — it is set only during
+# submit_kyc, never via the incremental save_step PATCH from the client.
 _PROFILE_FIELDS = {
     "preferred_name",
     "date_of_birth",
@@ -197,6 +200,11 @@ def map_experience(experience_level: str) -> str:
 def map_employment_status(employment_info: dict[str, Any]) -> str:
     raw_status = employment_info.get("employment_status", "").lower()
     return EMPLOYMENT_STATUS_MAP.get(raw_status, "employed")
+
+
+def extract_tax_id_last_4(tax_id: str) -> str:
+    """Strip non-digits from a tax ID (e.g. '123-45-6789') and return last 4."""
+    return re.sub(r"[^0-9]", "", tax_id)[-4:]
 
 
 def build_agreements(agreements_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -323,7 +331,10 @@ class OnboardingService:
             )
 
         await UserProfileRepository.update_fields(
-            db, user_id, onboarding_step="submitted"
+            db,
+            user_id,
+            onboarding_step="submitted",
+            tax_id_last_4=extract_tax_id_last_4(tax_id),
         )
 
         logger.info(

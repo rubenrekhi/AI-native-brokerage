@@ -11,7 +11,7 @@ struct PersonalInfoSettingsView: View {
     @State private var activeSheet: ActiveSheet?
 
     private enum ActiveSheet: Identifiable {
-        case name
+        case personalDetails
         case phone
         case address
         case email
@@ -55,23 +55,22 @@ struct PersonalInfoSettingsView: View {
                 await vm.load()
             }
         }
-        .sheet(item: $activeSheet) { sheet in
+        .popupCard(item: $activeSheet) { sheet in
             editProfileSheet(for: sheet)
-                .presentationDetents([.medium, .large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.clear)
         }
     }
 
     @ViewBuilder
     private func editProfileSheet(for sheet: ActiveSheet) -> some View {
         switch sheet {
-        case .name:
-            EditNameSheet(
-                currentFirstName: vm.profile?.profile.firstName,
-                currentMiddleName: vm.profile?.profile.middleName,
-                currentLastName: vm.profile?.profile.lastName,
-                onSaved: { Task { await vm.reload() } }
+        case .personalDetails:
+            PersonalDetailsSheet(
+                firstName: vm.profile?.profile.firstName,
+                middleName: vm.profile?.profile.middleName,
+                lastName: vm.profile?.profile.lastName,
+                dateOfBirth: vm.profile?.profile.dateOfBirth,
+                countryOfCitizenship: vm.profile?.profile.countryOfCitizenship,
+                taxIdLast4: vm.profile?.profile.taxIdLast4
             )
         case .phone:
             EditPhoneSheet(
@@ -150,7 +149,7 @@ struct PersonalInfoSettingsView: View {
                 .padding(.bottom, 24 * scale)
 
             VStack(spacing: 0) {
-                infoRow(title: L10n.Settings.nameDetails, isEnabled: true) { activeSheet = .name }
+                infoRow(title: L10n.Settings.nameDetails, isEnabled: true) { activeSheet = .personalDetails }
                 infoRowWithValue(
                     title: L10n.Settings.emailLabel,
                     value: vm.displayEmail,
@@ -231,8 +230,8 @@ struct PersonalInfoSettingsView: View {
 
                     Spacer()
 
-                    Image(systemName: "pencil.line")
-                        .font(.system(size: 15 * scale, weight: .medium))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13 * scale, weight: .semibold))
                         .foregroundStyle(Color.sevinoGreyContrast)
                         .accessibilityHidden(true)
                 }

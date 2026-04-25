@@ -4700,56 +4700,6 @@
         }
       }
     },
-    "settings.edit_name_first_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "First name"
-          }
-        }
-      }
-    },
-    "settings.edit_name_last_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Last name"
-          }
-        }
-      }
-    },
-    "settings.edit_name_middle_label" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Middle name (optional)"
-          }
-        }
-      }
-    },
-    "settings.edit_name_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit name"
-          }
-        }
-      }
-    },
-    "settings.edit_name_validation_error" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "First and last name are required."
-          }
-        }
-      }
-    },
     "settings.edit_phone_label" : {
       "localizations" : {
         "en" : {
@@ -4860,26 +4810,6 @@
         }
       }
     },
-    "settings.edit_sheet_close_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close"
-          }
-        }
-      }
-    },
-    "settings.edit_sheet_done" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
-          }
-        }
-      }
-    },
     "settings.email" : {
       "localizations" : {
         "en" : {
@@ -4896,16 +4826,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Email"
-          }
-        }
-      }
-    },
-    "settings.email_support_note" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Contact support to change your email."
           }
         }
       }
@@ -5286,6 +5206,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Personal information"
+          }
+        }
+      }
+    },
+    "settings.personal_details_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personal details"
+          }
+        }
+      }
+    },
+    "settings.personal_details_first_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_middle_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Middle name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_last_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_date_of_birth" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Date of birth"
+          }
+        }
+      }
+    },
+    "settings.personal_details_ssn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social security number"
+          }
+        }
+      }
+    },
+    "settings.personal_details_citizenship" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Citizenship"
           }
         }
       }

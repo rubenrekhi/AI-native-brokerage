@@ -76,8 +76,6 @@ struct SettingsView: View {
                     PersonalInfoSettingsView(vm: settingsVM)
                 case .appearance:
                     AppearanceSettingsView()
-                case .emailSettings:
-                    EmailSettingsView(vm: settingsVM)
                 case .manageFaceId:
                     FaceIDSettingsView()
                 case .changePassword:

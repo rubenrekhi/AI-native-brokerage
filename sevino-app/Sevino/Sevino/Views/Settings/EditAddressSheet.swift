@@ -1,11 +1,11 @@
 import MapKit
 import SwiftUI
 
-/// Sheet for editing the user's mailing address from Personal Info settings.
-/// Reuses `AddressSearchCompleter` for line-1 autocomplete — picking a
-/// suggestion back-fills city/state/postal the same way onboarding does.
+/// Popup card for editing the user's mailing address from Personal Info
+/// settings. Reuses `AddressSearchCompleter` for line-1 autocomplete — picking
+/// a suggestion back-fills city/state/postal the same way onboarding does.
 struct EditAddressSheet: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.popupDismiss) private var popupDismiss
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
     let initialLine1: String
@@ -60,106 +60,110 @@ struct EditAddressSheet: View {
     enum Field: Hashable { case line1, line2, city, state, postal }
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                SevinoGlassContainer {
-                    formContent
-                }
-                .padding(.horizontal, 20 * scale)
-                .padding(.top, 12 * scale)
-                .padding(.bottom, 24 * scale)
-            }
-            .scrollDismissesKeyboard(.interactively)
-            .background {
-                Color.sevinoSettingsBg
-                    .ignoresSafeArea()
-            }
-            .onGeometryChange(for: CGFloat.self) { proxy in
-                proxy.size.width
-            } action: { width in
-                baseScale = width / 393
-            }
-            .navigationTitle(L10n.Settings.editAddressTitle)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(L10n.Settings.editProfileCancel) { dismiss() }
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .disabled(vm.isLoading)
-                }
-            }
-            .overlay(alignment: .top) {
-                if vm.didSave {
-                    SuccessBanner(scale: scale)
-                        .padding(.top, 8 * scale)
-                        .transition(.move(edge: .top).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: 0.25), value: vm.didSave)
-            .task(id: vm.didSave, handleDidSaveChange)
+        SevinoGlassContainer {
+            popupBody
         }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            baseScale = width / 393
+        }
+        .task(id: vm.didSave, handleDidSaveChange)
     }
 
-    private var formContent: some View {
-        VStack(alignment: .leading, spacing: 16 * scale) {
-            line1Field
-
-            if showSuggestions {
-                SuggestionsList(
-                    results: Array(completer.results.prefix(5)),
-                    scale: scale,
-                    onSelect: selectResult
-                )
-            }
-
-            labeledField(
-                label: L10n.Settings.editAddressLine2Label,
-                text: $line2,
-                contentType: .streetAddressLine2,
-                focus: .line2,
-                submit: .next,
-                onSubmit: { focusedField = .city }
+    private var popupBody: some View {
+        SettingsEditPopup(
+            title: L10n.Settings.editAddressTitle,
+            scale: scale,
+            saveAction: .init(
+                label: L10n.Settings.editProfileSave,
+                isEnabled: canSave,
+                isLoading: vm.isLoading,
+                perform: save
             )
+        ) {
+            VStack(alignment: .leading, spacing: 12 * scale) {
+                labeledField(label: L10n.Settings.editAddressLine1Label) {
+                    line1Field
+                }
 
-            HStack(spacing: 12 * scale) {
-                labeledField(
-                    label: L10n.Settings.editAddressCityLabel,
-                    text: $city,
-                    contentType: .addressCity,
-                    focus: .city,
-                    submit: .next,
-                    onSubmit: { focusedField = .state }
-                )
-                labeledField(
-                    label: L10n.Settings.editAddressStateLabel,
-                    text: $state,
-                    contentType: .addressState,
-                    focus: .state,
-                    submit: .next,
-                    onSubmit: { focusedField = .postal }
-                )
-                .frame(maxWidth: 100 * scale)
+                if showSuggestions {
+                    SuggestionsList(
+                        results: Array(completer.results.prefix(3)),
+                        scale: scale,
+                        onSelect: selectResult
+                    )
+                }
+
+                labeledField(label: L10n.Settings.editAddressLine2Label) {
+                    plainField(
+                        text: $line2,
+                        contentType: .streetAddressLine2,
+                        focus: .line2,
+                        submit: .next,
+                        accessibilityLabel: L10n.Settings.editAddressLine2Label,
+                        onSubmit: { focusedField = .city }
+                    )
+                }
+
+                HStack(alignment: .top, spacing: 8 * scale) {
+                    labeledField(label: L10n.Settings.editAddressCityLabel) {
+                        plainField(
+                            text: $city,
+                            contentType: .addressCity,
+                            focus: .city,
+                            submit: .next,
+                            accessibilityLabel: L10n.Settings.editAddressCityLabel,
+                            onSubmit: { focusedField = .state }
+                        )
+                    }
+                    labeledField(label: L10n.Settings.editAddressStateLabel) {
+                        plainField(
+                            text: $state,
+                            contentType: .addressState,
+                            focus: .state,
+                            submit: .next,
+                            accessibilityLabel: L10n.Settings.editAddressStateLabel,
+                            onSubmit: { focusedField = .postal }
+                        )
+                    }
+                    .frame(maxWidth: 80 * scale)
+                    labeledField(label: L10n.Settings.editAddressPostalLabel) {
+                        plainField(
+                            text: $postalCode,
+                            contentType: .postalCode,
+                            focus: .postal,
+                            submit: .done,
+                            keyboard: .numbersAndPunctuation,
+                            accessibilityLabel: L10n.Settings.editAddressPostalLabel,
+                            onSubmit: { focusedField = nil }
+                        )
+                    }
+                    .frame(maxWidth: 100 * scale)
+                }
             }
-
-            labeledField(
-                label: L10n.Settings.editAddressPostalLabel,
-                text: $postalCode,
-                contentType: .postalCode,
-                focus: .postal,
-                submit: .done,
-                keyboard: .numbersAndPunctuation,
-                onSubmit: { focusedField = nil }
-            )
 
             if let error = vm.error {
                 Text(error)
-                    .font(.system(size: 13 * scale))
+                    .font(.system(size: 12 * scale))
                     .foregroundStyle(Color.sevinoNegative)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
 
-            saveButton
-                .padding(.top, 8 * scale)
+    private func labeledField<Field: View>(
+        label: String,
+        @ViewBuilder content: () -> Field
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Text(label)
+                .font(.system(size: 11 * scale, weight: .semibold))
+                .tracking(0.5)
+                .textCase(.uppercase)
+                .foregroundStyle(Color.sevinoGreyContrast)
+
+            content()
         }
     }
 
@@ -167,22 +171,31 @@ struct EditAddressSheet: View {
         !completer.results.isEmpty
             && line1 != committedLine1
             && !line1.isEmpty
+            && focusedField == .line1
     }
 
     private var canSave: Bool {
-        !line1.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !city.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !state.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !postalCode.trimmingCharacters(in: .whitespaces).isEmpty &&
-        !vm.isLoading &&
-        !vm.didSave
+        guard
+            !line1.trimmingCharacters(in: .whitespaces).isEmpty,
+            !city.trimmingCharacters(in: .whitespaces).isEmpty,
+            !state.trimmingCharacters(in: .whitespaces).isEmpty,
+            !postalCode.trimmingCharacters(in: .whitespaces).isEmpty,
+            !vm.isLoading,
+            !vm.didSave
+        else { return false }
+        return line1 != initialLine1
+            || line2 != initialLine2
+            || city != initialCity
+            || state != initialState
+            || postalCode != initialPostalCode
     }
 
     private var line1Field: some View {
-        VStack(alignment: .leading, spacing: 8 * scale) {
-            Text(L10n.Settings.editAddressLine1Label)
-                .font(.system(size: 13 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoGreyContrast)
+        HStack(spacing: 8 * scale) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 16 * scale))
+                .foregroundStyle(Color.sevinoNegative)
+                .accessibilityHidden(true)
 
             TextField(
                 "",
@@ -197,9 +210,6 @@ struct EditAddressSheet: View {
             .onSubmit { focusedField = .line2 }
             .font(.system(size: 16 * scale))
             .foregroundStyle(Color.sevinoSecondary)
-            .padding(.horizontal, 16 * scale)
-            .padding(.vertical, 14 * scale)
-            .modifier(SevinoGlass.card)
             .onChange(of: line1) { _, newValue in
                 if newValue != committedLine1 {
                     completer.search(newValue)
@@ -209,57 +219,29 @@ struct EditAddressSheet: View {
             }
             .accessibilityLabel(L10n.Settings.editAddressLine1Label)
         }
+        .padding(.vertical, 10 * scale)
     }
 
-    private func labeledField(
-        label: String,
+    private func plainField(
         text: Binding<String>,
         contentType: UITextContentType,
         focus: Field,
         submit: SubmitLabel,
         keyboard: UIKeyboardType = .default,
+        accessibilityLabel: String,
         onSubmit: @escaping () -> Void
     ) -> some View {
-        VStack(alignment: .leading, spacing: 8 * scale) {
-            Text(label)
-                .font(.system(size: 13 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoGreyContrast)
-
-            TextField("", text: text)
-                .textContentType(contentType)
-                .keyboardType(keyboard)
-                .autocorrectionDisabled()
-                .submitLabel(submit)
-                .focused($focusedField, equals: focus)
-                .onSubmit(onSubmit)
-                .font(.system(size: 16 * scale))
-                .foregroundStyle(Color.sevinoSecondary)
-                .padding(.horizontal, 16 * scale)
-                .padding(.vertical, 14 * scale)
-                .modifier(SevinoGlass.card)
-                .accessibilityLabel(label)
-        }
-    }
-
-    private var saveButton: some View {
-        Button(action: save) {
-            Group {
-                if vm.isLoading {
-                    ProgressView()
-                        .tint(Color.sevinoSecondary)
-                } else {
-                    Text(L10n.Settings.editProfileSave)
-                        .font(.system(size: 16 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                }
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 14 * scale)
-            .contentShape(.rect(cornerRadius: 14 * scale))
-        }
-        .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 14 * scale))
-        .disabled(!canSave)
-        .opacity(canSave ? 1 : 0.6)
+        TextField("", text: text)
+            .textContentType(contentType)
+            .keyboardType(keyboard)
+            .autocorrectionDisabled()
+            .submitLabel(submit)
+            .focused($focusedField, equals: focus)
+            .onSubmit(onSubmit)
+            .font(.system(size: 16 * scale))
+            .foregroundStyle(Color.sevinoSecondary)
+            .padding(.vertical, 10 * scale)
+            .accessibilityLabel(accessibilityLabel)
     }
 
     private func selectResult(_ result: MKLocalSearchCompletion) {
@@ -303,9 +285,7 @@ struct EditAddressSheet: View {
     private func handleDidSaveChange() async {
         guard vm.didSave else { return }
         onSaved()
-        try? await Task.sleep(for: .milliseconds(900))
-        guard !Task.isCancelled else { return }
-        dismiss()
+        popupDismiss()
     }
 }
 
@@ -314,83 +294,84 @@ private struct SuggestionsList: View {
     let scale: CGFloat
     let onSelect: (MKLocalSearchCompletion) -> Void
 
+    /// Title alone isn't unique (two "123 Main St" rows can share a title in
+    /// different cities). Compose with the subtitle for stable identity.
+    private struct Row: Identifiable {
+        let id: String
+        let completion: MKLocalSearchCompletion
+    }
+
+    private var rows: [Row] {
+        results.map { Row(id: "\($0.title)|\($0.subtitle)", completion: $0) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            ForEach(results, id: \.self) { result in
+            ForEach(rows) { row in
+                let result = row.completion
                 Button {
                     onSelect(result)
                 } label: {
-                    HStack(spacing: 12 * scale) {
+                    HStack(spacing: 10 * scale) {
                         Image(systemName: "mappin.circle.fill")
-                            .font(.system(size: 16 * scale))
+                            .font(.system(size: 14 * scale))
                             .foregroundStyle(Color.sevinoNegative)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(result.title)
-                                .font(.system(size: 14 * scale))
+                                .font(.system(size: 13 * scale))
                                 .foregroundStyle(Color.sevinoSecondary)
                                 .lineLimit(1)
                             if !result.subtitle.isEmpty {
                                 Text(result.subtitle)
-                                    .font(.system(size: 12 * scale))
+                                    .font(.system(size: 11 * scale))
                                     .foregroundStyle(Color.sevinoGreyContrast)
                                     .lineLimit(1)
                             }
                         }
                         Spacer()
                     }
-                    .padding(.horizontal, 14 * scale)
-                    .padding(.vertical, 10 * scale)
+                    .padding(.horizontal, 12 * scale)
+                    .padding(.vertical, 8 * scale)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .contentShape(.rect)
                 }
                 .buttonStyle(.plain)
             }
         }
-        .modifier(SevinoGlass.nav)
-    }
-}
-
-private struct SuccessBanner: View {
-    let scale: CGFloat
-
-    var body: some View {
-        HStack(spacing: 8 * scale) {
-            Image(systemName: "checkmark.circle.fill")
-                .foregroundStyle(Color.sevinoPositive)
-            Text(L10n.Settings.editProfileSuccess)
-                .font(.system(size: 14 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-        }
-        .padding(.horizontal, 16 * scale)
-        .padding(.vertical, 10 * scale)
         .modifier(SevinoGlass.popup)
-        .accessibilityElement(children: .combine)
-        .accessibilityAddTraits(.isStaticText)
     }
 }
 
 #if DEBUG
 #Preview("Dark") {
-    EditAddressSheet(
-        initialLine1: "123 Invest Circle",
-        initialLine2: "",
-        initialCity: "Cleveland",
-        initialState: "OH",
-        initialPostalCode: "44110",
-        onSaved: {}
-    )
-    .preferredColorScheme(.dark)
+    Color.sevinoSettingsBg
+        .ignoresSafeArea()
+        .overlay(alignment: .bottom) {
+            EditAddressSheet(
+                initialLine1: "123 Invest Circle",
+                initialLine2: "",
+                initialCity: "Cleveland",
+                initialState: "OH",
+                initialPostalCode: "44110",
+                onSaved: {}
+            )
+        }
+        .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    EditAddressSheet(
-        initialLine1: "123 Invest Circle",
-        initialLine2: "Apt 4B",
-        initialCity: "Cleveland",
-        initialState: "OH",
-        initialPostalCode: "44110",
-        onSaved: {}
-    )
-    .preferredColorScheme(.light)
+    Color.sevinoSettingsBg
+        .ignoresSafeArea()
+        .overlay(alignment: .bottom) {
+            EditAddressSheet(
+                initialLine1: "123 Invest Circle",
+                initialLine2: "Apt 4B",
+                initialCity: "Cleveland",
+                initialState: "OH",
+                initialPostalCode: "44110",
+                onSaved: {}
+            )
+        }
+        .preferredColorScheme(.light)
 }
 #endif

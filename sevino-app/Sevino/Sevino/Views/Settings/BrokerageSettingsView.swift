@@ -140,13 +140,10 @@ struct BrokerageSettingsView: View {
                     .font(.system(size: 18 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
-            .sheet(item: $renameItem) { item in
+            .popupCard(item: $renameItem) { item in
                 AccountRenameSheet(item: item, scale: scale) { newName in
                     accountName = newName
                 }
-                .presentationDetents([.height(180 * scale)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.clear)
             }
 
             VStack(spacing: 0) {
@@ -298,7 +295,7 @@ private struct RenameItem: Identifiable {
 }
 
 private struct AccountRenameSheet: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.popupDismiss) private var popupDismiss
 
     let item: RenameItem
     let scale: CGFloat
@@ -314,46 +311,41 @@ private struct AccountRenameSheet: View {
         _draftName = State(initialValue: item.currentName)
     }
 
+    private var canSave: Bool {
+        let trimmed = draftName.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && trimmed != item.currentName
+    }
+
     var body: some View {
-        VStack(spacing: 16 * scale) {
-            TextField(L10n.Settings.renameNamePlaceholder, text: $draftName)
-                .font(.system(size: 16 * scale))
-                .foregroundStyle(Color.sevinoSecondary)
-                .padding(.horizontal, 16 * scale)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.3), in: .rect(cornerRadius: 12 * scale))
-                .focused($isFocused)
-
-            HStack(spacing: 12 * scale) {
-                Button(action: dismiss.callAsFunction) {
-                    Text(L10n.Settings.renameCancel)
-                        .font(.system(size: 15 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12 * scale)
-                }
-                .modifier(SevinoGlass.card)
-
-                Button(action: save) {
-                    Text(L10n.Settings.renameSave)
-                        .font(.system(size: 15 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12 * scale)
-                }
-                .modifier(SevinoGlass.card)
-                .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty)
+        SettingsEditPopup(
+            title: L10n.Settings.renameTitle,
+            scale: scale,
+            saveAction: .init(
+                label: L10n.Settings.renameSave,
+                isEnabled: canSave,
+                isLoading: false,
+                perform: save
+            )
+        ) {
+            SettingsEditPopupSection(label: L10n.Settings.renameNamePlaceholder, scale: scale) {
+                TextField("", text: $draftName)
+                    .font(.system(size: 16 * scale))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .focused($isFocused)
+                    .onSubmit { if canSave { save() } }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12 * scale)
+                    .accessibilityLabel(L10n.Settings.renameNamePlaceholder)
             }
         }
-        .padding(20 * scale)
-        .modifier(SevinoGlass.card)
-        .padding(.horizontal, 12 * scale)
         .task { isFocused = true }
     }
 
     private func save() {
         onSave(draftName.trimmingCharacters(in: .whitespaces))
-        dismiss()
+        popupDismiss()
     }
 }
 

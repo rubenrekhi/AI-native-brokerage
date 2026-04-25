@@ -8,6 +8,7 @@ struct LoginSecuritySettingsView: View {
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
     @State private var showDeleteConfirmation = false
+    @State private var showEmailPopup = false
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
@@ -18,7 +19,7 @@ struct LoginSecuritySettingsView: View {
                 .padding(.bottom, 24 * scale)
 
             VStack(spacing: 0) {
-                navLinkRow(title: L10n.Settings.email, destination: .emailSettings)
+                buttonRow(title: L10n.Settings.email) { showEmailPopup = true }
                 navLinkRow(title: L10n.Settings.changePassword, destination: .changePassword)
                 navLinkRow(title: L10n.Settings.manageFaceId, destination: .manageFaceId)
                 comingSoonRow(title: L10n.Settings.activeSessions)
@@ -59,6 +60,14 @@ struct LoginSecuritySettingsView: View {
         } message: { message in
             Text(message)
         }
+        .popupCard(isPresented: $showEmailPopup) {
+            EditEmailSheet(email: viewModel.displayEmail)
+        }
+        .task {
+            if viewModel.profile == nil {
+                await viewModel.load()
+            }
+        }
     }
 
     private var header: some View {
@@ -85,6 +94,13 @@ struct LoginSecuritySettingsView: View {
 
     private func navLinkRow(title: String, destination: SettingsDestination) -> some View {
         NavigationLink(value: destination) {
+            rowContent(title: title)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func buttonRow(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             rowContent(title: title)
         }
         .buttonStyle(.plain)

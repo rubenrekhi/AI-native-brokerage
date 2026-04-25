@@ -272,6 +272,13 @@ class TestPostOnboardingSubmit:
         assert call_payload["identity"]["tax_id"] == "123-45-6789"
         assert call_payload["identity"]["tax_id_type"] == "USA_SSN"
 
+        # Verify only last-4 of the SSN was persisted (full SSN is not stored)
+        profile_row = await db_session.execute(
+            text("SELECT tax_id_last_4 FROM user_profiles WHERE id = :id"),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        assert profile_row.scalar_one() == "6789"
+
     async def test_duplicate_submission_returns_409(
         self, authenticated_db_client, db_session
     ):

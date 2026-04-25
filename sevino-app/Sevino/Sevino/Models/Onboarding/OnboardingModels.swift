@@ -106,6 +106,9 @@ struct ProfileData: Decodable {
     var countryOfCitizenship: String?
     var countryOfBirth: String?
     var countryOfTaxResidence: String?
+    /// Last four digits of the user's SSN, populated during KYC onboarding.
+    /// We never store the full SSN — Alpaca is the system of record.
+    var taxIdLast4: String?
 }
 
 struct FinancialProfileData: Decodable {

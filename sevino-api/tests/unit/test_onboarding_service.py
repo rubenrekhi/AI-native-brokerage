@@ -11,6 +11,7 @@ from app.services.onboarding import (
     build_alpaca_payload,
     derive_investment_objective,
     derive_risk_tolerance,
+    extract_tax_id_last_4,
     map_employment_status,
     map_experience,
     map_range,
@@ -527,3 +528,15 @@ class TestTaxIdValidation:
         import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="123-45-0000")
+
+
+class TestExtractTaxIdLast4:
+
+    def test_dashed_format(self):
+        assert extract_tax_id_last_4("123-45-6789") == "6789"
+
+    def test_undashed_format(self):
+        assert extract_tax_id_last_4("123456789") == "6789"
+
+    def test_strips_arbitrary_non_digits(self):
+        assert extract_tax_id_last_4(" 123 45 6789 ") == "6789"

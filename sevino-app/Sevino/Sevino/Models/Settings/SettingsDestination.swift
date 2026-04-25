@@ -6,7 +6,6 @@ enum SettingsDestination: Hashable {
     case personalInfo
     case appearance
     case changePassword
-    case emailSettings
     case manageFaceId
     case accountDocuments
     case statements

@@ -7,6 +7,7 @@ enum SevinoGlass {
     static let chip = ChipGlass()
     static let button = ButtonGlass()
     static let popup = PopupGlass()
+    static let bottomPopup = BottomPopupGlass()
     static let nav = NavGlass()
     static let navCircle = NavCircleGlass()
     static let navClear = NavClearGlass()
@@ -110,6 +111,24 @@ struct PopupGlass: ViewModifier {
                     .ultraThinMaterial,
                     in: RoundedRectangle(cornerRadius: Self.cornerRadius)
                 )
+        }
+    }
+}
+
+struct BottomPopupGlass: ViewModifier {
+    static let cornerRadius: CGFloat = 28
+
+    func body(content: Content) -> some View {
+        let shape = UnevenRoundedRectangle(
+            topLeadingRadius: Self.cornerRadius,
+            bottomLeadingRadius: 0,
+            bottomTrailingRadius: 0,
+            topTrailingRadius: Self.cornerRadius
+        )
+        if #available(iOS 26, *) {
+            content.glassEffect(.regular, in: shape)
+        } else {
+            content.background(.ultraThinMaterial, in: shape)
         }
     }
 }

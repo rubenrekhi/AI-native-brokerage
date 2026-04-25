@@ -30,25 +30,6 @@ final class EditProfileViewModel {
         error = nil
     }
 
-    func saveName(first: String, middle: String?, last: String) async {
-        let trimmedFirst = first.trimmingCharacters(in: .whitespaces)
-        let trimmedLast = last.trimmingCharacters(in: .whitespaces)
-        let trimmedMiddle = middle?.trimmingCharacters(in: .whitespaces)
-
-        guard !trimmedFirst.isEmpty, !trimmedLast.isEmpty else {
-            error = L10n.Settings.editNameValidationError
-            return
-        }
-
-        var request = ProfileUpdateRequest()
-        request.firstName = trimmedFirst
-        request.lastName = trimmedLast
-        if let trimmedMiddle, !trimmedMiddle.isEmpty {
-            request.middleName = trimmedMiddle
-        }
-        await submit(request)
-    }
-
     func savePhone(_ phone: String) async {
         let trimmed = phone.trimmingCharacters(in: .whitespaces)
         guard Self.isValidPhone(trimmed) else {

@@ -20,43 +20,6 @@ final class EditProfileViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.error)
     }
 
-    func testSaveNameSendsTrimmedFieldsWithoutEmptyMiddle() async {
-        await viewModel.saveName(first: "  Riley  ", middle: nil, last: " Ready ")
-
-        XCTAssertTrue(viewModel.didSave)
-        XCTAssertNil(viewModel.error)
-        XCTAssertEqual(service.updateProfileCalls.count, 1)
-        let request = service.updateProfileCalls[0]
-        XCTAssertEqual(request.firstName, "Riley")
-        XCTAssertEqual(request.lastName, "Ready")
-        XCTAssertNil(request.middleName)
-        XCTAssertNil(request.phoneNumber)
-        XCTAssertNil(request.streetAddress)
-    }
-
-    func testSaveNameIncludesMiddleWhenProvided() async {
-        await viewModel.saveName(first: "Riley", middle: "James", last: "Ready")
-
-        let request = service.updateProfileCalls[0]
-        XCTAssertEqual(request.middleName, "James")
-    }
-
-    func testSaveNameRejectsEmptyFirstNameWithoutCallingService() async {
-        await viewModel.saveName(first: "   ", middle: nil, last: "Ready")
-
-        XCTAssertFalse(viewModel.didSave)
-        XCTAssertEqual(viewModel.error, L10n.Settings.editNameValidationError)
-        XCTAssertEqual(service.updateProfileCalls.count, 0)
-    }
-
-    func testSaveNameRejectsEmptyLastNameWithoutCallingService() async {
-        await viewModel.saveName(first: "Riley", middle: nil, last: "")
-
-        XCTAssertFalse(viewModel.didSave)
-        XCTAssertEqual(viewModel.error, L10n.Settings.editNameValidationError)
-        XCTAssertEqual(service.updateProfileCalls.count, 0)
-    }
-
     func testSavePhoneSendsTrimmedPhone() async {
         await viewModel.savePhone("  +1 (555) 123-4567  ")
 
@@ -159,7 +122,7 @@ final class EditProfileViewModelTests: XCTestCase {
     }
 
     func testClearErrorResetsError() async {
-        await viewModel.saveName(first: "", middle: nil, last: "Ready")
+        await viewModel.savePhone("123")
         XCTAssertNotNil(viewModel.error)
 
         viewModel.clearError()

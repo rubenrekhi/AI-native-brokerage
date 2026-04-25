@@ -131,6 +131,7 @@ class ProfileData(BaseModel):
     country_of_citizenship: str | None = None
     country_of_birth: str | None = None
     country_of_tax_residence: str | None = None
+    tax_id_last_4: str | None = None
     disclosures: dict[str, Any] | None = None
     agreements_signed: dict[str, Any] | None = None
     risk_disclosure_acknowledged_at: datetime | None = None

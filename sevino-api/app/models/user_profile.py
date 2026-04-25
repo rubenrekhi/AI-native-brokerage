@@ -49,6 +49,10 @@ class UserProfile(Base, TimestampMixin):
     country_of_citizenship: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     country_of_birth: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     country_of_tax_residence: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Last four digits of SSN, captured at KYC submission. The full SSN is
+    # forwarded to Alpaca and never persisted; we only retain last-4 so the
+    # settings UI can display `•••-••-NNNN`.
+    tax_id_last_4: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # KYC / Compliance
     disclosures: Mapped[Optional[dict[str, Any]]] = mapped_column(
