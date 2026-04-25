@@ -2,6 +2,10 @@
 
 Stores JSON-serializable values. Non-pickled, by design — keeps payloads
 portable across Python versions and avoids deserialization CVEs.
+
+Note: serialization uses ``json.dumps(..., default=str)`` so non-JSON-native
+types (``Decimal``, ``datetime``, etc.) round-trip as strings. Callers that
+need exact numeric types must re-coerce after decoding.
 """
 from __future__ import annotations
 
@@ -28,7 +32,10 @@ async def cache_get_or_set(
         return await fetcher()
 
     if cached is not None:
-        return json.loads(cached)
+        try:
+            return json.loads(cached)
+        except json.JSONDecodeError:
+            logger.warning("cache_decode_failed", key=key, exc_info=True)
 
     value = await fetcher()
     try:
