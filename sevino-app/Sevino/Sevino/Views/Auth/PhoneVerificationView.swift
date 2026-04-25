@@ -45,25 +45,23 @@ struct PhoneVerificationView: View {
     }
 
     var body: some View {
-        ZStack {
-            AuthBackgroundView()
-            SevinoGlassContainer {
-                VStack(spacing: 0) {
-                    AuthHeaderView(scale: scale, onBack: onChangeNumber)
-                    ScrollView {
-                        VStack(spacing: 0) {
-                            titleSection
-                            otpSection
-                            errorSection
-                            nextButton
-                            resendSection
-                        }
+        SevinoGlassContainer {
+            VStack(spacing: 0) {
+                AuthHeaderView(scale: scale, onBack: onChangeNumber)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        titleSection
+                        otpSection
+                        errorSection
+                        nextButton
+                        resendSection
                     }
-                    .scrollIndicators(.hidden)
-                    Spacer(minLength: 0)
                 }
+                .scrollIndicators(.hidden)
+                Spacer(minLength: 0)
             }
         }
+        .background { AuthBackgroundView() }
         .preferredColorScheme(.dark)
         .background(scaleAnchor)
         .task {
