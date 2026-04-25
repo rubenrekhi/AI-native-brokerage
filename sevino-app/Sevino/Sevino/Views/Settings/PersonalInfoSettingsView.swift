@@ -214,6 +214,7 @@ struct PersonalInfoSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16 * scale)
         .modifier(SevinoGlass.card)
+        .floating3DCard()
     }
 
     private func infoRow(

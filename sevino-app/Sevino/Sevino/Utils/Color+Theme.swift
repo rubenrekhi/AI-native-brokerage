@@ -43,6 +43,9 @@ extension Color {
     /// Selection highlight text — #0088FF (same in both modes)
     static let sevinoHighlightText = adaptive(light: 0x0088FF, dark: 0x0088FF)
 
+    /// Drop shadow base — #000000 (same in both modes; apply opacity at use site)
+    static let sevinoShadow = adaptive(light: 0x000000, dark: 0x000000)
+
     private static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
