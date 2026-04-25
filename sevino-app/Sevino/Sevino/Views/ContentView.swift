@@ -53,6 +53,12 @@ struct ContentView: View {
                 } message: { error in
                     Text(error)
                 }
+        case .phoneVerification(let phoneNumber):
+            PhoneVerificationView(
+                phoneNumber: phoneNumber,
+                onVerified: viewModel.onPhoneVerified,
+                onChangeNumber: viewModel.onChangeNumber
+            )
         case .onboarding(let step, let data):
             OnboardingContainerView(
                 initialStep: step,

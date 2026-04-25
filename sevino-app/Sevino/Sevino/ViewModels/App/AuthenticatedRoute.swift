@@ -12,6 +12,11 @@ enum AuthenticatedRoute: Equatable {
     case loading
     case statusCheckFailed
     case phone
+    /// Inserted between `.phone` and `.onboarding` so a user can't enter the
+    /// 18-step onboarding without first verifying the SMS OTP. The phone number
+    /// is the formatted display string (e.g. `"(555) 123-4567"`) used by the
+    /// title and forwarded to the verification service.
+    case phoneVerification(phoneNumber: String)
     case onboarding(step: Int, data: OnboardingResumeManager.OnboardingResumeData?)
     case alpacaSetup(step: Int, userName: String, data: OnboardingResumeManager.AlpacaResumeData?)
     case home

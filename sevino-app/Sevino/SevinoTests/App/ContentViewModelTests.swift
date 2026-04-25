@@ -32,12 +32,12 @@ final class ContentViewModelTests: XCTestCase {
 
     // MARK: - savePhoneNumber
 
-    func testSavePhoneNumberSuccessAdvancesToOnboarding() async {
+    func testSavePhoneNumberSuccessAdvancesToPhoneVerification() async {
         viewModel.startFreshSignUpFlow()
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
         XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
@@ -73,8 +73,30 @@ final class ContentViewModelTests: XCTestCase {
         await viewModel.savePhoneNumber("4165551234")
 
         XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
         XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - Phone verification transitions
+
+    func testOnPhoneVerifiedAdvancesToOnboarding() async {
+        viewModel.startFreshSignUpFlow()
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+
+        viewModel.onPhoneVerified()
+
+        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+    }
+
+    func testOnChangeNumberReturnsToPhone() async {
+        viewModel.startFreshSignUpFlow()
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+
+        viewModel.onChangeNumber()
+
+        XCTAssertEqual(viewModel.route, .phone)
     }
 
     func testClearErrorResetsErrorAndAlertFlag() async {
@@ -209,6 +231,10 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertNotEqual(
             AuthenticatedRoute.alpacaSetup(step: 1, userName: "A", data: nil),
             AuthenticatedRoute.alpacaSetup(step: 1, userName: "B", data: nil)
+        )
+        XCTAssertNotEqual(
+            AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 123-4567"),
+            AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 999-0000")
         )
         var dataA = OnboardingResumeManager.OnboardingResumeData()
         dataA.userName = "A"

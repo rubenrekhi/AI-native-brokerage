@@ -46,9 +46,10 @@ final class ContentViewModel {
 
     // MARK: - Async operations
 
-    /// Saves the phone number and advances to onboarding on success. On failure, the
-    /// route stays on `.phone` and `error` is set so the view can surface an alert
-    /// and allow a retry.
+    /// Saves the phone number and advances to OTP verification on success. On failure,
+    /// the route stays on `.phone` and `error` is set so the view can surface an alert
+    /// and allow a retry. Onboarding starts only after the OTP confirms (see
+    /// `onPhoneVerified()`), so an unverified phone never reaches the 18-step flow.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
         showPhoneError = false
@@ -58,11 +59,24 @@ final class ContentViewModel {
             try await onboardingService.saveStep(
                 OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
             )
-            route = .onboarding(step: 1, data: nil)
+            route = .phoneVerification(phoneNumber: phoneNumber)
         } catch let caughtError {
             error = caughtError.localizedDescription
             showPhoneError = true
         }
+    }
+
+    /// Called by `PhoneVerificationView` once the OTP confirm succeeds. Advances
+    /// the user into the 18-step onboarding flow.
+    func onPhoneVerified() {
+        route = .onboarding(step: 1, data: nil)
+    }
+
+    /// Called when the user taps the back chevron on `PhoneVerificationView`.
+    /// Returns to phone capture so they can edit the number; the in-flight OTP
+    /// becomes irrelevant once a new number is submitted.
+    func onChangeNumber() {
+        route = .phone
     }
 
     /// Fetches onboarding status and routes to the matching destination. On failure,
