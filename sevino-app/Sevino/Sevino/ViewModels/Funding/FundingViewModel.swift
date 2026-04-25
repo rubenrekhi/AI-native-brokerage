@@ -10,14 +10,8 @@ final class FundingViewModel {
 
     var relationships: [AchRelationshipDTO] = []
     var isLoading: Bool = false
-
-    // MARK: - Error state
-
     var serverError: APIError?
     var localError: String?
-
-    // MARK: - Plaid sheet state
-
     let plaidLink: PlaidLinkCoordinator
 
     // MARK: - Cash display (mock) state

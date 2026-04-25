@@ -30,5 +30,4 @@ class UserSettings(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Boolean, nullable=False, server_default="true"
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="settings")

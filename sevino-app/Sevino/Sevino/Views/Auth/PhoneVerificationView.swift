@@ -169,8 +169,6 @@ struct PhoneVerificationView: View {
         .padding(.top, 12 * scale)
     }
 
-    // MARK: - Helpers
-
     private var scaleAnchor: some View {
         GeometryReader { geo in
             Color.clear.onAppear {

@@ -64,7 +64,6 @@ class AchRelationshipRepository:
     async def get_by_alpaca_id(
         db: AsyncSession, alpaca_relationship_id: str
     ) -> AchRelationship | None:
-        """Merge helper for GET /v1/funding/transfers."""
         result = await db.execute(
             select(AchRelationship).where(
                 AchRelationship.alpaca_relationship_id == alpaca_relationship_id
@@ -76,7 +75,6 @@ class AchRelationshipRepository:
     async def list_active_for_user(
         db: AsyncSession, user_id: uuid.UUID
     ) -> list[AchRelationship]:
-        """Excludes rows where status = 'CANCELED'."""
         result = await db.execute(
             select(AchRelationship)
             .where(
@@ -91,7 +89,6 @@ class AchRelationshipRepository:
     async def list_all_for_user(
         db: AsyncSession, user_id: uuid.UUID
     ) -> list[AchRelationship]:
-        """Includes canceled. Used when merging transfer history display names."""
         result = await db.execute(
             select(AchRelationship).where(AchRelationship.user_id == user_id)
         )

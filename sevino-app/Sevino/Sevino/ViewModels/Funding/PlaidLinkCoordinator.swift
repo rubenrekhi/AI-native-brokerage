@@ -18,8 +18,6 @@ final class PlaidLinkCoordinator {
     private(set) var serverError: APIError?
     private(set) var localError: String?
 
-    // MARK: - Collaborators
-
     private let service: any FundingServiceProtocol
 
     /// Called after a successful link (and after `BANK_ALREADY_LINKED`, so the

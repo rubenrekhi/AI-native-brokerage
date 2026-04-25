@@ -15,12 +15,7 @@ final class ContentViewModel {
 
     private(set) var isLoading = false
     private(set) var showPhoneError = false
-
-    // MARK: - Error
-
     private(set) var error: String?
-
-    // MARK: - Init
 
     init(
         onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
@@ -38,8 +33,6 @@ final class ContentViewModel {
     func startFreshSignUpFlow() {
         route = .phone
     }
-
-    // MARK: - Flow completion
 
     func completeOnboarding(userName: String) {
         route = .alpacaSetup(step: 1, userName: userName, data: nil)
@@ -117,8 +110,6 @@ final class ContentViewModel {
         error = nil
         showPhoneError = false
     }
-
-    // MARK: - Helpers
 
     private func apply(_ destination: OnboardingResumeManager.Destination) {
         switch destination {

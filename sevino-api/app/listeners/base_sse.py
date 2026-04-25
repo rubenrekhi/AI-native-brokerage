@@ -277,8 +277,6 @@ class BaseSSEListener(abc.ABC):
         # whitespace after the colon.
         comment = raw_line[1:].lstrip(" ")
 
-        # Bump liveness for EVERY comment, including heartbeats — that's
-        # the whole point of this method.
         self.last_message_received_at = time.monotonic()
 
         if comment in _BENIGN_COMMENTS:
@@ -388,7 +386,6 @@ class BaseSSEListener(abc.ABC):
                         )
                     await session.commit()
                 except Exception as exc:
-                    # Expected handler errors: log, roll back, move on.
                     await session.rollback()
                     logger.error(
                         "sse_handler_failed",

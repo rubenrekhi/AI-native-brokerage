@@ -1,9 +1,4 @@
-"""FastAPI router for /v1/assets/*.
-
-Backs the iOS ticker-mention UI: the client debounces input and hits
-`/search` for typeahead results over the locally cached Alpaca asset
-universe. Auth-gated; rate-limited via the global per-user default.
-"""
+"""FastAPI router for /v1/assets/*. Searches the local asset cache (not Alpaca directly)."""
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,5 +17,4 @@ async def search_assets(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list[AssetSearchResult]:
-    """Typeahead search over the tradeable asset cache."""
     return await AssetRepository.search(db, query.q, query.limit)

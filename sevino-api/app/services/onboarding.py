@@ -27,10 +27,6 @@ from app.services.alpaca_broker import AlpacaBrokerService
 logger = structlog.get_logger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Alpaca derivation constants
-# ---------------------------------------------------------------------------
-
 INCOME_RANGES: dict[str, tuple[str, str]] = {
     "Under $25K": ("0", "25000"),
     "$25K \u2013 $49K": ("25000", "50000"),
@@ -131,11 +127,6 @@ _FINANCIAL_FIELDS = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Derivation functions
-# ---------------------------------------------------------------------------
-
-
 def derive_risk_tolerance(scenario: str, max_loss: str) -> str:
     """
     Mapping matrix from onboarding doc (screens 14 + 15):
@@ -170,7 +161,6 @@ def derive_investment_objective(goals: list[str]) -> str:
 
 
 def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]:
-    """Look up a range string and return (min, max). Falls back to first entry."""
     if value in ranges:
         return ranges[value]
     first = next(iter(ranges.values()))
@@ -189,7 +179,6 @@ def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]
 
 
 def map_time_horizon(time_horizon: str) -> tuple[str, str]:
-    """Returns (investment_time_horizon, liquidity_needs)."""
     return TIME_HORIZON_MAP.get(time_horizon, ("3_to_5_years", "does_not_matter"))
 
 
@@ -222,18 +211,12 @@ def build_agreements(agreements_data: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
-
-
 class OnboardingService:
 
     @staticmethod
     async def save_step(
         db: AsyncSession, user_id: uuid.UUID, data: OnboardingPatchRequest
     ) -> str:
-        """Save fields from the current onboarding screen."""
         provided = data.model_dump(exclude_none=True, exclude={"step"})
 
         profile_updates: dict[str, Any] = {"onboarding_step": data.step}
@@ -350,15 +333,9 @@ class OnboardingService:
         }
 
 
-# ---------------------------------------------------------------------------
-# Payload construction
-# ---------------------------------------------------------------------------
-
-
 def validate_completeness(
     profile: UserProfile, financial: UserFinancialProfile
 ) -> None:
-    """Raise ValueError if required fields for Alpaca submission are missing."""
     missing: list[str] = []
 
     if not profile.first_name:

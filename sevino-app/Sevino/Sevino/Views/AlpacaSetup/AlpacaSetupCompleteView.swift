@@ -81,7 +81,6 @@ struct AlpacaSetupCompleteView: View {
         try? await Task.sleep(for: .milliseconds(400))
         showLoading = true
 
-        // Submit KYC to Alpaca during the loading state
         do {
             try await onSubmit()
         } catch {

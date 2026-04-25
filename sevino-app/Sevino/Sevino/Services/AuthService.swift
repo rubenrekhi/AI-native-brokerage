@@ -2,7 +2,6 @@ import Auth
 import Foundation
 import Supabase
 
-// Protocol for dependency injection — use MockAuthService in tests
 protocol AuthServiceProtocol {
     var isAuthenticated: Bool { get }
     var accessToken: String? { get async }
@@ -91,7 +90,6 @@ final class AuthService: AuthServiceProtocol {
         }
     }
 
-    // Used by APIClient to attach the JWT to requests
     var accessToken: String? {
         get async { try? await client.auth.session.accessToken }
     }

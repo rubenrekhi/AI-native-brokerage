@@ -130,10 +130,6 @@ final class APIClient: APIClientProtocol {
         return fileURL
     }
 
-    /**
-     Throws `APIError` on non-2xx, `URLError` on network failure,
-     `DecodingError` if the success body can't be decoded into `T`.
-     */
     private func request<T: Decodable>(
         _ path: String,
         method: String,
@@ -147,7 +143,6 @@ final class APIClient: APIClientProtocol {
         urlRequest.httpMethod = method
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        // Attach API key if configured
         let apiKey = AppConfig.apiKey
         if !apiKey.isEmpty {
             urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
@@ -177,8 +172,6 @@ final class APIClient: APIClientProtocol {
         return try decoder.decode(T.self, from: data)
     }
 
-    /// Same as `request` but discards the response body. For endpoints that
-    /// return 204 No Content.
     private func requestVoid(
         _ path: String,
         method: String,
@@ -220,5 +213,6 @@ final class APIClient: APIClientProtocol {
     }
 }
 
-// Used as the default type for the optional body parameter
+// Concrete Encodable sentinel satisfying the generic default `nil as Empty?` —
+// allows callers to omit `body` without specifying a type.
 private struct Empty: Encodable {}

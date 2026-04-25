@@ -14,10 +14,6 @@ logger = structlog.get_logger(__name__)
 _PG_DETAIL_KEY_RE = re.compile(r"Key \(([^)]+)\)=")
 
 
-# ---------------------------------------------------------------------------
-# Standard error response helper
-# ---------------------------------------------------------------------------
-
 def error_response(
     status_code: int,
     message: str,
@@ -29,10 +25,6 @@ def error_response(
         body["detail"] = detail
     return JSONResponse(status_code=status_code, content=body)
 
-
-# ---------------------------------------------------------------------------
-# Custom exception classes
-# ---------------------------------------------------------------------------
 
 class AuthenticationError(Exception):
     def __init__(self, message: str = "Not authenticated"):
@@ -77,10 +69,6 @@ class IncompleteOnboardingError(Exception):
         self.message = message
         self.missing_fields = missing_fields or []
 
-
-# ---------------------------------------------------------------------------
-# Exception handlers
-# ---------------------------------------------------------------------------
 
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
@@ -152,8 +140,6 @@ async def incomplete_onboarding_error_handler(
     )
 
 
-# --- Alpaca handlers ---
-
 async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
@@ -168,16 +154,12 @@ async def alpaca_unavailable_handler(
     return error_response(503, "Brokerage service unavailable, please try again", "ALPACA_UNAVAILABLE")
 
 
-# --- Plaid handler ---
-
 async def plaid_service_error_handler(
     request: Request, exc: "PlaidServiceError"
 ) -> JSONResponse:
     logger.error("plaid_service_error", code=exc.code, message=exc.message)
     return error_response(422, exc.message, exc.code, detail=exc.detail)
 
-
-# --- Supabase admin handlers ---
 
 async def supabase_admin_error_handler(
     request: Request, exc: "SupabaseAdminError"
@@ -198,8 +180,6 @@ async def supabase_admin_unavailable_handler(
         "SUPABASE_ADMIN_UNAVAILABLE",
     )
 
-
-# --- Phone verification handlers ---
 
 async def phone_verification_error_handler(
     request: Request, exc: "PhoneVerificationError"
@@ -232,8 +212,6 @@ async def phone_verification_unavailable_handler(
         "PHONE_VERIFICATION_UNAVAILABLE",
     )
 
-
-# --- SQLAlchemy handlers (registered before generic Exception) ---
 
 def _extract_column(exc: Exception) -> str | None:
     """Extract the offending column name from an asyncpg-wrapped SQLAlchemy error.
@@ -310,18 +288,12 @@ async def programming_error_handler(
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 
-# --- Generic catch-all ---
-
 async def generic_exception_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
     logger.error("unhandled_exception", error=str(exc), exc_info=True)
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
-
-# ---------------------------------------------------------------------------
-# Registration helper
-# ---------------------------------------------------------------------------
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_error_handler)
@@ -331,14 +303,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(NotFoundError, not_found_error_handler)
     app.add_exception_handler(ConflictError, conflict_error_handler)
     app.add_exception_handler(IncompleteOnboardingError, incomplete_onboarding_error_handler)
-    # Alpaca handlers
     from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
     app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
     app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
-    # Plaid handler
     from app.services.plaid import PlaidServiceError
     app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
-    # Supabase admin handlers
     from app.services.supabase_admin import (
         SupabaseAdminError,
         SupabaseAdminUnavailableError,
@@ -347,7 +316,6 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(
         SupabaseAdminUnavailableError, supabase_admin_unavailable_handler
     )
-    # Phone verification handlers
     from app.services.phone_verification import (
         PhoneNumberTakenError,
         PhoneVerificationError,

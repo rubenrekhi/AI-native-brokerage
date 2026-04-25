@@ -68,7 +68,6 @@ def configure_logging(environment: str) -> None:
             sort_keys=False,
             level_styles=_UPPERCASE_LEVEL_STYLES,
         )
-        # Drop verbose fields that clutter the dev console
         dev_filter: list[structlog.types.Processor] = [_drop_console_noise, _colorize_status]
     else:
         renderer = structlog.processors.JSONRenderer()

@@ -700,20 +700,50 @@ async def execute_trade(db, user_id, trade_request):
 
 ### 15.7 Comments
 
-- **Don't comment *what* the code does** — the code should be self-explanatory through good naming.
-- **Do comment *why*** — explain non-obvious business rules, workarounds, or decisions.
-- **TODO comments need context** — `# TODO: handle partial fills` not just `# TODO: fix this`.
+**Default to writing no comments.** A comment is only justified when removing it would leave a future reader confused about something the code itself cannot express. If the comment restates what the code already says, delete it.
+
+A comment earns its place only when one of these is true:
+- It explains a **non-obvious WHY** — a business rule, regulatory constraint, external-system quirk, or workaround that a reader cannot infer from the code (e.g. "Alpaca rejects orders within 60s of market open — we delay submission to avoid the throttle").
+- It is a **TODO/FIXME/HACK marker with concrete context** — `# TODO(SEV-123): handle partial fills`, not `# TODO: fix this`.
+- It is a **module/class/public-function docstring** that documents the contract (purpose, args, returns, raises) for an external caller. Docstrings on private helpers whose name already states their purpose are noise.
+
+Specific patterns to flag:
+- 🟡 **Restating the code.** `# Check if account is active` above `if account.status == "ACTIVE":`. Delete the comment.
+- 🟡 **Section-divider / banner comments inside a function.** `# ---- validate input ----`, `# Step 1: fetch user`. If the function needs section labels, extract each section into its own well-named helper.
+- 🟡 **Narrating the current task or PR.** `# Added for SEV-123`, `# New: handle the cancel path`, `# Fix: previously crashed when ...`. This belongs in the commit message / PR description, not the source — it rots immediately.
+- 🟡 **Referencing callers.** `# Called from worker.py`, `# Used by the onboarding flow`. The reference goes stale the moment another caller is added; let the call graph speak for itself.
+- 🟡 **Vacuous TODOs.** `# TODO: clean up`, `# TODO: refactor`. Either give it a concrete what + why (and ideally a ticket reference), or remove it.
+- 🟡 **Commented-out code.** Delete it. Git history is the archive.
+- 🟡 **Auto-generated docstring shells.** `"""Get the user."""` on `get_user(user_id)` adds nothing. Either write a contract worth reading or omit it.
+- 🟡 **Type/signature restatement in docstrings.** `:param user_id: The user_id.` is noise — type hints already carry that information.
+- 🔵 **Walls of prose where a name would do.** If the comment is needed because the function/variable name is too generic, rename instead of explaining.
+
+Exempt:
+- Pydantic `Field(..., description=...)` strings — these surface in OpenAPI docs and are part of the API contract, not internal commentary.
+- Short comments tagging a deliberate Alembic-vs-SQLAlchemy boundary, raw SQL workarounds, or other genuinely surprising decisions (these are the WHY case).
 
 ```python
 # BAD — restates the code
 # Check if the account is active
 if account.status == "ACTIVE":
 
-# GOOD — explains the why
-# Alpaca requires ACTIVE status before accepting orders.
-# APPROVED accounts haven't completed the funding step yet.
+# BAD — narrates the change
+# Added retry loop for SEV-456
+for attempt in range(3):
+
+# BAD — empty docstring shell
+def get_user(user_id: UUID) -> User:
+    """Get the user."""
+    ...
+
+# GOOD — explains the WHY a reader cannot infer
+# Alpaca returns ACTIVE only after KYC + funding completes.
+# APPROVED means KYC passed but the funding step hasn't run yet,
+# so order submission would 400.
 if account.status == "ACTIVE":
 ```
+
+When reviewing, check every newly-added comment against this list. If you can't articulate which justification (non-obvious WHY, TODO with context, public contract docstring) covers it, flag it for removal.
 
 ### 15.8 Immutability and Side Effects
 
@@ -727,7 +757,7 @@ if account.status == "ACTIVE":
 - **Is error handling specific?** No bare `except:`, no `except Exception: pass`.
 - **Is nesting shallow?** More than 3 levels of indentation is a red flag — use guard clauses.
 - **Are there meaningful abstractions?** Extracted code should represent a real concept, not just "lines that were nearby."
-- **Do comments explain *why*, not *what*?**
+- **Do comments earn their place?** Every comment must explain a non-obvious WHY, be a concrete TODO/FIXME, or be a public-contract docstring. Restated code, section banners, task-narration, caller lists, and empty docstring shells must be flagged for removal. See Section 15.7.
 
 ---
 
@@ -957,6 +987,7 @@ For every PR, run through this:
 - [ ] Sentry tags: For `capture_exception`/`capture_message` outside the request lifecycle, is a `new_scope()` opened with searchable tags (stream, user_id, task, event_id)? Structlog contextvars alone do NOT attach to Sentry events.
 - [ ] Happy-path observability: For long-running processes (listeners, tasks, crons), does the handler emit an `info` log when it actually does work (event received, state applied, task unit completed)? Heartbeats don't count. Sad paths loud + happy paths silent is a bug.
 - [ ] Code quality: Functions short and single-purpose? Names specific? Guard clauses over nesting?
+- [ ] Comments: Every newly-added comment justifies its existence (non-obvious WHY, concrete TODO, or public-contract docstring)? No restated-code, section-banner, task-narration, caller-list, or empty-docstring-shell comments?
 - [ ] Feature architecture: Route thin? Service layer owns logic? External responses mapped at boundary?
 - [ ] No anti-patterns: No god routes, leaky abstractions, or cross-service DB sharing?
 - [ ] Tests self-clean: Do integration tests roll back DB writes, flush Redis keys, drain ARQ jobs, and avoid leaking global/env state?

@@ -37,7 +37,6 @@ class BrokerageAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         JSONB, nullable=True
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="brokerage_account")
     ach_relationships: Mapped[list["AchRelationship"]] = relationship(
         back_populates="brokerage_account", cascade="all, delete-orphan"

@@ -127,10 +127,9 @@ struct ContentView: View {
             return
         }
         if authRoute == .signUp {
-            // Fresh signup — go straight to phone → onboarding, no status check
+            // Skip status check — a brand-new account has no server state to resume from.
             viewModel.startFreshSignUpFlow()
         } else {
-            // Returning user — either login or cold launch session restore
             checkStatus()
         }
     }

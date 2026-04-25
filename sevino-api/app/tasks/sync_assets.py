@@ -44,9 +44,8 @@ def _to_asset_row(alpaca_asset: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _capture_with_scope(exc: Exception, *, failure_stage: str) -> None:
-    # Every capture in a long-running worker process must set searchable
-    # tags (see be-auditor §11.3). Structlog contextvars don't mirror onto
-    # the Sentry scope, so we wire them explicitly.
+    # Structlog contextvars don't mirror onto the Sentry scope, so set
+    # searchable tags explicitly for captures from this worker.
     with sentry_sdk.new_scope() as scope:
         scope.set_tag("arq_task", "sync_assets")
         scope.set_tag("failure_stage", failure_stage)

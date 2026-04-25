@@ -361,7 +361,76 @@ Flag these deprecated patterns and suggest the modern replacement:
 
 ---
 
-### 13. Hygiene
+### 13. Comments
+
+**Default to writing no comments.** A comment is only justified when removing it would leave a future reader confused about something the code itself cannot express. SwiftUI bodies should read like declarative UI, not commented prose. If the comment restates what the code already says, delete it.
+
+A comment earns its place only when one of these is true:
+- It explains a **non-obvious WHY** — an iOS framework quirk (`// SwiftUI: animation breaks if view identity changes mid-transition`), a backend contract Sevino can't change, an Apple HIG decision against the obvious choice, or a workaround for a specific FB/radar.
+- It is a **TODO/FIXME/HACK marker with concrete context** — `// TODO(SEV-123): handle partial fills`, not `// TODO: fix this` or `// FIXME`.
+- It is a **DocC doc comment (`///` or `/** */`)** on a public type, public method, or protocol whose contract is non-trivial. Doc comments on private helpers whose name already states their purpose are noise.
+
+Specific patterns to flag:
+- 🟡 **Restating the code.** `// Show the loading spinner` above `if viewModel.isLoading { ProgressView() }`. Delete the comment.
+- 🟡 **Section-divider / `MARK: -` proliferation inside small types.** `MARK:` is fine for genuinely large types (full screens, services), but a 30-line `View` with five `// MARK: -` banners is splitting nothing. Either extract subviews/helpers, or remove the markers.
+- 🟡 **Banner / pseudo-section comments inside a `body`.** `// Header`, `// Cards`, `// Footer` interleaved with view code. Extract each section into a dedicated `View` struct (per Rule 3, "Prefer dedicated `View` structs over computed `some View` properties") instead of labeling chunks of body.
+- 🟡 **Narrating the current task / PR.** `// Added for SEV-123`, `// New design`, `// Updated to use Liquid Glass`, `// Fix: previously crashed`. Belongs in the commit message, not the source.
+- 🟡 **Referencing callers / call sites.** `// Called from OnboardingView`, `// Used by the funding flow`. Goes stale the moment a second caller appears.
+- 🟡 **Commented-out code or modifiers.** Delete it. Git history is the archive. Includes `// .opacity(0.5)` left next to a real modifier.
+- 🟡 **Vacuous TODOs.** `// TODO: clean up`, `// TODO: refactor later`. Either give it a concrete what + why (and ideally a ticket reference), or remove it.
+- 🟡 **Auto-generated DocC shells.** `/// Returns the user.` on `func user() -> User` adds nothing. Either write a contract worth reading or omit the doc comment entirely.
+- 🟡 **`// MARK: - Properties` / `// MARK: - Body` / `// MARK: - Helpers`** inside a single small `View`. The view-property-ordering convention (Rule 3) already imposes that structure — labels are redundant.
+- 🔵 **Walls of prose where a name would do.** If the comment is needed because the property/method name is too generic, rename instead of explaining.
+
+Exempt:
+- `// MARK: -` in genuinely large files (services, app-level singletons, reducers) where they help navigation in Xcode.
+- Comments tagging a deliberate Apple/SwiftUI gotcha or workaround (these are the WHY case — e.g. iOS 26 Liquid Glass z-order quirks already live in user memory).
+- `#Preview { }` blocks may contain explanatory comments freely; they are dev-only.
+- Localization keys' inline comments in `Localizable.xcstrings` are part of the i18n contract, not source commentary.
+
+```swift
+// BAD — restates the code
+// Show the loading spinner
+if viewModel.isLoading {
+    ProgressView()
+}
+
+// BAD — narrates the change
+// Added retry button for SEV-456
+Button("Retry", action: retry)
+
+// BAD — banner section inside body
+var body: some View {
+    VStack {
+        // Header
+        Text(L10n.Home.title)
+
+        // Cards
+        ForEach(items) { ... }
+
+        // Footer
+        FooterView()
+    }
+}
+
+// BAD — empty doc comment shell
+/// Returns the user.
+func user() -> User { ... }
+
+// GOOD — explains the WHY a reader cannot infer
+// SwiftUI iOS 26: glass Button labels escape parent .blur/.brightness via
+// hoisting, so we must remove the button from the tree (not just dim it)
+// while the popup is open.
+if !showPopup {
+    GlassButton(...)
+}
+```
+
+When reviewing, check every newly-added comment against this list. If you can't articulate which justification (non-obvious WHY, concrete TODO, public-contract DocC) covers it, flag it for removal.
+
+---
+
+### 14. Hygiene
 
 - Never store sensitive data in `@AppStorage` / `UserDefaults` — passwords, tokens, API keys go in Keychain
 - **Don't swallow user-facing errors** — flag these specific patterns:

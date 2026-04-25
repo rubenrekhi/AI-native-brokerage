@@ -29,22 +29,16 @@ class UserProfile(Base, TimestampMixin):
     first_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     last_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     date_of_birth: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
-
-    # Contact
     phone_number: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     phone_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
-    # Address
     street_address: Mapped[Optional[list[str]]] = mapped_column(
         ARRAY(Text), nullable=True
     )
     city: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     state: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     postal_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Identity
     middle_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     country_of_citizenship: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     country_of_birth: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -53,8 +47,6 @@ class UserProfile(Base, TimestampMixin):
     # forwarded to Alpaca and never persisted; we only retain last-4 so the
     # settings UI can display `•••-••-NNNN`.
     tax_id_last_4: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # KYC / Compliance
     disclosures: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSONB, nullable=True
     )
@@ -64,11 +56,7 @@ class UserProfile(Base, TimestampMixin):
     risk_disclosure_acknowledged_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-
-    # Analytics
     attribution_source: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    # Onboarding state
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="false"
     )
@@ -77,7 +65,6 @@ class UserProfile(Base, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationships
     financial_profile: Mapped[Optional["UserFinancialProfile"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
     )

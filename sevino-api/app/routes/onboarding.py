@@ -30,7 +30,6 @@ async def save_onboarding_step(
     user_id: str = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    """Incremental save — called after every onboarding screen."""
     step = await OnboardingService.save_step(db, uuid.UUID(user_id), body)
     return {"step": step}
 

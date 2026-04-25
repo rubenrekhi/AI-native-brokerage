@@ -40,8 +40,6 @@ struct PhoneNumberView: View {
         }
     }
 
-    // MARK: - Phone Input
-
     private var phoneSection: some View {
         VStack(alignment: .leading, spacing: 8 * scale) {
             Text(L10n.Auth.phoneLabel)
@@ -74,8 +72,6 @@ struct PhoneNumberView: View {
         .padding(.horizontal, 32 * scale)
     }
 
-    // MARK: - Next Button
-
     private var nextButton: some View {
         Button { onComplete(phoneVM.phoneNumber) } label: {
             Text(L10n.Auth.phoneNext)
@@ -93,8 +89,6 @@ struct PhoneNumberView: View {
         .padding(.horizontal, 32 * scale)
     }
 }
-
-// MARK: - Phone Title
 
 private struct PhoneTitleView: View {
     let scale: CGFloat

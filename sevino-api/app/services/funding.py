@@ -1,8 +1,5 @@
 """Funding orchestrator: bank linking (Plaid 3→4→5 + Alpaca ACH) and transfers.
 
-Routes depend on this service only. The service is the only place that combines
-PlaidService, AlpacaBrokerService, and the two repositories.
-
 Canonical reference: docs/funding.md.
 """
 
@@ -374,11 +371,6 @@ class FundingService:
         return transfers
 
 
-# ---------------------------------------------------------------------------
-# Internal helpers
-# ---------------------------------------------------------------------------
-
-
 async def _refresh_statuses_from_alpaca(
     db: AsyncSession,
     *,
@@ -480,7 +472,6 @@ async def _require_active_brokerage(db: AsyncSession, user_id: uuid.UUID):
 async def _find_active_relationship_for_item(
     db: AsyncSession, plaid_item_pk: uuid.UUID
 ) -> AchRelationship | None:
-    # Narrow scan: item_pk already identifies one user's single Plaid item.
     result = await db.execute(
         select(AchRelationship).where(
             AchRelationship.plaid_item_id == plaid_item_pk,

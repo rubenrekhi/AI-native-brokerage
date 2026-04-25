@@ -36,8 +36,7 @@ async def check_listener_liveness(ctx: dict) -> dict:
             )
             # Fresh scope per listener so tags don't leak between alerts and
             # ops can filter "show only trade_events_ws silence alerts" via
-            # the sse_stream tag. See be-auditor §11.3 — every capture in a
-            # long-running process must set searchable tags.
+            # the sse_stream tag.
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("sse_stream", listener.stream_name)
                 scope.set_tag("alert_type", "sse_silence")

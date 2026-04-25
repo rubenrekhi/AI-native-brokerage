@@ -124,25 +124,20 @@ enum OnboardingResumeManager {
         }
 
         guard let step = status.onboardingStep else {
-            // No step saved yet — start from the beginning
             return .onboarding(step: 1, data: OnboardingResumeData())
         }
 
-        // Check Phase 1
         if let resumeStep = phase1ResumeStep[step] {
             if step == "risk_disclosure" {
-                // Phase 1 complete — go to Alpaca setup
                 return .alpacaSetup(step: 1, data: buildAlpacaResumeData(from: status))
             }
             return .onboarding(step: resumeStep, data: buildOnboardingResumeData(from: status))
         }
 
-        // Check Phase 2
         if let resumeStep = phase2ResumeStep[step] {
             return .alpacaSetup(step: resumeStep, data: buildAlpacaResumeData(from: status))
         }
 
-        // Unknown step — start from beginning
         return .onboarding(step: 1, data: OnboardingResumeData())
     }
 
@@ -201,7 +196,6 @@ enum OnboardingResumeManager {
             data.state = profile.state ?? ""
             data.postalCode = profile.postalCode ?? ""
 
-            // Reconstruct display address
             let parts = [
                 profile.streetAddress?.first,
                 profile.city,

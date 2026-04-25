@@ -39,7 +39,6 @@ class AchRelationship(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         Text, nullable=False, server_default="QUEUED"
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="ach_relationships")
     brokerage_account: Mapped[BrokerageAccount] = relationship(
         back_populates="ach_relationships"

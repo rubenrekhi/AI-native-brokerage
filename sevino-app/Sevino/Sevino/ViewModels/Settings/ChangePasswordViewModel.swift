@@ -49,11 +49,9 @@ final class ChangePasswordViewModel {
             )
             didSucceed = true
         } catch let error as PasswordChangeError {
-            // PasswordChangeError is LocalizedError — localizedDescription returns a
-            // user-facing L10n string for the known cases.
             self.error = error.localizedDescription
         } catch {
-            // Unknown error (network, decoding, etc.) — don't leak raw SDK strings.
+            // Don't leak raw SDK strings to the user; surface a generic message.
             self.error = L10n.Settings.changePasswordGenericError
         }
     }

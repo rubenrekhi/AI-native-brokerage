@@ -23,5 +23,4 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     mcp_cards: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
     tool_calls: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
 
-    # Relationships
     conversation: Mapped[Conversation] = relationship(back_populates="messages")

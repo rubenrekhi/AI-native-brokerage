@@ -17,7 +17,6 @@ from app.models.asset import Asset
 
 
 def _escape_ilike(value: str) -> str:
-    # Escape ILIKE wildcards so caller input is treated literally.
     return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
