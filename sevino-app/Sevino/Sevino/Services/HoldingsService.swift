@@ -5,6 +5,40 @@ protocol HoldingsServiceProtocol {
     func fetchHoldings() async throws -> [Holding]
 }
 
+/// Real backend impl. Hits `GET /v1/portfolio/holdings` and prepends a synthetic
+/// CASH row so the view can render a single ordered list.
+final class APIHoldingsService: HoldingsServiceProtocol {
+    static let shared = APIHoldingsService()
+    private let client: any APIClientProtocol
+
+    init(client: any APIClientProtocol = APIClient.shared) { self.client = client }
+
+    func fetchHoldings() async throws -> [Holding] {
+        let dto: HoldingsDTO = try await client.get("/v1/portfolio/holdings")
+        var result: [Holding] = [Self.cashRow(dto.cash)]
+        result.append(contentsOf: dto.positions.map(Self.positionToHolding))
+        return result
+    }
+
+    private static func cashRow(_ cash: Decimal) -> Holding {
+        Holding(
+            ticker: "CASH", isCash: true, name: "Cash",
+            qty: nil, marketValue: cash,
+            avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
+        )
+    }
+
+    private static func positionToHolding(_ p: PositionDTO) -> Holding {
+        Holding(
+            ticker: p.symbol, isCash: false, name: p.name,
+            qty: p.qty, marketValue: p.marketValue,
+            avgEntryPrice: p.avgEntryPrice,
+            unrealizedPl: p.unrealizedPl,
+            unrealizedPlpc: p.unrealizedPlpc
+        )
+    }
+}
+
 /// Placeholder implementation that returns canned holdings. This is the default
 /// service used by `HoldingsViewModel` until the backend endpoint exists — it is
 /// not a test double.
@@ -14,25 +48,23 @@ final class PlaceholderHoldingsService: HoldingsServiceProtocol {
     func fetchHoldings() async throws -> [Holding] {
         [
             Holding(
-                ticker: "CASH", isCash: true,
-                shares: nil, value: "$40,291.92", gainLossText: nil, isPositive: nil,
-                daysGain: nil, daysGainPercent: nil, totalGain: nil, totalGainPercent: nil, averageCost: nil
+                ticker: "CASH", isCash: true, name: "Cash",
+                qty: nil, marketValue: Decimal(string: "40291.92")!,
+                avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
             ),
             Holding(
-                ticker: "TSLA", isCash: false,
-                shares: "57", value: "$21,748.18",
-                gainLossText: "+$7,418.90 (+51.74%)", isPositive: true,
-                daysGain: "+734.73", daysGainPercent: "+3.50%",
-                totalGain: "+$7,418.90", totalGainPercent: "+51.74%",
-                averageCost: "$248.91"
+                ticker: "TSLA", isCash: false, name: "Tesla, Inc.",
+                qty: Decimal(57), marketValue: Decimal(string: "21748.18")!,
+                avgEntryPrice: Decimal(string: "248.91")!,
+                unrealizedPl: Decimal(string: "7418.90")!,
+                unrealizedPlpc: Decimal(string: "0.5174")!
             ),
             Holding(
-                ticker: "AMD", isCash: false,
-                shares: "37", value: "$11,465.19",
-                gainLossText: "-$1,049.32 (-8.38%)", isPositive: false,
-                daysGain: "-89.21", daysGainPercent: "-0.77%",
-                totalGain: "-$1,049.32", totalGainPercent: "-8.38%",
-                averageCost: "$338.23"
+                ticker: "AMD", isCash: false, name: "Advanced Micro Devices",
+                qty: Decimal(37), marketValue: Decimal(string: "11465.19")!,
+                avgEntryPrice: Decimal(string: "338.23")!,
+                unrealizedPl: Decimal(string: "-1049.32")!,
+                unrealizedPlpc: Decimal(string: "-0.0838")!
             ),
         ]
     }

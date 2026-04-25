@@ -142,7 +142,7 @@ private struct HoldingRow: View {
     let scale: CGFloat
     @State private var isDetailExpanded = false
 
-    private var hasDetails: Bool { holding.daysGain != nil }
+    private var hasDetails: Bool { holding.averageCostText != nil }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -200,7 +200,7 @@ private struct HoldingRow: View {
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if let shares = holding.shares {
+            if let shares = holding.sharesText {
                 Text(L10n.Home.holdingsShares(shares))
                     .font(.system(size: 12 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
@@ -210,7 +210,7 @@ private struct HoldingRow: View {
 
     private var valueInfo: some View {
         VStack(alignment: .trailing, spacing: 2 * scale) {
-            Text(holding.value)
+            Text(holding.valueText)
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoSecondary)
 
@@ -230,23 +230,15 @@ private struct HoldingRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 8 * scale)
 
-            if let daysGain = holding.daysGain, let daysPercent = holding.daysGainPercent {
-                detailRow(
-                    label: L10n.Home.holdingsDaysGain,
-                    value: "\(daysGain) (\(daysPercent))",
-                    isPositive: holding.isPositive
-                )
-            }
-
-            if let totalGain = holding.totalGain, let totalPercent = holding.totalGainPercent {
+            if let totalGain = holding.gainLossText {
                 detailRow(
                     label: L10n.Home.holdingsTotalGain,
-                    value: "\(totalGain) (\(totalPercent))",
+                    value: totalGain,
                     isPositive: holding.isPositive
                 )
             }
 
-            if let avgCost = holding.averageCost {
+            if let avgCost = holding.averageCostText {
                 VStack(alignment: .leading, spacing: 4 * scale) {
                     Text(L10n.Home.holdingsAverageCost)
                         .font(.system(size: 13 * scale))
@@ -280,7 +272,7 @@ private struct HoldingRow: View {
 }
 
 private struct HoldingsMorphingPreview: View {
-    @State private var viewModel = HoldingsViewModel()
+    @State private var viewModel = HoldingsViewModel(service: PlaceholderHoldingsService.shared)
 
     var body: some View {
         ZStack {

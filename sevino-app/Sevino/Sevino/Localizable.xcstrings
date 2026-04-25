@@ -794,16 +794,6 @@
         }
       }
     },
-    "home.holdings_days_gain" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Day’s Gain"
-          }
-        }
-      }
-    },
     "home.holdings_empty_message" : {
       "localizations" : {
         "en" : {
