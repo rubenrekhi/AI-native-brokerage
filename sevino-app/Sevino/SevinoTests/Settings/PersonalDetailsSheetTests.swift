@@ -72,6 +72,18 @@ final class PersonalDetailsSheetTests: XCTestCase {
         XCTAssertEqual(PersonalDetailsSheet.formattedDateOfBirth("not-a-date"), "not-a-date")
     }
 
+    /// Regression for SEV-457: the day rendered must match the day stored,
+    /// regardless of the device's current timezone. Previously the input was
+    /// parsed in UTC and the output rendered in local time, shifting the date
+    /// back by one for any user west of UTC.
+    func testFormattedDateOfBirthPreservesDayAcrossTimezones() {
+        let formatted = PersonalDetailsSheet.formattedDateOfBirth("2004-01-08")
+        XCTAssertNotNil(formatted)
+        XCTAssertTrue(formatted?.contains("8") ?? false, "Expected day 8 in \(formatted ?? "nil")")
+        XCTAssertFalse(formatted?.contains("7,") ?? true, "Day must not shift to 7: \(formatted ?? "nil")")
+        XCTAssertTrue(formatted?.contains("2004") ?? false)
+    }
+
     func testFormattedDateOfBirthReturnsNilForNil() {
         XCTAssertNil(PersonalDetailsSheet.formattedDateOfBirth(nil))
     }

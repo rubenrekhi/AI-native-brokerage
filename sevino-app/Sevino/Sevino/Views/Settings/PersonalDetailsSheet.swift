@@ -89,10 +89,15 @@ struct PersonalDetailsSheet: View {
         return f
     }()
 
+    /// Renders in UTC to match the input formatter — a birth date is a
+    /// calendar day, not an instant, so parsing and formatting must agree on
+    /// timezone. Otherwise `1992-04-15` parsed as UTC midnight renders as
+    /// April 14 in any negative-UTC zone.
     private static let dateOfBirthOutputFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateStyle = .long
         f.timeStyle = .none
+        f.timeZone = TimeZone(identifier: "UTC")
         return f
     }()
 
