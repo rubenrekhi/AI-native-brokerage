@@ -13,6 +13,16 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True)
+async def _clean_assets(db_session: AsyncSession):
+    # TRUNCATE is transactional in Postgres, so the per-test rollback in
+    # db_session restores any rows synced by the worker (e.g. via
+    # sync_assets cron). Without this, locally synced data collides with
+    # test seeds and breaks ordering assertions. CASCADE keeps this safe
+    # if other tables (order_events, radar_items) FK into assets.
+    await db_session.execute(text("TRUNCATE assets RESTART IDENTITY CASCADE"))
+
+
 async def _seed(db_session: AsyncSession, rows: list[dict]) -> None:
     """Direct INSERT so each test controls exact row state."""
     for row in rows:
