@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.config import settings
+from app.sentry_config import before_send as sentry_before_send
 from app.database import get_db
 from app.exceptions import error_response, register_exception_handlers
 from app.lifecycle import lifespan
@@ -31,6 +32,7 @@ if settings.sentry_dsn:
         environment=settings.environment,
         traces_sample_rate=0.1,
         send_default_pii=False,
+        before_send=sentry_before_send,
     )
     sentry_sdk.set_tag("process", "api")
 
