@@ -11,3 +11,8 @@
 # Backend env — required by pydantic-settings to import `app.config`, which
 # every unit test, the server, and the worker depend on.
 /sevino-api/.env
+
+# iOS debug xcconfig — required by `xcodebuild` to compile the app in a fresh
+# worktree (referenced by Info.plist build settings). Only debug; staging and
+# release xcconfigs hold prod credentials and must NOT be copied across.
+/sevino-app/Sevino/Config.debug.xcconfig
