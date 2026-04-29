@@ -246,7 +246,7 @@ class TestPostOnboardingSubmit:
 
         response = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "123-45-6789"},
+            json={"tax_id": "412-73-8256"},
         )
 
         app.dependency_overrides.pop(get_alpaca, None)
@@ -269,7 +269,7 @@ class TestPostOnboardingSubmit:
 
         # Verify Alpaca was called with the SSN (not stored in DB)
         call_payload = mock_alpaca.create_account.call_args[0][0]
-        assert call_payload["identity"]["tax_id"] == "123-45-6789"
+        assert call_payload["identity"]["tax_id"] == "412-73-8256"
         assert call_payload["identity"]["tax_id_type"] == "USA_SSN"
 
         # Verify only last-4 of the SSN was persisted (full SSN is not stored)
@@ -277,7 +277,7 @@ class TestPostOnboardingSubmit:
             text("SELECT tax_id_last_4 FROM user_profiles WHERE id = :id"),
             {"id": uuid.UUID(TEST_USER_ID)},
         )
-        assert profile_row.scalar_one() == "6789"
+        assert profile_row.scalar_one() == "8256"
 
     async def test_duplicate_submission_returns_409(
         self, authenticated_db_client, db_session
@@ -296,14 +296,14 @@ class TestPostOnboardingSubmit:
         # First submission
         resp1 = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "123-45-6789"},
+            json={"tax_id": "412-73-8256"},
         )
         assert resp1.status_code == 200
 
         # Second submission — should fail
         resp2 = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "123-45-6789"},
+            json={"tax_id": "412-73-8256"},
         )
         assert resp2.status_code == 409
         assert resp2.json()["code"] == "CONFLICT"
@@ -322,7 +322,7 @@ class TestPostOnboardingSubmit:
 
         response = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "123-45-6789"},
+            json={"tax_id": "412-73-8256"},
         )
 
         app.dependency_overrides.pop(get_alpaca, None)
@@ -345,7 +345,7 @@ class TestPostOnboardingSubmit:
 
         response = await authenticated_db_client.post(
             "/v1/onboarding/submit",
-            json={"tax_id": "123-45-6789"},
+            json={"tax_id": "412-73-8256"},
         )
 
         app.dependency_overrides.pop(get_alpaca, None)

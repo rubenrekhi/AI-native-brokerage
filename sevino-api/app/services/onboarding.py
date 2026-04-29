@@ -218,6 +218,8 @@ class OnboardingService:
         db: AsyncSession, user_id: uuid.UUID, data: OnboardingPatchRequest
     ) -> str:
         provided = data.model_dump(exclude_none=True, exclude={"step"})
+        if data.agreements_signed is not None:
+            provided["agreements_signed"] = data.agreements_signed.model_dump(mode="json")
 
         profile_updates: dict[str, Any] = {"onboarding_step": data.step}
         financial_updates: dict[str, Any] = {}
@@ -360,6 +362,8 @@ def validate_completeness(
         missing.append("disclosures")
     if not profile.agreements_signed:
         missing.append("agreements_signed")
+    elif not (profile.agreements_signed or {}).get("signed_at"):
+        missing.append("agreements_signed.signed_at")
     if not financial.annual_income:
         missing.append("annual_income")
     if not financial.net_worth:

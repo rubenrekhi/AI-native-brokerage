@@ -143,7 +143,8 @@ async def incomplete_onboarding_error_handler(
 async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
-    logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
+    log = logger.warning if 400 <= exc.status_code < 500 else logger.error
+    log("alpaca_api_error", status_code=exc.status_code, message=exc.message)
     return error_response(422, exc.message, "ALPACA_ERROR", detail=exc.detail)
 
 
@@ -157,7 +158,9 @@ async def alpaca_unavailable_handler(
 async def plaid_service_error_handler(
     request: Request, exc: "PlaidServiceError"
 ) -> JSONResponse:
-    logger.error("plaid_service_error", code=exc.code, message=exc.message)
+    is_4xx = exc.status_code is not None and 400 <= exc.status_code < 500
+    log = logger.warning if is_4xx else logger.error
+    log("plaid_service_error", code=exc.code, message=exc.message)
     return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 

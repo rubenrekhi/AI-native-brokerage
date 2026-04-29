@@ -41,6 +41,15 @@ class OnboardingStep(str, Enum):
     submitted = "submitted"
 
 
+class AgreementsSigned(BaseModel):
+    """Typed representation of the agreements payload sent during onboarding."""
+
+    customer_agreement: bool = False
+    margin_agreement: bool = False
+    signed_at: datetime
+    ip_address: str
+
+
 class OnboardingPatchRequest(BaseModel):
     """Incremental save — called after every screen. All fields optional except step."""
 
@@ -83,7 +92,7 @@ class OnboardingPatchRequest(BaseModel):
 
     # Phase 2 — JSONB on user_profiles
     disclosures: dict[str, Any] | None = None
-    agreements_signed: dict[str, Any] | None = None
+    agreements_signed: AgreementsSigned | None = None
 
 
 class OnboardingSubmitRequest(BaseModel):
@@ -98,6 +107,14 @@ class OnboardingSubmitRequest(BaseModel):
         digits = re.sub(r"[^0-9]", "", v)
         if len(digits) != 9:
             raise ValueError("tax_id must contain exactly 9 digits")
+        # Reject obvious test-data sentinels first. Some (987654321, 999999999)
+        # would otherwise match the SSA range checks below and surface as
+        # "Invalid SSN area number" — accurate but misleading for ops triage.
+        # Alpaca sandbox accepts these and they pollute 4xx alerts in prod logs.
+        if digits == "123456789" or digits == "987654321":
+            raise ValueError("Sequential SSN values are not allowed")
+        if len(set(digits)) == 1:
+            raise ValueError("All-same-digit SSN values are not allowed")
         if digits[:3] in ("000", "666") or digits[:3] >= "900":
             raise ValueError("Invalid SSN area number")
         if digits[3:5] == "00" or digits[5:] == "0000":

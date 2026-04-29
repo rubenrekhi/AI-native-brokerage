@@ -34,10 +34,18 @@ _ENVIRONMENTS = {
 class PlaidServiceError(Exception):
     """Raised when Plaid returns an error or the request cannot be completed."""
 
-    def __init__(self, code: str, message: str, detail: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        detail: dict[str, Any] | None = None,
+        *,
+        status_code: int | None = None,
+    ):
         self.code = code
         self.message = message
         self.detail = detail
+        self.status_code = status_code
         super().__init__(message)
 
 
@@ -119,4 +127,4 @@ def _map_plaid_exception(exc: plaid.ApiException) -> PlaidServiceError:
             detail.update(
                 {k: parsed.get(k) for k in ("error_type", "request_id") if parsed.get(k)}
             )
-    return PlaidServiceError(code=code, message=message, detail=detail)
+    return PlaidServiceError(code=code, message=message, detail=detail, status_code=exc.status)

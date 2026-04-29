@@ -3,6 +3,9 @@
 from datetime import date
 from unittest.mock import MagicMock
 
+import pytest
+
+from app.schemas.onboarding import OnboardingSubmitRequest
 from app.services.onboarding import (
     INCOME_RANGES,
     LIQUID_NET_WORTH_RANGES,
@@ -16,6 +19,7 @@ from app.services.onboarding import (
     map_experience,
     map_range,
     map_time_horizon,
+    validate_completeness,
 )
 
 
@@ -393,7 +397,7 @@ class TestBuildAlpacaPayload:
     def test_full_payload_structure(self):
         profile = _make_profile()
         financial = _make_financial()
-        payload = build_alpaca_payload(profile, financial, "123-45-6789", "USA_SSN")
+        payload = build_alpaca_payload(profile, financial, "412-73-8256", "USA_SSN")
 
         # Top-level keys
         assert set(payload.keys()) == {"contact", "identity", "disclosures", "agreements"}
@@ -410,7 +414,7 @@ class TestBuildAlpacaPayload:
         assert payload["identity"]["given_name"] == "Riley"
         assert payload["identity"]["family_name"] == "Johnson"
         assert payload["identity"]["date_of_birth"] == "1998-03-15"
-        assert payload["identity"]["tax_id"] == "123-45-6789"
+        assert payload["identity"]["tax_id"] == "412-73-8256"
         assert payload["identity"]["tax_id_type"] == "USA_SSN"
         assert payload["identity"]["country_of_citizenship"] == "USA"
         assert payload["identity"]["funding_source"] == ["employment_income", "savings"]
@@ -445,7 +449,7 @@ class TestBuildAlpacaPayload:
     def test_middle_name_included_when_present(self):
         profile = _make_profile(middle_name="James")
         financial = _make_financial()
-        payload = build_alpaca_payload(profile, financial, "123-45-6789", "USA_SSN")
+        payload = build_alpaca_payload(profile, financial, "412-73-8256", "USA_SSN")
 
         assert payload["identity"]["middle_name"] == "James"
 
@@ -456,7 +460,7 @@ class TestBuildAlpacaPayload:
             country_of_tax_residence=None,
         )
         financial = _make_financial()
-        payload = build_alpaca_payload(profile, financial, "123-45-6789", "USA_SSN")
+        payload = build_alpaca_payload(profile, financial, "412-73-8256", "USA_SSN")
 
         assert payload["identity"]["country_of_citizenship"] == "USA"
         assert payload["identity"]["country_of_birth"] == "USA"
@@ -465,7 +469,7 @@ class TestBuildAlpacaPayload:
     def test_phone_defaults_to_empty_string_when_none(self):
         profile = _make_profile(phone_number=None)
         financial = _make_financial()
-        payload = build_alpaca_payload(profile, financial, "123-45-6789", "USA_SSN")
+        payload = build_alpaca_payload(profile, financial, "412-73-8256", "USA_SSN")
 
         assert payload["contact"]["phone_number"] == ""
 
@@ -478,65 +482,113 @@ class TestBuildAlpacaPayload:
 class TestTaxIdValidation:
 
     def test_valid_ssn_with_dashes(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        req = OnboardingSubmitRequest(tax_id="123-45-6789")
-        assert req.tax_id == "123-45-6789"
+        req = OnboardingSubmitRequest(tax_id="412-73-8256")
+        assert req.tax_id == "412-73-8256"
 
     def test_valid_ssn_no_dashes(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        req = OnboardingSubmitRequest(tax_id="123456789")
-        assert req.tax_id == "123456789"
+        req = OnboardingSubmitRequest(tax_id="412738256")
+        assert req.tax_id == "412738256"
 
     def test_too_few_digits(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="12345")
 
     def test_too_many_digits(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="1234567890")
 
     def test_area_number_000(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="000-45-6789")
 
     def test_area_number_666(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="666-45-6789")
 
     def test_area_number_900_plus(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="900-45-6789")
 
     def test_group_number_00(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="123-00-6789")
 
     def test_serial_number_0000(self):
-        from app.schemas.onboarding import OnboardingSubmitRequest
-        import pytest
         with pytest.raises(Exception):
             OnboardingSubmitRequest(tax_id="123-45-0000")
+
+    def test_ascending_sequence_rejected(self):
+        with pytest.raises(Exception, match="Sequential SSN"):
+            OnboardingSubmitRequest(tax_id="123-45-6789")
+
+    def test_descending_sequence_rejected(self):
+        with pytest.raises(Exception, match="Sequential SSN"):
+            OnboardingSubmitRequest(tax_id="987-65-4321")
+
+    def test_all_same_digit_rejected(self):
+        for d in ("111111111", "555555555", "999-99-9999"):
+            with pytest.raises(Exception, match="All-same-digit"):
+                OnboardingSubmitRequest(tax_id=d)
 
 
 class TestExtractTaxIdLast4:
 
     def test_dashed_format(self):
-        assert extract_tax_id_last_4("123-45-6789") == "6789"
+        assert extract_tax_id_last_4("412-73-8256") == "8256"
 
     def test_undashed_format(self):
-        assert extract_tax_id_last_4("123456789") == "6789"
+        assert extract_tax_id_last_4("412738256") == "8256"
 
     def test_strips_arbitrary_non_digits(self):
-        assert extract_tax_id_last_4(" 123 45 6789 ") == "6789"
+        assert extract_tax_id_last_4(" 412 73 8256 ") == "8256"
+
+
+class TestValidateCompleteness:
+
+    def _complete_profile(self, **overrides) -> MagicMock:
+        defaults = {
+            "first_name": "Riley",
+            "last_name": "Johnson",
+            "date_of_birth": date(1998, 3, 15),
+            "email": "riley@example.com",
+            "street_address": ["123 Main St"],
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+            "country_of_citizenship": "USA",
+            "disclosures": {"is_control_person": False},
+            "agreements_signed": {
+                "customer_agreement": True,
+                "signed_at": "2026-04-06T12:00:00Z",
+                "ip_address": "1.2.3.4",
+            },
+        }
+        defaults.update(overrides)
+        return MagicMock(**defaults)
+
+    def _complete_financial(self) -> MagicMock:
+        return MagicMock(
+            annual_income="$50K – $99K",
+            net_worth="$100K – $250K",
+            liquid_net_worth="$25K – $50K",
+            time_horizon="5 – 10 years",
+            risk_scenario_response="hold",
+            max_loss_tolerance="15-25%",
+            experience_level="invest_regularly",
+            investment_goals=["grow_wealth"],
+            funding_sources=["employment_income"],
+            employment_info={"employment_status": "employed"},
+        )
+
+    def test_passes_when_all_fields_present(self):
+        validate_completeness(self._complete_profile(), self._complete_financial())
+
+    def test_agreements_missing_signed_at_is_reported(self):
+        from app.exceptions import IncompleteOnboardingError
+
+        profile = self._complete_profile(
+            agreements_signed={"customer_agreement": True, "ip_address": "1.2.3.4"},
+        )
+        with pytest.raises(IncompleteOnboardingError) as exc_info:
+            validate_completeness(profile, self._complete_financial())
+        assert "agreements_signed.signed_at" in exc_info.value.missing_fields

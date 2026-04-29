@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import DataError, IntegrityError, ProgrammingError
 
+from structlog.testing import capture_logs
+
 from app.exceptions import (
     AuthenticationError,
     AuthorizationError,
@@ -20,10 +22,12 @@ from app.exceptions import (
     http_exception_handler,
     integrity_error_handler,
     not_found_error_handler,
+    plaid_service_error_handler,
     programming_error_handler,
     validation_error_handler,
 )
 from app.services.alpaca_broker import AlpacaBrokerError
+from app.services.plaid import PlaidServiceError
 
 request = MagicMock()
 
@@ -346,6 +350,59 @@ async def test_alpaca_error_handler_does_not_prefix_non_kyc_messages():
 
     assert body["error"] == "account is closed"
     assert "KYC" not in body["error"]
+
+
+# ---------------------------------------------------------------------------
+# Alpaca / Plaid log-level tests — 4xx → warning, 5xx → error
+# ---------------------------------------------------------------------------
+
+
+async def test_alpaca_4xx_logs_warning_not_error():
+    exc = AlpacaBrokerError(status_code=422, message="bad tax_id")
+    with capture_logs() as logs:
+        await alpaca_error_handler(request, exc)
+    assert len(logs) == 1
+    assert logs[0]["log_level"] == "warning"
+    assert logs[0]["event"] == "alpaca_api_error"
+
+
+async def test_alpaca_5xx_logs_error():
+    exc = AlpacaBrokerError(status_code=500, message="internal")
+    with capture_logs() as logs:
+        await alpaca_error_handler(request, exc)
+    assert len(logs) == 1
+    assert logs[0]["log_level"] == "error"
+
+
+async def test_plaid_4xx_logs_warning_not_error():
+    exc = PlaidServiceError(
+        code="INVALID_FIELD", message="bad account_id",
+        detail={"status_code": 400}, status_code=400,
+    )
+    with capture_logs() as logs:
+        await plaid_service_error_handler(request, exc)
+    assert len(logs) == 1
+    assert logs[0]["log_level"] == "warning"
+    assert logs[0]["event"] == "plaid_service_error"
+
+
+async def test_plaid_5xx_logs_error():
+    exc = PlaidServiceError(
+        code="INTERNAL_ERROR", message="server error",
+        detail={"status_code": 500}, status_code=500,
+    )
+    with capture_logs() as logs:
+        await plaid_service_error_handler(request, exc)
+    assert len(logs) == 1
+    assert logs[0]["log_level"] == "error"
+
+
+async def test_plaid_unknown_status_logs_error():
+    # Sentinel default fails safe: unknown failures still page ops via error-level.
+    exc = PlaidServiceError(code="PLAID_ERROR", message="unknown")
+    with capture_logs() as logs:
+        await plaid_service_error_handler(request, exc)
+    assert logs[0]["log_level"] == "error"
 
 
 # ---------------------------------------------------------------------------
