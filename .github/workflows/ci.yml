@@ -64,7 +64,11 @@ jobs:
       PLAID_CLIENT_ID: ci-plaid-id
       PLAID_SECRET: ci-plaid-secret
       PLAID_ENV: sandbox
-      PLAID_FERNET_KEY: ci-fernet-key-placeholder
+      # Throwaway Fernet key for CI only. Fernet validates the format eagerly
+      # (must be 32 url-safe base64-encoded bytes), so a placeholder string
+      # crashes any test that touches encryption. Generated via
+      # `Fernet.generate_key()`; rotate freely — no real data is encrypted with it.
+      PLAID_FERNET_KEY: uQU2G7e5Dud8WN7MwCywdmFDrBxE9uo_S0XIgtLhQnw=
       ANTHROPIC_API_KEY: ci-anthropic-key
 
     steps:
