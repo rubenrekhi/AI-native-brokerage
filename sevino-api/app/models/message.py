@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import ForeignKey, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
@@ -19,8 +19,8 @@ class Message(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         index=True,
     )
     role: Mapped[str] = mapped_column(Text, nullable=False)
-    content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    mcp_cards: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
-    tool_calls: Mapped[Optional[dict[str, Any]]] = mapped_column(JSONB, nullable=True)
+    content_blocks: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB, nullable=False, server_default="[]"
+    )
 
     conversation: Mapped[Conversation] = relationship(back_populates="messages")
