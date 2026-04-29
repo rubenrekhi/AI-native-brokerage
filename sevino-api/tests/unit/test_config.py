@@ -60,3 +60,51 @@ class TestSupabaseServiceRoleKey:
     def test_required_outside_dev(self, env):
         with pytest.raises(ValidationError, match="SUPABASE_SERVICE_ROLE_KEY"):
             _make_settings(environment=env, supabase_service_role_key="")
+
+
+class TestSentryEnvironment:
+    """``sentry_environment`` overrides the env tag for Railway PR-preview
+    deploys (so torn-down preview noise is filterable) but leaves the tag
+    untouched for real staging/prod (so existing alerts and dashboards
+    keyed off ``staging``/``prod`` keep matching). See SEV-433."""
+
+    def test_pr_preview_overrides(self):
+        s = _make_settings(
+            environment="staging", railway_environment_name="sevino-pr-123"
+        )
+        assert s.is_pr_preview is True
+        assert s.sentry_environment == "sevino-pr-123"
+
+    def test_bare_pr_prefix_does_not_match(self):
+        # Guard against regressing to a "pr-" prefix check: Railway's
+        # actual env name for Sevino's previews is "sevino-pr-N", not
+        # "pr-N", so a bare "pr-" prefix would never fire.
+        s = _make_settings(
+            environment="staging", railway_environment_name="pr-123"
+        )
+        assert s.is_pr_preview is False
+        assert s.sentry_environment == "staging"
+
+    def test_real_staging_keeps_settings_environment(self):
+        s = _make_settings(
+            environment="staging", railway_environment_name="staging"
+        )
+        assert s.is_pr_preview is False
+        assert s.sentry_environment == "staging"
+
+    def test_real_prod_keeps_normalized_prod(self):
+        # Load-bearing case: Railway names the prod env "production" but
+        # settings.environment normalizes to "prod". sentry_environment
+        # must return "prod" — not "production" — or existing Sentry
+        # alerts keyed off environment=prod silently stop matching.
+        s = _make_settings(
+            environment="production", railway_environment_name="production"
+        )
+        assert s.environment == "prod"
+        assert s.is_pr_preview is False
+        assert s.sentry_environment == "prod"
+
+    def test_unset_falls_back_to_settings_environment(self):
+        s = _make_settings(environment="dev", railway_environment_name="")
+        assert s.is_pr_preview is False
+        assert s.sentry_environment == "dev"

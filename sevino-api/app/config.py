@@ -54,10 +54,30 @@ class Settings(BaseSettings):
     plaid_env: str
     plaid_fernet_key: str
     sentry_dsn: str = ""
+    railway_environment_name: str = ""
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
         return [k.strip() for k in self.plaid_fernet_key.split(",") if k.strip()]
+
+    @property
+    def is_pr_preview(self) -> bool:
+        # Railway's PR-preview env names follow the project's environment
+        # template, which for Sevino is "sevino-pr-{number}" (visible in
+        # Railway → service → variables → RAILWAY_ENVIRONMENT_NAME). If
+        # the template is ever changed in Railway, this prefix must be
+        # updated to match or PR-preview filtering silently stops working.
+        return self.railway_environment_name.startswith("sevino-pr-")
+
+    @property
+    def sentry_environment(self) -> str:
+        # PR previews get their own tag (sevino-pr-NNN) so noise from
+        # torn-down previews is filterable. Real staging/prod keep
+        # settings.environment ("staging"/"prod") so existing Sentry alerts
+        # and dashboards keyed off those values don't silently break —
+        # Railway's env name for prod is "production", which would not
+        # match a "prod"-keyed alert.
+        return self.railway_environment_name if self.is_pr_preview else self.environment
 
     @property
     def show_docs(self) -> bool:

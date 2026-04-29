@@ -29,7 +29,7 @@ configure_logging(settings.environment)
 if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
-        environment=settings.environment,
+        environment=settings.sentry_environment,
         traces_sample_rate=0.1,
         send_default_pii=False,
         before_send=sentry_before_send,

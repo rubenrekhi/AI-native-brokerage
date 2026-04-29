@@ -125,7 +125,7 @@ async def startup(ctx: dict) -> None:
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
-            environment=settings.environment,
+            environment=settings.sentry_environment,
             traces_sample_rate=0.1,
             before_send=sentry_before_send,
         )
