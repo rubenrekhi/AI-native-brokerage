@@ -23,7 +23,7 @@ make worker         # ARQ background worker
 
 # Testing
 make test           # All tests (uv run pytest)
-make test-unit      # Unit tests only (uv run pytest tests/unit)
+make test-unit      # Unit tests only (uv run pytest tests/unit tests/ai/unit)
 uv run pytest -x    # Stop on first failure
 uv run pytest -k "test_health"  # Run tests matching keyword
 uv run pytest tests/integration/test_health.py::test_health_ok  # Single test
@@ -81,6 +81,7 @@ tests/
 ├── conftest.py           # Shared fixtures (mock_db, mock_arq, async client)
 ├── unit/                 # No DB or network
 ├── integration/          # Real test DB, mocked external services
+├── ai/unit/              # AI module unit tests (see docs/ai-v0-plan.md §5)
 └── fixtures/mock_responses/  # JSON matching Alpaca/Plaid response shapes
 ```
 
