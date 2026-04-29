@@ -243,8 +243,9 @@ struct HomeView: View {
         .task { await viewModel.load() }
         .task { await holdingsViewModel.loadHoldings() }
         .task { await radarViewModel.loadRadar() }
+        .task { await portfolioViewModel.loadSnapshot() }
         .task(id: portfolioViewModel.selectedTimeRange) {
-            await portfolioViewModel.loadPortfolio()
+            await portfolioViewModel.loadHistory()
         }
         .alert(
             L10n.Home.portfolioLoadErrorTitle,

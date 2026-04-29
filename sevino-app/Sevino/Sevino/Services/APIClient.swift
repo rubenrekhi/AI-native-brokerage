@@ -1,11 +1,17 @@
 import Foundation
 
 protocol APIClientProtocol: Sendable {
-    func get<T: Decodable>(_ path: String) async throws -> T
+    func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func delete<T: Decodable>(_ path: String) async throws -> T
+}
+
+extension APIClientProtocol {
+    func get<T: Decodable>(_ path: String) async throws -> T {
+        try await get(path, query: [:])
+    }
 }
 
 final class APIClient: APIClientProtocol {
@@ -55,8 +61,8 @@ final class APIClient: APIClientProtocol {
         self.tokenProvider = tokenProvider
     }
 
-    func get<T: Decodable>(_ path: String) async throws -> T {
-        try await request(path, method: "GET")
+    func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T {
+        try await request(path, method: "GET", query: query)
     }
 
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
@@ -82,9 +88,18 @@ final class APIClient: APIClientProtocol {
     private func request<T: Decodable>(
         _ path: String,
         method: String,
+        query: [String: String] = [:],
         body: (some Encodable)? = nil as Empty?
     ) async throws -> T {
-        guard let url = URL(string: baseURL + path) else {
+        guard var components = URLComponents(string: baseURL + path) else {
+            throw URLError(.badURL)
+        }
+        if !query.isEmpty {
+            components.queryItems = query
+                .sorted(by: { $0.key < $1.key })
+                .map { URLQueryItem(name: $0.key, value: $0.value) }
+        }
+        guard let url = components.url else {
             throw URLError(.badURL)
         }
 
