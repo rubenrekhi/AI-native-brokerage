@@ -804,6 +804,136 @@
         }
       }
     },
+    "home.holdings_empty_funded_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No holdings yet"
+          }
+        }
+      }
+    },
+    "home.holdings_empty_funded_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your cash is ready to invest. Search for a stock to get started."
+          }
+        }
+      }
+    },
+    "home.holdings_empty_unfunded_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add cash to start investing"
+          }
+        }
+      }
+    },
+    "home.holdings_empty_unfunded_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fund your account to begin building your portfolio."
+          }
+        }
+      }
+    },
+    "home.account_pending_short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Being reviewed"
+          }
+        }
+      }
+    },
+    "home.account_action_required_short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish setup"
+          }
+        }
+      }
+    },
+    "home.account_rejected_short" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unavailable"
+          }
+        }
+      }
+    },
+    "home.account_pending_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your account is being reviewed"
+          }
+        }
+      }
+    },
+    "home.account_pending_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We'll notify you as soon as it's ready. Holdings will appear once your account is active."
+          }
+        }
+      }
+    },
+    "home.account_action_required_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish setting up your account"
+          }
+        }
+      }
+    },
+    "home.account_action_required_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We need a bit more information before your account can be activated."
+          }
+        }
+      }
+    },
+    "home.account_rejected_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account unavailable"
+          }
+        }
+      }
+    },
+    "home.account_rejected_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please contact support so we can help get you set up."
+          }
+        }
+      }
+    },
     "home.holdings_empty_title" : {
       "localizations" : {
         "en" : {

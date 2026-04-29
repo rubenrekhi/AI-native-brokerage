@@ -5,6 +5,7 @@ final class HoldingsViewModel {
     private let service: any HoldingsServiceProtocol
 
     private(set) var holdings: [Holding] = []
+    private(set) var accountStatus: String = ""
     private(set) var displayOption: HoldingsDisplayOption = .totalValue
     private(set) var sortOption: HoldingsSortOption = .highToLow
 
@@ -20,7 +21,9 @@ final class HoldingsViewModel {
         isLoading = true
         defer { isLoading = false }
         do {
-            holdings = try await service.fetchHoldings()
+            let result = try await service.fetchHoldings()
+            holdings = result.holdings
+            accountStatus = result.accountStatus
         } catch let caughtError {
             error = caughtError.localizedDescription
         }

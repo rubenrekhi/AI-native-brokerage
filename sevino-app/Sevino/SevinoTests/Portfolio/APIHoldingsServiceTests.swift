@@ -28,10 +28,10 @@ final class APIHoldingsServiceTests: XCTestCase {
     func testFetchHoldingsPrependsCashRow() async throws {
         mockClient.responseToReturn = Self.activeDTO()
 
-        let holdings = try await service.fetchHoldings()
+        let result = try await service.fetchHoldings()
 
-        XCTAssertEqual(holdings.count, 3)
-        let cash = holdings[0]
+        XCTAssertEqual(result.holdings.count, 3)
+        let cash = result.holdings[0]
         XCTAssertTrue(cash.isCash)
         XCTAssertEqual(cash.ticker, "CASH")
         XCTAssertEqual(cash.name, "Cash")
@@ -41,12 +41,26 @@ final class APIHoldingsServiceTests: XCTestCase {
         XCTAssertNil(cash.unrealizedPl)
     }
 
+    func testFetchHoldingsForwardsAccountStatus() async throws {
+        mockClient.responseToReturn = HoldingsDTOFactory.make(
+            accountStatus: "APPROVAL_PENDING",
+            cash: Decimal(0),
+            totalMarketValue: Decimal(0),
+            positions: []
+        )
+
+        let result = try await service.fetchHoldings()
+
+        XCTAssertEqual(result.accountStatus, "APPROVAL_PENDING",
+                       "service must forward accountStatus so the VM can drive the empty-state copy")
+    }
+
     func testFetchHoldingsMapsPositiveGainPosition() async throws {
         mockClient.responseToReturn = Self.activeDTO()
 
-        let holdings = try await service.fetchHoldings()
+        let result = try await service.fetchHoldings()
 
-        let tsla = holdings[1]
+        let tsla = result.holdings[1]
         XCTAssertFalse(tsla.isCash)
         XCTAssertEqual(tsla.ticker, "TSLA")
         XCTAssertEqual(tsla.name, "Tesla, Inc.")
@@ -63,9 +77,9 @@ final class APIHoldingsServiceTests: XCTestCase {
     func testFetchHoldingsMapsNegativeGainPosition() async throws {
         mockClient.responseToReturn = Self.activeDTO()
 
-        let holdings = try await service.fetchHoldings()
+        let result = try await service.fetchHoldings()
 
-        let amd = holdings[2]
+        let amd = result.holdings[2]
         XCTAssertEqual(amd.ticker, "AMD")
         XCTAssertEqual(amd.unrealizedPl, Decimal(string: "-1009.32"))
         XCTAssertEqual(amd.isPositive, false)
@@ -83,12 +97,12 @@ final class APIHoldingsServiceTests: XCTestCase {
             positions: []
         )
 
-        let holdings = try await service.fetchHoldings()
+        let result = try await service.fetchHoldings()
 
-        XCTAssertEqual(holdings.count, 1)
-        XCTAssertTrue(holdings[0].isCash)
-        XCTAssertEqual(holdings[0].marketValue, Decimal(0))
-        XCTAssertEqual(holdings[0].valueText, Decimal(0).asCurrency())
+        XCTAssertEqual(result.holdings.count, 1)
+        XCTAssertTrue(result.holdings[0].isCash)
+        XCTAssertEqual(result.holdings[0].marketValue, Decimal(0))
+        XCTAssertEqual(result.holdings[0].valueText, Decimal(0).asCurrency())
     }
 
     func testFetchHoldingsPendingAccountReturnsZeroCashRow() async throws {
@@ -99,10 +113,11 @@ final class APIHoldingsServiceTests: XCTestCase {
             positions: []
         )
 
-        let holdings = try await service.fetchHoldings()
+        let result = try await service.fetchHoldings()
 
-        XCTAssertEqual(holdings.count, 1)
-        XCTAssertEqual(holdings[0].marketValue, Decimal(0))
+        XCTAssertEqual(result.holdings.count, 1)
+        XCTAssertEqual(result.holdings[0].marketValue, Decimal(0))
+        XCTAssertEqual(result.accountStatus, "APPROVAL_PENDING")
     }
 
     // MARK: - Error propagation

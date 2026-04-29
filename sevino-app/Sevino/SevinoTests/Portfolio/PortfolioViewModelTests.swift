@@ -23,9 +23,45 @@ final class PortfolioViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedTimeRange, .oneMonth)
         XCTAssertEqual(viewModel.displayValue, "—")
         XCTAssertEqual(viewModel.gainText, "")
+        XCTAssertEqual(viewModel.accountStatus, "")
         XCTAssertTrue(viewModel.chartPoints.isEmpty)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - accountStatus exposure (F4.10)
+
+    func testLoadSnapshotExposesAccountStatus() async {
+        mockService.snapshot = PortfolioSnapshot(
+            accountStatus: "APPROVAL_PENDING",
+            equity: Decimal(0),
+            dailyChangeAbs: Decimal(0),
+            dailyChangePct: Decimal(0),
+            chartPoints: []
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.accountStatus, "APPROVAL_PENDING",
+                       "VM must surface the snapshot's accountStatus for the pill switch")
+    }
+
+    func testLoadSnapshotFailurePreservesPriorAccountStatus() async {
+        mockService.snapshot = PortfolioSnapshot(
+            accountStatus: "ACTIVE",
+            equity: Decimal(string: "1000")!,
+            dailyChangeAbs: Decimal(0),
+            dailyChangePct: Decimal(0),
+            chartPoints: []
+        )
+        await viewModel.loadSnapshot()
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+
+        mockService.fetchPortfolioError = NSError(domain: "test", code: 0)
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE",
+                       "transient failures must not wipe the last-known status")
     }
 
     // MARK: - loadPortfolio success
@@ -160,7 +196,7 @@ final class PortfolioViewModelTests: XCTestCase {
         await viewModel.loadPortfolio()
 
         XCTAssertNil(viewModel.error,
-                     "history errors are silent in F4.8 — F4.10 will add explicit chart UI")
+                     "history errors are silent — chart-skeleton UI is a follow-up to F4.10")
     }
 
     // MARK: - clearError

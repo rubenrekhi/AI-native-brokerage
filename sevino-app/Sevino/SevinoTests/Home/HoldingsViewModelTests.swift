@@ -16,10 +16,36 @@ final class HoldingsViewModelTests: XCTestCase {
 
     func testInitialStateDefaultsToTotalValueAndHighToLow() {
         XCTAssertTrue(viewModel.holdings.isEmpty)
+        XCTAssertEqual(viewModel.accountStatus, "")
         XCTAssertEqual(viewModel.displayOption, .totalValue)
         XCTAssertEqual(viewModel.sortOption, .highToLow)
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - accountStatus exposure (F4.10)
+
+    func testLoadHoldingsExposesAccountStatusFromService() async {
+        mockService.accountStatus = "APPROVAL_PENDING"
+        mockService.holdings = []
+
+        await viewModel.loadHoldings()
+
+        XCTAssertEqual(viewModel.accountStatus, "APPROVAL_PENDING",
+                       "VM must surface the DTO's accountStatus so the view can pick the right empty/pending state")
+    }
+
+    func testLoadHoldingsFailurePreservesPriorAccountStatus() async {
+        mockService.accountStatus = "ACTIVE"
+        mockService.holdings = [Self.makeHolding(ticker: "AAPL")]
+        await viewModel.loadHoldings()
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+
+        mockService.fetchHoldingsError = NSError(domain: "test", code: 0)
+        await viewModel.loadHoldings()
+
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE",
+                       "transient failures must not wipe the last-known status")
     }
 
     // MARK: - loadHoldings success

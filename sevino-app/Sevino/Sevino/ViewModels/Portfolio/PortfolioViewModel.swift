@@ -11,6 +11,11 @@ final class PortfolioViewModel {
     private(set) var chartPoints: [Double] = []
     private(set) var selectedTimeRange: TimeRange = .oneMonth
 
+    /// Latest snapshot's `accountStatus` (e.g. `"ACTIVE"`, `"APPROVAL_PENDING"`).
+    /// Empty until the first successful snapshot fetch — views should treat
+    /// empty as "still loading" rather than rendering numeric values.
+    private(set) var accountStatus: String = ""
+
     private(set) var isLoading = false
     private(set) var error: String?
 
@@ -49,15 +54,16 @@ final class PortfolioViewModel {
             displayValue = snapshot.displayValue
             isDown = snapshot.isDown
             gainText = snapshot.gainText
+            accountStatus = snapshot.accountStatus
         } catch let caughtError {
             error = caughtError.localizedDescription
         }
     }
 
     /// Fetches just the history series for `selectedTimeRange`. History errors
-    /// silently leave the chart empty — F4.10 will add explicit empty/error UI.
-    /// Wire this to `.task(id: selectedTimeRange)` so range changes don't refetch
-    /// the snapshot and the pill numbers stay stable.
+    /// silently leave the chart empty — chart skeleton/empty-state polish is
+    /// tracked as a follow-up. Wire this to `.task(id: selectedTimeRange)` so
+    /// range changes don't refetch the snapshot and the pill numbers stay stable.
     func loadHistory() async {
         if let history = try? await historyService.fetchHistory(for: selectedTimeRange) {
             chartPoints = history.chartPoints

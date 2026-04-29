@@ -53,20 +53,7 @@ struct HoldingsMorphingView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16 * scale) {
                 headerRow
-
-                if viewModel.isLoading, viewModel.holdings.isEmpty {
-                    loadingState
-                } else if viewModel.error != nil, viewModel.holdings.isEmpty {
-                    errorState
-                } else if viewModel.holdings.isEmpty {
-                    emptyState
-                } else {
-                    LazyVStack(spacing: 12 * scale) {
-                        ForEach(viewModel.holdings) { holding in
-                            HoldingRow(holding: holding, scale: scale)
-                        }
-                    }
-                }
+                expandedBody
             }
         }
         .refreshable {
@@ -78,19 +65,66 @@ struct HoldingsMorphingView: View {
         ))
     }
 
+    /// Routes to one of: loading, error, account-status message, empty (cash vs.
+    /// no-cash), or the row list. Pending/rejected accounts replace the empty
+    /// state with a status-aware message so the user understands why their
+    /// holdings list is blank.
+    @ViewBuilder
+    private var expandedBody: some View {
+        let statusKind = AccountStatusKind(rawStatus: viewModel.accountStatus)
+        if viewModel.isLoading, viewModel.holdings.isEmpty {
+            loadingState
+        } else if viewModel.error != nil, viewModel.holdings.isEmpty {
+            errorState
+        } else if statusKind == .pending || statusKind == .actionRequired || statusKind == .rejected {
+            AccountStatusMessage(kind: statusKind, scale: scale)
+        } else if viewModel.holdings.isEmpty || onlyCashRow {
+            emptyStateForActiveAccount
+        } else {
+            LazyVStack(spacing: 12 * scale) {
+                ForEach(viewModel.holdings) { holding in
+                    HoldingRow(holding: holding, scale: scale)
+                }
+            }
+        }
+    }
+
+    private var onlyCashRow: Bool {
+        viewModel.holdings.count == 1 && viewModel.holdings[0].isCash
+    }
+
+    private var hasCash: Bool {
+        viewModel.holdings.contains { $0.isCash && $0.marketValue > 0 }
+    }
+
     private var loadingState: some View {
         ProgressView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, 32 * scale)
     }
 
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label(L10n.Home.holdingsEmptyTitle, systemImage: "chart.pie")
-        } description: {
-            Text(L10n.Home.holdingsEmptyMessage)
+    /// `ACTIVE` empty states branch on cash:
+    /// - has cash → "you can start investing now"
+    /// - no cash → "fund first"
+    /// Per F4.10 §3, "ACTIVE with $0 everything" must read differently from
+    /// "ACTIVE, funded, no positions yet".
+    @ViewBuilder
+    private var emptyStateForActiveAccount: some View {
+        if hasCash {
+            ContentUnavailableView {
+                Label(L10n.Home.holdingsEmptyFundedTitle, systemImage: "chart.pie")
+            } description: {
+                Text(L10n.Home.holdingsEmptyFundedMessage)
+            }
+            .frame(maxWidth: .infinity)
+        } else {
+            ContentUnavailableView {
+                Label(L10n.Home.holdingsEmptyUnfundedTitle, systemImage: "dollarsign.circle")
+            } description: {
+                Text(L10n.Home.holdingsEmptyUnfundedMessage)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
     }
 
     private var errorState: some View {

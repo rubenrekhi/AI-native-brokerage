@@ -1,8 +1,18 @@
 import Foundation
 
+/// View-model bundle of holdings data — pairs the account state with the row
+/// list so views can distinguish "ACTIVE with no positions" from "still being
+/// reviewed" without smuggling status through a fake CASH row (per F4.10).
+struct HoldingsResult: Equatable {
+    let accountStatus: String
+    let holdings: [Holding]
+
+    static let empty = HoldingsResult(accountStatus: "", holdings: [])
+}
+
 /// Protocol for fetching holdings data — enables mocking in previews and tests.
 protocol HoldingsServiceProtocol {
-    func fetchHoldings() async throws -> [Holding]
+    func fetchHoldings() async throws -> HoldingsResult
 }
 
 /// Real backend impl. Hits `GET /v1/portfolio/holdings` and prepends a synthetic
@@ -13,11 +23,11 @@ final class APIHoldingsService: HoldingsServiceProtocol {
 
     init(client: any APIClientProtocol = APIClient.shared) { self.client = client }
 
-    func fetchHoldings() async throws -> [Holding] {
+    func fetchHoldings() async throws -> HoldingsResult {
         let dto: HoldingsDTO = try await client.get("/v1/portfolio/holdings")
-        var result: [Holding] = [Self.cashRow(dto.cash)]
-        result.append(contentsOf: dto.positions.map(Self.positionToHolding))
-        return result
+        var rows: [Holding] = [Self.cashRow(dto.cash)]
+        rows.append(contentsOf: dto.positions.map(Self.positionToHolding))
+        return HoldingsResult(accountStatus: dto.accountStatus, holdings: rows)
     }
 
     private static func cashRow(_ cash: Decimal) -> Holding {
@@ -45,27 +55,30 @@ final class APIHoldingsService: HoldingsServiceProtocol {
 final class PlaceholderHoldingsService: HoldingsServiceProtocol {
     static let shared = PlaceholderHoldingsService()
 
-    func fetchHoldings() async throws -> [Holding] {
-        [
-            Holding(
-                ticker: "CASH", isCash: true, name: "Cash",
-                qty: nil, marketValue: Decimal(string: "40291.92")!,
-                avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
-            ),
-            Holding(
-                ticker: "TSLA", isCash: false, name: "Tesla, Inc.",
-                qty: Decimal(57), marketValue: Decimal(string: "21748.18")!,
-                avgEntryPrice: Decimal(string: "248.91")!,
-                unrealizedPl: Decimal(string: "7418.90")!,
-                unrealizedPlpc: Decimal(string: "0.5174")!
-            ),
-            Holding(
-                ticker: "AMD", isCash: false, name: "Advanced Micro Devices",
-                qty: Decimal(37), marketValue: Decimal(string: "11465.19")!,
-                avgEntryPrice: Decimal(string: "338.23")!,
-                unrealizedPl: Decimal(string: "-1049.32")!,
-                unrealizedPlpc: Decimal(string: "-0.0838")!
-            ),
-        ]
+    func fetchHoldings() async throws -> HoldingsResult {
+        HoldingsResult(
+            accountStatus: "ACTIVE",
+            holdings: [
+                Holding(
+                    ticker: "CASH", isCash: true, name: "Cash",
+                    qty: nil, marketValue: Decimal(string: "40291.92")!,
+                    avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
+                ),
+                Holding(
+                    ticker: "TSLA", isCash: false, name: "Tesla, Inc.",
+                    qty: Decimal(57), marketValue: Decimal(string: "21748.18")!,
+                    avgEntryPrice: Decimal(string: "248.91")!,
+                    unrealizedPl: Decimal(string: "7418.90")!,
+                    unrealizedPlpc: Decimal(string: "0.5174")!
+                ),
+                Holding(
+                    ticker: "AMD", isCash: false, name: "Advanced Micro Devices",
+                    qty: Decimal(37), marketValue: Decimal(string: "11465.19")!,
+                    avgEntryPrice: Decimal(string: "338.23")!,
+                    unrealizedPl: Decimal(string: "-1049.32")!,
+                    unrealizedPlpc: Decimal(string: "-0.0838")!
+                ),
+            ]
+        )
     }
 }
