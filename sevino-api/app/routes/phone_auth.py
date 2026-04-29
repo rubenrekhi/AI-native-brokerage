@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 import sentry_sdk
 import structlog
@@ -69,12 +70,21 @@ async def confirm_verification(
         (result or {}).get("user", {}).get("phone") or body.phone_number
     )
     verified_at = datetime.now(timezone.utc)
+    profile = await UserProfileRepository.get_by_id(db, uuid.UUID(user_id))
+    update_fields: dict[str, Any] = {
+        "phone_number": confirmed_phone,
+        "phone_verified_at": verified_at,
+    }
+    # Advance to welcome on the first verification only — re-verifications
+    # (e.g. settings phone-change once that flow exists) must not stomp the
+    # user's actual onboarding progress.
+    if profile is not None and profile.onboarding_step is None:
+        update_fields["onboarding_step"] = "welcome"
     try:
         await UserProfileRepository.update_fields(
             db,
             uuid.UUID(user_id),
-            phone_number=confirmed_phone,
-            phone_verified_at=verified_at,
+            **update_fields,
         )
     except Exception as exc:
         # GoTrue already flipped the phone on auth.users but we failed to mirror

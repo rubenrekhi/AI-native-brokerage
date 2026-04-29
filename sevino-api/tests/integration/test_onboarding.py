@@ -131,6 +131,8 @@ class TestGetOnboardingStatus:
         assert data["account_status"] is None
         assert data["profile"]["email"] is not None
         assert data["financial_profile"] is None
+        assert data["phone_verified"] is False
+        assert data["phone_number"] is None
 
     async def test_status_returns_saved_data(self, authenticated_db_client):
         # Save some data first
@@ -150,6 +152,89 @@ class TestGetOnboardingStatus:
         assert data["onboarding_step"] == "annual_income"
         assert data["profile"]["preferred_name"] == "Riley"
         assert data["financial_profile"]["annual_income"] == "$50K \u2013 $99K"
+        # Phone fields default to unset when GoTrue has no phone on file.
+        assert data["phone_verified"] is False
+        assert data["phone_number"] is None
+
+    async def test_status_unverified_with_pending_phone(
+        self, authenticated_db_client, db_session
+    ):
+        """SEV-448 repro: phone entered, OTP sent, never confirmed."""
+        await db_session.execute(
+            text(
+                "UPDATE auth.users SET phone_change = :p, phone_confirmed_at = NULL "
+                "WHERE id = :id"
+            ),
+            {"p": "+15551234567", "id": uuid.UUID(TEST_USER_ID)},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.get("/v1/onboarding/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["phone_verified"] is False
+        # phone_change should surface so iOS can prefill the OTP screen.
+        assert data["phone_number"] == "+15551234567"
+
+    async def test_status_verified_phone(
+        self, authenticated_db_client, db_session
+    ):
+        await db_session.execute(
+            text(
+                "UPDATE auth.users SET phone = :p, phone_confirmed_at = now() "
+                "WHERE id = :id"
+            ),
+            {"p": "+15551234567", "id": uuid.UUID(TEST_USER_ID)},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.get("/v1/onboarding/status")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["phone_verified"] is True
+        assert data["phone_number"] == "+15551234567"
+
+    async def test_status_no_phone_on_file(self, authenticated_db_client):
+        """Default test_user has neither phone nor phone_change set."""
+        response = await authenticated_db_client.get("/v1/onboarding/status")
+        data = response.json()
+        assert data["phone_verified"] is False
+        assert data["phone_number"] is None
+
+    async def test_patch_onboarding_ignores_phone_number(
+        self, authenticated_db_client, db_session
+    ):
+        """Defense-in-depth: phone_number is not in _PROFILE_FIELDS, so a
+        PATCH attempting to write it must be silently dropped — only
+        /v1/auth/phone/confirm may set the verified phone."""
+        response = await authenticated_db_client.patch(
+            "/v1/onboarding",
+            json={"step": "preferred_name", "phone_number": "+15551234567"},
+        )
+        assert response.status_code == 200
+
+        row = await db_session.execute(
+            text(
+                "SELECT phone_number, phone_verified_at "
+                "FROM user_profiles WHERE id = :id"
+            ),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        result = row.one()
+        assert result.phone_number is None
+        assert result.phone_verified_at is None
+
+        auth_row = await db_session.execute(
+            text(
+                "SELECT phone, phone_change FROM auth.users WHERE id = :id"
+            ),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        auth_result = auth_row.one()
+        # GoTrue defaults these columns to empty string rather than NULL;
+        # what we care about is that the PATCH didn't put a number there.
+        assert not auth_result.phone
+        assert not auth_result.phone_change
 
 
 # ---------------------------------------------------------------------------

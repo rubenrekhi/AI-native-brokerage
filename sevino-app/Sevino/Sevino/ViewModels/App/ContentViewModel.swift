@@ -44,24 +44,28 @@ final class ContentViewModel {
 
     // MARK: - Async operations
 
-    /// Persists the phone number and dispatches the OTP, then advances to the
-    /// verification screen. The OTP send is part of the precondition so a
-    /// duplicate-phone rejection (`PHONE_NUMBER_TAKEN`) keeps the user on
-    /// `.phone` with a tailored error rather than stranding them on the OTP
-    /// screen with no code on the way. Onboarding only starts after the OTP
-    /// confirms (see `onPhoneVerified()`), so an unverified phone never
-    /// reaches the 18-step flow.
+    /// Dispatches the OTP and advances to the verification screen. The phone
+    /// number itself is *not* persisted yet — it stays in iOS memory (passed
+    /// through the `.phoneVerification` route) until `/v1/auth/phone/confirm`
+    /// writes it atomically with `phone_verified_at` and the welcome step.
+    /// This way `user_profiles.phone_number` only ever holds verified phones,
+    /// and resume routing can never see `onboarding_step="welcome"` on an
+    /// unverified user (SEV-448). A duplicate-phone rejection
+    /// (`PHONE_NUMBER_TAKEN`) keeps the user on `.phone` with a tailored
+    /// error rather than stranding them on the OTP screen with no code.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
         showPhoneError = false
         isLoading = true
         defer { isLoading = false }
         do {
-            try await onboardingService.saveStep(
-                OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
-            )
             try await phoneVerificationService.sendOTP(phoneNumber: phoneNumber)
-            route = .phoneVerification(phoneNumber: phoneNumber)
+            // Normalize through PhoneFormatter so the route's associated value
+            // has the same `(555) 123-4567` shape whether we got here from
+            // PhoneNumberView (already pretty) or from a future caller that
+            // forwards raw digits — and so the OTP screen title is consistent
+            // with the resume path's auth.users-sourced format.
+            route = .phoneVerification(phoneNumber: PhoneFormatter.format(phoneNumber))
         } catch let caughtError {
             error = phoneSaveErrorMessage(for: caughtError)
             showPhoneError = true
@@ -115,6 +119,10 @@ final class ContentViewModel {
         switch destination {
         case .home:
             route = .home
+        case .phone:
+            route = .phone
+        case .phoneVerification(let phoneNumber):
+            route = .phoneVerification(phoneNumber: phoneNumber)
         case .onboarding(let step, let data):
             route = .onboarding(step: step, data: data)
         case .alpacaSetup(let step, let data):

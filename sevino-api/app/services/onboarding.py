@@ -5,6 +5,7 @@ from typing import Any
 
 import sentry_sdk
 import structlog
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.brokerage_account import BrokerageAccount
@@ -89,12 +90,14 @@ EMPLOYMENT_STATUS_MAP: dict[str, str] = {
 }
 
 # Fields that belong to user_profiles vs user_financial_profiles.
-# Note: tax_id_last_4 is intentionally excluded — it is set only during
+# tax_id_last_4 is intentionally excluded — it is set only during
 # submit_kyc, never via the incremental save_step PATCH from the client.
+# phone_number is intentionally absent — the only writer is
+# /v1/auth/phone/confirm after GoTrue acks the OTP, so a stray PATCH from
+# the client cannot poison user_profiles with an unverified value.
 _PROFILE_FIELDS = {
     "preferred_name",
     "date_of_birth",
-    "phone_number",
     "attribution_source",
     "risk_disclosure_acknowledged_at",
     "first_name",
@@ -243,11 +246,30 @@ class OnboardingService:
     ) -> OnboardingStatusResponse:
         """Load full onboarding state for resume."""
         profile = await UserProfileRepository.get_by_id(db, user_id)
+
+        # GoTrue holds the verified phone in auth.users.phone and the
+        # pending one in phone_change; COALESCE returns whichever is set.
+        # NULLIF collapses GoTrue's empty-string default to NULL.
+        auth_row = (
+            await db.execute(
+                text(
+                    "SELECT NULLIF(COALESCE(NULLIF(phone, ''), "
+                    "NULLIF(phone_change, '')), '') AS phone, "
+                    "phone_confirmed_at FROM auth.users WHERE id = :uid"
+                ),
+                {"uid": str(user_id)},
+            )
+        ).one_or_none()
+        phone_verified = bool(auth_row and auth_row.phone_confirmed_at)
+        phone_number = auth_row.phone if auth_row else None
+
         if profile is None:
             return OnboardingStatusResponse(
                 onboarding_completed=False,
                 onboarding_step=None,
                 profile=ProfileData(),
+                phone_verified=phone_verified,
+                phone_number=phone_number,
             )
 
         financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
@@ -262,6 +284,8 @@ class OnboardingService:
             financial_profile=(
                 FinancialProfileData.model_validate(financial) if financial else None
             ),
+            phone_verified=phone_verified,
+            phone_number=phone_number,
         )
 
     @staticmethod

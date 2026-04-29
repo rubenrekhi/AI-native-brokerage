@@ -129,6 +129,10 @@ class ProfileData(BaseModel):
     last_name: str | None = None
     date_of_birth: date | None = None
     email: str | None = None
+    # Verified mirror written by /v1/auth/phone/confirm. The canonical
+    # source for resume routing is OnboardingStatusResponse.phone_number,
+    # which reads auth.users directly so it can also surface unverified
+    # pending numbers from auth.users.phone_change.
     phone_number: str | None = None
     attribution_source: str | None = None
     street_address: list[str] | None = None
@@ -170,6 +174,10 @@ class OnboardingStatusResponse(BaseModel):
     kyc_results: dict[str, Any] | None = None
     profile: ProfileData
     financial_profile: FinancialProfileData | None = None
+    # Top-level (not on profile) because the source is auth.users — GoTrue's
+    # source of truth — rather than the user_profiles mirror.
+    phone_verified: bool = False
+    phone_number: str | None = None
 
 
 class OnboardingSubmitResponse(BaseModel):

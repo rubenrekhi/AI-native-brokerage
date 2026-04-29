@@ -135,7 +135,7 @@ class TestConfirmVerification:
 
         row = await db_session.execute(
             text(
-                "SELECT phone_number, phone_verified_at "
+                "SELECT phone_number, phone_verified_at, onboarding_step "
                 "FROM user_profiles WHERE id = :id"
             ),
             {"id": uuid.UUID(TEST_USER_ID)},
@@ -143,6 +143,37 @@ class TestConfirmVerification:
         result = row.one()
         assert result.phone_number == PHONE
         assert result.phone_verified_at is not None
+        # First-time confirm must atomically advance the onboarding step so
+        # resume routing has a coherent state to read (SEV-448).
+        assert result.onboarding_step == "welcome"
+
+    async def test_confirm_preserves_existing_onboarding_step(
+        self, authenticated_db_client, override_phone_service, db_session
+    ):
+        """A re-confirmation (e.g. settings phone-change once that flow
+        exists) must not stomp the user's actual onboarding progress."""
+        await db_session.execute(
+            text(
+                "UPDATE user_profiles SET onboarding_step = 'annual_income' "
+                "WHERE id = :id"
+            ),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        await db_session.flush()
+
+        response = await authenticated_db_client.post(
+            "/v1/auth/phone/confirm",
+            json={"phone_number": PHONE, "code": CODE},
+        )
+        assert response.status_code == 200
+
+        row = await db_session.execute(
+            text(
+                "SELECT onboarding_step FROM user_profiles WHERE id = :id"
+            ),
+            {"id": uuid.UUID(TEST_USER_ID)},
+        )
+        assert row.one().onboarding_step == "annual_income"
 
     async def test_wrong_otp_returns_422_and_does_not_set_verified(
         self, authenticated_db_client, override_phone_service, db_session

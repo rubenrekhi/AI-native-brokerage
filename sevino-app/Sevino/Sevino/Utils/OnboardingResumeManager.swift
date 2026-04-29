@@ -6,6 +6,8 @@ enum OnboardingResumeManager {
 
     enum Destination {
         case home
+        case phone
+        case phoneVerification(phoneNumber: String)
         case onboarding(step: Int, data: OnboardingResumeData)
         case alpacaSetup(step: Int, data: AlpacaResumeData)
         case loading
@@ -121,6 +123,20 @@ enum OnboardingResumeManager {
     static func destination(from status: OnboardingStatusResponse) -> Destination {
         if status.onboardingCompleted || status.onboardingStep == "submitted" {
             return .home
+        }
+
+        // Phone verification is an auth precondition for onboarding — guard
+        // here before consulting onboardingStep so an unverified user can
+        // never reach the 18-step flow (SEV-448). The number, when present,
+        // comes from auth.users.phone_change so the OTP screen can prefill
+        // without re-asking. PhoneFormatter renders the GoTrue-normalized
+        // E.164 string (`15551234567`) into the same `(555) 123-4567` shape
+        // the entry view produces, so resume reads continuously with typing.
+        if !status.phoneVerified {
+            if let phone = status.phoneNumber, !phone.isEmpty {
+                return .phoneVerification(phoneNumber: PhoneFormatter.format(phone))
+            }
+            return .phone
         }
 
         guard let step = status.onboardingStep else {

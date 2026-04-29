@@ -42,31 +42,13 @@ final class ContentViewModelTests: XCTestCase {
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
-        XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
-        XCTAssertEqual(mockOnboarding.savedSteps.last?.step, "welcome")
-        XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
         XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers, ["4165551234"],
                        "OTP must be dispatched before navigation so the user lands on the verification screen with a code on the way")
-    }
-
-    func testSavePhoneNumberFailureKeepsPhoneRouteAndRecordsError() async {
-        viewModel.startFreshSignUpFlow()
-        mockOnboarding.saveStepError = NSError(
-            domain: "", code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "Network error"]
-        )
-
-        await viewModel.savePhoneNumber("4165551234")
-
-        XCTAssertEqual(viewModel.route, .phone, "route stays on phone so user can retry")
-        XCTAssertTrue(viewModel.showPhoneError, "alert flag is set so the view presents an alert")
-        XCTAssertFalse(viewModel.isLoading)
-        XCTAssertEqual(viewModel.error, "Network error")
-        XCTAssertTrue(mockPhoneVerification.sentPhoneNumbers.isEmpty,
-                      "saveStep failure short-circuits before any OTP send")
+        XCTAssertTrue(mockOnboarding.savedSteps.isEmpty,
+                      "phone-entry no longer writes user_profiles — the verified phone is persisted server-side by /v1/auth/phone/confirm (SEV-448)")
     }
 
     func testSavePhoneNumberSendOTPFailureKeepsPhoneRoute() async {
@@ -82,7 +64,8 @@ final class ContentViewModelTests: XCTestCase {
                        "send-OTP failure must NOT advance — the verification screen would be unusable without a code on the way")
         XCTAssertTrue(viewModel.showPhoneError)
         XCTAssertEqual(viewModel.error, "SMS provider down")
-        XCTAssertEqual(mockOnboarding.savedSteps.count, 1, "saveStep already happened")
+        XCTAssertTrue(mockOnboarding.savedSteps.isEmpty,
+                      "no PATCH ever fires from phone capture — only the OTP send")
     }
 
     func testSavePhoneNumberPhoneTakenShowsLocalizedMessage() async {
@@ -103,18 +86,18 @@ final class ContentViewModelTests: XCTestCase {
 
     func testSavePhoneNumberRetrySuccessClearsErrorFlag() async {
         viewModel.startFreshSignUpFlow()
-        mockOnboarding.saveStepError = NSError(
+        mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
         await viewModel.savePhoneNumber("4165551234")
         XCTAssertTrue(viewModel.showPhoneError)
 
-        mockOnboarding.saveStepError = nil
+        mockPhoneVerification.sendOTPError = nil
         await viewModel.savePhoneNumber("4165551234")
 
         XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
         XCTAssertNil(viewModel.error)
     }
 
@@ -131,7 +114,7 @@ final class ContentViewModelTests: XCTestCase {
         mockPhoneVerification.sendOTPError = nil
         await viewModel.savePhoneNumber("4165559999")
 
-        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165559999"))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-9999"))
         XCTAssertNil(viewModel.error)
         XCTAssertFalse(viewModel.showPhoneError)
         XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers.last, "4165559999",
@@ -143,7 +126,7 @@ final class ContentViewModelTests: XCTestCase {
     func testOnPhoneVerifiedAdvancesToOnboarding() async {
         viewModel.startFreshSignUpFlow()
         await viewModel.savePhoneNumber("4165551234")
-        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
 
         viewModel.onPhoneVerified()
 
@@ -153,7 +136,7 @@ final class ContentViewModelTests: XCTestCase {
     func testOnChangeNumberReturnsToPhone() async {
         viewModel.startFreshSignUpFlow()
         await viewModel.savePhoneNumber("4165551234")
-        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "4165551234"))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
 
         viewModel.onChangeNumber()
 
@@ -161,7 +144,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testClearErrorResetsErrorAndAlertFlag() async {
-        mockOnboarding.saveStepError = NSError(
+        mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
@@ -184,7 +167,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: nil,
             accountStatus: nil,
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -198,7 +182,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: "preferred_name",
             accountStatus: nil,
             profile: ProfileData(preferredName: "Riley"),
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -216,7 +201,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: "risk_disclosure",
             accountStatus: nil,
             profile: ProfileData(preferredName: "Riley"),
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -251,7 +237,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: nil,
             accountStatus: nil,
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         await viewModel.checkOnboardingStatus()
 
