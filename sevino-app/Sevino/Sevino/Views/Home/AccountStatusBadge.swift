@@ -80,7 +80,8 @@ struct AccountStatusMessage: View {
                     .foregroundStyle(Color.sevinoSecondary)
                     .padding(.horizontal, 20 * scale)
                     .padding(.vertical, 10 * scale)
-                    .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+                    .frame(minHeight: 44 * scale)
+                    .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 22 * scale))
                     .padding(.top, 4 * scale)
                 }
             }

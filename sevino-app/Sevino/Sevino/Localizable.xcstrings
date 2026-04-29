@@ -1164,6 +1164,16 @@
         }
       }
     },
+    "home.portfolio_loading_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading"
+          }
+        }
+      }
+    },
     "home.portfolio_currency" : {
       "localizations" : {
         "en" : {

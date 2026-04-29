@@ -347,6 +347,7 @@ enum L10n {
         static let suggestionRadar = String(localized: "home.suggestion_radar")
         static let sidebarAccessibility = String(localized: "home.sidebar_accessibility")
         static let portfolioAccessibility = String(localized: "home.portfolio_accessibility")
+        static let portfolioLoadingAccessibility = String(localized: "home.portfolio_loading_accessibility")
         static let fundingAccessibility = String(localized: "home.funding_accessibility")
         static let watchlistAccessibility = String(localized: "home.watchlist_accessibility")
         static let menuAccessibility = String(localized: "home.menu_accessibility")

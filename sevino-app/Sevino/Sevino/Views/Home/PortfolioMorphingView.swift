@@ -72,7 +72,13 @@ struct PortfolioMorphingView: View {
 
     /// Reads the visible pill text to VoiceOver — without this, users hear
     /// "Portfolio, button" and miss whatever status copy replaced the value.
+    /// Mirrors the same first-load condition as `pillContent` so VoiceOver
+    /// announces "Loading" instead of the placeholder em-dash while waiting
+    /// for the first snapshot.
     private var pillAccessibilityValue: String {
+        if viewModel.accountStatus.isEmpty && viewModel.error == nil {
+            return L10n.Home.portfolioLoadingAccessibility
+        }
         switch AccountStatusKind(rawStatus: viewModel.accountStatus) {
         case .pending: return L10n.Home.accountPendingShort
         case .actionRequired: return L10n.Home.accountActionRequiredShort
