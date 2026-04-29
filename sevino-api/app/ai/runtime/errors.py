@@ -28,11 +28,15 @@ class ErrorCode(str, Enum):
 
 
 def to_error_code(exc: BaseException) -> ErrorCode:
-    # `InternalServerError` covers all 5xx responses (incl. 529 "overloaded").
-    # 4xx responses other than 429 (`BadRequestError`, `AuthenticationError`,
-    # etc.) are config or programmer errors — not overload conditions — so
-    # they fall through to `INTERNAL_ERROR` rather than being mislabelled
-    # `MODEL_OVERLOADED` and burning Phase 2 retry budget.
+    # 5xx responses map to `MODEL_OVERLOADED`. We check `status_code >= 500`
+    # rather than `isinstance(exc, InternalServerError)` because the SDK
+    # routes HTTP 529 — Anthropic's *primary* overload signal — to
+    # `OverloadedError`, a sibling of `InternalServerError` (both subclass
+    # `APIStatusError`). An `isinstance(InternalServerError)` check would
+    # silently miss 529 and dump the canonical overload case into
+    # `INTERNAL_ERROR`. 4xx responses other than 429 (`BadRequestError`,
+    # `AuthenticationError`, etc.) are config or programmer errors — not
+    # overload — so they fall through to `INTERNAL_ERROR`.
     # `APIConnectionError` (incl. its `APITimeoutError` subclass) covers
     # transport-level failures: the SDK's own timeouts and network errors
     # don't subclass `asyncio.TimeoutError` or `APIStatusError`, so without
@@ -42,7 +46,7 @@ def to_error_code(exc: BaseException) -> ErrorCode:
     # this signature is wider than `Exception`.
     if isinstance(exc, anthropic.RateLimitError):
         return ErrorCode.MODEL_RATE_LIMIT
-    if isinstance(exc, anthropic.InternalServerError):
+    if isinstance(exc, anthropic.APIStatusError) and exc.status_code >= 500:
         return ErrorCode.MODEL_OVERLOADED
     if isinstance(exc, anthropic.APIConnectionError):
         return ErrorCode.MODEL_OVERLOADED

@@ -42,10 +42,34 @@ def _http_request() -> httpx.Request:
     return httpx.Request("POST", "https://api.anthropic.com/v1/messages")
 
 
-def test_internal_server_error_maps_to_model_overloaded():
-    # 5xx responses — including 529 "overloaded" — surface as
-    # `InternalServerError` in the SDK and indicate transient model-side
-    # failures that retry logic should treat as overload.
+@pytest.mark.parametrize("status", [500, 502, 503, 504, 529])
+def test_5xx_responses_map_to_model_overloaded(status):
+    # The SDK routes 529 to `OverloadedError` (a sibling of
+    # `InternalServerError`, NOT a subclass), so an isinstance-only check
+    # against `InternalServerError` would miss the canonical overload
+    # case. Status-code-based dispatch covers all 5xx including 529.
+    # We synthesise a raw `APIStatusError` rather than the per-status
+    # subclasses (some of which, like `OverloadedError`, aren't exported
+    # at the top-level `anthropic` namespace).
+    exc = anthropic.APIStatusError(
+        "server error", response=_http_response(status), body=None
+    )
+    assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
+
+
+def test_overloaded_error_maps_to_model_overloaded():
+    # Belt-and-braces test using the actual `OverloadedError` class
+    # (imported from the SDK's private module since it isn't re-exported).
+    # This locks in the 529-handling guarantee even if the SDK someday
+    # changes the class hierarchy.
+    from anthropic._exceptions import OverloadedError
+
+    exc = OverloadedError("overloaded", response=_http_response(529), body=None)
+    assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
+
+
+def test_internal_server_error_subclass_maps_to_model_overloaded():
+    # The SDK's own subclass for non-529 5xx codes still routes correctly.
     exc = anthropic.InternalServerError(
         "server error", response=_http_response(500), body=None
     )
