@@ -4,6 +4,7 @@ import pytest
 from anthropic.types import Usage
 from anthropic.types.cache_creation import CacheCreation
 
+from app.ai.models import MODELS
 from app.ai.runtime.cost import _PRICING, cost_usd_micros
 
 
@@ -202,6 +203,17 @@ class TestUnknownModel:
         usage = Usage(input_tokens=100, output_tokens=50)
         with pytest.raises(ValueError):
             cost_usd_micros(usage, "")
+
+
+class TestPricingCoversConfiguredModels:
+    """Guard against an env flip (e.g. ANTHROPIC_MODEL_MAIN) leaving the rate
+    table behind. If MODELS.MAIN moves to a new id, _PRICING must follow."""
+
+    def test_main_model_is_priced(self):
+        assert MODELS.MAIN in _PRICING
+
+    def test_smoke_model_is_priced(self):
+        assert MODELS.SMOKE in _PRICING
 
 
 class TestPureFunction:

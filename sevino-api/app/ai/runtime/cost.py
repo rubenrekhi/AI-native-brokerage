@@ -33,7 +33,6 @@ class ModelPricing:
 
 
 # Source: https://www.anthropic.com/pricing#api
-# Values are microUSD per token, equivalent to USD per million tokens.
 _PRICING: dict[str, ModelPricing] = {
     "claude-sonnet-4-6": ModelPricing(
         input=3.0,
@@ -66,6 +65,10 @@ def cost_usd_micros(usage: Usage, model_id: str) -> int:
     present (the SDK populates it whenever caching was used). When the
     breakdown is absent but the legacy total ``cache_creation_input_tokens``
     is set, the 5-minute rate is assumed — v0 only writes 5-minute caches.
+
+    The result is rounded to the nearest microUSD using Python's default
+    round-half-to-even, so tied half-microUSD costs may drift by ±1 µUSD —
+    irrelevant at v0 billing precision.
 
     Raises ``ValueError`` if ``model_id`` has no entry in the rate table.
     """
