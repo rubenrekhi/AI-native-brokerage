@@ -1,8 +1,6 @@
 import time
 from unittest.mock import MagicMock
 
-import pytest
-
 from app.tasks.listener_liveness import check_listener_liveness
 
 
