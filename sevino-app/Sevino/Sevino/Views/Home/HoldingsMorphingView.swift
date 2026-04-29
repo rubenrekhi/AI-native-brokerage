@@ -85,7 +85,7 @@ struct HoldingsMorphingView: View {
         } else {
             LazyVStack(spacing: 12 * scale) {
                 ForEach(viewModel.holdings) { holding in
-                    HoldingRow(holding: holding, scale: scale)
+                    PortfolioHoldingRow(holding: holding, scale: scale)
                 }
                 if onlyCashRow {
                     cashOnlyHint
@@ -188,7 +188,11 @@ struct HoldingsMorphingView: View {
     }
 }
 
-private struct HoldingRow: View {
+/// Row renderer for the live `/v1/portfolio/holdings` data — distinct from
+/// the chat-rendered `HoldingRow` (`Views/Components/Cards/HoldingRow.swift`)
+/// which is for MCP card payloads. Same name unprefixed would shadow the
+/// public type and cause a compile error after the main sync.
+private struct PortfolioHoldingRow: View {
     let holding: PortfolioHolding
     let scale: CGFloat
     @State private var isDetailExpanded = false

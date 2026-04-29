@@ -450,6 +450,7 @@ enum L10n {
         static let holdingsTitle = String(localized: "home.holdings_title")
         static let holdingsTotalValue = String(localized: "home.holdings_total_value")
         static let holdingsMyHoldings = String(localized: "home.holdings_my_holdings")
+        static let holdingsDaysGain = String(localized: "home.holdings_days_gain")
         static let holdingsTotalGain = String(localized: "home.holdings_total_gain")
         static let holdingsAverageCost = String(localized: "home.holdings_average_cost")
         static func holdingsShares(_ count: String) -> String {

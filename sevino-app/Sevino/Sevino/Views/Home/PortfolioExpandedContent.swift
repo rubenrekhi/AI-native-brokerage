@@ -1,0 +1,28 @@
+import SwiftUI
+
+struct PortfolioExpandedContent: View {
+    let scale: CGFloat
+    let viewModel: PortfolioViewModel
+    @State private var scrubValue: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16 * scale) {
+            Text("\(viewModel.gainText) \(viewModel.periodLabel)")
+                .font(.system(size: 15 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoPositive)
+
+            PortfolioChartView(points: viewModel.chartPoints, scale: scale, scrubValue: $scrubValue)
+                .frame(height: 160 * scale)
+
+            HomeTimeRangeSelector(
+                selected: viewModel.selectedTimeRange,
+                scale: scale,
+                onSelect: viewModel.setTimeRange
+            )
+        }
+        .transition(.asymmetric(
+            insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
+            removal: .identity
+        ))
+    }
+}
