@@ -56,6 +56,7 @@ class Settings(BaseSettings):
     anthropic_api_key: str
     sentry_dsn: str = ""
     railway_environment_name: str = ""
+    anthropic_model_main: str = "claude-sonnet-4-6"
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
