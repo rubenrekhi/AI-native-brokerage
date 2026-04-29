@@ -26,6 +26,12 @@ final class HoldingsViewModel {
         }
     }
 
+    /// Pull-to-refresh entry point — same operation as `loadHoldings`, named
+    /// to match the F4.9 spec and read clearly at the call site.
+    func reload() async {
+        await loadHoldings()
+    }
+
     func setDisplayOption(_ option: HoldingsDisplayOption) {
         displayOption = option
     }

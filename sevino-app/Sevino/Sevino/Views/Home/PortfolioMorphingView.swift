@@ -47,20 +47,25 @@ struct PortfolioMorphingView: View {
     }
 
     private var expandedCard: some View {
-        VStack(alignment: .leading, spacing: 16 * scale) {
-            HStack(spacing: 8 * scale) {
-                Text(viewModel.displayValue)
-                    .font(.system(size: 36 * scale, weight: .bold))
-                    .foregroundStyle(Color.sevinoSecondary)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16 * scale) {
+                HStack(spacing: 8 * scale) {
+                    Text(viewModel.displayValue)
+                        .font(.system(size: 36 * scale, weight: .bold))
+                        .foregroundStyle(Color.sevinoSecondary)
 
-                Text(L10n.Home.portfolioCurrency)
-                    .font(.system(size: 18 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
+                    Text(L10n.Home.portfolioCurrency)
+                        .font(.system(size: 18 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                }
+
+                PortfolioExpandedContent(scale: scale, viewModel: viewModel)
             }
-
-            PortfolioExpandedContent(scale: scale, viewModel: viewModel)
+            .padding(16 * scale)
         }
-        .padding(16 * scale)
+        .refreshable {
+            await viewModel.loadPortfolio()
+        }
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .modifier(SevinoGlass.card)

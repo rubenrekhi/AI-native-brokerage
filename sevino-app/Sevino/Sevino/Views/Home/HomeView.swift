@@ -1,8 +1,10 @@
+import Combine
 import SwiftUI
 
 struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: HomeViewModel
     @State private var portfolioViewModel: PortfolioViewModel
     @State private var fundingViewModel: FundingViewModel
@@ -19,6 +21,10 @@ struct HomeView: View {
     @State private var showHoldingsFilter = false
     @State private var showRadar = false
     @State private var showSidebar = false
+
+    /// Captured as a `let` (not a fresh publisher per render) so SwiftUI's
+    /// re-evaluations don't subscribe to a new timer each pass.
+    private let refreshTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter }
@@ -247,6 +253,11 @@ struct HomeView: View {
         .task(id: portfolioViewModel.selectedTimeRange) {
             await portfolioViewModel.loadHistory()
         }
+        .modifier(PortfolioAutoRefresh(
+            scenePhase: scenePhase,
+            timer: refreshTimer,
+            refresh: { await portfolioViewModel.loadSnapshot() }
+        ))
         .alert(
             L10n.Home.portfolioLoadErrorTitle,
             isPresented: Binding(
@@ -410,6 +421,27 @@ struct HomeView: View {
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 
+}
+
+/// Refreshes the portfolio snapshot every 5 minutes while the scene is active
+/// and on every transition back to `.active`. Combine timers keep firing while
+/// backgrounded, so the timer handler also gates on `scenePhase`.
+private struct PortfolioAutoRefresh: ViewModifier {
+    let scenePhase: ScenePhase
+    let timer: Publishers.Autoconnect<Timer.TimerPublisher>
+    let refresh: @Sendable () async -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(timer) { _ in
+                guard scenePhase == .active else { return }
+                Task { await refresh() }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                guard phase == .active else { return }
+                Task { await refresh() }
+            }
+    }
 }
 
 #Preview("Dark") {

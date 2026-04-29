@@ -50,22 +50,27 @@ struct HoldingsMorphingView: View {
     }
 
     private var expandedContent: some View {
-        VStack(alignment: .leading, spacing: 16 * scale) {
-            headerRow
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16 * scale) {
+                headerRow
 
-            if viewModel.isLoading, viewModel.holdings.isEmpty {
-                loadingState
-            } else if viewModel.error != nil, viewModel.holdings.isEmpty {
-                errorState
-            } else if viewModel.holdings.isEmpty {
-                emptyState
-            } else {
-                LazyVStack(spacing: 12 * scale) {
-                    ForEach(viewModel.holdings) { holding in
-                        HoldingRow(holding: holding, scale: scale)
+                if viewModel.isLoading, viewModel.holdings.isEmpty {
+                    loadingState
+                } else if viewModel.error != nil, viewModel.holdings.isEmpty {
+                    errorState
+                } else if viewModel.holdings.isEmpty {
+                    emptyState
+                } else {
+                    LazyVStack(spacing: 12 * scale) {
+                        ForEach(viewModel.holdings) { holding in
+                            HoldingRow(holding: holding, scale: scale)
+                        }
                     }
                 }
             }
+        }
+        .refreshable {
+            await viewModel.reload()
         }
         .transition(.asymmetric(
             insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
