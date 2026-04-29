@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+    paths:
+      - "sevino-api/**"
+      - ".github/workflows/ci.yml"
+  push:
+    branches: [main]
+    paths:
+      - "sevino-api/**"
+      - ".github/workflows/ci.yml"
+
+defaults:
+  run:
+    working-directory: sevino-api
+    shell: bash
+
+jobs:
+  backend-tests:
+    name: backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          # Local dev (Supabase CLI) exposes Postgres on 54322; tests in
+          # tests/integration/conftest.py hardcode that port. Map the
+          # container's 5432 to the same host port so tests work unchanged.
+          - 54322:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:54322/postgres
+      DATABASE_URL_DIRECT: postgresql+asyncpg://postgres:postgres@localhost:54322/postgres
+      REDIS_URL: redis://localhost:6379
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      API_KEY: ""
+      ALPACA_API_KEY: ci-alpaca-key
+      ALPACA_SECRET_KEY: ci-alpaca-secret
+      PLAID_CLIENT_ID: ci-plaid-id
+      PLAID_SECRET: ci-plaid-secret
+      PLAID_ENV: sandbox
+      PLAID_FERNET_KEY: ci-fernet-key-placeholder
+      ANTHROPIC_API_KEY: ci-anthropic-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sevino-api/uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Bootstrap Supabase auth schema
+        # Migrations and integration tests reference `auth.users` (Supabase-managed
+        # in real envs) and grant to `supabase_auth_admin`. Recreate the minimum
+        # surface area locally so migrations + tests run against a plain Postgres.
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres <<'SQL'
+          CREATE ROLE supabase_auth_admin NOLOGIN;
+          CREATE SCHEMA auth;
+          CREATE TABLE auth.users (
+              id UUID PRIMARY KEY,
+              instance_id UUID,
+              email VARCHAR(255),
+              encrypted_password VARCHAR(255),
+              aud VARCHAR(255),
+              role VARCHAR(255),
+              raw_app_meta_data JSONB,
+              raw_user_meta_data JSONB,
+              created_at TIMESTAMPTZ,
+              updated_at TIMESTAMPTZ,
+              confirmation_token VARCHAR(255) DEFAULT '',
+              email_change VARCHAR(255) DEFAULT '',
+              email_change_token_new VARCHAR(255) DEFAULT '',
+              recovery_token VARCHAR(255) DEFAULT '',
+              phone VARCHAR(255),
+              phone_change VARCHAR(255) DEFAULT '',
+              phone_confirmed_at TIMESTAMPTZ
+          );
+          SQL
+
+      - name: Verify single alembic head
+        run: |
+          heads=$(uv run alembic heads)
+          count=$(printf '%s\n' "$heads" | grep -c .)
+          if [ "$count" -ne 1 ]; then
+            echo "::error::Expected 1 alembic head, found $count:"
+            echo "$heads"
+            exit 1
+          fi
+
+      - name: Apply migrations
+        run: make migrate
+
+      - name: Run tests
+        run: make test

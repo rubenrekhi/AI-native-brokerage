@@ -114,18 +114,19 @@ uv run pytest -v
 
 Backend tests run in GitHub Actions on every PR that changes files in `sevino-api/`.
 
-### Workflow (`.github/workflows/backend.yml`)
+### Workflow (`.github/workflows/ci.yml`)
 
 1. Checkout repo.
-2. Set up Python + uv.
-3. `uv sync` to install dependencies.
-4. Spin up Postgres service container (GitHub Actions built-in).
-5. `alembic heads` — fail if multiple heads exist (catches migration conflicts).
-6. `alembic upgrade head` against the test database.
-7. `uv run pytest` — run all tests.
-8. If tests pass and branch is `main`, Railway auto-deploys.
+2. Install uv (with cache keyed on `sevino-api/uv.lock`).
+3. `uv sync --frozen` to install dependencies (auto-installs Python from `.python-version`).
+4. Spin up Postgres 17 + Redis 7 service containers; Postgres is mapped to host port 54322 to match the local Supabase setup that integration tests connect to.
+5. Bootstrap the `auth` schema, `auth.users` table, and `supabase_auth_admin` role on the Postgres service — these are Supabase-managed in real environments but must exist before migrations + integration tests run.
+6. `alembic heads` — fail if multiple heads exist (catches migration conflicts).
+7. `make migrate` (`alembic upgrade head`) against the test database.
+8. `make test` — run all tests.
+9. If tests pass and branch is `main`, Railway auto-deploys.
 
-The workflow only triggers on changes to `sevino-api/**` — app-only PRs don't run backend tests.
+The workflow only triggers on changes to `sevino-api/**` (or to the workflow file itself) — app-only PRs don't run backend tests.
 
 ## What to Test for MVP
 
