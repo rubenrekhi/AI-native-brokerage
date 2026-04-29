@@ -70,10 +70,20 @@ class TestSentryEnvironment:
 
     def test_pr_preview_overrides(self):
         s = _make_settings(
-            environment="staging", railway_environment_name="pr-123"
+            environment="staging", railway_environment_name="sevino-pr-123"
         )
         assert s.is_pr_preview is True
-        assert s.sentry_environment == "pr-123"
+        assert s.sentry_environment == "sevino-pr-123"
+
+    def test_bare_pr_prefix_does_not_match(self):
+        # Guard against regressing to a "pr-" prefix check: Railway's
+        # actual env name for Sevino's previews is "sevino-pr-N", not
+        # "pr-N", so a bare "pr-" prefix would never fire.
+        s = _make_settings(
+            environment="staging", railway_environment_name="pr-123"
+        )
+        assert s.is_pr_preview is False
+        assert s.sentry_environment == "staging"
 
     def test_real_staging_keeps_settings_environment(self):
         s = _make_settings(

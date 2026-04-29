@@ -145,10 +145,10 @@ async def test_every_silent_stream_fires_its_own_alert(monkeypatch):
 
 
 async def test_pr_preview_env_skips_all_alerts(monkeypatch):
-    """PR preview environments (RAILWAY_ENVIRONMENT_NAME=pr-*) must never
-    fire Sentry silence alerts — these previews get torn down and their
-    stale checkpoints generate noise. See SEV-433."""
-    monkeypatch.setattr(settings, "railway_environment_name", "pr-123")
+    """PR preview environments (RAILWAY_ENVIRONMENT_NAME=sevino-pr-*) must
+    never fire Sentry silence alerts — these previews get torn down and
+    their stale checkpoints generate noise. See SEV-433."""
+    monkeypatch.setattr(settings, "railway_environment_name", "sevino-pr-123")
     capture = MagicMock()
     monkeypatch.setattr(
         "app.tasks.listener_liveness.sentry_sdk.capture_message", capture

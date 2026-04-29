@@ -188,7 +188,7 @@ class TestWorkerStartup:
     @pytest.mark.parametrize(
         "env_setting,railway_env,expected",
         [
-            ("staging", "pr-789", "pr-789"),  # PR preview overrides
+            ("staging", "sevino-pr-789", "sevino-pr-789"),  # PR preview overrides
             ("prod", "production", "prod"),  # real prod NOT rewritten
         ],
     )
