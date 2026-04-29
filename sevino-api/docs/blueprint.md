@@ -446,10 +446,12 @@ Redis sits between the API and Alpaca for frequently accessed data. Cache keys f
 
 | Data | Cache Key Pattern | TTL | Invalidation |
 |---|---|---|---|
-| Account summary (equity, cash, buying power) | `user:{id}:account` | 60s | SSE: transfer completed |
-| Positions / holdings | `user:{id}:positions` | 30s | SSE: order filled |
-| Stock quotes | `market:quote:{symbol}` | 15s | TTL only (ambient market data) |
-| Portfolio history (charts) | `user:{id}:history:{timeframe}` | 5min | TTL only |
+| Portfolio snapshot (equity, cash, buying power, daily change) | `portfolio:snapshot:{user_id}` | 30s | TTL only (post-MVP: SSE invalidation on transfer/fill) |
+| Holdings (positions + cash + total) | `portfolio:holdings:{user_id}` | 30s | TTL only (post-MVP: SSE invalidation on fills) |
+| Portfolio history (charts) | `portfolio:history:{user_id}:{range}` | 60s | TTL only |
+| Stock quotes (planned) | `market:quote:{symbol}` | 15s | TTL only (ambient market data) |
+
+The portfolio cache helper is `cache_get_or_set()` in `app/cache.py` — it caches the **serialized response dict** (already transformed: decimal-as-string, sorted, with asset-name joins) so a cache miss recomputation is idempotent. Malformed cache entries silently fall back to the fetcher. Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py`.
 
 **What is NOT cached (always live):**
 
@@ -895,47 +897,54 @@ The `order_events` table is our audit log — it's the authoritative record of e
 
 **What it does:** Retrieves and serves the user's holdings, positions, P&L, stock/ETF quotes, and portfolio history for charts. On-demand REST fetches with Redis caching.
 
+**Status:** Portfolio surfaces (status bar pill, expanded modal, performance chart, holdings modal) are **live**. Implementation lives in `app/routes/portfolio.py` + `app/services/portfolio.py`; iOS lives under `Sevino/Models/Portfolio/`, `Sevino/Services/`, `Sevino/ViewModels/Portfolio/`. For the full contract — response shapes, decimal-as-string convention, range mapping, non-`ACTIVE` short-circuit, error mapping — see [`docs/alpaca-integration.md`](alpaca-integration.md#portfolio-read-endpoints-sevino-api) and `.context/portfolio-data/architecture.md`.
+
 **Sequence:**
 
 All portfolio and market data follows the same pattern: user action → API checks Redis cache → cache miss calls Alpaca REST → cache result → return.
 
-**Positions & Holdings** (user taps Holdings icon or asks AI):
-1. API checks `user:{id}:positions` cache (30s TTL).
-2. Cache miss → `GET /v1/trading/accounts/{id}/positions`.
-3. Returns: symbol, qty, current_price, market_value, cost_basis, unrealized_pl, unrealized_plpc per position.
-4. Used by: Holdings modal (FR-9.6), Portfolio Summary Card (FR-5.1), AI context (FR-4.3), concentration risk check (FR-8.10).
+**Snapshot** (status bar pill, expanded modal hero):
+1. iOS calls `GET /v1/portfolio/snapshot`.
+2. API checks `portfolio:snapshot:{user_id}` cache (30s TTL).
+3. Cache miss → `GET /v1/trading/accounts/{id}/account` via `AlpacaBrokerService.get_trading_account`.
+4. Response: `account_status`, `currency`, `equity`, `last_equity`, `cash`, `buying_power`, `daily_change_abs`, `daily_change_pct` — money fields decimal-as-string. Non-`ACTIVE` accounts get 409 `ACCOUNT_NOT_ACTIVE` before reaching the service (see `alpaca-integration.md`).
+5. Used by: status bar value + daily change (FR-9.2), AI greeting (FR-4.7), force-press modal (FR-9.4).
 
-**Account Summary** (status bar, AI greeting, modals):
-1. API checks `user:{id}:account` cache (60s TTL).
-2. Cache miss → `GET /v1/trading/accounts/{id}/account`.
-3. Returns: equity, last_equity, cash, buying_power, daily P&L (equity - last_equity), cash_interest.
-4. Used by: status bar value + daily change (FR-9.2), AI greeting (FR-4.7), force-press modal.
+**Holdings** (user taps Holdings icon or asks AI):
+1. iOS calls `GET /v1/portfolio/holdings`.
+2. API checks `portfolio:holdings:{user_id}` cache (30s TTL).
+3. Cache miss → concurrent `GET .../account` + `GET .../positions`, then joins with `assets.name` for company names.
+4. Response: `account_status`, `currency`, `cash`, `total_market_value`, `positions[]` sorted by market value desc. Non-`ACTIVE` accounts get 409 before reaching the service.
+5. Used by: Holdings modal (FR-9.6), Portfolio Summary Card (FR-5.1), AI context (FR-4.3), concentration risk check (FR-8.10).
 
-**Stock Quotes** (user asks about a stock, taps Radar item):
+**Portfolio History** (chart with time-range selector):
+1. iOS calls `GET /v1/portfolio/history?range=1M` (any of `1D|1W|1M|3M|6M|YTD|1Y|ALL`).
+2. API checks `portfolio:history:{user_id}:{range}` cache (60s TTL — pinned per range).
+3. Cache miss → `GET .../account/portfolio/history` with the range mapped to `period` / `timeframe` / `start` (table in `alpaca-integration.md`).
+4. Response: `range`, `timeframe`, `currency`, `base_value`, `end_value`, `gain_abs`, `gain_pct`, `points[]` (`{t, v}` with ISO-8601 UTC timestamps).
+5. Used by: Performance Chart Card (FR-5.1), force-press modal chart.
+
+**Stock Quotes** (planned; still hits Alpaca direct):
 1. API checks `market:quote:{symbol}` cache (15s TTL).
 2. Cache miss → `GET /v2/stocks/{symbol}/snapshot` (bundles latest trade, quote, daily bar, prev daily bar in one call).
 3. Used by: Stock Info Card (FR-5.1), AI Radar Card.
 
-**Portfolio History / Charts** (user opens performance chart or selects time range):
-1. API checks `user:{id}:history:{timeframe}` cache (5min TTL).
-2. Cache miss → `GET /v1/trading/accounts/{id}/account/portfolio/history?period={X}&timeframe={Y}`.
-3. Timeframe mapping: 1D→5Min, 1W→15Min, 1M→1Hour, 3M/6M/1Y→1Day, All→1Week.
-4. Used by: Performance Chart Card (FR-5.1), force-press modal chart.
-
-**Stock Charts** (user asks "show me TSLA's chart" or taps time range on Stock Info Card):
-1. `GET /v2/stocks/{symbol}/bars?timeframe={X}&start={Y}` — same timeframe mapping as portfolio history.
+**Stock Charts** (planned; user asks "show me TSLA's chart"):
+1. `GET /v2/stocks/{symbol}/bars?timeframe={X}&start={Y}`.
 
 **Batch Quotes** (Radar modal, comparison cards):
 1. `GET /v2/stocks/snapshots?symbols=VTI,AAPL,MSFT,...` — single batch call for multiple symbols.
 
 **Status Bar Background Refresh:**
-The iOS app calls the Sevino API every 5 minutes while in the foreground to refresh the status bar portfolio value. This is a frontend-initiated background job, not a server-side polling loop. The API serves from cache when possible.
+The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. As of F4.6, this fires on view-appear and on time-range change; periodic 5-minute refresh, scene-phase resume, and pull-to-refresh are wired in F4.9 (in flight). All refresh is frontend-initiated — the backend never polls. The 30s server-side TTL means most refresh ticks are cache hits.
 
 **Key decisions:**
 
 - All market data is on-demand REST, not continuous WebSocket streaming. The chat-first UI means data is behind user-initiated actions — no always-visible ticker or live chart.
+- Money / qty / percentage fields are JSON **strings** end-to-end (`MoneyStr` / `QtyStr` / `PctStr` in `app/schemas/_types.py`; `@DecimalString` on iOS). Avoids float drift across the wire.
+- Non-`ACTIVE` short-circuits prevent calling Alpaca for `SUBMITTED` / `APPROVAL_PENDING` / `ACTION_REQUIRED` / `REJECTED` accounts — iOS uses `account_status` to render onboarding/review copy instead of misleading `$0.00`.
 - The `snapshot` endpoint is the most efficient call for Stock Info Cards — bundles everything needed in one response.
-- Cache TTLs are starting points. Positions (30s) and account (60s) are short because SSE events invalidate them on trades/transfers. Quotes (15s) and history (5min) expire by TTL only since there's no user-triggered event to react to.
+- Cache TTLs are short (30–60s) because invalidation isn't wired yet. Once SSE order-fill / transfer-complete listeners ship, they can `DEL` the matching `portfolio:*` keys for instant freshness.
 - Future option: Alpaca's Market Data WebSocket (`wss://stream.data.alpaca.markets/v2/{feed}`) is available if a future feature requires continuous price streaming. Not needed for MVP.
 
 ---

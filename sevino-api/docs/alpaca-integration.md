@@ -306,6 +306,92 @@ Useful for building activity feeds and AI context ("what happened in my account 
 
 ---
 
+## Portfolio Read Endpoints (Sevino API)
+
+The three Sevino-API routes the iOS portfolio surfaces depend on. Each one wraps an Alpaca call (or two) behind a Redis cache and a non-`ACTIVE` short-circuit. For the response field-by-field contract, ticket index, and decision history, see `.context/portfolio-data/architecture.md` and `.context/portfolio-data/tickets/README.md`.
+
+### Routes
+
+| Route | Used by (iOS) | Alpaca calls | Cache key | TTL |
+|---|---|---|---|---|
+| `GET /v1/portfolio/snapshot` | Status-bar pill, expanded modal hero | `GET /v1/trading/accounts/{id}/account` | `portfolio:snapshot:{user_id}` | 30s |
+| `GET /v1/portfolio/holdings` | Holdings modal | `GET .../account` + `.../positions` (concurrent) | `portfolio:holdings:{user_id}` | 30s |
+| `GET /v1/portfolio/history?range=1M` | Performance chart | `GET .../account/portfolio/history` | `portfolio:history:{user_id}:{range}` | 60s |
+
+Routes are mounted in `app/main.py` under the `/v1/portfolio` prefix. Source: `app/routes/portfolio.py`, service `app/services/portfolio.py`.
+
+### Decimal-as-string contract
+
+All money / quantity / percentage fields serialize as JSON **strings**, not numbers. This avoids float drift across Python ↔ JSON ↔ Swift. The shared Pydantic aliases live in `app/schemas/_types.py`:
+
+- `MoneyStr` — 2 decimal places, quantized (`"1084.92"`)
+- `QtyStr` — up to 9 decimal places, fractional shares (`"0.125"`)
+- `PctStr` — factor of 1, 4 decimal places (`"0.2731"` = 27.31%)
+
+Every portfolio response model uses these aliases — never plain `Decimal`. iOS decodes via the `@DecimalString` property wrapper (`sevino-app/Sevino/Sevino/Utils/DecimalString.swift`).
+
+### Caching
+
+Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py` from the same `redis_url` as ARQ. The cache helper in `app/cache.py`:
+
+```python
+async def cache_get_or_set(client: aioredis.Redis, key: str, ttl: int, fetcher: ...): ...
+```
+
+Caches the **serialized response dict**, not the raw Alpaca response — so transformations (decimal quantization, sorting, asset-name joins) are computed once per TTL window. Malformed cache entries fall back to the fetcher (see `#506`). No invalidation on writes; the 30–60s TTL is the SLA. If we later wire SSE order fills, invalidate `portfolio:holdings:{user_id}` + `portfolio:snapshot:{user_id}` on each `fill` event.
+
+**Do not add a background job that pre-warms these keys.** Refresh is pull-based from the iOS client.
+
+### Non-`ACTIVE` gate (at the dependency, not the service)
+
+The portfolio surfaces are gated **before** the service runs, by the FastAPI dependency `get_alpaca_account_context` in `app/dependencies/portfolio.py`. If the caller has no `brokerage_accounts` row, or their `account_status != "ACTIVE"`, the dependency raises:
+
+```python
+raise ConflictError(
+    "Your brokerage account is not active yet.",
+    code="ACCOUNT_NOT_ACTIVE",
+    detail={"account_status": status},
+)
+```
+
+This maps to **409 `ACCOUNT_NOT_ACTIVE`** with `detail.account_status` set to the actual Alpaca status string (e.g. `"APPROVAL_PENDING"`, `"ACTION_REQUIRED"`, `"REJECTED"`, or `null` if no row exists). iOS reads `detail.account_status` from the 409 response and renders the corresponding empty-state copy ("Being reviewed", "Action required", "Rejected") instead of a misleading `$0.00`.
+
+Because the dependency 409s before the service runs, `PortfolioService` itself trusts that `ctx.account_status == "ACTIVE"` on entry — there are no defensive `if ctx.account_status != "ACTIVE": ...` branches inside the service. **Don't add them**; that path is unreachable.
+
+Rationale for gating in the dependency rather than calling Alpaca: the broker's behavior for non-`ACTIVE` accounts on the `account` / `positions` / `portfolio/history` endpoints is undocumented (200 with empty data? 4xx?). Cheaper and safer to skip the round trip and centralize the check at one boundary.
+
+### `range` → Alpaca params mapping (`/v1/portfolio/history`)
+
+Query parameter `range` is the iOS-facing enum; the service maps it to Alpaca's `period` / `timeframe` / `start`. Anything outside this set returns 422.
+
+| iOS `range` | Alpaca `period` | Alpaca `timeframe` | Alpaca `start` |
+|---|---|---|---|
+| `1D` | `1D` | `5Min` | — |
+| `1W` | `1W` | `30Min` | — |
+| `1M` | `1M` | `1D` | — |
+| `3M` | `3M` | `1D` | — |
+| `6M` | `6M` | `1D` | — |
+| `YTD` | (omit) | `1D` | `YYYY-01-01T00:00:00Z` (computed) |
+| `1Y` | `1A` | `1D` | — |
+| `ALL` | `all` | `1W` | — |
+
+Source of truth: `range_to_alpaca_params()` in `app/services/portfolio.py`.
+
+### Errors
+
+Domain exceptions bubble up to the registered handlers in `app/exceptions.py`:
+
+| Raised | HTTP | Code | Notes |
+|---|---|---|---|
+| `ConflictError("ACCOUNT_NOT_ACTIVE")` | 409 | `ACCOUNT_NOT_ACTIVE` | most common — raised by `get_alpaca_account_context` for non-`ACTIVE` users; `detail.account_status` carries the Alpaca status |
+| `AlpacaBrokerError` (4xx) | 422 | `ALPACA_ERROR` | input rejected by broker |
+| `AlpacaBrokerError` (5xx) | 502 | `ALPACA_ERROR` | broker outage — distinct status from input errors |
+| `AlpacaBrokerUnavailableError` | 503 | `ALPACA_UNAVAILABLE` | sets `Retry-After: 30` |
+
+Routes never `try/except` — handlers map exceptions to the structured `error_response()` shape.
+
+---
+
 ## Status Bar & Modal Data Architecture
 
 **PRD References:** FR-9.1–FR-9.8
