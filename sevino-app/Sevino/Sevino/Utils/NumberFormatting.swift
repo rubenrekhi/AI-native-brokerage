@@ -38,6 +38,13 @@ private func currencyFormatter(currencyCode: String, locale: Locale, signed: Boo
     f.numberStyle = .currency
     f.locale = locale
     f.currencyCode = currencyCode
+    // On non-en_US locales, USD renders as "US$1,084.92" by default. Sevino is
+    // a USD-only product and we want a bare "$" everywhere; user locale still
+    // drives separators (e.g. "1.084,92" in DE). For non-USD codes we keep
+    // the locale-default symbol.
+    if currencyCode == "USD" {
+        f.currencySymbol = "$"
+    }
     if signed { f.positivePrefix = f.plusSign + (f.currencySymbol ?? "$") }
     _cache.setObject(f, forKey: key)
     return f
