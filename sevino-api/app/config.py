@@ -54,10 +54,24 @@ class Settings(BaseSettings):
     plaid_env: str
     plaid_fernet_key: str
     sentry_dsn: str = ""
+    railway_environment_name: str = ""
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
         return [k.strip() for k in self.plaid_fernet_key.split(",") if k.strip()]
+
+    @property
+    def is_pr_preview(self) -> bool:
+        return self.railway_environment_name.startswith("pr-")
+
+    @property
+    def sentry_environment(self) -> str:
+        # PR previews get their own tag (pr-NNN) so noise from torn-down
+        # previews is filterable. Real staging/prod keep settings.environment
+        # ("staging"/"prod") so existing Sentry alerts and dashboards keyed
+        # off those values don't silently break — Railway's env name for
+        # prod is "production", which would not match a "prod"-keyed alert.
+        return self.railway_environment_name if self.is_pr_preview else self.environment
 
     @property
     def show_docs(self) -> bool:

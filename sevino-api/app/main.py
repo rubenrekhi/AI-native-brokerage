@@ -1,5 +1,3 @@
-import os
-
 from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
@@ -29,10 +27,9 @@ from app.routes.settings import router as settings_router
 configure_logging(settings.environment)
 
 if settings.sentry_dsn:
-    _railway_env = os.environ.get("RAILWAY_ENVIRONMENT_NAME", "")
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
-        environment=_railway_env if _railway_env.startswith("pr-") else settings.environment,
+        environment=settings.sentry_environment,
         traces_sample_rate=0.1,
         send_default_pii=False,
         before_send=sentry_before_send,

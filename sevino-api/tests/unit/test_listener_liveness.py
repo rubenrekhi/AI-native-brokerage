@@ -1,6 +1,7 @@
 import time
 from unittest.mock import MagicMock
 
+from app.config import settings
 from app.tasks.listener_liveness import check_listener_liveness
 
 
@@ -147,7 +148,7 @@ async def test_pr_preview_env_skips_all_alerts(monkeypatch):
     """PR preview environments (RAILWAY_ENVIRONMENT_NAME=pr-*) must never
     fire Sentry silence alerts — these previews get torn down and their
     stale checkpoints generate noise. See SEV-433."""
-    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "pr-123")
+    monkeypatch.setattr(settings, "railway_environment_name", "pr-123")
     capture = MagicMock()
     monkeypatch.setattr(
         "app.tasks.listener_liveness.sentry_sdk.capture_message", capture
@@ -163,7 +164,7 @@ async def test_pr_preview_env_skips_all_alerts(monkeypatch):
 async def test_non_pr_railway_env_still_alerts(monkeypatch):
     """Non-PR Railway environments (staging, production) must still fire
     silence alerts normally."""
-    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "staging")
+    monkeypatch.setattr(settings, "railway_environment_name", "staging")
     capture = MagicMock()
     monkeypatch.setattr(
         "app.tasks.listener_liveness.sentry_sdk.capture_message", capture
@@ -179,7 +180,7 @@ async def test_non_pr_railway_env_still_alerts(monkeypatch):
 async def test_railway_env_tag_set_on_silence_alert(monkeypatch):
     """When RAILWAY_ENVIRONMENT_NAME is set (non-PR), it should appear as a
     tag on silence alerts for ops filtering."""
-    monkeypatch.setenv("RAILWAY_ENVIRONMENT_NAME", "staging")
+    monkeypatch.setattr(settings, "railway_environment_name", "staging")
     captured_tags: dict = {}
 
     class _FakeScope:

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 import signal
 import time
 
@@ -124,10 +123,9 @@ async def startup(ctx: dict) -> None:
     logging.getLogger("arq").handlers.clear()
 
     if settings.sentry_dsn:
-        _railway_env = os.environ.get("RAILWAY_ENVIRONMENT_NAME", "")
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
-            environment=_railway_env if _railway_env.startswith("pr-") else settings.environment,
+            environment=settings.sentry_environment,
             traces_sample_rate=0.1,
             before_send=sentry_before_send,
         )
