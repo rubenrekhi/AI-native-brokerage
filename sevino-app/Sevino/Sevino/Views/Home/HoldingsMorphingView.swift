@@ -65,10 +65,11 @@ struct HoldingsMorphingView: View {
         ))
     }
 
-    /// Routes to one of: loading, error, account-status message, empty (cash vs.
-    /// no-cash), or the row list. Pending/rejected accounts replace the empty
-    /// state with a status-aware message so the user understands why their
-    /// holdings list is blank.
+    /// Routes to one of: loading, error, account-status message, fully-empty
+    /// state, or the row list. When holdings contains only the CASH row we
+    /// render the list (so the user sees their cash balance) plus a small
+    /// hint nudging them to add a stock — replacing it with an empty state
+    /// would hide the cash they actually have.
     @ViewBuilder
     private var expandedBody: some View {
         let statusKind = AccountStatusKind(rawStatus: viewModel.accountStatus)
@@ -78,12 +79,15 @@ struct HoldingsMorphingView: View {
             errorState
         } else if statusKind == .pending || statusKind == .actionRequired || statusKind == .rejected {
             AccountStatusMessage(kind: statusKind, scale: scale)
-        } else if viewModel.holdings.isEmpty || onlyCashRow {
-            emptyStateForActiveAccount
+        } else if viewModel.holdings.isEmpty {
+            unfundedEmptyState
         } else {
             LazyVStack(spacing: 12 * scale) {
                 ForEach(viewModel.holdings) { holding in
                     HoldingRow(holding: holding, scale: scale)
+                }
+                if onlyCashRow {
+                    cashOnlyHint
                 }
             }
         }
@@ -93,38 +97,38 @@ struct HoldingsMorphingView: View {
         viewModel.holdings.count == 1 && viewModel.holdings[0].isCash
     }
 
-    private var hasCash: Bool {
-        viewModel.holdings.contains { $0.isCash && $0.marketValue > 0 }
-    }
-
     private var loadingState: some View {
         ProgressView()
             .frame(maxWidth: .infinity)
             .padding(.vertical, 32 * scale)
     }
 
-    /// `ACTIVE` empty states branch on cash:
-    /// - has cash → "you can start investing now"
-    /// - no cash → "fund first"
-    /// Per F4.10 §3, "ACTIVE with $0 everything" must read differently from
-    /// "ACTIVE, funded, no positions yet".
-    @ViewBuilder
-    private var emptyStateForActiveAccount: some View {
-        if hasCash {
-            ContentUnavailableView {
-                Label(L10n.Home.holdingsEmptyFundedTitle, systemImage: "chart.pie")
-            } description: {
-                Text(L10n.Home.holdingsEmptyFundedMessage)
-            }
-            .frame(maxWidth: .infinity)
-        } else {
-            ContentUnavailableView {
-                Label(L10n.Home.holdingsEmptyUnfundedTitle, systemImage: "dollarsign.circle")
-            } description: {
-                Text(L10n.Home.holdingsEmptyUnfundedMessage)
-            }
-            .frame(maxWidth: .infinity)
+    /// Inline nudge for funded ACTIVE accounts that haven't bought anything
+    /// yet. Sits below the CASH row instead of replacing it so users still
+    /// see their cash balance.
+    private var cashOnlyHint: some View {
+        HStack(spacing: 8 * scale) {
+            Image(systemName: "magnifyingglass.circle")
+                .font(.system(size: 14 * scale))
+                .foregroundStyle(Color.sevinoGreyContrast)
+            Text(L10n.Home.holdingsCashOnlyHint)
+                .font(.system(size: 13 * scale))
+                .foregroundStyle(Color.sevinoGreyContrast)
         }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 8 * scale)
+    }
+
+    /// `ACTIVE` account with no positions and no cash row — the user still
+    /// needs to fund. Funded-but-empty no longer routes here; it falls
+    /// through to the row list with `cashOnlyHint`.
+    private var unfundedEmptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Home.holdingsEmptyUnfundedTitle, systemImage: "dollarsign.circle")
+        } description: {
+            Text(L10n.Home.holdingsEmptyUnfundedMessage)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private var errorState: some View {

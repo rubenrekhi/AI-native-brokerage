@@ -64,6 +64,36 @@ final class PortfolioViewModelTests: XCTestCase {
                        "transient failures must not wipe the last-known status")
     }
 
+    func testLoadSnapshotParsesAccountStatusFromAccountNotActiveError() async {
+        mockService.fetchPortfolioError = APIError(
+            error: "Your brokerage account is not active yet.",
+            code: APIError.Code.accountNotActive,
+            detail: ["account_status": AnyCodable("APPROVAL_PENDING")]
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.accountStatus, "APPROVAL_PENDING",
+                       "VM must extract account_status from a 409 detail so the pending UI can render")
+        XCTAssertNil(viewModel.error,
+                     "ACCOUNT_NOT_ACTIVE is not a generic error — accountStatus carries the meaning")
+    }
+
+    func testLoadSnapshotSuppressesErrorAfterFirstSuccess() async {
+        await viewModel.loadSnapshot()
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+
+        mockService.fetchPortfolioError = NSError(
+            domain: "test", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+        await viewModel.loadSnapshot()
+
+        XCTAssertNil(viewModel.error,
+                     "stale-while-error: refresh failures stay silent so the last good value remains on screen")
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+    }
+
     // MARK: - loadPortfolio success
 
     func testLoadPortfolioSuccessPopulatesSnapshotAndHistory() async {

@@ -45,21 +45,28 @@ struct PortfolioMorphingView: View {
         .accessibilityValue(pillAccessibilityValue)
     }
 
-    /// `ACTIVE` and unknown render the dollar value as before; non-`ACTIVE`
-    /// statuses swap in a short label so the user sees "Being reviewed" instead
-    /// of a misleading $0.00 while their account is pending. `unknown` covers
-    /// both pre-fetch (status == "") and any future status the client doesn't
-    /// know — fall back to the value rather than blanking the pill.
+    /// First-load (no successful fetch yet) shows a spinner so the pill
+    /// doesn't render a stale `"—"` placeholder. After any fetch completes,
+    /// `accountStatus` is non-empty and we route on its kind: non-`ACTIVE`
+    /// statuses swap in a short label, `active`/`unknown` render the dollar
+    /// value. `unknown` is also the fallback for any future status the
+    /// client doesn't recognise — show the value rather than blanking.
     @ViewBuilder
     private var pillContent: some View {
-        let kind = AccountStatusKind(rawStatus: viewModel.accountStatus)
-        switch kind {
-        case .pending, .actionRequired, .rejected:
-            AccountStatusPillLabel(kind: kind, scale: scale)
-        case .active, .unknown:
-            Text(viewModel.displayValue)
-                .font(.system(size: 13 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
+        if viewModel.accountStatus.isEmpty && viewModel.error == nil {
+            ProgressView()
+                .scaleEffect(0.7)
+                .frame(minWidth: 20 * scale)
+        } else {
+            let kind = AccountStatusKind(rawStatus: viewModel.accountStatus)
+            switch kind {
+            case .pending, .actionRequired, .rejected:
+                AccountStatusPillLabel(kind: kind, scale: scale)
+            case .active, .unknown:
+                Text(viewModel.displayValue)
+                    .font(.system(size: 13 * scale, weight: .semibold))
+                    .foregroundStyle(Color.sevinoSecondary)
+            }
         }
     }
 

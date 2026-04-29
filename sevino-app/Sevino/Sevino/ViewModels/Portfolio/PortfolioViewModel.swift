@@ -44,7 +44,17 @@ final class PortfolioViewModel {
         _ = await (snap, hist)
     }
 
-    /// Fetches just the snapshot. Snapshot errors surface to the user via `error`.
+    /// Fetches just the snapshot.
+    ///
+    /// On `ACCOUNT_NOT_ACTIVE` (the 409 raised by the backend's
+    /// `get_alpaca_account_context` dependency), parses the wrapped
+    /// `account_status` out of `APIError.detail` so the pending/rejected UI
+    /// can render — without this, non-ACTIVE users would only see a generic
+    /// error toast.
+    ///
+    /// Stale-while-error: errors only surface when we have no status info at
+    /// all. After any successful fetch (or a parsed 409), refresh failures
+    /// stay silent so the last good value remains on screen.
     func loadSnapshot() async {
         error = nil
         isLoading = true
@@ -56,7 +66,14 @@ final class PortfolioViewModel {
             gainText = snapshot.gainText
             accountStatus = snapshot.accountStatus
         } catch let caughtError {
-            error = caughtError.localizedDescription
+            if let apiError = caughtError as? APIError,
+               apiError.code == APIError.Code.accountNotActive,
+               let status = apiError.detail?["account_status"]?.stringValue {
+                accountStatus = status
+            }
+            if accountStatus.isEmpty {
+                error = caughtError.localizedDescription
+            }
         }
     }
 

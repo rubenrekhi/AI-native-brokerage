@@ -46,7 +46,10 @@ struct AccountStatusPillLabel: View {
 }
 
 /// Full-width message for the holdings/portfolio modal explaining the state
-/// and (where applicable) offering the next action.
+/// and (where applicable) offering the next action. The `actionRequired`
+/// case renders a "Finish setup" button; its action is wired up later when
+/// onboarding deep-link navigation lands — for now it's a no-op so the
+/// surface looks complete without claiming a destination we don't have yet.
 struct AccountStatusMessage: View {
     let kind: AccountStatusKind
     let scale: CGFloat
@@ -67,6 +70,19 @@ struct AccountStatusMessage: View {
                     .font(.system(size: 13 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
                     .fixedSize(horizontal: false, vertical: true)
+
+                if let cta = copy.cta {
+                    Button(cta) {
+                        // Stub — onboarding deep-link navigation is a separate
+                        // ticket. Intentional no-op so the visual lands now.
+                    }
+                    .font(.system(size: 14 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .padding(.horizontal, 20 * scale)
+                    .padding(.vertical, 10 * scale)
+                    .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+                    .padding(.top, 4 * scale)
+                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16 * scale)
@@ -81,6 +97,7 @@ struct AccountStatusMessage: View {
         let title: String
         let message: String
         let icon: String
+        let cta: String?
     }
 
     private func body(for kind: AccountStatusKind) -> Copy? {
@@ -89,19 +106,22 @@ struct AccountStatusMessage: View {
             return Copy(
                 title: L10n.Home.accountPendingTitle,
                 message: L10n.Home.accountPendingMessage,
-                icon: "clock"
+                icon: "clock",
+                cta: nil
             )
         case .actionRequired:
             return Copy(
                 title: L10n.Home.accountActionRequiredTitle,
                 message: L10n.Home.accountActionRequiredMessage,
-                icon: "exclamationmark.circle"
+                icon: "exclamationmark.circle",
+                cta: L10n.Home.accountActionRequiredCTA
             )
         case .rejected:
             return Copy(
                 title: L10n.Home.accountRejectedTitle,
                 message: L10n.Home.accountRejectedMessage,
-                icon: "xmark.octagon"
+                icon: "xmark.octagon",
+                cta: nil
             )
         case .active, .unknown:
             return nil

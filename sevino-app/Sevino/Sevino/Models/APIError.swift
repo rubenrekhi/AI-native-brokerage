@@ -43,6 +43,7 @@ extension APIError {
         static let incompleteOnboarding = "INCOMPLETE_ONBOARDING"
         static let alpacaError = "ALPACA_ERROR"
         static let alpacaUnavailable = "ALPACA_UNAVAILABLE"
+        static let accountNotActive = "ACCOUNT_NOT_ACTIVE"
         static let unknown = "UNKNOWN"
     }
 }

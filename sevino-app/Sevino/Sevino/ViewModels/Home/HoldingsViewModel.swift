@@ -16,6 +16,10 @@ final class HoldingsViewModel {
         self.service = service
     }
 
+    /// Mirrors `PortfolioViewModel.loadSnapshot`: on `ACCOUNT_NOT_ACTIVE`,
+    /// parses the wrapped `account_status` into `accountStatus` so the
+    /// holdings modal renders the pending/rejected message instead of a
+    /// generic error. Stale-while-error suppresses refresh-failure noise.
     func loadHoldings() async {
         error = nil
         isLoading = true
@@ -25,7 +29,14 @@ final class HoldingsViewModel {
             holdings = result.holdings
             accountStatus = result.accountStatus
         } catch let caughtError {
-            error = caughtError.localizedDescription
+            if let apiError = caughtError as? APIError,
+               apiError.code == APIError.Code.accountNotActive,
+               let status = apiError.detail?["account_status"]?.stringValue {
+                accountStatus = status
+            }
+            if accountStatus.isEmpty {
+                error = caughtError.localizedDescription
+            }
         }
     }
 

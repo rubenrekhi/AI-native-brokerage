@@ -48,6 +48,38 @@ final class HoldingsViewModelTests: XCTestCase {
                        "transient failures must not wipe the last-known status")
     }
 
+    func testLoadHoldingsParsesAccountStatusFromAccountNotActiveError() async {
+        mockService.fetchHoldingsError = APIError(
+            error: "Your brokerage account is not active yet.",
+            code: APIError.Code.accountNotActive,
+            detail: ["account_status": AnyCodable("APPROVAL_PENDING")]
+        )
+
+        await viewModel.loadHoldings()
+
+        XCTAssertEqual(viewModel.accountStatus, "APPROVAL_PENDING",
+                       "VM must extract account_status from a 409 detail so the pending UI can render")
+        XCTAssertNil(viewModel.error,
+                     "ACCOUNT_NOT_ACTIVE is not a generic error — accountStatus carries the meaning")
+    }
+
+    func testLoadHoldingsSuppressesErrorAfterFirstSuccess() async {
+        mockService.accountStatus = "ACTIVE"
+        mockService.holdings = [Self.makeHolding(ticker: "AAPL")]
+        await viewModel.loadHoldings()
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+
+        mockService.fetchHoldingsError = NSError(
+            domain: "test", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+        await viewModel.loadHoldings()
+
+        XCTAssertNil(viewModel.error,
+                     "stale-while-error: refresh failures stay silent so the last good list remains on screen")
+        XCTAssertEqual(viewModel.accountStatus, "ACTIVE")
+    }
+
     // MARK: - loadHoldings success
 
     func testLoadHoldingsSuccessPopulatesList() async {
