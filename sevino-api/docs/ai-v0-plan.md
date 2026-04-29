@@ -546,42 +546,42 @@ Make the system ergonomic to work on locally + scaffold CI.
 
 ```
 Wave 1 (start day 1, all independent):
-  A1.1 Anthropic SDK
-  A1.2 Model constants
-  A1.3 System prompt + hash
-  A1.4 Hard caps
-  A1.5 Error taxonomy
-  A2.2 New ORM models
-  A2.3 Modified existing models
-  A2.5 Cost calculator
-  A3.1 Langfuse singleton
-  A4.3 GitHub Actions
+  A1.1 (SEV-460) Anthropic SDK
+  A1.2 (SEV-461) Model constants
+  A1.3 (SEV-462) System prompt + hash
+  A1.4 (SEV-463) Hard caps
+  A1.5 (SEV-464) Error taxonomy
+  A2.2 (SEV-470) New ORM models
+  A2.3 (SEV-471) Modified existing models
+  A2.5 (SEV-473) Cost calculator
+  A3.1 (SEV-474) Langfuse singleton
+  A4.3 (SEV-479) GitHub Actions
 
 Wave 2 (after Wave 1 ships):
-  A2.1 Alembic migration            ← depends on A2.2, A2.3
-  A2.4 ConversationRepository       ← depends on A2.2, A2.3
-  A4.2 make ai-fixtures             ← depends on A2.1 (sequential after migration applied locally)
+  A2.1 (SEV-469) Alembic migration            ← depends on A2.2, A2.3
+  A2.4 (SEV-472) ConversationRepository       ← depends on A2.2, A2.3
+  A4.2 (SEV-478) make ai-fixtures             ← depends on A2.1 (sequential after migration applied locally)
 
 Wave 3 (after Wave 2):
-  A1.6 Agent loop core              ← depends on A1.1-1.5, A2.4
-                                       *** CRITICAL PATH ***
+  A1.6 (SEV-465) Agent loop core              ← depends on A1.1-1.5, A2.4
+                                                  *** CRITICAL PATH ***
 
 Wave 4 (after A1.6):
-  A1.7 Extended thinking
-  A1.8 Prompt caching                These three can ship in parallel
-  A1.9 JSON endpoint                 once A1.6 lands.
-  A3.2 Langfuse spans
+  A1.7 (SEV-466) Extended thinking
+  A1.8 (SEV-467) Prompt caching                These three can ship in parallel
+  A1.9 (SEV-468) JSON endpoint                 once A1.6 lands.
+  A3.2 (SEV-475) Langfuse spans
 
 Wave 5 (after Wave 4):
-  A3.3 Cost on traces                ← A3.2 + A2.5
-  A4.1 make ai-curl                  ← A1.9
+  A3.3 (SEV-476) Cost on traces                ← A3.2 + A2.5
+  A4.1 (SEV-477) make ai-curl                  ← A1.9
 ```
 
-**Critical path:** `A2.2/A2.3 → A2.4 → A1.6 → A1.9 → demo`. Roughly 1 day per wave with one engineer; with two engineers in parallel on Wave 1, the critical path drives the timeline (~3 days). With 3+ engineers there's diminishing return — A1.6 is one PR.
+**Critical path:** `A2.2/A2.3 (SEV-470/471) → A2.4 (SEV-472) → A1.6 (SEV-465) → A1.9 (SEV-468) → demo`. Roughly 1 day per wave with one engineer; with two engineers in parallel on Wave 1, the critical path drives the timeline (~3 days). With 3+ engineers there's diminishing return — A1.6 is one PR.
 
 **For two engineers:**
-- **E1 (sequential / critical path):** A2.2 → A2.4 → A1.6 → A1.9 → A4.1
-- **E2 (parallel / supporting):** A1.1, A1.2, A1.3, A1.4, A1.5 (Wave 1) → A2.1, A2.3 (Wave 2) → A1.7, A1.8, A3.1 → A3.2, A3.3 → A4.3, A4.2
+- **E1 (sequential / critical path):** A2.2 (SEV-470) → A2.4 (SEV-472) → A1.6 (SEV-465) → A1.9 (SEV-468) → A4.1 (SEV-477)
+- **E2 (parallel / supporting):** A1.1 (SEV-460), A1.2 (SEV-461), A1.3 (SEV-462), A1.4 (SEV-463), A1.5 (SEV-464) (Wave 1) → A2.1 (SEV-469), A2.3 (SEV-471) (Wave 2) → A1.7 (SEV-466), A1.8 (SEV-467), A3.1 (SEV-474) → A3.2 (SEV-475), A3.3 (SEV-476) → A4.3 (SEV-479), A4.2 (SEV-478)
 
 ---
 
@@ -702,38 +702,38 @@ The endpoint flips from JSON to SSE.
 
 ```
 Wave 1 (start as soon as Project A merges; all independent):
-  B1.1 Block schema (TextBlock + StatusBlock)
-  B1.2 SSE event types
-  B2.1 Add sse-starlette dep
-  B3.1 Redis idempotency middleware
+  B1.1 (SEV-480) Block schema (TextBlock + StatusBlock)
+  B1.2 (SEV-481) SSE event types
+  B2.1 (SEV-482) Add sse-starlette dep
+  B3.1 (SEV-486) Redis idempotency middleware
 
 Wave 2 (after Wave 1):
-  B2.2 SSEEmitter                   ← B1.2
+  B2.2 (SEV-483) SSEEmitter                   ← B1.2
 
 Wave 3 (after Wave 2):
-  B2.3 Flip endpoint to SSE         ← B2.1, B2.2, B1.2
-  B4.1 Smoke harness skeleton       (parallel — only depends on A4.3)
+  B2.3 (SEV-484) Flip endpoint to SSE         ← B2.1, B2.2, B1.2
+  B4.1 (SEV-490) Smoke harness skeleton       (parallel — only depends on A4.3)
 
 Wave 4 (after Wave 3):
-  B2.4 Wire loop to emit events     ← B2.3, B1.1, B2.2
-                                       *** CRITICAL PATH ***
-  B3.2 Idempotent replay            ← B3.1, B2.3, B2.4 (so really Wave 5)
+  B2.4 (SEV-485) Wire loop to emit events     ← B2.3, B1.1, B2.2
+                                                  *** CRITICAL PATH ***
+  B3.2 (SEV-487) Idempotent replay            ← B3.1, B2.3, B2.4 (so really Wave 5)
 
 Wave 5 (after B2.4):
-  B3.3 Cancellation: disconnect polling   ← B2.3, A1.6
-  B3.4 Cancellation: stream close + partial   ← B3.3
-  B4.2 Smoke: hello                       ← B2.4
-  B4.3 Smoke: iteration cap                ← B2.4
+  B3.3 (SEV-488) Cancellation: disconnect polling   ← B2.3, A1.6
+  B3.4 (SEV-489) Cancellation: stream close + partial   ← B3.3
+  B4.2 (SEV-491) Smoke: hello                       ← B2.4
+  B4.3 (SEV-492) Smoke: iteration cap                ← B2.4
 
 Wave 6:
-  B4.4 CI workflow update           ← B4.2, B4.3
+  B4.4 (SEV-493) CI workflow update           ← B4.2, B4.3
 ```
 
-**Critical path:** `B1.2 → B2.2 → B2.3 → B2.4`. Plus B3.3 → B3.4 happens after the critical path. ~3 days end-to-end.
+**Critical path:** `B1.2 (SEV-481) → B2.2 (SEV-483) → B2.3 (SEV-484) → B2.4 (SEV-485)`. Plus B3.3 (SEV-488) → B3.4 (SEV-489) happens after the critical path. ~3 days end-to-end.
 
 **For two engineers:**
-- **E1 (critical path):** B1.2 → B2.2 → B2.3 → B2.4 → B3.3 → B3.4
-- **E2 (supporting):** B1.1, B2.1, B3.1 (Wave 1) → B4.1 → B3.2 → B4.2, B4.3 → B4.4
+- **E1 (critical path):** B1.2 (SEV-481) → B2.2 (SEV-483) → B2.3 (SEV-484) → B2.4 (SEV-485) → B3.3 (SEV-488) → B3.4 (SEV-489)
+- **E2 (supporting):** B1.1 (SEV-480), B2.1 (SEV-482), B3.1 (SEV-486) (Wave 1) → B4.1 (SEV-490) → B3.2 (SEV-487) → B4.2 (SEV-491), B4.3 (SEV-492) → B4.4 (SEV-493)
 
 ---
 
@@ -917,53 +917,53 @@ Wave 6:
 
 ```
 Wave 1 (start as soon as Project B's B2.3 ships — wire format stable):
-  C1.1 Tool framework
-  C1.3 StockCardBlock schema       (after B1.1)
-  C2.1 Acquire Alpaca creds        (action item, day 1)
-  C3.1 iOS SSEClient
-  C5.1 JSON schema export          (after C1.3)
-  C5.2 CI diff check               (after C5.1, C3.3 — wave 2)
+  C1.1 (SEV-494) Tool framework
+  C1.3 (SEV-496) StockCardBlock schema       (after B1.1)
+  C2.1 (SEV-498) Acquire Alpaca creds        (action item, day 1)
+  C3.1 (SEV-503) iOS SSEClient
+  C5.1 (SEV-514) JSON schema export          (after C1.3)
+  C5.2 (SEV-515) CI diff check               (after C5.1, C3.3 — wave 2)
 
 Wave 2 (after Wave 1):
-  C1.2 Wire ToolContext into loop  ← C1.1, A1.6
-  C1.4 Wire tool→SSE blocks        ← C1.2, C1.3, B2.4
-  C2.2 AlpacaMarketDataService     ← C2.1
-  C3.2 iOS SSEEvent decoder        ← C3.1, B1.2
-  C3.3 iOS Message + Block         ← B1.1, C1.3
-  
+  C1.2 (SEV-495) Wire ToolContext into loop  ← C1.1, A1.6
+  C1.4 (SEV-497) Wire tool→SSE blocks        ← C1.2, C1.3, B2.4
+  C2.2 (SEV-499) AlpacaMarketDataService     ← C2.1
+  C3.2 (SEV-504) iOS SSEEvent decoder        ← C3.1, B1.2
+  C3.3 (SEV-505) iOS Message + Block         ← B1.1, C1.3
+
 Wave 3 (after Wave 2):
-  C2.3 Market data lifecycle       ← C2.2
-  C3.4 iOS ConversationStore       ← C3.1, C3.2, C3.3
-  C4.1 TextBlockView               ← C3.3
-  C4.2 StatusPillView              ← C3.3
-  C4.3 StockCardView               ← C3.3
+  C2.3 (SEV-500) Market data lifecycle       ← C2.2
+  C3.4 (SEV-506) iOS ConversationStore       ← C3.1, C3.2, C3.3
+  C4.1 (SEV-507) TextBlockView               ← C3.3
+  C4.2 (SEV-508) StatusPillView              ← C3.3
+  C4.3 (SEV-509) StockCardView               ← C3.3
 
 Wave 4 (after Wave 3):
-  C2.4 get_stock_info tool         ← C2.3, C1.1, C1.3
-  C4.4 MessageListView             ← C3.3, C3.4, C4.1-4.3
+  C2.4 (SEV-501) get_stock_info tool         ← C2.3, C1.1, C1.3
+  C4.4 (SEV-510) MessageListView             ← C3.3, C3.4, C4.1-4.3
 
 Wave 5 (after Wave 4):
-  C2.5 Register tool               ← C2.4, C1.2
-  C4.5 HomeView integration        ← C4.4
-  C4.6 Wire input bar              ← C4.5, C3.4
-  C4.7 Auth wiring                 ← C3.4 (one-line, can ship anytime)
+  C2.5 (SEV-502) Register tool               ← C2.4, C1.2
+  C4.5 (SEV-511) HomeView integration        ← C4.4
+  C4.6 (SEV-512) Wire input bar              ← C4.5, C3.4
+  C4.7 (SEV-513) Auth wiring                 ← C3.4 (one-line, can ship anytime)
 
 Wave 6 (after Wave 5):
-  C5.3 Smoke: AMD price            ← C2.5, B4.1
-                                       *** FINAL DEMO ***
+  C5.3 (SEV-516) Smoke: AMD price            ← C2.5, B4.1
+                                                  *** FINAL DEMO ***
 ```
 
 **Critical paths (two parallel, by domain):**
-- **Backend:** `C1.1 → C1.2 → C1.4 → C2.4 → C2.5 → C5.3` (~3 days)
-- **iOS:** `C3.1 → C3.2 → C3.4 → C4.4 → C4.5 → C4.6` (~3 days, runs alongside backend)
-- Integration day at the end where C5.3 tests the full backend + iOS round trip.
+- **Backend:** `C1.1 (SEV-494) → C1.2 (SEV-495) → C1.4 (SEV-497) → C2.4 (SEV-501) → C2.5 (SEV-502) → C5.3 (SEV-516)` (~3 days)
+- **iOS:** `C3.1 (SEV-503) → C3.2 (SEV-504) → C3.4 (SEV-506) → C4.4 (SEV-510) → C4.5 (SEV-511) → C4.6 (SEV-512)` (~3 days, runs alongside backend)
+- Integration day at the end where C5.3 (SEV-516) tests the full backend + iOS round trip.
 
 **For three engineers (1 backend, 1 iOS, 1 floater):**
-- **E1 (backend tools):** C1.1 → C1.2 → C1.4 → C2.4 → C2.5 → C5.3
-- **E2 (iOS):** C3.1 → C3.2 → C3.3 → C3.4 → C4.4 → C4.5 → C4.6
-- **E3 (supporting):** C2.1, C2.2, C2.3 (alpaca client) → C1.3, C5.1, C5.2 (schema sync) → C4.1, C4.2, C4.3 (block views, can hand off to E2)
+- **E1 (backend tools):** C1.1 (SEV-494) → C1.2 (SEV-495) → C1.4 (SEV-497) → C2.4 (SEV-501) → C2.5 (SEV-502) → C5.3 (SEV-516)
+- **E2 (iOS):** C3.1 (SEV-503) → C3.2 (SEV-504) → C3.3 (SEV-505) → C3.4 (SEV-506) → C4.4 (SEV-510) → C4.5 (SEV-511) → C4.6 (SEV-512)
+- **E3 (supporting):** C2.1 (SEV-498), C2.2 (SEV-499), C2.3 (SEV-500) (alpaca client) → C1.3 (SEV-496), C5.1 (SEV-514), C5.2 (SEV-515) (schema sync) → C4.1 (SEV-507), C4.2 (SEV-508), C4.3 (SEV-509) (block views, can hand off to E2)
 
-iOS engineer (E2) can start with C3.1 (SSE parser — tested locally with a captured SSE stream from B2.3) on day 1 of Project C, before any backend tool work has shipped. The wire format is stable from B2.3.
+iOS engineer (E2) can start with C3.1 (SEV-503) (SSE parser — tested locally with a captured SSE stream from B2.3) on day 1 of Project C, before any backend tool work has shipped. The wire format is stable from B2.3.
 
 ---
 
