@@ -1,6 +1,14 @@
 import Foundation
 
-struct Holding: Equatable, Identifiable {
+/// One row in the user's live brokerage account: either the synthetic CASH row
+/// (`isCash == true`) or a real position. Decoded from `/v1/portfolio/holdings`
+/// via `HoldingsDTO`, so all monetary fields are `Decimal` (formatting happens
+/// at the view layer via `NumberFormatting`).
+///
+/// Distinct from the chat-rendered `Holding` (in `Views/Components/Cards/`)
+/// which carries pre-formatted strings — that type is for MCP card payloads
+/// and has different lifecycle and update semantics. Don't merge them.
+struct PortfolioHolding: Equatable, Identifiable {
     var id: String { ticker }
 
     let ticker: String

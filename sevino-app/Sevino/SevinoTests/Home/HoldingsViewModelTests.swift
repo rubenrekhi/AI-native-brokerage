@@ -167,8 +167,8 @@ final class HoldingsViewModelTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private static func makeHolding(ticker: String) -> Holding {
-        Holding(
+    private static func makeHolding(ticker: String) -> PortfolioHolding {
+        PortfolioHolding(
             ticker: ticker, isCash: false, name: ticker,
             qty: Decimal(10), marketValue: Decimal(1000),
             avgEntryPrice: Decimal(99),

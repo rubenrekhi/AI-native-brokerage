@@ -3,7 +3,7 @@ import Foundation
 
 final class MockHoldingsService: HoldingsServiceProtocol {
     var fetchHoldingsError: Error?
-    var holdings: [Holding] = []
+    var holdings: [PortfolioHolding] = []
     var accountStatus: String = "ACTIVE"
 
     private(set) var fetchHoldingsCallCount = 0

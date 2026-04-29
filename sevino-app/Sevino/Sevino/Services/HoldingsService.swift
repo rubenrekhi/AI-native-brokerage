@@ -5,7 +5,7 @@ import Foundation
 /// reviewed" without smuggling status through a fake CASH row (per F4.10).
 struct HoldingsResult: Equatable {
     let accountStatus: String
-    let holdings: [Holding]
+    let holdings: [PortfolioHolding]
 
     static let empty = HoldingsResult(accountStatus: "", holdings: [])
 }
@@ -25,21 +25,21 @@ final class APIHoldingsService: HoldingsServiceProtocol {
 
     func fetchHoldings() async throws -> HoldingsResult {
         let dto: HoldingsDTO = try await client.get("/v1/portfolio/holdings")
-        var rows: [Holding] = [Self.cashRow(dto.cash)]
-        rows.append(contentsOf: dto.positions.map(Self.positionToHolding))
+        var rows: [PortfolioHolding] = [Self.cashRow(dto.cash)]
+        rows.append(contentsOf: dto.positions.map(Self.positionRow))
         return HoldingsResult(accountStatus: dto.accountStatus, holdings: rows)
     }
 
-    private static func cashRow(_ cash: Decimal) -> Holding {
-        Holding(
+    private static func cashRow(_ cash: Decimal) -> PortfolioHolding {
+        PortfolioHolding(
             ticker: "CASH", isCash: true, name: "Cash",
             qty: nil, marketValue: cash,
             avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
         )
     }
 
-    private static func positionToHolding(_ p: PositionDTO) -> Holding {
-        Holding(
+    private static func positionRow(_ p: PositionDTO) -> PortfolioHolding {
+        PortfolioHolding(
             ticker: p.symbol, isCash: false, name: p.name,
             qty: p.qty, marketValue: p.marketValue,
             avgEntryPrice: p.avgEntryPrice,
@@ -59,19 +59,19 @@ final class PlaceholderHoldingsService: HoldingsServiceProtocol {
         HoldingsResult(
             accountStatus: "ACTIVE",
             holdings: [
-                Holding(
+                PortfolioHolding(
                     ticker: "CASH", isCash: true, name: "Cash",
                     qty: nil, marketValue: Decimal(string: "40291.92")!,
                     avgEntryPrice: nil, unrealizedPl: nil, unrealizedPlpc: nil
                 ),
-                Holding(
+                PortfolioHolding(
                     ticker: "TSLA", isCash: false, name: "Tesla, Inc.",
                     qty: Decimal(57), marketValue: Decimal(string: "21748.18")!,
                     avgEntryPrice: Decimal(string: "248.91")!,
                     unrealizedPl: Decimal(string: "7418.90")!,
                     unrealizedPlpc: Decimal(string: "0.5174")!
                 ),
-                Holding(
+                PortfolioHolding(
                     ticker: "AMD", isCash: false, name: "Advanced Micro Devices",
                     qty: Decimal(37), marketValue: Decimal(string: "11465.19")!,
                     avgEntryPrice: Decimal(string: "338.23")!,

@@ -182,7 +182,7 @@ struct HoldingsMorphingView: View {
 }
 
 private struct HoldingRow: View {
-    let holding: Holding
+    let holding: PortfolioHolding
     let scale: CGFloat
     @State private var isDetailExpanded = false
 
