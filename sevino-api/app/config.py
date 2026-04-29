@@ -53,6 +53,7 @@ class Settings(BaseSettings):
     plaid_secret: str
     plaid_env: str
     plaid_fernet_key: str
+    anthropic_api_key: str
     sentry_dsn: str = ""
     railway_environment_name: str = ""
 
