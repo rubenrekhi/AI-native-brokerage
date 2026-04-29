@@ -28,12 +28,16 @@ class ErrorCode(str, Enum):
 
 
 def to_error_code(exc: BaseException) -> ErrorCode:
-    # `RateLimitError` is a subclass of `APIStatusError`, so it must be
-    # checked first. `asyncio.CancelledError` inherits from `BaseException`,
-    # which is why this signature is wider than `Exception`.
+    # `InternalServerError` covers all 5xx responses (incl. 529 "overloaded").
+    # 4xx responses other than 429 (`BadRequestError`, `AuthenticationError`,
+    # etc.) are config or programmer errors — not overload conditions — so
+    # they fall through to `INTERNAL_ERROR` rather than being mislabelled
+    # `MODEL_OVERLOADED` and burning Phase 2 retry budget.
+    # `asyncio.CancelledError` inherits from `BaseException`, which is why
+    # this signature is wider than `Exception`.
     if isinstance(exc, anthropic.RateLimitError):
         return ErrorCode.MODEL_RATE_LIMIT
-    if isinstance(exc, anthropic.APIStatusError):
+    if isinstance(exc, anthropic.InternalServerError):
         return ErrorCode.MODEL_OVERLOADED
     if isinstance(exc, asyncio.CancelledError):
         return ErrorCode.CANCELLED

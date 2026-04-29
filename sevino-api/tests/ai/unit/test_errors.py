@@ -38,20 +38,33 @@ def test_rate_limit_error_maps_to_model_rate_limit():
     assert to_error_code(exc) == ErrorCode.MODEL_RATE_LIMIT
 
 
-def test_api_status_error_maps_to_model_overloaded():
-    exc = anthropic.APIStatusError(
-        "overloaded", response=_http_response(529), body=None
-    )
-    assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
-
-
-def test_other_api_status_subclass_still_maps_to_model_overloaded():
-    # Non-rate-limit subclasses of APIStatusError fall through the
-    # RateLimitError check and land on MODEL_OVERLOADED.
+def test_internal_server_error_maps_to_model_overloaded():
+    # 5xx responses — including 529 "overloaded" — surface as
+    # `InternalServerError` in the SDK and indicate transient model-side
+    # failures that retry logic should treat as overload.
     exc = anthropic.InternalServerError(
         "server error", response=_http_response(500), body=None
     )
     assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
+
+
+@pytest.mark.parametrize(
+    "exc_cls,status",
+    [
+        (anthropic.BadRequestError, 400),
+        (anthropic.AuthenticationError, 401),
+        (anthropic.PermissionDeniedError, 403),
+        (anthropic.NotFoundError, 404),
+        (anthropic.UnprocessableEntityError, 422),
+    ],
+)
+def test_4xx_api_status_errors_map_to_internal_error(exc_cls, status):
+    # 4xx errors other than 429 are config/programmer bugs (bad API key,
+    # malformed request, etc.) — not overload. They must NOT be labelled
+    # MODEL_OVERLOADED, since Phase 2 retry logic would burn budget on
+    # requests that can never succeed.
+    exc = exc_cls("client error", response=_http_response(status), body=None)
+    assert to_error_code(exc) == ErrorCode.INTERNAL_ERROR
 
 
 def test_cancelled_error_maps_to_cancelled():
