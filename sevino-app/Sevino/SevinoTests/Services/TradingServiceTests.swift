@@ -165,6 +165,165 @@ final class TradingServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - placeOrder
+
+    func test_placeOrder_postsToOrdersEndpointWithBody() async throws {
+        let body = Data(#"""
+        {
+          "id": "ord_1",
+          "alpaca_order_id": "alp_1",
+          "symbol": "AAPL",
+          "side": "buy",
+          "type": "market",
+          "time_in_force": "day",
+          "qty": "5",
+          "notional": null,
+          "limit_price": null,
+          "status": "accepted",
+          "submitted_at": null,
+          "created_at": "2026-04-28T10:00:00Z"
+        }
+        """#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/trading/orders",
+            response: .success(status: 201, body: body)
+        )
+
+        let service = makeService()
+        let response = try await service.placeOrder(
+            PlaceOrderRequest(
+                symbol: "AAPL",
+                side: "buy",
+                type: "market",
+                qty: "5",
+                notional: nil,
+                limitPrice: nil,
+                conversationId: "conv_1"
+            )
+        )
+
+        let sent = try XCTUnwrap(StubURLProtocol.lastRequest())
+        XCTAssertEqual(sent.httpMethod, "POST")
+        XCTAssertEqual(sent.url?.path, "/v1/trading/orders")
+
+        // URLSession moves request bodies to httpBodyStream when running through
+        // the protocol stub, so read the stream rather than httpBody.
+        let sentBody = try XCTUnwrap(Self.bodyData(from: sent))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: sentBody) as? [String: Any])
+        XCTAssertEqual(json["symbol"] as? String, "AAPL")
+        XCTAssertEqual(json["side"] as? String, "buy")
+        XCTAssertEqual(json["type"] as? String, "market")
+        XCTAssertEqual(json["qty"] as? String, "5")
+        XCTAssertEqual(json["conversation_id"] as? String, "conv_1")
+
+        XCTAssertEqual(response.id, "ord_1")
+        XCTAssertEqual(response.alpacaOrderId, "alp_1")
+        XCTAssertEqual(response.timeInForce, "day")
+    }
+
+    func test_placeOrder_propagatesAPIError() async {
+        let errorBody = Data(#"{"error":"Account not active","code":"ACCOUNT_NOT_ACTIVE"}"#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/trading/orders",
+            response: .success(status: 409, body: errorBody)
+        )
+
+        let service = makeService()
+        do {
+            _ = try await service.placeOrder(
+                PlaceOrderRequest(
+                    symbol: "AAPL", side: "buy", type: "market",
+                    qty: "1", notional: nil, limitPrice: nil, conversationId: nil
+                )
+            )
+            XCTFail("expected APIError")
+        } catch let error as APIError {
+            XCTAssertEqual(error.code, "ACCOUNT_NOT_ACTIVE")
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
+    // MARK: - cancelOrder
+
+    func test_cancelOrder_sendsDeleteToOrdersIdEndpoint() async throws {
+        let body = Data(#"""
+        {
+          "id": "ord_2",
+          "alpaca_order_id": "alp_2",
+          "symbol": "TSLA",
+          "side": "sell",
+          "type": "market",
+          "time_in_force": "day",
+          "qty": "1",
+          "notional": null,
+          "limit_price": null,
+          "status": "pending_cancel",
+          "submitted_at": "2026-04-28T10:00:00Z",
+          "created_at": "2026-04-28T10:00:00Z",
+          "filled_qty": null,
+          "filled_avg_price": null,
+          "filled_at": null,
+          "conversation_id": null
+        }
+        """#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/trading/orders/ord_2",
+            response: .success(status: 200, body: body)
+        )
+
+        let service = makeService()
+        let response = try await service.cancelOrder(id: "ord_2")
+
+        let sent = try XCTUnwrap(StubURLProtocol.lastRequest())
+        XCTAssertEqual(sent.httpMethod, "DELETE")
+        XCTAssertEqual(sent.url?.path, "/v1/trading/orders/ord_2")
+        XCTAssertEqual(response.id, "ord_2")
+        XCTAssertEqual(response.status, "pending_cancel")
+    }
+
+    // MARK: - getOrder
+
+    func test_getOrder_fetchesOrdersIdEndpoint() async throws {
+        let body = Data(#"""
+        {
+          "id": "ord_3",
+          "alpaca_order_id": "alp_3",
+          "symbol": "MSFT",
+          "side": "buy",
+          "type": "limit",
+          "time_in_force": "gtc",
+          "qty": "2",
+          "notional": null,
+          "limit_price": "300.00",
+          "status": "filled",
+          "submitted_at": "2026-04-28T10:00:00Z",
+          "created_at": "2026-04-28T10:00:00Z",
+          "filled_qty": "2",
+          "filled_avg_price": "299.85",
+          "filled_at": "2026-04-28T10:00:05Z",
+          "conversation_id": null
+        }
+        """#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/trading/orders/ord_3",
+            response: .success(status: 200, body: body)
+        )
+
+        let service = makeService()
+        let response = try await service.getOrder(id: "ord_3")
+
+        let sent = try XCTUnwrap(StubURLProtocol.lastRequest())
+        XCTAssertEqual(sent.httpMethod, "GET")
+        XCTAssertEqual(sent.url?.path, "/v1/trading/orders/ord_3")
+        XCTAssertEqual(response.filledQty, "2")
+        XCTAssertEqual(response.filledAvgPrice, "299.85")
+    }
+
     // MARK: - listPositions
 
     func test_listPositions_hitsExpectedPath() async throws {
@@ -195,5 +354,23 @@ final class TradingServiceTests: XCTestCase {
             tokenProvider: { nil }
         )
         return TradingService(api: client)
+    }
+
+    /// URLSession converts request bodies to `httpBodyStream` when sent through
+    /// a custom URLProtocol, so `httpBody` is nil at the recorded-request layer.
+    /// This drains the stream to bytes for body assertions.
+    private static func bodyData(from request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        var data = Data()
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return data
     }
 }

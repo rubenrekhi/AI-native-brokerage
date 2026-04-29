@@ -13,6 +13,10 @@ protocol TradingServiceProtocol: Sendable {
     ) async throws -> [OrderResponse]
 
     func listPositions() async throws -> [PositionResponse]
+
+    func placeOrder(_ request: PlaceOrderRequest) async throws -> PlaceOrderResponse
+    func cancelOrder(id: String) async throws -> OrderDetailResponse
+    func getOrder(id: String) async throws -> OrderDetailResponse
 }
 
 extension TradingServiceProtocol {
@@ -72,6 +76,18 @@ final class TradingService: TradingServiceProtocol {
     func listPositions() async throws -> [PositionResponse] {
         let response: PositionListResponse = try await api.get("/v1/brokerage/positions")
         return response.positions
+    }
+
+    func placeOrder(_ request: PlaceOrderRequest) async throws -> PlaceOrderResponse {
+        try await api.post("/v1/trading/orders", body: request)
+    }
+
+    func cancelOrder(id: String) async throws -> OrderDetailResponse {
+        try await api.delete("/v1/trading/orders/\(id)")
+    }
+
+    func getOrder(id: String) async throws -> OrderDetailResponse {
+        try await api.get("/v1/trading/orders/\(id)")
     }
 
     private static let iso8601: ISO8601DateFormatter = {

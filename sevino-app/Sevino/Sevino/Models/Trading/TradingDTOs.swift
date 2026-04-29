@@ -80,6 +80,59 @@ struct PositionListResponse: Decodable {
     let positions: [PositionResponse]
 }
 
+/// Body for `POST /v1/trading/orders`. Wire field names map via the API
+/// client's `convertToSnakeCase` strategy (`limitPrice` → `limit_price`,
+/// `conversationId` → `conversation_id`).
+struct PlaceOrderRequest: Encodable, Equatable {
+    let symbol: String
+    let side: String
+    let type: String
+    let qty: String?
+    let notional: String?
+    let limitPrice: String?
+    let conversationId: String?
+}
+
+/// Response from `POST /v1/trading/orders`. Mirrors the backend
+/// `PlaceOrderResponse` schema. Numeric fields stay as strings (Alpaca's wire
+/// shape) — coerce client-side when typed values are needed.
+struct PlaceOrderResponse: Decodable, Equatable {
+    let id: String
+    let alpacaOrderId: String
+    let symbol: String
+    let side: String
+    let type: String
+    let timeInForce: String
+    let qty: String?
+    let notional: String?
+    let limitPrice: String?
+    let status: String
+    let submittedAt: String?
+    let createdAt: String
+}
+
+/// Response from `GET /v1/trading/orders/{id}` and
+/// `DELETE /v1/trading/orders/{id}`. Adds fill details and the originating
+/// conversation ID on top of `PlaceOrderResponse`.
+struct OrderDetailResponse: Decodable, Equatable {
+    let id: String
+    let alpacaOrderId: String
+    let symbol: String
+    let side: String
+    let type: String
+    let timeInForce: String
+    let qty: String?
+    let notional: String?
+    let limitPrice: String?
+    let status: String
+    let submittedAt: String?
+    let createdAt: String
+    let filledQty: String?
+    let filledAvgPrice: String?
+    let filledAt: String?
+    let conversationId: String?
+}
+
 enum OrderSide: String {
     case buy
     case sell

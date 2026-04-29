@@ -129,6 +129,18 @@ class BaseSSEListener(abc.ABC):
         """Process one event. Runs inside the same transaction as the
         checkpoint upsert — raising rolls back both and the loop continues."""
 
+    async def on_reconnect(self) -> None:
+        """Hook invoked after every successful (re)connect, before events are
+        dispatched. Default is a no-op; subclasses override for reconcile
+        sweeps that close gaps not covered by ``since_id`` replay (lost
+        checkpoint, events older than Alpaca's replay window). Runs outside
+        the per-event transaction.
+
+        Any exception that escapes is captured to Sentry as an unhandled bug,
+        so subclasses must swallow expected transient upstream errors (Alpaca
+        5xx, network blips) themselves — the listener stays connected either
+        way and the next reconnect retries the sweep."""
+
     async def run(self) -> None:
         """Main loop. Connect, stream, reconnect forever. Returns only on
         :class:`asyncio.CancelledError`."""
@@ -215,6 +227,22 @@ class BaseSSEListener(abc.ABC):
                 level="info",
                 message=f"{self.stream_name} connected",
             )
+
+            try:
+                await self.on_reconnect()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.error(
+                    "sse_listener_on_reconnect_failed",
+                    stream=self.stream_name,
+                    error=str(exc),
+                    exc_type=type(exc).__name__,
+                )
+                with sentry_sdk.new_scope() as scope:
+                    scope.set_tag("sse_stream", self.stream_name)
+                    scope.set_tag("sse_phase", "on_reconnect")
+                    sentry_sdk.capture_exception(exc)
 
             # Iterate lines via SSELineDecoder (spec-compliant splitter —
             # httpx.Response.aiter_lines uses looser stdlib splitlines()

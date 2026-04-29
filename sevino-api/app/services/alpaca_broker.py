@@ -138,6 +138,12 @@ class AlpacaBrokerService:
             "GET", f"/v1/trading/accounts/{account_id}/positions"
         )
 
+    async def get_position(self, account_id: str, symbol: str) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/positions/{symbol} — single position."""
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/positions/{symbol}"
+        )
+
     async def list_orders(
         self,
         account_id: str,
@@ -168,6 +174,29 @@ class AlpacaBrokerService:
             "GET",
             f"/v1/trading/accounts/{account_id}/orders",
             params=params or None,
+        )
+
+    async def create_order(
+        self, account_id: str, payload: dict[str, Any]
+    ) -> dict[str, Any]:
+        """POST /v1/trading/accounts/{account_id}/orders — submit a new order."""
+        return await self._request(
+            "POST",
+            f"/v1/trading/accounts/{account_id}/orders",
+            json=payload,
+        )
+
+    async def get_order(self, account_id: str, order_id: str) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/orders/{order_id} — single order."""
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/orders/{order_id}"
+        )
+
+    async def cancel_order(self, account_id: str, order_id: str) -> None:
+        """DELETE /v1/trading/accounts/{account_id}/orders/{order_id}. 204 → None."""
+        await self._request(
+            "DELETE",
+            f"/v1/trading/accounts/{account_id}/orders/{order_id}",
         )
 
     async def create_ach_relationship(
