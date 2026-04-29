@@ -19,6 +19,7 @@ struct OnboardingNameView: View {
     @State private var typed1 = ""
     @State private var typed2 = ""
     @State private var showInput = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -123,18 +124,11 @@ struct OnboardingNameView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.nameResponse1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.nameResponse1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.nameResponse2) { typed2 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.nameResponse2, reduceMotion: reduceMotion) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showInput = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

@@ -7,7 +7,9 @@ from fastapi import FastAPI
 
 from app.config import get_redis_settings, settings
 from app.services.alpaca_broker import AlpacaBrokerService
+from app.services.phone_verification import PhoneVerificationService
 from app.services.plaid import PlaidService
+from app.services.supabase_admin import SupabaseAdminService
 
 logger = structlog.get_logger(__name__)
 
@@ -29,7 +31,17 @@ async def lifespan(app: FastAPI):
     logger.info("redis client ready")
     app.state.alpaca = AlpacaBrokerService()
     app.state.plaid = PlaidService()
+    app.state.phone_verification = PhoneVerificationService()
+    app.state.supabase_admin = SupabaseAdminService()
     yield
+    try:
+        await app.state.supabase_admin.close()
+    except Exception:
+        logger.exception("supabase_admin close failed")
+    try:
+        await app.state.phone_verification.close()
+    except Exception:
+        logger.exception("phone_verification close failed")
     try:
         app.state.plaid.close()
     except Exception:

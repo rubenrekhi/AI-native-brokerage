@@ -42,5 +42,4 @@ class UserFinancialProfile(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         ARRAY(Text), nullable=True
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="financial_profile")

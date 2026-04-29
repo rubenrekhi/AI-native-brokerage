@@ -1,9 +1,11 @@
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 import sentry_sdk
 import structlog
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.brokerage_account import BrokerageAccount
@@ -25,10 +27,6 @@ from app.services.alpaca_broker import AlpacaBrokerService
 
 logger = structlog.get_logger(__name__)
 
-
-# ---------------------------------------------------------------------------
-# Alpaca derivation constants
-# ---------------------------------------------------------------------------
 
 INCOME_RANGES: dict[str, tuple[str, str]] = {
     "Under $25K": ("0", "25000"),
@@ -91,11 +89,15 @@ EMPLOYMENT_STATUS_MAP: dict[str, str] = {
     "retired": "retired",
 }
 
-# Fields that belong to user_profiles vs user_financial_profiles
+# Fields that belong to user_profiles vs user_financial_profiles.
+# tax_id_last_4 is intentionally excluded — it is set only during
+# submit_kyc, never via the incremental save_step PATCH from the client.
+# phone_number is intentionally absent — the only writer is
+# /v1/auth/phone/confirm after GoTrue acks the OTP, so a stray PATCH from
+# the client cannot poison user_profiles with an unverified value.
 _PROFILE_FIELDS = {
     "preferred_name",
     "date_of_birth",
-    "phone_number",
     "attribution_source",
     "risk_disclosure_acknowledged_at",
     "first_name",
@@ -126,11 +128,6 @@ _FINANCIAL_FIELDS = {
     "employment_info",
     "funding_sources",
 }
-
-
-# ---------------------------------------------------------------------------
-# Derivation functions
-# ---------------------------------------------------------------------------
 
 
 def derive_risk_tolerance(scenario: str, max_loss: str) -> str:
@@ -167,7 +164,6 @@ def derive_investment_objective(goals: list[str]) -> str:
 
 
 def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]:
-    """Look up a range string and return (min, max). Falls back to first entry."""
     if value in ranges:
         return ranges[value]
     first = next(iter(ranges.values()))
@@ -186,7 +182,6 @@ def map_range(value: str, ranges: dict[str, tuple[str, str]]) -> tuple[str, str]
 
 
 def map_time_horizon(time_horizon: str) -> tuple[str, str]:
-    """Returns (investment_time_horizon, liquidity_needs)."""
     return TIME_HORIZON_MAP.get(time_horizon, ("3_to_5_years", "does_not_matter"))
 
 
@@ -197,6 +192,11 @@ def map_experience(experience_level: str) -> str:
 def map_employment_status(employment_info: dict[str, Any]) -> str:
     raw_status = employment_info.get("employment_status", "").lower()
     return EMPLOYMENT_STATUS_MAP.get(raw_status, "employed")
+
+
+def extract_tax_id_last_4(tax_id: str) -> str:
+    """Strip non-digits from a tax ID (e.g. '123-45-6789') and return last 4."""
+    return re.sub(r"[^0-9]", "", tax_id)[-4:]
 
 
 def build_agreements(agreements_data: dict[str, Any]) -> list[dict[str, Any]]:
@@ -214,19 +214,15 @@ def build_agreements(agreements_data: dict[str, Any]) -> list[dict[str, Any]]:
     return result
 
 
-# ---------------------------------------------------------------------------
-# Service
-# ---------------------------------------------------------------------------
-
-
 class OnboardingService:
 
     @staticmethod
     async def save_step(
         db: AsyncSession, user_id: uuid.UUID, data: OnboardingPatchRequest
     ) -> str:
-        """Save fields from the current onboarding screen."""
         provided = data.model_dump(exclude_none=True, exclude={"step"})
+        if data.agreements_signed is not None:
+            provided["agreements_signed"] = data.agreements_signed.model_dump(mode="json")
 
         profile_updates: dict[str, Any] = {"onboarding_step": data.step}
         financial_updates: dict[str, Any] = {}
@@ -250,11 +246,30 @@ class OnboardingService:
     ) -> OnboardingStatusResponse:
         """Load full onboarding state for resume."""
         profile = await UserProfileRepository.get_by_id(db, user_id)
+
+        # GoTrue holds the verified phone in auth.users.phone and the
+        # pending one in phone_change; COALESCE returns whichever is set.
+        # NULLIF collapses GoTrue's empty-string default to NULL.
+        auth_row = (
+            await db.execute(
+                text(
+                    "SELECT NULLIF(COALESCE(NULLIF(phone, ''), "
+                    "NULLIF(phone_change, '')), '') AS phone, "
+                    "phone_confirmed_at FROM auth.users WHERE id = :uid"
+                ),
+                {"uid": str(user_id)},
+            )
+        ).one_or_none()
+        phone_verified = bool(auth_row and auth_row.phone_confirmed_at)
+        phone_number = auth_row.phone if auth_row else None
+
         if profile is None:
             return OnboardingStatusResponse(
                 onboarding_completed=False,
                 onboarding_step=None,
                 profile=ProfileData(),
+                phone_verified=phone_verified,
+                phone_number=phone_number,
             )
 
         financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
@@ -269,6 +284,8 @@ class OnboardingService:
             financial_profile=(
                 FinancialProfileData.model_validate(financial) if financial else None
             ),
+            phone_verified=phone_verified,
+            phone_number=phone_number,
         )
 
     @staticmethod
@@ -323,7 +340,10 @@ class OnboardingService:
             )
 
         await UserProfileRepository.update_fields(
-            db, user_id, onboarding_step="submitted"
+            db,
+            user_id,
+            onboarding_step="submitted",
+            tax_id_last_4=extract_tax_id_last_4(tax_id),
         )
 
         logger.info(
@@ -339,15 +359,9 @@ class OnboardingService:
         }
 
 
-# ---------------------------------------------------------------------------
-# Payload construction
-# ---------------------------------------------------------------------------
-
-
 def validate_completeness(
     profile: UserProfile, financial: UserFinancialProfile
 ) -> None:
-    """Raise ValueError if required fields for Alpaca submission are missing."""
     missing: list[str] = []
 
     if not profile.first_name:
@@ -372,6 +386,8 @@ def validate_completeness(
         missing.append("disclosures")
     if not profile.agreements_signed:
         missing.append("agreements_signed")
+    elif not (profile.agreements_signed or {}).get("signed_at"):
+        missing.append("agreements_signed.signed_at")
     if not financial.annual_income:
         missing.append("annual_income")
     if not financial.net_worth:

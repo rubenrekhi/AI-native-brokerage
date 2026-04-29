@@ -24,12 +24,34 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return try castResponse()
     }
 
+    func post<T: Decodable>(_ path: String) async throws -> T {
+        lastPath = path
+        lastMethod = "POST"
+        lastBody = nil
+        if let error = errorToThrow { throw error }
+        return try castResponse()
+    }
+
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
         lastPath = path
         lastMethod = "POST"
         lastBody = body
         if let error = errorToThrow { throw error }
         return try castResponse()
+    }
+
+    func post(_ path: String) async throws {
+        lastPath = path
+        lastMethod = "POST"
+        lastBody = nil
+        if let error = errorToThrow { throw error }
+    }
+
+    func post(_ path: String, body: some Encodable) async throws {
+        lastPath = path
+        lastMethod = "POST"
+        lastBody = body
+        if let error = errorToThrow { throw error }
     }
 
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
@@ -53,5 +75,26 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         lastMethod = "DELETE"
         if let error = errorToThrow { throw error }
         return try castResponse()
+    }
+
+    func delete(_ path: String) async throws {
+        lastPath = path
+        lastMethod = "DELETE"
+        if let error = errorToThrow { throw error }
+    }
+
+    func delete(_ path: String, body: some Encodable) async throws {
+        lastPath = path
+        lastMethod = "DELETE"
+        lastBody = body
+        if let error = errorToThrow { throw error }
+    }
+
+    func downloadFile(_ path: String, suggestedExtension: String?) async throws -> URL {
+        lastPath = path
+        lastMethod = "GET"
+        if let error = errorToThrow { throw error }
+        if let url = responseToReturn as? URL { return url }
+        throw URLError(.badServerResponse)
     }
 }

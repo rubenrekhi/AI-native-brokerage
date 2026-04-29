@@ -2,7 +2,7 @@ import ssl as _ssl
 from typing import Any
 
 from arq.connections import RedisSettings
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 from redis.backoff import ExponentialBackoff
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -44,18 +44,40 @@ class Settings(BaseSettings):
     database_url_direct: str = ""
     redis_url: str
     supabase_url: str
+    supabase_anon_key: str
+    supabase_service_role_key: str
     api_key: str = ""
     alpaca_api_key: str
     alpaca_secret_key: str
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
-    plaid_fernet_key: str = ""
+    plaid_fernet_key: str
     sentry_dsn: str = ""
+    railway_environment_name: str = ""
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
         return [k.strip() for k in self.plaid_fernet_key.split(",") if k.strip()]
+
+    @property
+    def is_pr_preview(self) -> bool:
+        # Railway's PR-preview env names follow the project's environment
+        # template, which for Sevino is "sevino-pr-{number}" (visible in
+        # Railway → service → variables → RAILWAY_ENVIRONMENT_NAME). If
+        # the template is ever changed in Railway, this prefix must be
+        # updated to match or PR-preview filtering silently stops working.
+        return self.railway_environment_name.startswith("sevino-pr-")
+
+    @property
+    def sentry_environment(self) -> str:
+        # PR previews get their own tag (sevino-pr-NNN) so noise from
+        # torn-down previews is filterable. Real staging/prod keep
+        # settings.environment ("staging"/"prod") so existing Sentry alerts
+        # and dashboards keyed off those values don't silently break —
+        # Railway's env name for prod is "production", which would not
+        # match a "prod"-keyed alert.
+        return self.railway_environment_name if self.is_pr_preview else self.environment
 
     @property
     def show_docs(self) -> bool:
@@ -92,6 +114,18 @@ class Settings(BaseSettings):
         if v and v.startswith("postgresql://"):
             return v.replace("postgresql://", "postgresql+asyncpg://", 1)
         return v
+
+    @model_validator(mode="after")
+    def require_service_role_key_outside_dev(self) -> "Settings":
+        # The service-role key is required for privileged admin operations
+        # (e.g. DELETE /v1/settings/account). Allow empty in dev for
+        # convenience, fail fast at boot in staging/prod so a misconfigured
+        # deploy can't surface as a per-request 503.
+        if self.environment != "dev" and not self.supabase_service_role_key:
+            raise ValueError(
+                "SUPABASE_SERVICE_ROLE_KEY is required outside of dev"
+            )
+        return self
 
 
 settings = Settings()

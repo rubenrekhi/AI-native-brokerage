@@ -1,6 +1,6 @@
 import SwiftUI
 
-enum AppTextSize: String, CaseIterable, Identifiable {
+enum AppTextSize: String, CaseIterable, Identifiable, Codable {
     case small, regular
 
     var id: String { rawValue }

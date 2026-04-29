@@ -14,10 +14,6 @@ logger = structlog.get_logger(__name__)
 _PG_DETAIL_KEY_RE = re.compile(r"Key \(([^)]+)\)=")
 
 
-# ---------------------------------------------------------------------------
-# Standard error response helper
-# ---------------------------------------------------------------------------
-
 def error_response(
     status_code: int,
     message: str,
@@ -30,10 +26,6 @@ def error_response(
         body["detail"] = detail
     return JSONResponse(status_code=status_code, content=body, headers=headers)
 
-
-# ---------------------------------------------------------------------------
-# Custom exception classes
-# ---------------------------------------------------------------------------
 
 class AuthenticationError(Exception):
     def __init__(self, message: str = "Not authenticated"):
@@ -78,10 +70,6 @@ class IncompleteOnboardingError(Exception):
         self.message = message
         self.missing_fields = missing_fields or []
 
-
-# ---------------------------------------------------------------------------
-# Exception handlers
-# ---------------------------------------------------------------------------
 
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
@@ -153,12 +141,11 @@ async def incomplete_onboarding_error_handler(
     )
 
 
-# --- Alpaca handlers ---
-
 async def alpaca_error_handler(
     request: Request, exc: "AlpacaBrokerError"
 ) -> JSONResponse:
-    logger.error("alpaca_api_error", status_code=exc.status_code, message=exc.message)
+    log = logger.warning if 400 <= exc.status_code < 500 else logger.error
+    log("alpaca_api_error", status_code=exc.status_code, message=exc.message)
     # Upstream 5xx is a broker outage we masked as 422 ("validation error"),
     # which is misleading. Surface it as 502 so clients can distinguish "your
     # input was rejected" (422) from "the brokerage is broken" (502).
@@ -178,16 +165,66 @@ async def alpaca_unavailable_handler(
     )
 
 
-# --- Plaid handler ---
-
 async def plaid_service_error_handler(
     request: Request, exc: "PlaidServiceError"
 ) -> JSONResponse:
-    logger.error("plaid_service_error", code=exc.code, message=exc.message)
+    is_4xx = exc.status_code is not None and 400 <= exc.status_code < 500
+    log = logger.warning if is_4xx else logger.error
+    log("plaid_service_error", code=exc.code, message=exc.message)
     return error_response(422, exc.message, exc.code, detail=exc.detail)
 
 
-# --- SQLAlchemy handlers (registered before generic Exception) ---
+async def supabase_admin_error_handler(
+    request: Request, exc: "SupabaseAdminError"
+) -> JSONResponse:
+    logger.error(
+        "supabase_admin_error", status_code=exc.status_code, message=exc.message
+    )
+    return error_response(502, exc.message, "SUPABASE_ADMIN_ERROR", detail=exc.detail)
+
+
+async def supabase_admin_unavailable_handler(
+    request: Request, exc: "SupabaseAdminUnavailableError"
+) -> JSONResponse:
+    logger.error("supabase_admin_unavailable", error=exc.message)
+    return error_response(
+        503,
+        "Account service unavailable, please try again",
+        "SUPABASE_ADMIN_UNAVAILABLE",
+    )
+
+
+async def phone_verification_error_handler(
+    request: Request, exc: "PhoneVerificationError"
+) -> JSONResponse:
+    logger.warning("phone_verification_error", message=exc.message)
+    return error_response(
+        422, exc.message, "PHONE_VERIFICATION_FAILED", detail=exc.detail
+    )
+
+
+async def phone_number_taken_handler(
+    request: Request, exc: "PhoneNumberTakenError"
+) -> JSONResponse:
+    logger.info("phone_number_taken", message=exc.message)
+    return error_response(
+        409,
+        "This phone number is already in use. Please use a different number.",
+        "PHONE_NUMBER_TAKEN",
+        detail=exc.detail,
+    )
+
+
+async def phone_verification_unavailable_handler(
+    request: Request, exc: "PhoneVerificationUnavailableError"
+) -> JSONResponse:
+    logger.error("phone_verification_unavailable", error=exc.message)
+    return error_response(
+        503,
+        "Phone verification service unavailable, please try again",
+        "PHONE_VERIFICATION_UNAVAILABLE",
+    )
+
 
 def _extract_column(exc: Exception) -> str | None:
     """Extract the offending column name from an asyncpg-wrapped SQLAlchemy error.
@@ -264,18 +301,12 @@ async def programming_error_handler(
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
 
-# --- Generic catch-all ---
-
 async def generic_exception_handler(
     request: Request, exc: Exception
 ) -> JSONResponse:
     logger.error("unhandled_exception", error=str(exc), exc_info=True)
     return error_response(500, "Internal server error", "INTERNAL_ERROR")
 
-
-# ---------------------------------------------------------------------------
-# Registration helper
-# ---------------------------------------------------------------------------
 
 def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(RequestValidationError, validation_error_handler)
@@ -285,13 +316,33 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(NotFoundError, not_found_error_handler)
     app.add_exception_handler(ConflictError, conflict_error_handler)
     app.add_exception_handler(IncompleteOnboardingError, incomplete_onboarding_error_handler)
-    # Alpaca handlers
     from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
     app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)
     app.add_exception_handler(AlpacaBrokerUnavailableError, alpaca_unavailable_handler)
-    # Plaid handler
     from app.services.plaid import PlaidServiceError
     app.add_exception_handler(PlaidServiceError, plaid_service_error_handler)
+    from app.services.supabase_admin import (
+        SupabaseAdminError,
+        SupabaseAdminUnavailableError,
+    )
+    app.add_exception_handler(SupabaseAdminError, supabase_admin_error_handler)
+    app.add_exception_handler(
+        SupabaseAdminUnavailableError, supabase_admin_unavailable_handler
+    )
+    from app.services.phone_verification import (
+        PhoneNumberTakenError,
+        PhoneVerificationError,
+        PhoneVerificationUnavailableError,
+    )
+    # Both handlers can be registered in any order — Starlette dispatches by
+    # walking `type(exc).__mro__`, so the subclass handler always wins for
+    # `PhoneNumberTakenError` regardless of insertion order. Listing the
+    # subclass first just keeps the dispatch order obvious to readers.
+    app.add_exception_handler(PhoneNumberTakenError, phone_number_taken_handler)
+    app.add_exception_handler(PhoneVerificationError, phone_verification_error_handler)
+    app.add_exception_handler(
+        PhoneVerificationUnavailableError, phone_verification_unavailable_handler
+    )
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)
     app.add_exception_handler(IntegrityError, integrity_error_handler)

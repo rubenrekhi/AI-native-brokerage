@@ -11,10 +11,10 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: true,
             onboardingStep: "submitted",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .home = OnboardingResumeManager.destination(from: status) {
-            // pass
         } else {
             XCTFail("Expected .home")
         }
@@ -25,10 +25,10 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "submitted",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .home = OnboardingResumeManager.destination(from: status) {
-            // pass
         } else {
             XCTFail("Expected .home")
         }
@@ -41,7 +41,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: nil,
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 1)
@@ -55,7 +56,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "welcome",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 2)
@@ -69,7 +71,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "preferred_name",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 3)
@@ -83,7 +86,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "annual_income",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 10)
@@ -97,7 +101,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "experience",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 17)
@@ -113,7 +118,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "risk_disclosure",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 1)
@@ -129,7 +135,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "kyc_intro",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 2)
@@ -143,7 +150,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "legal_name",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 3, "legal_name should resume at address screen")
@@ -157,7 +165,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "address",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 4, "address should resume at citizenship screen")
@@ -171,7 +180,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "employment",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 6, "employment should resume at funding sources screen")
@@ -185,7 +195,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "funding_sources",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 7, "funding_sources should resume at SSN screen")
@@ -199,7 +210,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "disclosures",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 7, "Steps past SSN should resume at SSN screen")
@@ -213,7 +225,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "agreements",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .alpacaSetup(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 7, "Steps past SSN should resume at SSN screen")
@@ -237,7 +250,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
                 financialWorries: ["not_saving_enough"],
                 investmentGoals: ["grow_wealth", "retirement"],
                 annualIncome: "$50K – $99K"
-            )
+            ),
+            phoneVerified: true
         )
 
         if case .onboarding(_, let data) = OnboardingResumeManager.destination(from: status) {
@@ -269,7 +283,8 @@ final class OnboardingResumeManagerTests: XCTestCase {
             financialProfile: FinancialProfileData(
                 employmentInfo: ["employment_status": "employed", "employer_name": "Acme"],
                 fundingSources: ["savings"]
-            )
+            ),
+            phoneVerified: true
         )
 
         if case .alpacaSetup(_, let data) = OnboardingResumeManager.destination(from: status) {
@@ -295,12 +310,82 @@ final class OnboardingResumeManagerTests: XCTestCase {
             onboardingCompleted: false,
             onboardingStep: "unknown_step",
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         if case .onboarding(let step, _) = OnboardingResumeManager.destination(from: status) {
             XCTAssertEqual(step, 1)
         } else {
             XCTFail("Expected .onboarding from beginning")
+        }
+    }
+
+    // MARK: - Phone verification (SEV-448)
+
+    func testUnverifiedWithPhoneRoutesToPhoneVerification() {
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: nil,
+            profile: nil,
+            financialProfile: nil,
+            phoneVerified: false,
+            phoneNumber: "+15551234567"
+        )
+        if case .phoneVerification(let phone) = OnboardingResumeManager.destination(from: status) {
+            XCTAssertEqual(phone, "(555) 123-4567",
+                           "phone is formatted for display so the resume screen matches the entry-view shape")
+        } else {
+            XCTFail("Expected .phoneVerification")
+        }
+    }
+
+    func testUnverifiedWithoutPhoneRoutesToPhoneCapture() {
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: nil,
+            profile: nil,
+            financialProfile: nil,
+            phoneVerified: false,
+            phoneNumber: nil
+        )
+        if case .phone = OnboardingResumeManager.destination(from: status) {
+            // pass
+        } else {
+            XCTFail("Expected .phone")
+        }
+    }
+
+    func testUnverifiedWithEmptyPhoneRoutesToPhoneCapture() {
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: false,
+            onboardingStep: nil,
+            profile: nil,
+            financialProfile: nil,
+            phoneVerified: false,
+            phoneNumber: ""
+        )
+        if case .phone = OnboardingResumeManager.destination(from: status) {
+            // pass
+        } else {
+            XCTFail("Expected .phone for empty phone string")
+        }
+    }
+
+    func testCompletedOnboardingTakesPrecedenceOverUnverifiedPhone() {
+        // Data-drift safety: a fully-onboarded user reaches home even if
+        // phoneVerified is false (e.g. status response missing the field).
+        let status = OnboardingStatusResponse(
+            onboardingCompleted: true,
+            onboardingStep: "submitted",
+            profile: nil,
+            financialProfile: nil,
+            phoneVerified: false,
+            phoneNumber: nil
+        )
+        if case .home = OnboardingResumeManager.destination(from: status) {
+            // pass
+        } else {
+            XCTFail("Expected .home to take precedence")
         }
     }
 }

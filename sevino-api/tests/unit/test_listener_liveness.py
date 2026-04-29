@@ -1,6 +1,7 @@
 import time
 from unittest.mock import MagicMock
 
+from app.config import settings
 from app.tasks.listener_liveness import check_listener_liveness
 
 
@@ -141,3 +142,71 @@ async def test_every_silent_stream_fires_its_own_alert(monkeypatch):
     messages = [call.args[0] for call in capture.call_args_list]
     assert any("account_status" in m for m in messages)
     assert any("trade_events_ws" in m for m in messages)
+
+
+async def test_pr_preview_env_skips_all_alerts(monkeypatch):
+    """PR preview environments (RAILWAY_ENVIRONMENT_NAME=sevino-pr-*) must
+    never fire Sentry silence alerts — these previews get torn down and
+    their stale checkpoints generate noise. See SEV-433."""
+    monkeypatch.setattr(settings, "railway_environment_name", "sevino-pr-123")
+    capture = MagicMock()
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.capture_message", capture
+    )
+    listener = _listener("trade_events_ws", silence_seconds=9999, threshold=60)
+
+    result = await check_listener_liveness({"listeners": [listener]})
+
+    assert result == {"checked": 0, "silent": 0, "skipped": "pr-preview"}
+    capture.assert_not_called()
+
+
+async def test_non_pr_railway_env_still_alerts(monkeypatch):
+    """Non-PR Railway environments (staging, production) must still fire
+    silence alerts normally."""
+    monkeypatch.setattr(settings, "railway_environment_name", "staging")
+    capture = MagicMock()
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.capture_message", capture
+    )
+    listener = _listener("account_status", silence_seconds=120, threshold=60)
+
+    result = await check_listener_liveness({"listeners": [listener]})
+
+    assert result == {"checked": 1, "silent": 1}
+    capture.assert_called_once()
+
+
+async def test_railway_env_tag_set_on_silence_alert(monkeypatch):
+    """When RAILWAY_ENVIRONMENT_NAME is set (non-PR), it should appear as a
+    tag on silence alerts for ops filtering."""
+    monkeypatch.setattr(settings, "railway_environment_name", "staging")
+    captured_tags: dict = {}
+
+    class _FakeScope:
+        def set_tag(self, k, v):
+            captured_tags[k] = v
+
+        def set_context(self, k, v):
+            pass
+
+    class _FakeScopeManager:
+        def __enter__(self):
+            return _FakeScope()
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.new_scope",
+        lambda: _FakeScopeManager(),
+    )
+    monkeypatch.setattr(
+        "app.tasks.listener_liveness.sentry_sdk.capture_message",
+        MagicMock(),
+    )
+
+    listener = _listener("account_status", silence_seconds=200, threshold=60)
+    await check_listener_liveness({"listeners": [listener]})
+
+    assert captured_tags["railway_environment"] == "staging"

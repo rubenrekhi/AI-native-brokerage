@@ -6,6 +6,8 @@ enum OnboardingResumeManager {
 
     enum Destination {
         case home
+        case phone
+        case phoneVerification(phoneNumber: String)
         case onboarding(step: Int, data: OnboardingResumeData)
         case alpacaSetup(step: Int, data: AlpacaResumeData)
         case loading
@@ -123,26 +125,35 @@ enum OnboardingResumeManager {
             return .home
         }
 
+        // Phone verification is an auth precondition for onboarding — guard
+        // here before consulting onboardingStep so an unverified user can
+        // never reach the 18-step flow (SEV-448). The number, when present,
+        // comes from auth.users.phone_change so the OTP screen can prefill
+        // without re-asking. PhoneFormatter renders the GoTrue-normalized
+        // E.164 string (`15551234567`) into the same `(555) 123-4567` shape
+        // the entry view produces, so resume reads continuously with typing.
+        if !status.phoneVerified {
+            if let phone = status.phoneNumber, !phone.isEmpty {
+                return .phoneVerification(phoneNumber: PhoneFormatter.format(phone))
+            }
+            return .phone
+        }
+
         guard let step = status.onboardingStep else {
-            // No step saved yet — start from the beginning
             return .onboarding(step: 1, data: OnboardingResumeData())
         }
 
-        // Check Phase 1
         if let resumeStep = phase1ResumeStep[step] {
             if step == "risk_disclosure" {
-                // Phase 1 complete — go to Alpaca setup
                 return .alpacaSetup(step: 1, data: buildAlpacaResumeData(from: status))
             }
             return .onboarding(step: resumeStep, data: buildOnboardingResumeData(from: status))
         }
 
-        // Check Phase 2
         if let resumeStep = phase2ResumeStep[step] {
             return .alpacaSetup(step: resumeStep, data: buildAlpacaResumeData(from: status))
         }
 
-        // Unknown step — start from beginning
         return .onboarding(step: 1, data: OnboardingResumeData())
     }
 
@@ -169,7 +180,6 @@ enum OnboardingResumeManager {
         }
 
         if let profile = status.profile, let dob = profile.dateOfBirth {
-            // Convert YYYY-MM-DD to MM-DD-YYYY for the DOB view
             let parts = dob.split(separator: "-")
             if parts.count == 3 {
                 data.dobString = "\(parts[1])-\(parts[2])-\(parts[0])"
@@ -201,7 +211,6 @@ enum OnboardingResumeManager {
             data.state = profile.state ?? ""
             data.postalCode = profile.postalCode ?? ""
 
-            // Reconstruct display address
             let parts = [
                 profile.streetAddress?.first,
                 profile.city,

@@ -88,6 +88,13 @@ struct OnboardingStatusResponse: Decodable {
     var accountStatus: String?
     var profile: ProfileData?
     var financialProfile: FinancialProfileData?
+    // Phone-verification state lives at the top level (not on `profile`)
+    // because the source is `auth.users`, not `user_profiles`. Defaults to
+    // `false` so a missing field routes the user back through phone capture
+    // — annoying but recoverable — instead of silently letting an
+    // unverified user into the 18-step flow.
+    var phoneVerified: Bool = false
+    var phoneNumber: String?
 }
 
 struct ProfileData: Decodable {
@@ -106,6 +113,9 @@ struct ProfileData: Decodable {
     var countryOfCitizenship: String?
     var countryOfBirth: String?
     var countryOfTaxResidence: String?
+    /// Last four digits of the user's SSN, populated during KYC onboarding.
+    /// We never store the full SSN — Alpaca is the system of record.
+    var taxIdLast4: String?
 }
 
 struct FinancialProfileData: Decodable {

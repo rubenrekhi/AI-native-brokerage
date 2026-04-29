@@ -1,10 +1,3 @@
-"""FastAPI router for /v1/funding/*.
-
-Mounted in app/main.py in Phase 7. All endpoints require authentication via
-`get_current_user`; rate-limited at the global per-user default from
-`app/rate_limit.py`.
-"""
-
 import uuid
 
 import structlog

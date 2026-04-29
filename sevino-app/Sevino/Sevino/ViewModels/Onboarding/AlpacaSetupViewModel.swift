@@ -54,8 +54,6 @@ final class AlpacaSetupViewModel {
         )
     }
 
-    // MARK: - Init
-
     init(
         userName: String,
         initialStep: Int = 1,
@@ -80,7 +78,7 @@ final class AlpacaSetupViewModel {
         self.fundingSources = data.fundingSources
     }
 
-    // MARK: - Navigation
+    // MARK: - Step control
 
     func advance() {
         if currentStep < Self.totalSteps {

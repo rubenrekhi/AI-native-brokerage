@@ -5,11 +5,16 @@ import XCTest
 final class ContentViewModelTests: XCTestCase {
 
     private var mockOnboarding: MockOnboardingService!
+    private var mockPhoneVerification: MockPhoneVerificationService!
     private var viewModel: ContentViewModel!
 
     override func setUp() {
         mockOnboarding = MockOnboardingService()
-        viewModel = ContentViewModel(onboardingService: mockOnboarding)
+        mockPhoneVerification = MockPhoneVerificationService()
+        viewModel = ContentViewModel(
+            onboardingService: mockOnboarding,
+            phoneVerificationService: mockPhoneVerification
+        )
     }
 
     // MARK: - Initial state
@@ -32,53 +37,114 @@ final class ContentViewModelTests: XCTestCase {
 
     // MARK: - savePhoneNumber
 
-    func testSavePhoneNumberSuccessAdvancesToOnboarding() async {
+    func testSavePhoneNumberSuccessAdvancesToPhoneVerification() async {
         viewModel.startFreshSignUpFlow()
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
         XCTAssertFalse(viewModel.isLoading)
         XCTAssertNil(viewModel.error)
-        XCTAssertEqual(mockOnboarding.savedSteps.count, 1)
-        XCTAssertEqual(mockOnboarding.savedSteps.last?.step, "welcome")
-        XCTAssertEqual(mockOnboarding.savedSteps.last?.phoneNumber, "4165551234")
+        XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers, ["4165551234"],
+                       "OTP must be dispatched before navigation so the user lands on the verification screen with a code on the way")
+        XCTAssertTrue(mockOnboarding.savedSteps.isEmpty,
+                      "phone-entry no longer writes user_profiles — the verified phone is persisted server-side by /v1/auth/phone/confirm (SEV-448)")
     }
 
-    func testSavePhoneNumberFailureKeepsPhoneRouteAndRecordsError() async {
+    func testSavePhoneNumberSendOTPFailureKeepsPhoneRoute() async {
         viewModel.startFreshSignUpFlow()
-        mockOnboarding.saveStepError = NSError(
+        mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
-            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+            userInfo: [NSLocalizedDescriptionKey: "SMS provider down"]
         )
 
         await viewModel.savePhoneNumber("4165551234")
 
-        XCTAssertEqual(viewModel.route, .phone, "route stays on phone so user can retry")
-        XCTAssertTrue(viewModel.showPhoneError, "alert flag is set so the view presents an alert")
-        XCTAssertFalse(viewModel.isLoading)
-        XCTAssertEqual(viewModel.error, "Network error")
+        XCTAssertEqual(viewModel.route, .phone,
+                       "send-OTP failure must NOT advance — the verification screen would be unusable without a code on the way")
+        XCTAssertTrue(viewModel.showPhoneError)
+        XCTAssertEqual(viewModel.error, "SMS provider down")
+        XCTAssertTrue(mockOnboarding.savedSteps.isEmpty,
+                      "no PATCH ever fires from phone capture — only the OTP send")
+    }
+
+    func testSavePhoneNumberPhoneTakenShowsLocalizedMessage() async {
+        viewModel.startFreshSignUpFlow()
+        mockPhoneVerification.sendOTPError = APIError(
+            error: "ignored backend message",
+            code: "PHONE_NUMBER_TAKEN"
+        )
+
+        await viewModel.savePhoneNumber("4165551234")
+
+        XCTAssertEqual(viewModel.route, .phone,
+                       "duplicate-phone keeps user on the entry screen so they can pick a different number")
+        XCTAssertTrue(viewModel.showPhoneError)
+        XCTAssertEqual(viewModel.error, L10n.Auth.phoneNumberTaken,
+                       "PHONE_NUMBER_TAKEN gets the dedicated copy, not the generic backend message")
     }
 
     func testSavePhoneNumberRetrySuccessClearsErrorFlag() async {
         viewModel.startFreshSignUpFlow()
-        mockOnboarding.saveStepError = NSError(
+        mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
         await viewModel.savePhoneNumber("4165551234")
         XCTAssertTrue(viewModel.showPhoneError)
 
-        mockOnboarding.saveStepError = nil
+        mockPhoneVerification.sendOTPError = nil
         await viewModel.savePhoneNumber("4165551234")
 
         XCTAssertFalse(viewModel.showPhoneError)
-        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
         XCTAssertNil(viewModel.error)
     }
 
+    func testSavePhoneNumberPhoneTakenThenRetryWithNewNumberAdvances() async {
+        viewModel.startFreshSignUpFlow()
+        mockPhoneVerification.sendOTPError = APIError(
+            error: "ignored backend message",
+            code: "PHONE_NUMBER_TAKEN"
+        )
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phone)
+        XCTAssertEqual(viewModel.error, L10n.Auth.phoneNumberTaken)
+
+        mockPhoneVerification.sendOTPError = nil
+        await viewModel.savePhoneNumber("4165559999")
+
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-9999"))
+        XCTAssertNil(viewModel.error)
+        XCTAssertFalse(viewModel.showPhoneError)
+        XCTAssertEqual(mockPhoneVerification.sentPhoneNumbers.last, "4165559999",
+                       "OTP must be dispatched against the new number after the duplicate-phone retry")
+    }
+
+    // MARK: - Phone verification transitions
+
+    func testOnPhoneVerifiedAdvancesToOnboarding() async {
+        viewModel.startFreshSignUpFlow()
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
+
+        viewModel.onPhoneVerified()
+
+        XCTAssertEqual(viewModel.route, .onboarding(step: 1, data: nil))
+    }
+
+    func testOnChangeNumberReturnsToPhone() async {
+        viewModel.startFreshSignUpFlow()
+        await viewModel.savePhoneNumber("4165551234")
+        XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
+
+        viewModel.onChangeNumber()
+
+        XCTAssertEqual(viewModel.route, .phone)
+    }
+
     func testClearErrorResetsErrorAndAlertFlag() async {
-        mockOnboarding.saveStepError = NSError(
+        mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
@@ -101,7 +167,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: nil,
             accountStatus: nil,
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -115,7 +182,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: "preferred_name",
             accountStatus: nil,
             profile: ProfileData(preferredName: "Riley"),
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -133,7 +201,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: "risk_disclosure",
             accountStatus: nil,
             profile: ProfileData(preferredName: "Riley"),
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
 
         await viewModel.checkOnboardingStatus()
@@ -168,7 +237,8 @@ final class ContentViewModelTests: XCTestCase {
             onboardingStep: nil,
             accountStatus: nil,
             profile: nil,
-            financialProfile: nil
+            financialProfile: nil,
+            phoneVerified: true
         )
         await viewModel.checkOnboardingStatus()
 
@@ -209,6 +279,10 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertNotEqual(
             AuthenticatedRoute.alpacaSetup(step: 1, userName: "A", data: nil),
             AuthenticatedRoute.alpacaSetup(step: 1, userName: "B", data: nil)
+        )
+        XCTAssertNotEqual(
+            AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 123-4567"),
+            AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 999-0000")
         )
         var dataA = OnboardingResumeManager.OnboardingResumeData()
         dataA.userName = "A"

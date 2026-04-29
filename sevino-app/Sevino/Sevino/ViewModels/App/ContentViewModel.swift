@@ -5,6 +5,7 @@ import Foundation
 @Observable
 final class ContentViewModel {
     private let onboardingService: any OnboardingServiceProtocol
+    private let phoneVerificationService: any PhoneVerificationServiceProtocol
 
     // MARK: - Routing
 
@@ -14,15 +15,14 @@ final class ContentViewModel {
 
     private(set) var isLoading = false
     private(set) var showPhoneError = false
-
-    // MARK: - Error
-
     private(set) var error: String?
 
-    // MARK: - Init
-
-    init(onboardingService: any OnboardingServiceProtocol = OnboardingService.shared) {
+    init(
+        onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
+        phoneVerificationService: any PhoneVerificationServiceProtocol = PhoneVerificationService.shared
+    ) {
         self.onboardingService = onboardingService
+        self.phoneVerificationService = phoneVerificationService
     }
 
     // MARK: - Auth transitions
@@ -34,8 +34,6 @@ final class ContentViewModel {
         route = .phone
     }
 
-    // MARK: - Flow completion
-
     func completeOnboarding(userName: String) {
         route = .alpacaSetup(step: 1, userName: userName, data: nil)
     }
@@ -46,23 +44,55 @@ final class ContentViewModel {
 
     // MARK: - Async operations
 
-    /// Saves the phone number and advances to onboarding on success. On failure, the
-    /// route stays on `.phone` and `error` is set so the view can surface an alert
-    /// and allow a retry.
+    /// Dispatches the OTP and advances to the verification screen. The phone
+    /// number itself is *not* persisted yet — it stays in iOS memory (passed
+    /// through the `.phoneVerification` route) until `/v1/auth/phone/confirm`
+    /// writes it atomically with `phone_verified_at` and the welcome step.
+    /// This way `user_profiles.phone_number` only ever holds verified phones,
+    /// and resume routing can never see `onboarding_step="welcome"` on an
+    /// unverified user (SEV-448). A duplicate-phone rejection
+    /// (`PHONE_NUMBER_TAKEN`) keeps the user on `.phone` with a tailored
+    /// error rather than stranding them on the OTP screen with no code.
     func savePhoneNumber(_ phoneNumber: String) async {
         error = nil
         showPhoneError = false
         isLoading = true
         defer { isLoading = false }
         do {
-            try await onboardingService.saveStep(
-                OnboardingPatchRequest(step: "welcome", phoneNumber: phoneNumber)
-            )
-            route = .onboarding(step: 1, data: nil)
+            try await phoneVerificationService.sendOTP(phoneNumber: phoneNumber)
+            // Normalize through PhoneFormatter so the route's associated value
+            // has the same `(555) 123-4567` shape whether we got here from
+            // PhoneNumberView (already pretty) or from a future caller that
+            // forwards raw digits — and so the OTP screen title is consistent
+            // with the resume path's auth.users-sourced format.
+            route = .phoneVerification(phoneNumber: PhoneFormatter.format(phoneNumber))
         } catch let caughtError {
-            error = caughtError.localizedDescription
+            error = phoneSaveErrorMessage(for: caughtError)
             showPhoneError = true
         }
+    }
+
+    /// Translates phone-step errors into a user-facing string. The duplicate
+    /// case gets the dedicated copy so the user understands why advancing was
+    /// blocked; everything else falls back to the backend's localized message.
+    private func phoneSaveErrorMessage(for error: Error) -> String {
+        if let apiError = error as? APIError, apiError.code == "PHONE_NUMBER_TAKEN" {
+            return L10n.Auth.phoneNumberTaken
+        }
+        return error.localizedDescription
+    }
+
+    /// Called by `PhoneVerificationView` once the OTP confirm succeeds. Advances
+    /// the user into the 18-step onboarding flow.
+    func onPhoneVerified() {
+        route = .onboarding(step: 1, data: nil)
+    }
+
+    /// Called when the user taps the back chevron on `PhoneVerificationView`.
+    /// Returns to phone capture so they can edit the number; the in-flight OTP
+    /// becomes irrelevant once a new number is submitted.
+    func onChangeNumber() {
+        route = .phone
     }
 
     /// Fetches onboarding status and routes to the matching destination. On failure,
@@ -85,12 +115,14 @@ final class ContentViewModel {
         showPhoneError = false
     }
 
-    // MARK: - Helpers
-
     private func apply(_ destination: OnboardingResumeManager.Destination) {
         switch destination {
         case .home:
             route = .home
+        case .phone:
+            route = .phone
+        case .phoneVerification(let phoneNumber):
+            route = .phoneVerification(phoneNumber: phoneNumber)
         case .onboarding(let step, let data):
             route = .onboarding(step: step, data: data)
         case .alpacaSetup(let step, let data):

@@ -33,5 +33,4 @@ class RadarItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="radar_items")

@@ -11,6 +11,7 @@ from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from app.config import get_redis_settings, settings
+from app.sentry_config import before_send as sentry_before_send
 from app.listeners.registry import build_listeners
 from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
@@ -124,8 +125,9 @@ async def startup(ctx: dict) -> None:
     if settings.sentry_dsn:
         sentry_sdk.init(
             dsn=settings.sentry_dsn,
-            environment=settings.environment,
+            environment=settings.sentry_environment,
             traces_sample_rate=0.1,
+            before_send=sentry_before_send,
         )
         sentry_sdk.set_tag("process", "worker")
 

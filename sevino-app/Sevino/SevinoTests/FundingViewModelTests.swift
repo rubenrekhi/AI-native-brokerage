@@ -63,200 +63,72 @@ final class FundingViewModelTests: XCTestCase {
         XCTAssertTrue(sut.relationships.isEmpty)
     }
 
-    // MARK: - startBankLink
+    // MARK: - Plaid coordinator wiring
 
-    func test_startBankLink_setsTokenAndShowsSheet() async {
-        let (sut, mock) = makeSUT()
-        mock.createLinkTokenResult = .success("link-sandbox-abc")
-
-        await sut.startBankLink()
-
-        XCTAssertEqual(sut.linkToken, "link-sandbox-abc")
-        XCTAssertTrue(sut.isShowingPlaidLink)
-        XCTAssertNil(sut.displayedError)
-        XCTAssertEqual(mock.createLinkTokenCalls, 1)
-    }
-
-    func test_startBankLink_whenApiFails_storesServerErrorAndDoesNotShowSheet() async {
-        let (sut, mock) = makeSUT()
-        let error = APIError(error: "Account not active", code: "ACCOUNT_NOT_ACTIVE")
-        mock.createLinkTokenResult = .failure(error)
-
-        await sut.startBankLink()
-
-        XCTAssertEqual(sut.serverError, error)
-        XCTAssertFalse(sut.isShowingPlaidLink)
-        XCTAssertNil(sut.linkToken)
-    }
-
-    func test_startBankLink_whenNonAPIErrorThrown_storesLocalErrorFallback() async {
-        let (sut, mock) = makeSUT()
-        mock.createLinkTokenResult = .failure(URLError(.notConnectedToInternet))
-
-        await sut.startBankLink()
-
-        XCTAssertNil(sut.serverError)
-        XCTAssertEqual(sut.localError, L10n.Home.fundingGenericError)
-        XCTAssertEqual(sut.displayedError, L10n.Home.fundingGenericError)
-        XCTAssertFalse(sut.isShowingPlaidLink)
-    }
-
-    func test_startBankLink_clearsPreExistingErrors() async {
-        let (sut, mock) = makeSUT()
-        sut.serverError = APIError(error: "old", code: "INTERNAL_ERROR")
-        sut.localError = "old-local"
-        mock.createLinkTokenResult = .success("link-sandbox-abc")
-
-        await sut.startBankLink()
-
-        XCTAssertNil(sut.serverError)
-        XCTAssertNil(sut.localError)
-    }
-
-    // MARK: - onPlaidSuccess
-
-    func test_onPlaidSuccess_happyPath_refreshesRelationshipsAndDismissesSheet() async {
+    func test_plaidLink_onSuccess_refreshesRelationships() async {
         let (sut, mock) = makeSUT()
         let rel = makeRelationship()
         mock.linkBankResult = .success(rel)
         mock.listAchRelationshipsResult = .success([rel])
-        sut.linkToken = "link-sandbox-abc"
-        sut.isShowingPlaidLink = true
 
-        await sut.onPlaidSuccess(
-            publicToken: "public-sandbox-xyz",
-            accountId: "acct_123",
-            institutionName: "First Platypus Bank",
-            accountMask: "0000",
-            accountName: "Plaid Checking"
+        await sut.plaidLink.onPlaidSuccess(
+            publicToken: "pt",
+            accountId: "acct",
+            institutionName: nil,
+            accountMask: nil,
+            accountName: nil
         )
 
-        XCTAssertEqual(mock.linkBankCalls.count, 1)
-        XCTAssertEqual(mock.linkBankCalls.first?.publicToken, "public-sandbox-xyz")
-        XCTAssertEqual(mock.linkBankCalls.first?.accountId, "acct_123")
-        XCTAssertNil(mock.linkBankCalls.first?.nickname)
         XCTAssertEqual(mock.listAchRelationshipsCalls, 1)
         XCTAssertEqual(sut.relationships, [rel])
         XCTAssertTrue(sut.hasLinkedBank)
-        XCTAssertFalse(sut.isShowingPlaidLink)
-        XCTAssertNil(sut.linkToken)
-        XCTAssertNil(sut.displayedError)
     }
 
-    func test_onPlaidSuccess_withBankAlreadyLinked_storesServerErrorAndStillRefreshes() async {
+    func test_requestBankLink_forwardsToCoordinator() async {
         let (sut, mock) = makeSUT()
-        let error = APIError(error: "Already linked", code: "BANK_ALREADY_LINKED")
-        mock.linkBankResult = .failure(error)
-        let existing = makeRelationship()
-        mock.listAchRelationshipsResult = .success([existing])
-        sut.isShowingPlaidLink = true
+        mock.createLinkTokenResult = .success("link-sandbox-abc")
 
-        await sut.onPlaidSuccess(
-            publicToken: "pt",
-            accountId: "acct",
-            institutionName: nil,
-            accountMask: nil,
-            accountName: nil
-        )
+        sut.requestBankLink()
+        // Drain the Task scheduled by requestBankLink.
+        for _ in 0..<10 where sut.plaidLink.linkToken == nil {
+            await Task.yield()
+        }
 
-        XCTAssertEqual(sut.serverError, error)
-        XCTAssertEqual(mock.listAchRelationshipsCalls, 1,
-                       "BANK_ALREADY_LINKED should still refresh relationships")
-        XCTAssertEqual(sut.relationships, [existing])
-        XCTAssertFalse(sut.isShowingPlaidLink)
-    }
-
-    func test_onPlaidSuccess_withAccountNotActive_storesServerErrorAndDismisses() async {
-        let (sut, mock) = makeSUT()
-        let error = APIError(error: "Account not active", code: "ACCOUNT_NOT_ACTIVE")
-        mock.linkBankResult = .failure(error)
-        sut.isShowingPlaidLink = true
-
-        await sut.onPlaidSuccess(
-            publicToken: "pt",
-            accountId: "acct",
-            institutionName: nil,
-            accountMask: nil,
-            accountName: nil
-        )
-
-        XCTAssertEqual(sut.serverError, error)
-        XCTAssertEqual(mock.listAchRelationshipsCalls, 0,
-                       "non-BANK_ALREADY_LINKED errors should not trigger refresh")
-        XCTAssertFalse(sut.isShowingPlaidLink)
-    }
-
-    func test_onPlaidSuccess_whenNonAPIErrorThrown_storesLocalErrorFallback() async {
-        let (sut, mock) = makeSUT()
-        mock.linkBankResult = .failure(URLError(.timedOut))
-        sut.isShowingPlaidLink = true
-
-        await sut.onPlaidSuccess(
-            publicToken: "pt",
-            accountId: "acct",
-            institutionName: nil,
-            accountMask: nil,
-            accountName: nil
-        )
-
-        XCTAssertNil(sut.serverError)
-        XCTAssertEqual(sut.localError, L10n.Home.fundingGenericError)
-        XCTAssertFalse(sut.isShowingPlaidLink)
-    }
-
-    // MARK: - onPlaidExit
-
-    func test_onPlaidExit_withNilError_isSilent() {
-        let (sut, _) = makeSUT()
-        sut.isShowingPlaidLink = true
-        sut.linkToken = "link-sandbox-abc"
-
-        sut.onPlaidExit(error: nil)
-
-        XCTAssertNil(sut.serverError)
-        XCTAssertNil(sut.localError)
-        XCTAssertNil(sut.displayedError)
-        XCTAssertFalse(sut.isShowingPlaidLink)
-        XCTAssertNil(sut.linkToken)
-    }
-
-    func test_onPlaidExit_withNonNilError_storesLocalErrorCopy() {
-        let (sut, _) = makeSUT()
-        sut.isShowingPlaidLink = true
-
-        sut.onPlaidExit(error: URLError(.notConnectedToInternet))
-
-        XCTAssertEqual(sut.localError, L10n.Home.fundingPlaidConnectionError)
-        XCTAssertNil(sut.serverError)
-        XCTAssertFalse(sut.isShowingPlaidLink)
+        XCTAssertEqual(sut.plaidLink.linkToken, "link-sandbox-abc")
     }
 
     // MARK: - displayedError coalescing
 
-    func test_displayedError_prefersServerErrorOverLocalError() {
-        let (sut, _) = makeSUT()
-        sut.serverError = APIError(error: "Server says no", code: "INTERNAL_ERROR")
-        sut.localError = "Local fallback"
+    func test_displayedError_prefersPlaidLinkErrorOverRelationshipError() async {
+        let (sut, mock) = makeSUT()
+        let plaidError = APIError(error: "Plaid says no", code: "INTERNAL_ERROR")
+        mock.createLinkTokenResult = .failure(plaidError)
+        await sut.plaidLink.startBankLink()
+        sut.localError = "Stale relationship-load error"
 
-        XCTAssertEqual(sut.displayedError, "Server says no")
+        XCTAssertEqual(sut.displayedError, "Plaid says no")
     }
 
-    func test_displayedError_whenOnlyLocal_returnsLocal() {
+    func test_displayedError_whenOnlyRelationshipError_returnsRelationshipError() {
         let (sut, _) = makeSUT()
         sut.localError = "Only local"
 
         XCTAssertEqual(sut.displayedError, "Only local")
     }
 
-    func test_clearErrors_resetsBothSources() {
-        let (sut, _) = makeSUT()
-        sut.serverError = APIError(error: "e", code: "INTERNAL_ERROR")
-        sut.localError = "l"
+    func test_clearErrors_resetsBothVMAndCoordinatorChannels() async {
+        let (sut, mock) = makeSUT()
+        mock.createLinkTokenResult = .failure(APIError(error: "p", code: "INTERNAL_ERROR"))
+        await sut.plaidLink.startBankLink()
+        sut.serverError = APIError(error: "r", code: "INTERNAL_ERROR")
+        sut.localError = "rl"
 
         sut.clearErrors()
 
         XCTAssertNil(sut.serverError)
         XCTAssertNil(sut.localError)
+        XCTAssertNil(sut.plaidLink.serverError)
+        XCTAssertNil(sut.plaidLink.localError)
         XCTAssertNil(sut.displayedError)
     }
 }

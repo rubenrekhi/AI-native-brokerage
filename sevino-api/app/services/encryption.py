@@ -31,8 +31,6 @@ class EncryptionError(Exception):
 
 @lru_cache(maxsize=1)
 def get_fernet() -> MultiFernet:
-    """Return the process-wide MultiFernet. Cached; restart process to pick up
-    rotated `PLAID_FERNET_KEY` values. See module docstring."""
     keys = settings.plaid_fernet_keys
     if not keys:
         raise EncryptionError(

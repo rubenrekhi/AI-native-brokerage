@@ -1,6 +1,6 @@
 import Foundation
 
-enum TimeRange: String, CaseIterable, Identifiable {
+enum TimeRange: String, CaseIterable, Identifiable, Codable {
     case oneDay = "1D"
     case oneWeek = "1W"
     case oneMonth = "1M"

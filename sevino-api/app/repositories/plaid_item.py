@@ -16,7 +16,7 @@ from app.services.encryption import decrypt, encrypt
 # Known values for plaid_items.status (free-form TEXT column)
 STATUS_ACTIVE = "active"
 STATUS_INACTIVE = "inactive"
-STATUS_REQUIRES_REAUTH = "requires_reauth"  # reserved; reauth branch
+STATUS_REQUIRES_REAUTH = "requires_reauth"
 
 
 class PlaidItemRepository:
@@ -33,7 +33,6 @@ class PlaidItemRepository:
         account_mask: str | None = None,
         account_name: str | None = None,
     ) -> PlaidItem:
-        """Encrypts `plaid_access_token_plaintext` before insert."""
         item = PlaidItem(
             user_id=user_id,
             plaid_item_id=plaid_item_id,

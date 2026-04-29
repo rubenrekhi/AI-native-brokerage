@@ -1,6 +1,6 @@
 import Foundation
 
-struct RadarItem: Identifiable {
+struct RadarItem: Identifiable, Codable {
     var id: String { ticker }
     let ticker: String
     let description: String

@@ -12,7 +12,6 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import Base and all models so Alembic can detect schema changes for autogenerate.
 from app.models import (  # noqa: F401, E402
     AchRelationship,
     Asset,

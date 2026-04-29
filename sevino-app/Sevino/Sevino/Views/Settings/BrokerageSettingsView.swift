@@ -1,20 +1,40 @@
 import SwiftUI
 
 struct BrokerageSettingsView: View {
-    @Environment(\.dismiss) private var dismiss
+    private static let usdCurrency: Decimal.FormatStyle.Currency = .currency(code: "USD")
 
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
-    // TODO: Replace with real data from ViewModel
-    private let accountNumber = "A3793803408"
-    private let accountValue = "$1092.82"
-    private let netDeposits = "$800.00"
-
-    @State private var accountName = "Growth 💰"
+    @State private var vm: SettingsViewModel
+    @State private var accountName = L10n.Settings.brokerageAccountNameDefault
     @State private var renameItem: RenameItem?
+    @State private var showCloseConfirmation = false
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
+
+    private var accountNumber: String {
+        vm.profile?.brokerage?.accountNumber ?? L10n.Settings.unavailableValue
+    }
+
+    private var accountValueText: String {
+        guard let equity = vm.accountValue?.equity else { return L10n.Settings.unavailableValue }
+        return equity.formatted(Self.usdCurrency)
+    }
+
+    private var netDepositsText: String {
+        guard let cash = vm.accountValue?.cash else { return L10n.Settings.unavailableValue }
+        return cash.formatted(Self.usdCurrency)
+    }
+
+    private var isInitialLoad: Bool {
+        vm.isLoading && vm.profile == nil && vm.accountValue == nil
+    }
+
+    init(vm: SettingsViewModel = SettingsViewModel()) {
+        _vm = State(initialValue: vm)
+    }
 
     var body: some View {
         SevinoGlassContainer {
@@ -26,24 +46,29 @@ struct BrokerageSettingsView: View {
                     .padding(.bottom, 24 * scale)
 
                 VStack(spacing: 0) {
-                    navRow(title: L10n.Settings.accountDocuments)
-                    navRow(title: L10n.Settings.monthlyStatements)
-                    navRow(title: L10n.Settings.taxDocuments)
-                    navRow(title: L10n.Settings.accountHistory)
+                    navRow(title: L10n.Settings.accountDocuments, destination: .accountDocuments)
+                    navRow(title: L10n.Settings.statements, destination: .statements)
+                    navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
+                    navRow(title: L10n.Settings.accountHistory, destination: .accountHistory)
+                    navRow(title: L10n.Settings.tradeHistory, destination: .tradeHistory)
                 }
 
                 Spacer()
 
-                Button(action: {}) {
-                    Text(L10n.Settings.closeAccount)
-                        .font(.system(size: 16 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16 * scale)
-                        .contentShape(.rect(cornerRadius: 14 * scale))
+                Button(action: { showCloseConfirmation = true }) {
+                    closeAccountLabel
                 }
                 .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
-                .disabled(true)
+                .disabled(vm.isClosingBrokerage || vm.didCloseBrokerage)
+                .confirmationDialog(
+                    L10n.Settings.closeAccountConfirmTitle,
+                    isPresented: $showCloseConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button(L10n.Settings.closeAccountConfirmAction, role: .destructive, action: closeBrokerageAccount)
+                } message: {
+                    Text(L10n.Settings.closeAccountConfirmMessage)
+                }
                 .padding(.bottom, 16 * scale)
             }
             .padding(.horizontal, 20 * scale)
@@ -61,6 +86,41 @@ struct BrokerageSettingsView: View {
             }
         }
         .navigationBarBackButtonHidden()
+        .task { await vm.load() }
+        .overlay(alignment: .top) {
+            if vm.didCloseBrokerage {
+                CloseAccountSuccessBanner(scale: scale)
+                    .padding(.top, 8 * scale)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.25), value: vm.didCloseBrokerage)
+        .task(id: vm.didCloseBrokerage) {
+            guard vm.didCloseBrokerage else { return }
+            try? await Task.sleep(for: .milliseconds(1200))
+            guard !Task.isCancelled else { return }
+            dismiss()
+            vm.resetCloseBrokerageFlag()
+        }
+        .modifier(CloseBrokerageAlertModifier(vm: vm))
+    }
+
+    @ViewBuilder
+    private var closeAccountLabel: some View {
+        if vm.isClosingBrokerage {
+            ProgressView()
+                .tint(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        } else {
+            Text(L10n.Settings.closeAccount)
+                .font(.system(size: 16 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16 * scale)
+                .contentShape(.rect(cornerRadius: 14 * scale))
+        }
     }
 
     private var header: some View {
@@ -81,19 +141,24 @@ struct BrokerageSettingsView: View {
                     .font(.system(size: 18 * scale, weight: .medium))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
-            .sheet(item: $renameItem) { item in
+            .popupCard(item: $renameItem) { item in
                 AccountRenameSheet(item: item, scale: scale) { newName in
                     accountName = newName
                 }
-                .presentationDetents([.height(180 * scale)])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(.clear)
             }
 
             VStack(spacing: 0) {
-                accountDetailRow(label: L10n.Settings.accountNumber, value: accountNumber, showCopy: true)
-                accountDetailRow(label: L10n.Settings.accountValue, value: accountValue)
-                accountDetailRow(label: L10n.Settings.netDeposits, value: netDeposits, isLast: true)
+                if isInitialLoad {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 24 * scale)
+                } else if let error = vm.error, vm.profile == nil && vm.accountValue == nil {
+                    errorState(message: error)
+                } else {
+                    accountDetailRow(label: L10n.Settings.accountNumber, value: accountNumber, showCopy: true)
+                    accountDetailRow(label: L10n.Settings.accountValue, value: accountValueText)
+                    accountDetailRow(label: L10n.Settings.netDeposits, value: netDepositsText, isLast: true)
+                }
             }
             .padding(14 * scale)
             .modifier(SevinoGlass.card)
@@ -133,8 +198,27 @@ struct BrokerageSettingsView: View {
         }
     }
 
-    private func navRow(title: String) -> some View {
-        Button(action: {}) {
+    private func errorState(message: String) -> some View {
+        VStack(spacing: 12 * scale) {
+            Text(message)
+                .font(.system(size: 14 * scale))
+                .foregroundStyle(Color.sevinoNegative)
+                .multilineTextAlignment(.center)
+
+            Button(action: { Task { await vm.reload() } }) {
+                Text(L10n.General.tryAgain)
+                    .font(.system(size: 14 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .frame(minHeight: 44)
+                    .padding(.horizontal, 16 * scale)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16 * scale)
+    }
+
+    private func navRow(title: String, destination: SettingsDestination) -> some View {
+        NavigationLink(value: destination) {
             VStack(spacing: 0) {
                 HStack {
                     Text(title)
@@ -149,20 +233,60 @@ struct BrokerageSettingsView: View {
                         .accessibilityHidden(true)
                 }
                 .padding(.vertical, 16 * scale)
+                .frame(minHeight: 44)
 
                 Divider()
                     .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
             }
         }
-        .disabled(true)
     }
 
     private func copyAccountNumber() {
-        UIPasteboard.general.string = accountNumber
+        guard let number = vm.profile?.brokerage?.accountNumber else { return }
+        UIPasteboard.general.string = number
     }
 
     private func presentRename() {
         renameItem = RenameItem(currentName: accountName)
+    }
+
+    private func closeBrokerageAccount() {
+        Task { await vm.closeBrokerageAccount() }
+    }
+}
+
+private struct CloseBrokerageAlertModifier: ViewModifier {
+    @Bindable var vm: SettingsViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Settings.closeAccountErrorTitle,
+            isPresented: $vm.showCloseBrokerageError,
+            presenting: vm.closeBrokerageError
+        ) { _ in
+            Button(L10n.General.ok, role: .cancel, action: vm.clearCloseBrokerageError)
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
+private struct CloseAccountSuccessBanner: View {
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 8 * scale) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.sevinoPositive)
+            Text(L10n.Settings.closeAccountSuccess)
+                .font(.system(size: 14 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+        }
+        .padding(.horizontal, 16 * scale)
+        .padding(.vertical, 10 * scale)
+        .modifier(SevinoGlass.popup)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 
@@ -172,7 +296,7 @@ private struct RenameItem: Identifiable {
 }
 
 private struct AccountRenameSheet: View {
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.popupDismiss) private var popupDismiss
 
     let item: RenameItem
     let scale: CGFloat
@@ -188,46 +312,41 @@ private struct AccountRenameSheet: View {
         _draftName = State(initialValue: item.currentName)
     }
 
+    private var canSave: Bool {
+        let trimmed = draftName.trimmingCharacters(in: .whitespaces)
+        return !trimmed.isEmpty && trimmed != item.currentName
+    }
+
     var body: some View {
-        VStack(spacing: 16 * scale) {
-            TextField(L10n.Settings.renameNamePlaceholder, text: $draftName)
-                .font(.system(size: 16 * scale))
-                .foregroundStyle(Color.sevinoSecondary)
-                .padding(.horizontal, 16 * scale)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.3), in: .rect(cornerRadius: 12 * scale))
-                .focused($isFocused)
-
-            HStack(spacing: 12 * scale) {
-                Button(action: dismiss.callAsFunction) {
-                    Text(L10n.Settings.renameCancel)
-                        .font(.system(size: 15 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12 * scale)
-                }
-                .modifier(SevinoGlass.card)
-
-                Button(action: save) {
-                    Text(L10n.Settings.renameSave)
-                        .font(.system(size: 15 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12 * scale)
-                }
-                .modifier(SevinoGlass.card)
-                .disabled(draftName.trimmingCharacters(in: .whitespaces).isEmpty)
+        SettingsEditPopup(
+            title: L10n.Settings.renameTitle,
+            scale: scale,
+            saveAction: .init(
+                label: L10n.Settings.renameSave,
+                isEnabled: canSave,
+                isLoading: false,
+                perform: save
+            )
+        ) {
+            SettingsEditPopupSection(label: L10n.Settings.renameNamePlaceholder, scale: scale) {
+                TextField("", text: $draftName)
+                    .font(.system(size: 16 * scale))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .textInputAutocapitalization(.words)
+                    .submitLabel(.done)
+                    .focused($isFocused)
+                    .onSubmit { if canSave { save() } }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 12 * scale)
+                    .accessibilityLabel(L10n.Settings.renameNamePlaceholder)
             }
         }
-        .padding(20 * scale)
-        .modifier(SevinoGlass.card)
-        .padding(.horizontal, 12 * scale)
         .task { isFocused = true }
     }
 
     private func save() {
         onSave(draftName.trimmingCharacters(in: .whitespaces))
-        dismiss()
+        popupDismiss()
     }
 }
 

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.config import settings
+from app.sentry_config import before_send as sentry_before_send
 from app.database import get_db
 from app.exceptions import error_response, register_exception_handlers
 from app.lifecycle import lifespan
@@ -17,18 +18,22 @@ from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 from app.rate_limit import limiter
 from app.routes.assets import router as assets_router
+from app.routes.brokerage import router as brokerage_router
 from app.routes.funding import router as funding_router
 from app.routes.onboarding import router as onboarding_router
+from app.routes.phone_auth import router as phone_auth_router
 from app.routes.portfolio import router as portfolio_router
+from app.routes.settings import router as settings_router
 
 configure_logging(settings.environment)
 
 if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
-        environment=settings.environment,
+        environment=settings.sentry_environment,
         traces_sample_rate=0.1,
         send_default_pii=False,
+        before_send=sentry_before_send,
     )
     sentry_sdk.set_tag("process", "api")
 
@@ -105,7 +110,10 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(onboarding_router, prefix="/v1/onboarding", tags=["onboarding"])
     app.include_router(funding_router, prefix="/v1/funding", tags=["funding"])
     app.include_router(assets_router, prefix="/v1/assets", tags=["assets"])
+    app.include_router(phone_auth_router, prefix="/v1/auth", tags=["auth"])
+    app.include_router(brokerage_router, prefix="/v1/brokerage", tags=["brokerage"])
     app.include_router(portfolio_router, prefix="/v1/portfolio", tags=["portfolio"])
+    app.include_router(settings_router, prefix="/v1/settings", tags=["settings"])
 
 
 include_routers(app)

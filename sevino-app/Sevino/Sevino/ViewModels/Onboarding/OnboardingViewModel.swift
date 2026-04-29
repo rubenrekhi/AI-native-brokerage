@@ -50,8 +50,6 @@ final class OnboardingViewModel {
         referralExtra.map { "\(referralSource): \($0)" } ?? referralSource
     }
 
-    // MARK: - Init
-
     init(
         initialStep: Int = 1,
         resumeData: OnboardingResumeManager.OnboardingResumeData? = nil,
@@ -77,7 +75,7 @@ final class OnboardingViewModel {
         self.experienceSelection = data.experienceSelection
     }
 
-    // MARK: - Navigation
+    // MARK: - Step control
 
     func advance() {
         if currentStep < Self.totalSteps {
@@ -193,8 +191,6 @@ final class OnboardingViewModel {
         let now = OnboardingDataMapper.isoTimestamp()
         Task { await saveAndAdvance(OnboardingPatchRequest(step: "risk_disclosure", riskDisclosureAcknowledgedAt: now)) }
     }
-
-    // MARK: - Helpers
 
     private func buildSingleSelectRequest(step: SingleSelectStep, value: String) -> OnboardingPatchRequest {
         var request = OnboardingPatchRequest(step: step.rawValue)

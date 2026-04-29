@@ -1,4 +1,5 @@
 import time
+from collections.abc import AsyncIterator
 from typing import Any, Literal
 
 import httpx
@@ -8,6 +9,12 @@ from app.config import settings
 from app.exceptions import NotFoundError
 
 logger = structlog.get_logger(__name__)
+
+
+# Alpaca transfer states that are still in-flight: money hasn't settled yet.
+PENDING_TRANSFER_STATUSES = frozenset(
+    {"QUEUED", "APPROVAL_PENDING", "PENDING", "SENT_TO_CLEARING"}
+)
 
 
 class AlpacaBrokerError(Exception):
@@ -28,6 +35,15 @@ class AlpacaBrokerUnavailableError(Exception):
         super().__init__(message)
 
 
+async def _stream_response_bytes(response: httpx.Response) -> AsyncIterator[bytes]:
+    """Yield body chunks of an already-sent streaming response, guaranteeing close."""
+    try:
+        async for chunk in response.aiter_bytes():
+            yield chunk
+    finally:
+        await response.aclose()
+
+
 class AlpacaBrokerService:
 
     def __init__(self) -> None:
@@ -43,7 +59,6 @@ class AlpacaBrokerService:
         await self._client.aclose()
 
     async def _get_token(self) -> str:
-        """Get a valid access token, refreshing if expired."""
         if self._access_token and time.time() < (self._token_expires_at - 60):
             return self._access_token
 
@@ -87,7 +102,12 @@ class AlpacaBrokerService:
         return await self._request("POST", "/v1/accounts", json=payload)
 
     async def get_account(self, account_id: str) -> dict[str, Any]:
-        """GET /v1/accounts/{account_id} — retrieve account details and status."""
+        """GET /v1/accounts/{account_id} — KYC/status metadata.
+
+        Use this for account lifecycle (status, identity, contact). For live
+        financial position (equity, cash, buying power), use
+        `get_trading_account`.
+        """
         return await self._request("GET", f"/v1/accounts/{account_id}")
 
     async def update_account(
@@ -95,6 +115,60 @@ class AlpacaBrokerService:
     ) -> dict[str, Any]:
         """PATCH /v1/accounts/{account_id} — update account (e.g. assign APR tier)."""
         return await self._request("PATCH", f"/v1/accounts/{account_id}", json=payload)
+
+    async def get_trading_account(self, account_id: str) -> dict[str, Any]:
+        """GET /v1/trading/accounts/{account_id}/account — live equity/cash/buying power.
+
+        Use this for live financial position. For KYC/status metadata, use
+        `get_account`.
+        """
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/account"
+        )
+
+    async def close_account(self, account_id: str) -> dict[str, Any]:
+        """POST /v1/accounts/{account_id}/actions/close — initiate account closure."""
+        return await self._request(
+            "POST", f"/v1/accounts/{account_id}/actions/close"
+        )
+
+    async def list_positions(self, account_id: str) -> list[dict[str, Any]]:
+        """GET /v1/trading/accounts/{account_id}/positions — open positions."""
+        return await self._request(
+            "GET", f"/v1/trading/accounts/{account_id}/positions"
+        )
+
+    async def list_orders(
+        self,
+        account_id: str,
+        *,
+        status: Literal["open", "closed", "all"] | None = None,
+        side: Literal["buy", "sell"] | None = None,
+        symbols: str | None = None,
+        after: str | None = None,
+        until: str | None = None,
+        limit: int | None = None,
+        direction: Literal["asc", "desc"] | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/trading/accounts/{account_id}/orders — order history."""
+        params = {
+            k: v
+            for k, v in {
+                "status": status,
+                "side": side,
+                "symbols": symbols,
+                "after": after,
+                "until": until,
+                "limit": limit,
+                "direction": direction,
+            }.items()
+            if v is not None
+        }
+        return await self._request(
+            "GET",
+            f"/v1/trading/accounts/{account_id}/orders",
+            params=params or None,
+        )
 
     async def create_ach_relationship(
         self, account_id: str, *, processor_token: str
@@ -163,6 +237,62 @@ class AlpacaBrokerService:
             f"/v1/accounts/{account_id}/transfers",
             params=params or None,
         )
+
+    async def list_documents(
+        self,
+        account_id: str,
+        *,
+        document_type: str | None = None,
+        start: str | None = None,
+        end: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/{account_id}/documents — statements, 1099s, etc."""
+        params = {
+            k: v
+            for k, v in {"type": document_type, "start": start, "end": end}.items()
+            if v
+        }
+        return await self._request(
+            "GET",
+            f"/v1/accounts/{account_id}/documents",
+            params=params or None,
+        )
+
+    async def stream_document(
+        self, account_id: str, document_id: str
+    ) -> AsyncIterator[bytes]:
+        """GET /v1/accounts/{account_id}/documents/{document_id}/download — yields PDF chunks.
+
+        Alpaca 301s to an S3 URL; redirects are followed transparently. The
+        response body is streamed rather than buffered so multi-MB tax
+        packets don't pin per-request memory on the dyno.
+
+        The upstream request is sent eagerly so a non-2xx status (e.g.
+        404 for an unknown document) raises before the caller begins
+        iterating — otherwise FastAPI would have already flushed 200
+        headers by the time the error surfaced.
+        """
+        path = f"/v1/accounts/{account_id}/documents/{document_id}/download"
+        request = self._client.build_request(
+            "GET",
+            f"{self._base_url}{path}",
+            headers=await self._headers(),
+        )
+        try:
+            response = await self._client.send(
+                request, stream=True, follow_redirects=True
+            )
+        except httpx.HTTPError as exc:
+            logger.error("alpaca_connection_failed", error=str(exc), path=path)
+            raise AlpacaBrokerUnavailableError(str(exc)) from exc
+
+        if response.status_code not in (200, 201):
+            try:
+                await response.aread()
+                self._handle_response(response)  # always raises
+            finally:
+                await response.aclose()
+        return _stream_response_bytes(response)
 
     async def list_assets(
         self,
@@ -235,9 +365,20 @@ class AlpacaBrokerService:
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
     ) -> Any:
-        """Make an authenticated request to the Alpaca Broker API."""
+        response = await self._execute(method, path, json=json, params=params)
+        return self._handle_response(response)
+
+    async def _execute(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        """Execute the HTTP request, mapping transport errors to AlpacaBrokerUnavailableError."""
         try:
-            response = await self._client.request(
+            return await self._client.request(
                 method,
                 f"{self._base_url}{path}",
                 headers=await self._headers(),
@@ -247,7 +388,6 @@ class AlpacaBrokerService:
         except httpx.HTTPError as exc:
             logger.error("alpaca_connection_failed", error=str(exc), path=path)
             raise AlpacaBrokerUnavailableError(str(exc)) from exc
-        return self._handle_response(response)
 
     def _handle_response(self, response: httpx.Response) -> Any:
         if response.status_code == 204:

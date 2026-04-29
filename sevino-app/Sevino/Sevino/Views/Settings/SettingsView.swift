@@ -7,7 +7,9 @@ struct SettingsView: View {
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
     @State private var authVM = AuthViewModel()
+    @State private var settingsVM = SettingsViewModel()
     @State private var showLegalLinks = false
+    @State private var showLogOutConfirmation = false
     @State private var path = NavigationPath()
     @State private var baseScale: CGFloat = 1
 
@@ -29,7 +31,7 @@ struct SettingsView: View {
 
                     Spacer()
 
-                    Button(action: logOut) {
+                    Button(action: confirmLogOut) {
                         Text(L10n.Settings.logOut)
                             .font(.system(size: 16 * scale, weight: .semibold))
                             .foregroundStyle(Color.sevinoSecondary)
@@ -39,6 +41,11 @@ struct SettingsView: View {
                     }
                     .modifier(SevinoGlass.tintedButton(tint: Color.sevinoNegative, cornerRadius: 14 * scale))
                     .disabled(authVM.isLoading)
+                    .confirmationDialog(L10n.Settings.logOutConfirmTitle, isPresented: $showLogOutConfirmation) {
+                        Button(L10n.Settings.logOutConfirmAction, role: .destructive, action: logOut)
+                    } message: {
+                        Text(L10n.Settings.logOutConfirmMessage)
+                    }
                     .padding(.bottom, 16 * scale)
                 }
                 .padding(.horizontal, 20 * scale)
@@ -54,20 +61,44 @@ struct SettingsView: View {
                 baseScale = width / 393
             }
             .navigationBarBackButtonHidden()
+            .task { await settingsVM.load() }
             .navigationDestination(for: SettingsDestination.self) { destination in
                 switch destination {
                 case .accounts:
-                    AccountsSettingsView()
+                    AccountsSettingsView(settingsVM: settingsVM)
                 case .brokerage:
                     BrokerageSettingsView()
                 case .linkedAccounts:
-                    LinkedAccountsSettingsView()
+                    LinkedAccountsSettingsView(viewModel: settingsVM)
                 case .loginSecurity:
-                    LoginSecuritySettingsView()
+                    LoginSecuritySettingsView(viewModel: settingsVM)
                 case .personalInfo:
-                    PersonalInfoSettingsView()
+                    PersonalInfoSettingsView(vm: settingsVM)
                 case .appearance:
                     AppearanceSettingsView()
+                case .manageFaceId:
+                    FaceIDSettingsView()
+                case .changePassword:
+                    ChangePasswordView(vm: ChangePasswordViewModel())
+                case .accountDocuments:
+                    DocumentsListView(
+                        title: L10n.Settings.accountDocuments,
+                        documentType: nil
+                    )
+                case .statements:
+                    DocumentsListView(
+                        title: L10n.Settings.statements,
+                        documentType: "account_statement"
+                    )
+                case .taxDocuments:
+                    DocumentsListView(
+                        title: L10n.Settings.taxDocuments,
+                        documentType: "tax_1099"
+                    )
+                case .accountHistory:
+                    AccountHistoryView()
+                case .tradeHistory:
+                    TradeHistoryView()
                 }
             }
         }
@@ -142,6 +173,10 @@ struct SettingsView: View {
 
     private func navigateToAppearance() {
         path.append(SettingsDestination.appearance)
+    }
+
+    private func confirmLogOut() {
+        showLogOutConfirmation = true
     }
 
     private func logOut() {

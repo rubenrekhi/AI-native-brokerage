@@ -10,6 +10,7 @@ struct HomeView: View {
     @State private var fundingViewModel: FundingViewModel
     @State private var holdingsViewModel: HoldingsViewModel
     @State private var radarViewModel: RadarViewModel
+    @State private var transferViewModel: TransferViewModel
     @State private var tickerMentionViewModel = TickerMentionViewModel()
     @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
@@ -21,13 +22,16 @@ struct HomeView: View {
     @State private var showHoldingsFilter = false
     @State private var showRadar = false
     @State private var showSidebar = false
+    @State private var showQuickCommands = false
+    @State private var webSearchEnabled = false
+    @State private var bottomSafeArea: CGFloat = 0
 
     /// Captured as a `let` (not a fresh publisher per render) so SwiftUI's
     /// re-evaluations don't subscribe to a new timer each pass.
     private let refreshTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
-    private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter }
+    private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
 
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
@@ -39,13 +43,15 @@ struct HomeView: View {
         portfolioViewModel: PortfolioViewModel = PortfolioViewModel(),
         fundingViewModel: FundingViewModel = FundingViewModel(),
         holdingsViewModel: HoldingsViewModel = HoldingsViewModel(),
-        radarViewModel: RadarViewModel = RadarViewModel()
+        radarViewModel: RadarViewModel = RadarViewModel(),
+        transferViewModel: TransferViewModel = TransferViewModel()
     ) {
         self._viewModel = State(initialValue: viewModel)
         self._portfolioViewModel = State(initialValue: portfolioViewModel)
         self._fundingViewModel = State(initialValue: fundingViewModel)
         self._holdingsViewModel = State(initialValue: holdingsViewModel)
         self._radarViewModel = State(initialValue: radarViewModel)
+        self._transferViewModel = State(initialValue: transferViewModel)
     }
 
     var body: some View {
@@ -117,7 +123,9 @@ struct HomeView: View {
                     isHidden: showPortfolio || showHoldings || showRadar,
                     viewModel: fundingViewModel,
                     onTap: toggleFunding,
-                    onDismiss: dismissFunding
+                    onDismiss: dismissFunding,
+                    onDeposit: { startTransfer(.deposit) },
+                    onWithdraw: { startTransfer(.withdraw) }
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 44) * scale)
@@ -170,7 +178,8 @@ struct HomeView: View {
                         viewModel: tickerMentionViewModel,
                         scale: scale,
                         isDimmed: anyModalOpen,
-                        onSend: { _ in }
+                        onSend: { _ in },
+                        onQuickCommands: openQuickCommands
                     )
                     .padding(.horizontal, 16 * scale)
                     .padding(.bottom, 8 * scale)
@@ -208,16 +217,18 @@ struct HomeView: View {
                     onSelect: { tickerMentionViewModel.selectResult($0) }
                 )
                 .padding(.horizontal, 16 * scale)
-                .padding(.bottom, chatInputHeight + 8 * scale)
+                .padding(.bottom, chatInputHeight - 8 * scale)
                 .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
         }
+        .overlay(alignment: .bottom) { quickCommandsOverlay }
         .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .background { HomeBackgroundView() }
         .background {
             GeometryReader { geo in
                 Color.clear.onAppear {
                     baseScale = geo.size.width / 393
+                    bottomSafeArea = geo.safeAreaInsets.bottom
                 }
             }
         }
@@ -241,6 +252,7 @@ struct HomeView: View {
             SidebarPanelView(
                 scale: scale,
                 chats: viewModel.chats,
+                userName: viewModel.preferredName,
                 founderPhoneURL: viewModel.founderPhoneURL(),
                 founderTextURL: viewModel.founderTextURL(),
                 contactEmailURL: viewModel.contactEmailURL()
@@ -289,6 +301,11 @@ struct HomeView: View {
         } message: { message in
             Text(message)
         }
+        .modifier(TransferSheetPresenter(
+            transferViewModel: transferViewModel,
+            fundingViewModel: fundingViewModel,
+            scale: scale
+        ))
         .alert(
             L10n.Home.radarLoadErrorTitle,
             isPresented: Binding(
@@ -326,11 +343,31 @@ struct HomeView: View {
     }
 
     private func dismissTopLayer() {
-        if showHoldingsFilter {
+        if showQuickCommands {
+            dismissQuickCommands()
+        } else if showHoldingsFilter {
             withAnimation(.spring(duration: 0.3, bounce: 0.15)) { showHoldingsFilter = false }
         } else {
             dismissAllModals()
         }
+    }
+
+    private func openQuickCommands() {
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            showQuickCommands = true
+        }
+    }
+
+    private func dismissQuickCommands() {
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            showQuickCommands = false
+        }
+    }
+
+    private func selectDiscover() {
+        tickerMentionViewModel.updateText("$")
+        tickerMentionViewModel.requestFocus()
+        dismissQuickCommands()
     }
 
     private func togglePortfolio() {
@@ -351,6 +388,16 @@ struct HomeView: View {
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showFunding = false
         }
+    }
+
+    private func startTransfer(_ direction: TransferDirection) {
+        // Collapse the cash detail modal first; the transfer card sheet then appears
+        // over the home screen. When chat is built, this state will move to the chat
+        // screen's MCP renderer.
+        withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            showFunding = false
+        }
+        transferViewModel.start(direction: direction)
     }
 
     private func toggleHoldings() {
@@ -393,6 +440,25 @@ struct HomeView: View {
     private func toggleSidebar() {
         withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
             showSidebar.toggle()
+        }
+    }
+
+    // Re-mounted on each open so QuickCommandsPopup's dragOffset resets cleanly.
+    @ViewBuilder
+    private var quickCommandsOverlay: some View {
+        if showQuickCommands {
+            VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                QuickCommandsPopup(
+                    scale: scale,
+                    webSearchEnabled: $webSearchEnabled,
+                    bottomSafeArea: bottomSafeArea,
+                    onDiscover: selectDiscover,
+                    onDismiss: dismissQuickCommands
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+            .ignoresSafeArea()
         }
     }
 

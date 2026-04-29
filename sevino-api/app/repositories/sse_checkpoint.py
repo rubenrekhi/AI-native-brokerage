@@ -18,8 +18,6 @@ class SseCheckpointRepository:
     async def upsert(
         db: AsyncSession, stream_name: str, last_event_id: str | None
     ) -> None:
-        # INSERT ... ON CONFLICT so the first event for a stream creates the
-        # row and subsequent events just bump last_event_id + updated_at.
         stmt = insert(SseCheckpoint).values(
             stream_name=stream_name, last_event_id=last_event_id
         )

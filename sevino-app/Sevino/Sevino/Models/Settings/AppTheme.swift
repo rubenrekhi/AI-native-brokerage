@@ -1,6 +1,6 @@
 import Foundation
 
-enum AppTheme: String, CaseIterable, Identifiable {
+enum AppTheme: String, CaseIterable, Identifiable, Codable {
     case light, dark, system
 
     var id: String { rawValue }

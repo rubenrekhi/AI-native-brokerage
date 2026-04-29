@@ -41,9 +41,13 @@ class OnboardingStep(str, Enum):
     submitted = "submitted"
 
 
-# ---------------------------------------------------------------------------
-# Request models
-# ---------------------------------------------------------------------------
+class AgreementsSigned(BaseModel):
+    """Typed representation of the agreements payload sent during onboarding."""
+
+    customer_agreement: bool = False
+    margin_agreement: bool = False
+    signed_at: datetime
+    ip_address: str
 
 
 class OnboardingPatchRequest(BaseModel):
@@ -88,7 +92,7 @@ class OnboardingPatchRequest(BaseModel):
 
     # Phase 2 — JSONB on user_profiles
     disclosures: dict[str, Any] | None = None
-    agreements_signed: dict[str, Any] | None = None
+    agreements_signed: AgreementsSigned | None = None
 
 
 class OnboardingSubmitRequest(BaseModel):
@@ -103,16 +107,19 @@ class OnboardingSubmitRequest(BaseModel):
         digits = re.sub(r"[^0-9]", "", v)
         if len(digits) != 9:
             raise ValueError("tax_id must contain exactly 9 digits")
+        # Reject obvious test-data sentinels first. Some (987654321, 999999999)
+        # would otherwise match the SSA range checks below and surface as
+        # "Invalid SSN area number" — accurate but misleading for ops triage.
+        # Alpaca sandbox accepts these and they pollute 4xx alerts in prod logs.
+        if digits == "123456789" or digits == "987654321":
+            raise ValueError("Sequential SSN values are not allowed")
+        if len(set(digits)) == 1:
+            raise ValueError("All-same-digit SSN values are not allowed")
         if digits[:3] in ("000", "666") or digits[:3] >= "900":
             raise ValueError("Invalid SSN area number")
         if digits[3:5] == "00" or digits[5:] == "0000":
             raise ValueError("Invalid SSN format")
         return v
-
-
-# ---------------------------------------------------------------------------
-# Response models
-# ---------------------------------------------------------------------------
 
 
 class ProfileData(BaseModel):
@@ -122,6 +129,10 @@ class ProfileData(BaseModel):
     last_name: str | None = None
     date_of_birth: date | None = None
     email: str | None = None
+    # Verified mirror written by /v1/auth/phone/confirm. The canonical
+    # source for resume routing is OnboardingStatusResponse.phone_number,
+    # which reads auth.users directly so it can also surface unverified
+    # pending numbers from auth.users.phone_change.
     phone_number: str | None = None
     attribution_source: str | None = None
     street_address: list[str] | None = None
@@ -131,6 +142,7 @@ class ProfileData(BaseModel):
     country_of_citizenship: str | None = None
     country_of_birth: str | None = None
     country_of_tax_residence: str | None = None
+    tax_id_last_4: str | None = None
     disclosures: dict[str, Any] | None = None
     agreements_signed: dict[str, Any] | None = None
     risk_disclosure_acknowledged_at: datetime | None = None
@@ -162,6 +174,10 @@ class OnboardingStatusResponse(BaseModel):
     kyc_results: dict[str, Any] | None = None
     profile: ProfileData
     financial_profile: FinancialProfileData | None = None
+    # Top-level (not on profile) because the source is auth.users — GoTrue's
+    # source of truth — rather than the user_profiles mirror.
+    phone_verified: bool = False
+    phone_number: str | None = None
 
 
 class OnboardingSubmitResponse(BaseModel):

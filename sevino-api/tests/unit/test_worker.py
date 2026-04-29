@@ -172,7 +172,6 @@ class TestWorkerStartup:
             "app.worker.AlpacaBrokerService",
             MagicMock(return_value=fake_broker),
         )
-        # Empty registry — the realistic case today (SEV-213+ will populate it).
         monkeypatch.setattr(
             "app.worker.build_listeners", MagicMock(return_value=[])
         )
@@ -185,6 +184,43 @@ class TestWorkerStartup:
         assert ctx["alpaca"] is fake_broker
         assert ctx["listeners"] == []
         assert ctx["listener_tasks"] == []
+
+    @pytest.mark.parametrize(
+        "env_setting,railway_env,expected",
+        [
+            ("staging", "sevino-pr-789", "sevino-pr-789"),  # PR preview overrides
+            ("prod", "production", "prod"),  # real prod NOT rewritten
+        ],
+    )
+    async def test_startup_passes_sentry_environment_to_init(
+        self, monkeypatch, env_setting, railway_env, expected
+    ):
+        """Worker wires ``settings.sentry_environment`` into
+        ``sentry_sdk.init``. The "real prod" parametrization is the
+        load-bearing case: Railway's prod env name is "production" but
+        ``settings.environment`` normalizes to "prod" — the override must
+        NOT rewrite "prod" → "production", or existing Sentry alerts keyed
+        on ``environment=prod`` silently stop matching. See SEV-433."""
+        init_mock = MagicMock()
+        monkeypatch.setattr(app_worker.sentry_sdk, "init", init_mock)
+        monkeypatch.setattr(app_worker.sentry_sdk, "set_tag", MagicMock())
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "fake-dsn")
+        monkeypatch.setattr(app_worker.settings, "environment", env_setting)
+        monkeypatch.setattr(
+            app_worker.settings, "railway_environment_name", railway_env
+        )
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.build_listeners", MagicMock(return_value=[])
+        )
+
+        await app_worker.startup({})
+
+        init_mock.assert_called_once()
+        assert init_mock.call_args.kwargs["environment"] == expected
 
     async def test_startup_spawns_asyncio_task_per_listener(self, monkeypatch):
         """Each registered listener gets its own long-running asyncio.Task."""

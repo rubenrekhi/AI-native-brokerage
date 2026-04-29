@@ -44,6 +44,9 @@ final class TickerMentionViewModel {
     /// Views observe this and reset their text selection accordingly.
     private(set) var caretToEndTick: Int = 0
 
+    /// Bumps whenever the chat input should take focus. Views observe this and raise the keyboard.
+    private(set) var focusRequestTick: Int = 0
+
     /// True when there is an active query AND results are available to display.
     var isShowingPopup: Bool {
         activeQuery != nil && !results.isEmpty
@@ -142,6 +145,11 @@ final class TickerMentionViewModel {
         dismiss()
         tokens = []
         text = ""
+    }
+
+    /// Ask the chat input to take focus. The view observes `focusRequestTick` to raise the keyboard.
+    func requestFocus() {
+        focusRequestTick &+= 1
     }
 
     // MARK: - Mention detection

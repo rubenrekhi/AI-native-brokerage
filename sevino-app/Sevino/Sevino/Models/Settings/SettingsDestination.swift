@@ -5,4 +5,11 @@ enum SettingsDestination: Hashable {
     case loginSecurity
     case personalInfo
     case appearance
+    case changePassword
+    case manageFaceId
+    case accountDocuments
+    case statements
+    case taxDocuments
+    case accountHistory
+    case tradeHistory
 }

@@ -73,8 +73,6 @@ struct AuthView: View {
         }
     }
 
-    // MARK: - Actions
-
     private func signInWithGoogle() {}
 
     private func signInWithApple() {}

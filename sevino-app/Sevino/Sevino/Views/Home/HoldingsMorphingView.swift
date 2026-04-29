@@ -40,6 +40,7 @@ struct HoldingsMorphingView: View {
         .accessibilityLabel(L10n.Home.menuAccessibility)
     }
 
+    @ViewBuilder
     private var expandedCard: some View {
         expandedContent
             .padding(20 * scale)
@@ -146,6 +147,12 @@ struct HoldingsMorphingView: View {
                 .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 22 * scale))
         }
         .frame(maxWidth: .infinity)
+    }
+
+    private func toggleFilter() {
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            showFilter.toggle()
+        }
     }
 
     private func retry() {

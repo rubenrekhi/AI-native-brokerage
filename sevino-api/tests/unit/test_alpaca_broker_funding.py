@@ -165,6 +165,181 @@ class TestListTransfers:
         assert captured["query"] == ""
 
 
+class TestGetTradingAccount:
+    async def test_gets_trading_account(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(
+                200,
+                json={
+                    "id": ACCOUNT_ID,
+                    "equity": "10234.56",
+                    "cash": "1234.56",
+                    "buying_power": "2469.12",
+                    "portfolio_value": "10234.56",
+                },
+            )
+
+        service = _make_service(handler)
+        result = await service.get_trading_account(ACCOUNT_ID)
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(
+            f"/v1/trading/accounts/{ACCOUNT_ID}/account"
+        )
+        assert result["equity"] == "10234.56"
+        assert result["cash"] == "1234.56"
+
+    async def test_404_raises_not_found(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"message": "account not found"})
+
+        service = _make_service(handler)
+        with pytest.raises(NotFoundError):
+            await service.get_trading_account(ACCOUNT_ID)
+
+
+class TestListPositions:
+    async def test_gets_positions(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(
+                200,
+                json=[{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}],
+            )
+
+        service = _make_service(handler)
+        result = await service.list_positions(ACCOUNT_ID)
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(
+            f"/v1/trading/accounts/{ACCOUNT_ID}/positions"
+        )
+        assert result == [{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}]
+
+    async def test_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        service = _make_service(handler)
+        assert await service.list_positions(ACCOUNT_ID) == []
+
+
+class TestListDocuments:
+    async def test_returns_documents(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "id": "doc-1",
+                        "type": "account_statement",
+                        "date": "2026-03-31",
+                        "name": "March Statement",
+                    }
+                ],
+            )
+
+        service = _make_service(handler)
+        result = await service.list_documents(ACCOUNT_ID)
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(f"/v1/accounts/{ACCOUNT_ID}/documents")
+        assert len(result) == 1
+        assert result[0]["id"] == "doc-1"
+
+    async def test_applies_type_start_end_filters(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["query"] = parse_qs(urlparse(str(request.url)).query)
+            return httpx.Response(200, json=[])
+
+        service = _make_service(handler)
+        await service.list_documents(
+            ACCOUNT_ID,
+            document_type="account_statement",
+            start="2026-01-01",
+            end="2026-03-31",
+        )
+
+        assert captured["query"] == {
+            "type": ["account_statement"],
+            "start": ["2026-01-01"],
+            "end": ["2026-03-31"],
+        }
+
+    async def test_omits_none_filters(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["query"] = urlparse(str(request.url)).query
+            return httpx.Response(200, json=[])
+
+        service = _make_service(handler)
+        await service.list_documents(ACCOUNT_ID)
+
+        assert captured["query"] == ""
+
+
+class TestStreamDocument:
+    async def test_yields_body_chunks(self):
+        captured: dict = {}
+        pdf_bytes = b"%PDF-1.4\nfake"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(200, content=pdf_bytes)
+
+        service = _make_service(handler)
+        iterator = await service.stream_document(ACCOUNT_ID, "doc-1")
+        chunks = [c async for c in iterator]
+
+        assert captured["method"] == "GET"
+        assert captured["url"].endswith(
+            f"/v1/accounts/{ACCOUNT_ID}/documents/doc-1/download"
+        )
+        assert b"".join(chunks) == pdf_bytes
+
+    async def test_follows_redirect_to_s3(self):
+        pdf_bytes = b"%PDF-1.4\nfollowed"
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if "documents/doc-1/download" in str(request.url):
+                return httpx.Response(
+                    301, headers={"location": "https://s3.example/file.pdf"}
+                )
+            return httpx.Response(200, content=pdf_bytes)
+
+        service = _make_service(handler)
+        iterator = await service.stream_document(ACCOUNT_ID, "doc-1")
+        chunks = [c async for c in iterator]
+
+        assert b"".join(chunks) == pdf_bytes
+
+    async def test_404_raises_not_found_before_iteration(self):
+        """A 404 must raise eagerly from `await stream_document(...)` so the
+        route can return a proper 404 status, not a truncated 200 stream."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"message": "document not found"})
+
+        service = _make_service(handler)
+        with pytest.raises(NotFoundError):
+            await service.stream_document(ACCOUNT_ID, "doc-1")
+
+
 class TestErrorMapping:
     async def test_404_from_list_raises_not_found(self):
         def handler(request: httpx.Request) -> httpx.Response:

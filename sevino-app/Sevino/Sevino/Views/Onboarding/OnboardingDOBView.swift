@@ -10,6 +10,7 @@ struct OnboardingDOBView: View {
     @State private var typed1 = ""
     @State private var typed2 = ""
     @State private var showFields = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var month: String
     @State private var day: String
@@ -20,7 +21,6 @@ struct OnboardingDOBView: View {
         self.userPromptText = userPromptText
         self.animate = animate
         self.onContinue = onContinue
-        // Parse MM-DD-YYYY into components
         let parts = initialDOB.split(separator: "-")
         if parts.count == 3 {
             _month = State(initialValue: String(parts[0]))
@@ -171,18 +171,11 @@ struct OnboardingDOBView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.dobResponse1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.dobResponse1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.dobResponse2) { typed2 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.dobResponse2, reduceMotion: reduceMotion) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showFields = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

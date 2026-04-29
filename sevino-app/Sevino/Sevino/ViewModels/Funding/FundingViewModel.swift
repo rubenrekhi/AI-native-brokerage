@@ -10,42 +10,43 @@ final class FundingViewModel {
 
     var relationships: [AchRelationshipDTO] = []
     var isLoading: Bool = false
-
-    // MARK: - Error state
-
     var serverError: APIError?
     var localError: String?
-
-    // MARK: - Plaid sheet state
-
-    var linkToken: String?
-    var isShowingPlaidLink: Bool = false
+    let plaidLink: PlaidLinkCoordinator
 
     // MARK: - Cash display (mock) state
 
-    private(set) var cashBalance = "$2,412.08"
-    private(set) var cashApy = "3.20%"
-    private(set) var cashThisMonth = "+$6.43"
-    private(set) var cashDaysAccrued = "22"
-    private(set) var cashLifetime = "+$41.87"
-    private(set) var cashLifetimeSince = "Oct 2025"
-    private(set) var cashBuyingPower = "$2,412.08"
-    private(set) var cashPendingDeposits = "$100.50"
-    private(set) var cashInterestPaidOut = "Monthly"
-    private(set) var cashFdicInsured = "$2,500,000"
+    private(set) var cashBalance: Decimal = 2412.08
+    private(set) var cashApy: Decimal = 0.032
+    private(set) var cashThisMonthEarned: Decimal = 6.43
+    private(set) var cashDaysAccrued: Int = 22
+    private(set) var cashLifetimeEarned: Decimal = 41.87
+    private(set) var cashLifetimeSince: Date = DateComponents(
+        calendar: .current, year: 2025, month: 10, day: 1
+    ).date ?? Date()
+    private(set) var cashBuyingPower: Decimal = 2412.08
+    private(set) var cashPendingDeposits: Decimal = 100.50
+    private(set) var cashInterestPaidOut: PaidOutCadence = .monthly
+    private(set) var cashFdicInsuredLimit: Decimal = 2_500_000
 
     private let service: any FundingServiceProtocol
 
     init(service: any FundingServiceProtocol = FundingService.shared) {
         self.service = service
+        self.plaidLink = PlaidLinkCoordinator(service: service)
+        self.plaidLink.onLinked = { [weak self] in
+            await self?.loadRelationships()
+        }
     }
 
     // MARK: - Derived
 
     var hasLinkedBank: Bool { !relationships.isEmpty }
 
+    /// Coalesces relationship-load errors with Plaid-flow errors so views can
+    /// observe a single error stream regardless of which call failed.
     var displayedError: String? {
-        serverError?.localizedDescription ?? localError
+        plaidLink.displayedError ?? serverError?.localizedDescription ?? localError
     }
 
     var error: String? { displayedError }
@@ -54,6 +55,7 @@ final class FundingViewModel {
     func clearErrors() {
         serverError = nil
         localError = nil
+        plaidLink.clearErrors()
     }
 
     // MARK: - Actions
@@ -70,56 +72,9 @@ final class FundingViewModel {
         }
     }
 
-    func startBankLink() async {
-        clearErrors()
-        isLoading = true
-        defer { isLoading = false }
-        do {
-            linkToken = try await service.createLinkToken()
-            isShowingPlaidLink = true
-        } catch let apiError as APIError {
-            serverError = apiError
-        } catch {
-            localError = L10n.Home.fundingGenericError
-        }
-    }
-
-    func onPlaidSuccess(
-        publicToken: String,
-        accountId: String,
-        institutionName: String?,
-        accountMask: String?,
-        accountName: String?
-    ) async {
-        do {
-            _ = try await service.linkBank(
-                LinkBankRequest(
-                    publicToken: publicToken,
-                    accountId: accountId,
-                    institutionName: institutionName,
-                    accountMask: accountMask,
-                    accountName: accountName,
-                    nickname: nil
-                )
-            )
-            await loadRelationships()
-        } catch let apiError as APIError {
-            serverError = apiError
-            if apiError.code == "BANK_ALREADY_LINKED" {
-                await loadRelationships()
-            }
-        } catch {
-            localError = L10n.Home.fundingGenericError
-        }
-        linkToken = nil
-        isShowingPlaidLink = false
-    }
-
-    func onPlaidExit(error plaidError: Error?) {
-        if plaidError != nil {
-            localError = L10n.Home.fundingPlaidConnectionError
-        }
-        linkToken = nil
-        isShowingPlaidLink = false
+    /// Exposed so callers continue to drive the link flow through the VM
+    /// (preserves the existing `viewModel.requestBankLink` call site).
+    func requestBankLink() {
+        plaidLink.requestBankLink()
     }
 }

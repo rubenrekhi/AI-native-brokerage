@@ -7,8 +7,26 @@ struct FundingMorphingView: View {
     @Bindable var viewModel: FundingViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
+    var onDeposit: (() -> Void)?
+    var onWithdraw: (() -> Void)?
 
     @Namespace private var morphNamespace
+
+    private var cashCardData: CashCardData {
+        CashCardData(
+            balance: viewModel.cashBalance,
+            apy: viewModel.cashApy,
+            thisMonthEarned: viewModel.cashThisMonthEarned,
+            daysAccrued: viewModel.cashDaysAccrued,
+            lifetimeEarned: viewModel.cashLifetimeEarned,
+            lifetimeSince: viewModel.cashLifetimeSince,
+            buyingPower: viewModel.cashBuyingPower,
+            pendingDeposits: viewModel.cashPendingDeposits,
+            interestPaidOut: viewModel.cashInterestPaidOut,
+            fdicInsuredLimit: viewModel.cashFdicInsuredLimit,
+            hasLinkedBank: viewModel.hasLinkedBank
+        )
+    }
 
     var body: some View {
         Group {
@@ -36,24 +54,21 @@ struct FundingMorphingView: View {
     }
 
     private var expandedCard: some View {
-        expandedContent
-            .padding(20 * scale)
-            .frame(maxWidth: .infinity)
-            .fixedSize(horizontal: false, vertical: true)
-            .modifier(SevinoGlass.card)
-            .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
-    }
+        @Bindable var plaidLink = viewModel.plaidLink
 
-    private var expandedContent: some View {
-        VStack(spacing: 16 * scale) {
-            headerSection
-            earningsBadge
-            statCards
-            detailsTable
-            actionRow
-            infoRow
-            disclaimer
-        }
+        return CashDetailCard(
+            data: cashCardData,
+            scale: scale,
+            onDeposit: onDeposit,
+            onWithdraw: onWithdraw,
+            onLinkBank: plaidLink.requestBankLink,
+            isLinkBankDisabled: viewModel.isLoading || plaidLink.isLoading
+        )
+        .padding(20 * scale)
+        .frame(maxWidth: .infinity)
+        .fixedSize(horizontal: false, vertical: true)
+        .modifier(SevinoGlass.card)
+        .clipShape(.rect(cornerRadius: CardGlass.cornerRadius))
         .transition(.asymmetric(
             insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
             removal: .identity
@@ -63,13 +78,13 @@ struct FundingMorphingView: View {
                 await viewModel.loadRelationships()
             }
         }
-        .sheet(isPresented: $viewModel.isShowingPlaidLink) {
-            if let token = viewModel.linkToken {
+        .sheet(isPresented: $plaidLink.showPlaidLink) {
+            if let token = plaidLink.linkToken {
                 PlaidLinkSheet(
                     linkToken: token,
                     onSuccess: { publicToken, accountId, institutionName, accountMask, accountName in
                         Task {
-                            await viewModel.onPlaidSuccess(
+                            await plaidLink.onPlaidSuccess(
                                 publicToken: publicToken,
                                 accountId: accountId,
                                 institutionName: institutionName,
@@ -79,169 +94,11 @@ struct FundingMorphingView: View {
                         }
                     },
                     onExit: { error in
-                        viewModel.onPlaidExit(error: error)
+                        plaidLink.onPlaidExit(error: error)
                     }
                 )
             }
         }
-    }
-
-    private var headerSection: some View {
-        VStack(spacing: 4 * scale) {
-            Text(L10n.Home.uninvestedCash)
-                .font(.system(size: 14 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoGreyContrast)
-
-            Text(viewModel.cashBalance)
-                .font(.system(size: 36 * scale, weight: .bold))
-                .foregroundStyle(Color.sevinoSecondary)
-        }
-    }
-
-    private var earningsBadge: some View {
-        Text(L10n.Home.earningApy(viewModel.cashApy))
-            .font(.system(size: 13 * scale, weight: .semibold))
-            .foregroundStyle(Color.sevinoPositive)
-            .padding(.horizontal, 14 * scale)
-            .padding(.vertical, 6 * scale)
-            .background(Color.sevinoPositive.opacity(0.15), in: .capsule)
-    }
-
-    private var statCards: some View {
-        HStack(spacing: 10 * scale) {
-            statCard(
-                title: L10n.Home.thisMonth,
-                value: viewModel.cashThisMonth,
-                subtitle: L10n.Home.daysAccrued(viewModel.cashDaysAccrued)
-            )
-            statCard(
-                title: L10n.Home.lifetimeEarned,
-                value: viewModel.cashLifetime,
-                subtitle: L10n.Home.sinceLabel(viewModel.cashLifetimeSince)
-            )
-        }
-    }
-
-    private func statCard(title: String, value: String, subtitle: String) -> some View {
-        VStack(alignment: .leading, spacing: 4 * scale) {
-            Text(title)
-                .font(.system(size: 12 * scale, weight: .medium))
-                .foregroundStyle(Color.sevinoSecondary)
-            Text(value)
-                .font(.system(size: 22 * scale, weight: .bold))
-                .foregroundStyle(Color.sevinoPositive)
-            Text(subtitle)
-                .font(.system(size: 11 * scale))
-                .foregroundStyle(Color.sevinoGreyContrast)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12 * scale)
-        .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
-    }
-
-    private var detailsTable: some View {
-        VStack(spacing: 0) {
-            detailRow(label: L10n.Home.currentApy, value: viewModel.cashApy)
-            detailRow(label: L10n.Home.buyingPower, value: viewModel.cashBuyingPower)
-            detailRow(label: L10n.Home.pendingDeposits, value: viewModel.cashPendingDeposits)
-            detailRow(label: L10n.Home.interestPaidOut, value: viewModel.cashInterestPaidOut)
-            detailRow(label: L10n.Home.fdicInsured, value: viewModel.cashFdicInsured, isLast: true)
-        }
-        .padding(12 * scale)
-        .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
-    }
-
-    private func detailRow(label: String, value: String, isLast: Bool = false) -> some View {
-        VStack(spacing: 0) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 13 * scale))
-                    .foregroundStyle(Color.sevinoSecondary)
-                Spacer()
-                Text(value)
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoSecondary)
-            }
-            .padding(.vertical, 8 * scale)
-
-            if !isLast {
-                Divider()
-                    .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var actionRow: some View {
-        if viewModel.hasLinkedBank {
-            actionButtons
-        } else {
-            linkBankButton
-        }
-    }
-
-    private var actionButtons: some View {
-        HStack(spacing: 10 * scale) {
-            Button(L10n.Home.deposit, action: {})
-                .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
-
-            Button(L10n.Home.withdraw, action: {})
-                .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoGreyAccent.opacity(0.2), in: .rect(cornerRadius: 14 * scale))
-        }
-    }
-
-    private var linkBankButton: some View {
-        Button {
-            Task { await viewModel.startBankLink() }
-        } label: {
-            Text(L10n.Home.linkBankAccount)
-                .font(.system(size: 15 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoPrimary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 14 * scale)
-                .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
-        }
-        .disabled(viewModel.isLoading)
-    }
-
-    private var infoRow: some View {
-        Button(action: {}) {
-            HStack {
-                Image(systemName: "info.circle")
-                    .font(.system(size: 14 * scale))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                    .accessibilityHidden(true)
-
-                Text(L10n.Home.cashInterestInfo)
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoSecondary)
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 12 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                    .accessibilityHidden(true)
-            }
-            .padding(12 * scale)
-            .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
-        }
-        .disabled(true)
-    }
-
-    private var disclaimer: some View {
-        Text(L10n.Home.cashDisclaimer)
-            .font(.system(size: 10 * scale))
-            .foregroundStyle(Color.sevinoGreyContrast)
-            .fixedSize(horizontal: false, vertical: true)
     }
 }
 

@@ -14,12 +14,12 @@
         }
       }
     },
-    "%@ • %@" : {
+    "%@, %@" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ • %2$@"
+            "value" : "%1$@, %2$@"
           }
         }
       }
@@ -84,6 +84,136 @@
         }
       }
     },
+    "auth.otp_expired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That code has expired. Tap Resend to get a new one."
+          }
+        }
+      }
+    },
+    "auth.otp_input_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the 6-digit code we sent to your phone"
+          }
+        }
+      }
+    },
+    "auth.otp_input_a11y_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verification code"
+          }
+        }
+      }
+    },
+    "auth.otp_invalid_code" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That code isn't right. Please try again."
+          }
+        }
+      }
+    },
+    "auth.otp_network_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't reach the network. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "auth.otp_next" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Next"
+          }
+        }
+      }
+    },
+    "auth.otp_resend" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend code"
+          }
+        }
+      }
+    },
+    "auth.otp_resend_countdown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resend code in %llds"
+          }
+        }
+      }
+    },
+    "auth.otp_resend_prompt" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Didn't get it?"
+          }
+        }
+      }
+    },
+    "auth.otp_send_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't send the code right now. Please try again in a moment."
+          }
+        }
+      }
+    },
+    "auth.otp_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the code we sent to %@"
+          }
+        }
+      }
+    },
+    "auth.otp_too_many_attempts" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Too many attempts. Please wait a few minutes before trying again."
+          }
+        }
+      }
+    },
+    "auth.otp_unknown_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
     "auth.password_placeholder" : {
       "localizations" : {
         "en" : {
@@ -120,6 +250,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Next"
+          }
+        }
+      }
+    },
+    "auth.phone_number_taken" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This phone number is already in use. Please use a different number."
           }
         }
       }
@@ -404,16 +544,6 @@
         }
       }
     },
-    "home.attach_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Attach"
-          }
-        }
-      }
-    },
     "home.buying_power" : {
       "localizations" : {
         "en" : {
@@ -484,32 +614,62 @@
         }
       }
     },
-    "home.funding_generic_error" : {
+    "home.dictation_dismiss" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Something went wrong. Try again."
+            "value" : "Not now"
           }
         }
       }
     },
-    "home.funding_plaid_connection_error" : {
+    "home.dictation_failed" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Couldn't connect to your bank. Try again."
+            "value" : "Voice input failed. Please try again."
           }
         }
       }
     },
-    "home.link_bank_account" : {
+    "home.dictation_open_settings" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Link a bank account"
+            "value" : "Open Settings"
+          }
+        }
+      }
+    },
+    "home.dictation_permission_denied" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow microphone and speech recognition access in Settings to use voice input."
+          }
+        }
+      }
+    },
+    "home.dictation_permission_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input"
+          }
+        }
+      }
+    },
+    "home.dictation_unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice input is unavailable on this device."
           }
         }
       }
@@ -664,6 +824,16 @@
         }
       }
     },
+    "home.funding_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Try again."
+          }
+        }
+      }
+    },
     "home.funding_load_error_dismiss" : {
       "localizations" : {
         "en" : {
@@ -690,6 +860,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't load cash details"
+          }
+        }
+      }
+    },
+    "home.funding_plaid_connection_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't connect to your bank. Try again."
           }
         }
       }
@@ -760,6 +940,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Average Cost"
+          }
+        }
+      }
+    },
+    "home.holdings_days_gain" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day’s Gain"
           }
         }
       }
@@ -1044,6 +1234,16 @@
         }
       }
     },
+    "home.link_bank_account" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account"
+          }
+        }
+      }
+    },
     "home.menu_accessibility" : {
       "localizations" : {
         "en" : {
@@ -1060,6 +1260,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Voice input"
+          }
+        }
+      }
+    },
+    "home.mic_recording_state" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording"
+          }
+        }
+      }
+    },
+    "home.mic_start_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double tap to start dictation"
+          }
+        }
+      }
+    },
+    "home.mic_stop_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop voice input"
+          }
+        }
+      }
+    },
+    "home.mic_stop_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double tap to stop dictation"
           }
         }
       }
@@ -1184,6 +1424,26 @@
         }
       }
     },
+    "home.portfolio_distribution_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "home.portfolio_distribution_segment_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@, %3$@"
+          }
+        }
+      }
+    },
     "home.portfolio_load_error_dismiss" : {
       "localizations" : {
         "en" : {
@@ -1210,6 +1470,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Couldn't load portfolio"
+          }
+        }
+      }
+    },
+    "home.quick_commands_allow_web_search" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow web search"
+          }
+        }
+      }
+    },
+    "home.quick_commands_button_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick commands"
+          }
+        }
+      }
+    },
+    "home.quick_commands_close_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "home.quick_commands_discover" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discover"
+          }
+        }
+      }
+    },
+    "home.quick_commands_discover_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "start typing to search for a stock"
+          }
+        }
+      }
+    },
+    "home.quick_commands_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick Commands"
           }
         }
       }
@@ -1350,6 +1670,146 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Since %@"
+          }
+        }
+      }
+    },
+    "home.stock_stat_ask" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask"
+          }
+        }
+      }
+    },
+    "home.stock_stat_avg_volume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avg Volume"
+          }
+        }
+      }
+    },
+    "home.stock_stat_bid" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bid"
+          }
+        }
+      }
+    },
+    "home.stock_stat_exchange" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exchange"
+          }
+        }
+      }
+    },
+    "home.stock_stat_fifty_two_week_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "52W High"
+          }
+        }
+      }
+    },
+    "home.stock_stat_fifty_two_week_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "52W Low"
+          }
+        }
+      }
+    },
+    "home.stock_stat_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High"
+          }
+        }
+      }
+    },
+    "home.stock_stat_last_sale" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last Sale"
+          }
+        }
+      }
+    },
+    "home.stock_stat_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low"
+          }
+        }
+      }
+    },
+    "home.stock_stat_margin_req" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Margin Req"
+          }
+        }
+      }
+    },
+    "home.stock_stat_market_cap" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mkt Cap"
+          }
+        }
+      }
+    },
+    "home.stock_stat_open" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        }
+      }
+    },
+    "home.stock_stat_pe_ratio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P/E Ratio"
+          }
+        }
+      }
+    },
+    "home.stock_stat_volume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volume"
           }
         }
       }
@@ -1904,6 +2364,36 @@
         }
       }
     },
+    "onboarding.alpaca_save_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your answer"
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_save_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
     "onboarding.alpaca_ssn_placeholder" : {
       "localizations" : {
         "en" : {
@@ -2000,66 +2490,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Something went wrong"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't save your answer"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "onboarding.alpaca_save_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_heading" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We couldn't save your answer"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "onboarding.save_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
           }
         }
       }
@@ -2204,6 +2634,26 @@
         }
       }
     },
+    "onboarding.dob_day" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DD"
+          }
+        }
+      }
+    },
+    "onboarding.dob_month" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MM"
+          }
+        }
+      }
+    },
     "onboarding.dob_response1" : {
       "localizations" : {
         "en" : {
@@ -2220,26 +2670,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "This helps me personalize your investment timeline."
-          }
-        }
-      }
-    },
-    "onboarding.dob_month" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MM"
-          }
-        }
-      }
-    },
-    "onboarding.dob_day" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "DD"
           }
         }
       }
@@ -3604,6 +4034,36 @@
         }
       }
     },
+    "onboarding.save_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "onboarding.save_error_heading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't save your answer"
+          }
+        }
+      }
+    },
+    "onboarding.save_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
     "onboarding.setup_account" : {
       "localizations" : {
         "en" : {
@@ -3704,6 +4164,66 @@
         }
       }
     },
+    "settings.account_history_deposit_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit"
+          }
+        }
+      }
+    },
+    "settings.account_history_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your deposits and withdrawals will appear here."
+          }
+        }
+      }
+    },
+    "settings.account_history_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No transfers yet"
+          }
+        }
+      }
+    },
+    "settings.account_history_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load history"
+          }
+        }
+      }
+    },
+    "settings.account_history_unknown_bank" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bank transfer"
+          }
+        }
+      }
+    },
+    "settings.account_history_withdrawal_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdrawal"
+          }
+        }
+      }
+    },
     "settings.account_name" : {
       "localizations" : {
         "en" : {
@@ -3794,12 +4314,62 @@
         }
       }
     },
+    "settings.biometric_auth_reason" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Authenticate to enable biometric unlock"
+          }
+        }
+      }
+    },
+    "settings.biometric_toggle_helper" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use %@ to unlock Sevino when you open the app."
+          }
+        }
+      }
+    },
+    "settings.biometrics_unavailable_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrics aren't available on this device. Enable Face ID or Touch ID in your device settings to use biometric unlock."
+          }
+        }
+      }
+    },
+    "settings.biometrics_unavailable_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biometrics unavailable"
+          }
+        }
+      }
+    },
     "settings.brokerage" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Brokerage"
+          }
+        }
+      }
+    },
+    "settings.brokerage_account_name_default" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Growth 💰"
           }
         }
       }
@@ -3824,6 +4394,46 @@
         }
       }
     },
+    "settings.change_password_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Password"
+          }
+        }
+      }
+    },
+    "settings.change_password_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something went wrong. Please try again."
+          }
+        }
+      }
+    },
+    "settings.change_password_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a new password for your Sevino account. You'll use it the next time you sign in."
+          }
+        }
+      }
+    },
+    "settings.change_password_success" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password updated"
+          }
+        }
+      }
+    },
     "settings.close_accessibility" : {
       "localizations" : {
         "en" : {
@@ -3844,6 +4454,76 @@
         }
       }
     },
+    "settings.close_account_confirm_action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close brokerage account"
+          }
+        }
+      }
+    },
+    "settings.close_account_confirm_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your brokerage account will be closed with Alpaca. Any linked bank accounts will be unlinked. You can reopen a new account later."
+          }
+        }
+      }
+    },
+    "settings.close_account_confirm_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close brokerage account?"
+          }
+        }
+      }
+    },
+    "settings.close_account_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to close account"
+          }
+        }
+      }
+    },
+    "settings.close_account_success" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brokerage account closed"
+          }
+        }
+      }
+    },
+    "settings.coming_soon" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Coming soon"
+          }
+        }
+      }
+    },
+    "settings.confirm_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Confirm new password"
+          }
+        }
+      }
+    },
     "settings.consumer_terms" : {
       "localizations" : {
         "en" : {
@@ -3860,6 +4540,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Copy account number"
+          }
+        }
+      }
+    },
+    "settings.current_password_incorrect_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current password is incorrect."
+          }
+        }
+      }
+    },
+    "settings.current_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current password"
           }
         }
       }
@@ -3904,6 +4604,352 @@
         }
       }
     },
+    "settings.delete_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to delete account"
+          }
+        }
+      }
+    },
+    "settings.document_download_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unable to open document"
+          }
+        }
+      }
+    },
+    "settings.document_row_accessibility_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens document"
+          }
+        }
+      }
+    },
+    "settings.document_row_loading" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading"
+          }
+        }
+      }
+    },
+    "settings.documents_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Documents will appear here once your brokerage account starts generating them."
+          }
+        }
+      }
+    },
+    "settings.documents_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No documents yet"
+          }
+        }
+      }
+    },
+    "settings.duration_days" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld day"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld days"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings.duration_months" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld month"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld months"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings.duration_none" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Less than a day"
+          }
+        }
+      }
+    },
+    "settings.duration_weeks" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld week"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld weeks"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "settings.edit_address_city_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "City"
+          }
+        }
+      }
+    },
+    "settings.edit_address_line1_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Street address"
+          }
+        }
+      }
+    },
+    "settings.edit_address_line1_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Search your address"
+          }
+        }
+      }
+    },
+    "settings.edit_address_line2_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apt, suite, etc. (optional)"
+          }
+        }
+      }
+    },
+    "settings.edit_address_missing_field_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill in street, city, state, and postal code to save."
+          }
+        }
+      }
+    },
+    "settings.edit_address_postal_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Postal code"
+          }
+        }
+      }
+    },
+    "settings.edit_address_state_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "State"
+          }
+        }
+      }
+    },
+    "settings.edit_address_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit mailing address"
+          }
+        }
+      }
+    },
+    "settings.edit_email_explanation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email changes require verification. Contact support to update your email."
+          }
+        }
+      }
+    },
+    "settings.edit_email_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Email"
+          }
+        }
+      }
+    },
+    "settings.edit_phone_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phone number"
+          }
+        }
+      }
+    },
+    "settings.edit_phone_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Edit phone"
+          }
+        }
+      }
+    },
+    "settings.edit_phone_validation_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid phone number."
+          }
+        }
+      }
+    },
+    "settings.edit_profile_cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancel"
+          }
+        }
+      }
+    },
+    "settings.edit_profile_generic_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't save your changes. Please try again."
+          }
+        }
+      }
+    },
+    "settings.edit_profile_save" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save"
+          }
+        }
+      }
+    },
+    "settings.edit_profile_success" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_derivation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Based on your onboarding responses."
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_max_loss_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximum loss tolerance"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_scenario_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Market downturn response"
+          }
+        }
+      }
+    },
+    "settings.edit_risk_tolerance_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Risk tolerance"
+          }
+        }
+      }
+    },
     "settings.email" : {
       "localizations" : {
         "en" : {
@@ -3920,6 +4966,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Email"
+          }
+        }
+      }
+    },
+    "settings.face_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Face ID"
           }
         }
       }
@@ -4094,12 +5150,82 @@
         }
       }
     },
+    "settings.load_error_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't load your account details. Check your connection and try again."
+          }
+        }
+      }
+    },
+    "settings.load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "settings.load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load account"
+          }
+        }
+      }
+    },
+    "settings.loading_personal_info" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Loading personal info"
+          }
+        }
+      }
+    },
     "settings.log_out" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Log out"
+          }
+        }
+      }
+    },
+    "settings.log_out_confirm_action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log out"
+          }
+        }
+      }
+    },
+    "settings.log_out_confirm_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You'll need to sign in again to access your account."
+          }
+        }
+      }
+    },
+    "settings.log_out_confirm_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Log out of Sevino?"
           }
         }
       }
@@ -4134,12 +5260,22 @@
         }
       }
     },
-    "settings.monthly_statements" : {
+    "settings.missing_value_placeholder" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Monthly and annual statements"
+            "value" : "—"
+          }
+        }
+      }
+    },
+    "settings.statements" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Statements"
           }
         }
       }
@@ -4164,12 +5300,122 @@
         }
       }
     },
+    "settings.new_password_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New password"
+          }
+        }
+      }
+    },
+    "settings.optic_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optic ID"
+          }
+        }
+      }
+    },
+    "settings.password_mismatch_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Passwords don't match."
+          }
+        }
+      }
+    },
+    "settings.password_requirements_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New password doesn't meet the requirements."
+          }
+        }
+      }
+    },
     "settings.personal_info" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Personal information"
+          }
+        }
+      }
+    },
+    "settings.personal_details_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personal details"
+          }
+        }
+      }
+    },
+    "settings.personal_details_first_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_middle_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Middle name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_last_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last name"
+          }
+        }
+      }
+    },
+    "settings.personal_details_date_of_birth" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Date of birth"
+          }
+        }
+      }
+    },
+    "settings.personal_details_ssn" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Social security number"
+          }
+        }
+      }
+    },
+    "settings.personal_details_citizenship" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Citizenship"
           }
         }
       }
@@ -4250,6 +5496,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rename account"
+          }
+        }
+      }
+    },
+    "settings.risk_aggressive" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aggressive"
+          }
+        }
+      }
+    },
+    "settings.risk_conservative" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conservative"
+          }
+        }
+      }
+    },
+    "settings.risk_moderate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Moderate"
           }
         }
       }
@@ -4354,12 +5630,332 @@
         }
       }
     },
+    "settings.tier_free" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free Tier"
+          }
+        }
+      }
+    },
     "settings.title" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Settings"
+          }
+        }
+      }
+    },
+    "settings.touch_id_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Touch ID"
+          }
+        }
+      }
+    },
+    "settings.trade_history" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Trade history"
+          }
+        }
+      }
+    },
+    "settings.trade_history_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No trades yet"
+          }
+        }
+      }
+    },
+    "settings.trade_history_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your buys and sells will appear here."
+          }
+        }
+      }
+    },
+    "settings.trade_history_filtered_empty_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No matches"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filtered_empty_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try adjusting your filters."
+          }
+        }
+      }
+    },
+    "settings.trade_history_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load trades"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_status" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_side" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Type"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_timeframe" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timeframe"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_holdings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Holdings"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_all" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_completed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Completed"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_buy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buy"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_sell" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sell"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_7d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 days"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_30d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "30 days"
+          }
+        }
+      }
+    },
+    "settings.trade_history_filter_90d" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "90 days"
+          }
+        }
+      }
+    },
+    "settings.trade_history_buy_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buy"
+          }
+        }
+      }
+    },
+    "settings.trade_history_sell_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sell"
+          }
+        }
+      }
+    },
+    "settings.trade_history_status_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
+    "settings.trade_history_status_completed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filled"
+          }
+        }
+      }
+    },
+    "settings.trade_history_status_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        }
+      }
+    },
+    "settings.trade_history_status_unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown"
+          }
+        }
+      }
+    },
+    "settings.trade_history_shares_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ shares"
+          }
+        }
+      }
+    },
+    "settings.trade_history_partial_fill_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ of %2$@ filled"
+          }
+        }
+      }
+    },
+    "settings.unavailable_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
+          }
+        }
+      }
+    },
+    "settings.unknown_bank_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unknown bank"
+          }
+        }
+      }
+    },
+    "settings.unknown_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "—"
           }
         }
       }
@@ -4404,12 +6000,42 @@
         }
       }
     },
+    "settings.unlink_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't unlink account"
+          }
+        }
+      }
+    },
+    "settings.link_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't link account"
+          }
+        }
+      }
+    },
     "settings.using_sevino" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Using Sevino for %@"
+          }
+        }
+      }
+    },
+    "sidebar.account_pill_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account"
           }
         }
       }
@@ -4504,12 +6130,452 @@
         }
       }
     },
-    "sidebar.user_name" : {
+    "trade_execution.error_submitting_order" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ready Riley"
+            "value" : "Error submitting order"
+          }
+        }
+      }
+    },
+    "trade_execution.hold_to_confirm" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to confirm"
+          }
+        }
+      }
+    },
+    "trade_execution.hold_to_confirm_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press and hold for two seconds to confirm"
+          }
+        }
+      }
+    },
+    "trade_execution.label_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "trade_execution.label_current_price" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current Price"
+          }
+        }
+      }
+    },
+    "trade_execution.label_estimated_shares" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated Shares"
+          }
+        }
+      }
+    },
+    "trade_execution.label_estimated_total" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated Total"
+          }
+        }
+      }
+    },
+    "trade_execution.label_order_type" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order Type"
+          }
+        }
+      }
+    },
+    "trade_execution.order_submitted" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order submitted"
+          }
+        }
+      }
+    },
+    "trade_execution.side_buy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BUY"
+          }
+        }
+      }
+    },
+    "trade_execution.side_sell" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SELL"
+          }
+        }
+      }
+    },
+    "trade_execution.ticker_exchange_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ | %2$@"
+          }
+        }
+      }
+    },
+    "transfer.amount_empty_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an amount"
+          }
+        }
+      }
+    },
+    "transfer.amount_exceeds_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount exceeds available"
+          }
+        }
+      }
+    },
+    "transfer.amount_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount"
+          }
+        }
+      }
+    },
+    "transfer.bank_account_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ••••%2$@"
+          }
+        }
+      }
+    },
+    "transfer.bank_type_mask_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ ••••%2$@"
+          }
+        }
+      }
+    },
+    "transfer.brokerage_name" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Uninvested Cash"
+          }
+        }
+      }
+    },
+    "transfer.brokerage_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brokerage"
+          }
+        }
+      }
+    },
+    "transfer.close_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
+    "transfer.confirm_deposit_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit %@"
+          }
+        }
+      }
+    },
+    "transfer.confirm_withdraw_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdraw %@"
+          }
+        }
+      }
+    },
+    "transfer.deposit_badge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DEPOSIT"
+          }
+        }
+      }
+    },
+    "transfer.disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funds available to invest instantly · Settles in 1-3 days"
+          }
+        }
+      }
+    },
+    "transfer.estimated_arrival_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Estimated arrival"
+          }
+        }
+      }
+    },
+    "transfer.exceeds_available" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exceeds available · %@"
+          }
+        }
+      }
+    },
+    "transfer.failed_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ · FAILED"
+          }
+        }
+      }
+    },
+    "transfer.from_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From"
+          }
+        }
+      }
+    },
+    "transfer.link_another_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link another account"
+          }
+        }
+      }
+    },
+    "transfer.link_bank_cta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link Bank Account"
+          }
+        }
+      }
+    },
+    "transfer.linked_accounts_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LINKED ACCOUNTS"
+          }
+        }
+      }
+    },
+    "transfer.no_banks_message" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Link a bank account to start moving money."
+          }
+        }
+      }
+    },
+    "transfer.no_banks_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No linked bank accounts"
+          }
+        }
+      }
+    },
+    "transfer.reason_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "REASON"
+          }
+        }
+      }
+    },
+    "transfer.receipt_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RECEIPT"
+          }
+        }
+      }
+    },
+    "transfer.select_account_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Select bank account"
+          }
+        }
+      }
+    },
+    "transfer.settles_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SETTLES"
+          }
+        }
+      }
+    },
+    "transfer.source_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SOURCE"
+          }
+        }
+      }
+    },
+    "transfer.status_complete" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Complete"
+          }
+        }
+      }
+    },
+    "transfer.status_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        }
+      }
+    },
+    "transfer.status_queued" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Queued"
+          }
+        }
+      }
+    },
+    "transfer.status_unknown" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
+    "transfer.submitted_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SUBMITTED"
+          }
+        }
+      }
+    },
+    "transfer.to_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To"
+          }
+        }
+      }
+    },
+    "transfer.withdraw_badge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WITHDRAW"
           }
         }
       }

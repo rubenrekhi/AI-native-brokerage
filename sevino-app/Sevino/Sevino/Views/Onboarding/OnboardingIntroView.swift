@@ -11,6 +11,7 @@ struct OnboardingIntroView: View {
     @State private var typedBody3 = ""
     @State private var typedCta = ""
     @State private var showButton = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -81,24 +82,17 @@ struct OnboardingIntroView: View {
             return
         }
         try? await Task.sleep(for: .milliseconds(400))
-        await typeOut(L10n.Onboarding.introTitle) { typedTitle = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.introTitle, reduceMotion: reduceMotion) { typedTitle = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.introBody1) { typedBody1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.introBody1, reduceMotion: reduceMotion) { typedBody1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.introBody2) { typedBody2 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.introBody2, reduceMotion: reduceMotion) { typedBody2 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.introBody3) { typedBody3 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.introBody3, reduceMotion: reduceMotion) { typedBody3 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.introCta) { typedCta = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.introCta, reduceMotion: reduceMotion) { typedCta = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showButton = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

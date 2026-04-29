@@ -34,10 +34,18 @@ _ENVIRONMENTS = {
 class PlaidServiceError(Exception):
     """Raised when Plaid returns an error or the request cannot be completed."""
 
-    def __init__(self, code: str, message: str, detail: dict[str, Any] | None = None):
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        detail: dict[str, Any] | None = None,
+        *,
+        status_code: int | None = None,
+    ):
         self.code = code
         self.message = message
         self.detail = detail
+        self.status_code = status_code
         super().__init__(message)
 
 
@@ -62,7 +70,7 @@ class PlaidService:
         self._api_client.close()
 
     async def create_link_token(self, *, user_id: str) -> str:
-        """Step 1 — POST /link/token/create. Returns `link_token`."""
+        """POST /link/token/create — step 1 of the Plaid bank-link flow."""
         request = LinkTokenCreateRequest(
             products=[Products("auth")],
             client_name="Sevino",
@@ -74,7 +82,7 @@ class PlaidService:
         return response["link_token"]
 
     async def exchange_public_token(self, *, public_token: str) -> tuple[str, str]:
-        """Step 3 — POST /item/public_token/exchange. Returns `(access_token, item_id)`."""
+        """POST /item/public_token/exchange — step 3 of the Plaid bank-link flow."""
         request = ItemPublicTokenExchangeRequest(public_token=public_token)
         response = await self._call(self._client.item_public_token_exchange, request)
         return response["access_token"], response["item_id"]
@@ -82,8 +90,7 @@ class PlaidService:
     async def create_processor_token(
         self, *, access_token: str, account_id: str
     ) -> str:
-        """Step 4 — POST /processor/token/create with `processor=alpaca`.
-        Returns `processor_token`."""
+        """POST /processor/token/create with `processor=alpaca` — step 4 of the bank-link flow."""
         request = ProcessorTokenCreateRequest(
             access_token=access_token,
             account_id=account_id,
@@ -120,4 +127,4 @@ def _map_plaid_exception(exc: plaid.ApiException) -> PlaidServiceError:
             detail.update(
                 {k: parsed.get(k) for k in ("error_type", "request_id") if parsed.get(k)}
             )
-    return PlaidServiceError(code=code, message=message, detail=detail)
+    return PlaidServiceError(code=code, message=message, detail=detail, status_code=exc.status)

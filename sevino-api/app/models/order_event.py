@@ -45,7 +45,6 @@ class OrderEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationships
     user: Mapped[UserProfile] = relationship(back_populates="order_events")
     conversation: Mapped[Optional[Conversation]] = relationship(
         back_populates="order_events"

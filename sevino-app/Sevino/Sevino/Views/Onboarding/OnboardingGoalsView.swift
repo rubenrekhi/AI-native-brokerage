@@ -19,6 +19,7 @@ struct OnboardingGoalsView: View {
     @State private var typed1 = ""
     @State private var typed2 = ""
     @State private var showOptions = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let options: [IdentifiableOption] = [
         L10n.Onboarding.goalGrowWealth,
@@ -154,18 +155,11 @@ struct OnboardingGoalsView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.goalsResponse1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.goalsResponse1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(L10n.Onboarding.goalsResponse2) { typed2 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.goalsResponse2, reduceMotion: reduceMotion) { typed2 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showOptions = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

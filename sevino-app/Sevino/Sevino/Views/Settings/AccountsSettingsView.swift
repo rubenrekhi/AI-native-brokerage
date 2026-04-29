@@ -1,25 +1,26 @@
 import SwiftUI
 
 struct AccountsSettingsView: View {
+    let settingsVM: SettingsViewModel
+
     @Environment(\.dismiss) private var dismiss
 
     @Environment(\.textSizeMultiplier) private var textMultiplier
 
-    // TODO: Replace with real status from ViewModel
-    private let kycStatus = KYCStatus.submitted
-
     @State private var baseScale: CGFloat = 1
 
     private var scale: CGFloat { baseScale * textMultiplier }
+
+    private var kycStatus: KYCStatus? {
+        settingsVM.profile?.brokerage?.accountStatus
+    }
 
     var body: some View {
         VStack(spacing: 0) {
             header
                 .padding(.bottom, 24 * scale)
 
-            navLinkRow(title: L10n.Settings.brokerage, destination: .brokerage)
-            navLinkRow(title: L10n.Settings.linkedAccounts, destination: .linkedAccounts)
-            settingsRow(title: L10n.Settings.kycStatus, trailing: .kycBadge(kycStatus))
+            content
 
             Spacer()
         }
@@ -29,14 +30,51 @@ struct AccountsSettingsView: View {
             Color.sevinoSettingsBg
                 .ignoresSafeArea()
         }
-        .background {
-            GeometryReader { geo in
-                Color.clear.onAppear {
-                    baseScale = geo.size.width / 393
-                }
-            }
+        .onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.size.width
+        } action: { width in
+            baseScale = width / 393
         }
         .navigationBarBackButtonHidden()
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if settingsVM.profile == nil, settingsVM.isLoading {
+            loadingState
+        } else if settingsVM.profile == nil, let error = settingsVM.error {
+            errorState(message: error)
+        } else {
+            navLinkRow(title: L10n.Settings.brokerage, destination: .brokerage)
+            navLinkRow(title: L10n.Settings.linkedAccounts, destination: .linkedAccounts)
+            settingsRow(title: L10n.Settings.kycStatus, trailing: .kycBadge(kycStatus))
+        }
+    }
+
+    private var loadingState: some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 32 * scale)
+    }
+
+    private func errorState(message: String) -> some View {
+        ContentUnavailableView {
+            Label(L10n.Settings.loadErrorTitle, systemImage: "exclamationmark.triangle")
+        } description: {
+            Text(L10n.Settings.loadErrorMessage)
+        } actions: {
+            Button(L10n.Settings.loadErrorRetry, action: retry)
+                .font(.system(size: 14 * scale, weight: .medium))
+                .foregroundStyle(Color.sevinoSecondary)
+                .padding(.horizontal, 20 * scale)
+                .padding(.vertical, 10 * scale)
+                .modifier(SevinoGlass.tintedButton(tint: Color.sevinoAccent, cornerRadius: 20 * scale))
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private func retry() {
+        Task { await settingsVM.reload() }
     }
 
     private var header: some View {
@@ -83,12 +121,18 @@ struct AccountsSettingsView: View {
                             .foregroundStyle(Color.sevinoGreyContrast)
                             .accessibilityHidden(true)
                     case .kycBadge(let status):
-                        Text(status.label)
-                            .font(.system(size: 12 * scale, weight: .semibold))
-                            .foregroundStyle(status.color)
-                            .padding(.horizontal, 10 * scale)
-                            .padding(.vertical, 4 * scale)
-                            .background(status.color.opacity(0.15), in: .rect(cornerRadius: 6 * scale))
+                        if let status {
+                            Text(status.label)
+                                .font(.system(size: 12 * scale, weight: .semibold))
+                                .foregroundStyle(status.color)
+                                .padding(.horizontal, 10 * scale)
+                                .padding(.vertical, 4 * scale)
+                                .background(status.color.opacity(0.15), in: .rect(cornerRadius: 6 * scale))
+                        } else {
+                            Text(verbatim: "—")
+                                .font(.system(size: 14 * scale))
+                                .foregroundStyle(Color.sevinoGreyContrast)
+                        }
                     }
                 }
                 .padding(.vertical, 16 * scale)
@@ -103,19 +147,19 @@ struct AccountsSettingsView: View {
 
 private enum RowTrailing {
     case chevron
-    case kycBadge(KYCStatus)
+    case kycBadge(KYCStatus?)
 }
 
 #Preview("Dark") {
     NavigationStack {
-        AccountsSettingsView()
+        AccountsSettingsView(settingsVM: SettingsViewModel())
     }
     .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
     NavigationStack {
-        AccountsSettingsView()
+        AccountsSettingsView(settingsVM: SettingsViewModel())
     }
     .preferredColorScheme(.light)
 }

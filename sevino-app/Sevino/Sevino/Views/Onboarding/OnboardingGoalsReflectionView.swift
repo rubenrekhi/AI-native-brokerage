@@ -14,6 +14,7 @@ struct OnboardingGoalsReflectionView: View {
     @State private var typedTagline = ""
     @State private var showSource = false
     @State private var showButton = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var content: GoalsReflectionContent {
         GoalsReflectionContent.select(for: goals, name: userName)
@@ -110,16 +111,16 @@ struct OnboardingGoalsReflectionView: View {
             return
         }
         try? await Task.sleep(for: .milliseconds(400))
-        await typeOut(content.heading) { typedHeading = $0 }
+        await TypewriterAnimation.typeOut(content.heading, reduceMotion: reduceMotion) { typedHeading = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.body1) { typedBody1 = $0 }
+        await TypewriterAnimation.typeOut(content.body1, reduceMotion: reduceMotion) { typedBody1 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.body2) { typedBody2 = $0 }
+        await TypewriterAnimation.typeOut(content.body2, reduceMotion: reduceMotion) { typedBody2 = $0 }
         try? await Task.sleep(for: .milliseconds(200))
-        await typeOut(content.stat) { typedStat = $0 }
+        await TypewriterAnimation.typeOut(content.stat, reduceMotion: reduceMotion) { typedStat = $0 }
         if !content.tagline.isEmpty {
             try? await Task.sleep(for: .milliseconds(300))
-            await typeOut(content.tagline) { typedTagline = $0 }
+            await TypewriterAnimation.typeOut(content.tagline, reduceMotion: reduceMotion) { typedTagline = $0 }
         }
         try? await Task.sleep(for: .milliseconds(200))
         showSource = true
@@ -127,13 +128,6 @@ struct OnboardingGoalsReflectionView: View {
         showButton = true
     }
 
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        guard !text.isEmpty else { return }
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
-    }
 }
 
 

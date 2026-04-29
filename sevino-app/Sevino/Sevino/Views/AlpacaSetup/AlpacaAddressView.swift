@@ -16,6 +16,7 @@ struct AlpacaAddressView: View {
     @State private var showInput: Bool
     // Root owner of this @Observable; @State is correct here. Pass to child views as a plain parameter — do not re-wrap.
     @State private var completer = AddressSearchCompleter()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         scale: CGFloat,
@@ -238,16 +239,9 @@ struct AlpacaAddressView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.alpacaAddressResponse1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaAddressResponse1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showInput = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 

@@ -53,6 +53,12 @@ struct ContentView: View {
                 } message: { error in
                     Text(error)
                 }
+        case .phoneVerification(let phoneNumber):
+            PhoneVerificationView(
+                phoneNumber: phoneNumber,
+                onVerified: viewModel.onPhoneVerified,
+                onChangeNumber: viewModel.onChangeNumber
+            )
         case .onboarding(let step, let data):
             OnboardingContainerView(
                 initialStep: step,
@@ -96,15 +102,7 @@ struct ContentView: View {
     }
 
     private var loadingView: some View {
-        ZStack {
-            OnboardingBackgroundView()
-            Image("logo_white")
-                .resizable()
-                .scaledToFit()
-                .frame(height: 40)
-                .accessibilityHidden(true)
-        }
-        .preferredColorScheme(.dark)
+        LoadingLogoView()
     }
 
     @ViewBuilder
@@ -129,10 +127,9 @@ struct ContentView: View {
             return
         }
         if authRoute == .signUp {
-            // Fresh signup — go straight to phone → onboarding, no status check
+            // Skip status check — a brand-new account has no server state to resume from.
             viewModel.startFreshSignUpFlow()
         } else {
-            // Returning user — either login or cold launch session restore
             checkStatus()
         }
     }
@@ -150,6 +147,39 @@ struct ContentView: View {
     }
 }
 
+// MARK: - Loading logo
+
+private struct LoadingLogoView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isBreathing = false
+
+    var body: some View {
+        ZStack {
+            OnboardingBackgroundView()
+            GeometryReader { proxy in
+                let scale = proxy.size.width / 393
+                Image("logo_white")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 40 * scale)
+                    .scaleEffect(isBreathing ? 1.06 : 0.96)
+                    .opacity(isBreathing ? 1.0 : 0.7)
+                    .accessibilityHidden(true)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+        .preferredColorScheme(.dark)
+        .task { startBreathingAnimation() }
+    }
+
+    private func startBreathingAnimation() {
+        guard !reduceMotion else { return }
+        withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+            isBreathing = true
+        }
+    }
+}
+
 // MARK: - Status check retry
 
 private struct StatusCheckRetryView: View {
@@ -158,50 +188,53 @@ private struct StatusCheckRetryView: View {
     var body: some View {
         ZStack {
             OnboardingBackgroundView()
-            VStack(spacing: 16) {
-                Text(L10n.General.connectionErrorTitle)
-                    .font(.dmSerif(size: 28))
-                    .foregroundStyle(Color.welcomeText)
-                    .multilineTextAlignment(.center)
+            GeometryReader { proxy in
+                let scale = proxy.size.width / 393
+                SevinoGlassContainer {
+                    VStack(spacing: 16 * scale) {
+                        Image(systemName: "wifi.exclamationmark")
+                            .font(.system(size: 26 * scale, weight: .light))
+                            .foregroundStyle(Color.welcomeText)
+                            .accessibilityHidden(true)
 
-                Text(L10n.General.connectionErrorBody)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Color.welcomeText.opacity(0.8))
-                    .multilineTextAlignment(.center)
+                        VStack(spacing: 6 * scale) {
+                            Text(L10n.General.connectionErrorTitle)
+                                .font(.system(size: 22 * scale, weight: .semibold))
+                                .foregroundStyle(Color.welcomeText)
+                                .multilineTextAlignment(.center)
 
-                Button(action: onRetry) {
-                    Text(L10n.General.tryAgain)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color.welcomeButtonDarkTint)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
+                            Text(L10n.General.connectionErrorBody)
+                                .font(.system(size: 11 * scale))
+                                .foregroundStyle(Color.welcomeText.opacity(0.8))
+                                .multilineTextAlignment(.center)
+                        }
+
+                        Button(action: onRetry) {
+                            Text(L10n.General.tryAgain)
+                                .font(.system(size: 12 * scale, weight: .semibold))
+                                .foregroundStyle(Color.welcomeButtonDarkTint)
+                                .padding(.horizontal, 20 * scale)
+                                .padding(.vertical, 8 * scale)
+                                .contentShape(.rect(cornerRadius: CardGlass.cornerRadius))
+                        }
+                        .buttonStyle(.plain)
+                        .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
+                        .padding(.top, 2 * scale)
+                    }
+                    .padding(.horizontal, 22 * scale)
+                    .padding(.vertical, 26 * scale)
+                    .frame(maxWidth: .infinity)
+                    .modifier(SevinoGlass.card)
                 }
-                .buttonStyle(.plain)
-                .modifier(SevinoGlass.tintedButton(tint: Color.welcomeButtonLightTint.opacity(0.4)))
-                .padding(.top, 8)
+                .padding(.horizontal, 72 * scale)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .padding(.horizontal, 32)
         }
         .preferredColorScheme(.dark)
     }
 }
 
 // MARK: - Previews
-
-@Observable
-private final class PreviewAuthService: AuthServiceProtocol {
-    var isAuthenticated: Bool
-    var accessToken: String? { nil }
-
-    init(isAuthenticated: Bool = false) {
-        self.isAuthenticated = isAuthenticated
-    }
-
-    func signUp(email: String, password: String) async throws {}
-    func signIn(email: String, password: String) async throws { isAuthenticated = true }
-    func signOut() async throws { isAuthenticated = false }
-}
 
 #Preview("Logged Out") {
     ContentView()
@@ -217,4 +250,8 @@ private final class PreviewAuthService: AuthServiceProtocol {
 
 #Preview("Status Check Retry") {
     StatusCheckRetryView(onRetry: {})
+}
+
+#Preview("Loading Logo") {
+    LoadingLogoView()
 }

@@ -28,7 +28,34 @@ final class HomeViewModelTests: XCTestCase {
             viewModel.greeting.contains("Riley"),
             "greeting should include the fetched name, got \(viewModel.greeting)"
         )
+        XCTAssertEqual(viewModel.preferredName, "Riley")
         XCTAssertNil(viewModel.error)
+    }
+
+    // MARK: - preferredName exposure
+
+    func testLoadWhenNameIsNilLeavesPreferredNameNil() async {
+        mockProfile.preferredName = nil
+
+        await viewModel.load()
+
+        XCTAssertNil(viewModel.preferredName)
+    }
+
+    func testLoadWhenNameIsEmptyStringLeavesPreferredNameNil() async {
+        mockProfile.preferredName = ""
+
+        await viewModel.load()
+
+        XCTAssertNil(viewModel.preferredName)
+    }
+
+    func testLoadWhenNameFetchFailsLeavesPreferredNameNil() async {
+        mockProfile.fetchPreferredNameError = NSError(domain: "test", code: 0)
+
+        await viewModel.load()
+
+        XCTAssertNil(viewModel.preferredName)
     }
 
     // MARK: - Greeting fallback

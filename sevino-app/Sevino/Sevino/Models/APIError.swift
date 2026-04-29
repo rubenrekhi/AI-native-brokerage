@@ -26,7 +26,6 @@ extension APIError {
     }
 }
 
-// Known backend error codes
 extension APIError {
     enum Code {
         static let authenticationError = "AUTHENTICATION_ERROR"
@@ -48,7 +47,6 @@ extension APIError {
     }
 }
 
-// Quick checks against common error codes
 extension APIError {
     var isAuthError: Bool { code == Code.authenticationError || code == Code.authorizationError }
     var isRateLimited: Bool { code == Code.rateLimitExceeded }
@@ -64,7 +62,6 @@ extension APIError: LocalizedError {
     var errorDescription: String? { error }
 }
 
-// Fallback when the backend response can't be decoded
 extension APIError {
     static let unknown = APIError(
         error: "Something went wrong",

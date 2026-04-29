@@ -13,6 +13,7 @@ struct AlpacaRegulatoryView: View {
     @State private var isSeniorOfficer = false
     @State private var isAffiliatedBroker = false
     @State private var isPoliticalFigure = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 0) {
@@ -118,16 +119,9 @@ struct AlpacaRegulatoryView: View {
         try? await Task.sleep(for: .milliseconds(200))
         withAnimation(.easeOut(duration: 0.3)) { showPrompt = true }
         try? await Task.sleep(for: .milliseconds(500))
-        await typeOut(L10n.Onboarding.alpacaRegulatoryResponse1) { typed1 = $0 }
+        await TypewriterAnimation.typeOut(L10n.Onboarding.alpacaRegulatoryResponse1, reduceMotion: reduceMotion) { typed1 = $0 }
         try? await Task.sleep(for: .milliseconds(300))
         withAnimation(.easeOut(duration: 0.3)) { showForm = true }
-    }
-
-    private func typeOut(_ text: String, update: (String) -> Void) async {
-        for i in 1...text.count {
-            try? await Task.sleep(for: .milliseconds(25))
-            update(String(text.prefix(i)))
-        }
     }
 }
 
