@@ -33,11 +33,18 @@ def to_error_code(exc: BaseException) -> ErrorCode:
     # etc.) are config or programmer errors — not overload conditions — so
     # they fall through to `INTERNAL_ERROR` rather than being mislabelled
     # `MODEL_OVERLOADED` and burning Phase 2 retry budget.
+    # `APIConnectionError` (incl. its `APITimeoutError` subclass) covers
+    # transport-level failures: the SDK's own timeouts and network errors
+    # don't subclass `asyncio.TimeoutError` or `APIStatusError`, so without
+    # this branch they'd silently fall through to `INTERNAL_ERROR` and be
+    # treated as un-retryable.
     # `asyncio.CancelledError` inherits from `BaseException`, which is why
     # this signature is wider than `Exception`.
     if isinstance(exc, anthropic.RateLimitError):
         return ErrorCode.MODEL_RATE_LIMIT
     if isinstance(exc, anthropic.InternalServerError):
+        return ErrorCode.MODEL_OVERLOADED
+    if isinstance(exc, anthropic.APIConnectionError):
         return ErrorCode.MODEL_OVERLOADED
     if isinstance(exc, asyncio.CancelledError):
         return ErrorCode.CANCELLED

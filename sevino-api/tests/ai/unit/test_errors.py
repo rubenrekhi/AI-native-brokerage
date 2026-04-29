@@ -38,6 +38,10 @@ def test_rate_limit_error_maps_to_model_rate_limit():
     assert to_error_code(exc) == ErrorCode.MODEL_RATE_LIMIT
 
 
+def _http_request() -> httpx.Request:
+    return httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+
+
 def test_internal_server_error_maps_to_model_overloaded():
     # 5xx responses — including 529 "overloaded" — surface as
     # `InternalServerError` in the SDK and indicate transient model-side
@@ -45,6 +49,22 @@ def test_internal_server_error_maps_to_model_overloaded():
     exc = anthropic.InternalServerError(
         "server error", response=_http_response(500), body=None
     )
+    assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
+
+
+def test_api_timeout_error_maps_to_model_overloaded():
+    # `APITimeoutError` does NOT inherit from `asyncio.TimeoutError`; its
+    # MRO is APITimeoutError → APIConnectionError → APIError → Exception.
+    # Without an explicit branch it would land on INTERNAL_ERROR and not
+    # be retried — but a SDK timeout is the canonical transient failure.
+    exc = anthropic.APITimeoutError(request=_http_request())
+    assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
+
+
+def test_api_connection_error_maps_to_model_overloaded():
+    # `APIConnectionError` covers transport-level failures (DNS, refused,
+    # reset). Same retry semantics as overload — bucket them together.
+    exc = anthropic.APIConnectionError(request=_http_request())
     assert to_error_code(exc) == ErrorCode.MODEL_OVERLOADED
 
 
