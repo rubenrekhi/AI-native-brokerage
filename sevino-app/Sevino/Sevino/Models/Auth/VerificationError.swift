@@ -1,12 +1,15 @@
+import Auth
 import Foundation
 
 /**
- User-facing error for the phone-OTP verification flow.
+ User-facing error for the phone- and email-OTP verification flows.
 
- Maps backend `APIError` codes (and `URLError` for offline cases) into a
- small set of cases the UI can render with a clear, localized message.
- The view model raises one of these and the view binds the message
- directly via `errorDescription`.
+ Maps backend `APIError` codes (phone, via Sevino API), Supabase `AuthError`
+ codes (email, direct GoTrue), `EmailVerificationError.resendCooldown` (our
+ own client-side cooldown guard), and `URLError` (offline) into a small set
+ of cases the UI can render with a clear, localized message. The view model
+ raises one of these and the view binds the message directly via
+ `errorDescription`.
  */
 enum VerificationError: LocalizedError, Equatable {
     case invalidCode
@@ -30,17 +33,28 @@ enum VerificationError: LocalizedError, Equatable {
 
 extension VerificationError {
     /**
-     Convert any thrown error from the verification service into a
-     `VerificationError`.
+     Convert any thrown error from a verification service into a `VerificationError`.
 
-     - `APIError` is dispatched on `code` (and `detail.code` for GoTrue
-        error sub-codes nested inside `PHONE_VERIFICATION_FAILED`).
-     - `URLError` becomes `.network`.
-     - Anything else falls through to `.unknown`.
+     Dispatch order:
+     1. `APIError` — phone flow, talks to the Sevino API. Mapped on `code`
+        (and `detail.code` for GoTrue sub-codes nested inside
+        `PHONE_VERIFICATION_FAILED`).
+     2. `AuthError` — email flow, talks to Supabase GoTrue directly.
+     3. `EmailVerificationError.resendCooldown` — our own client-side guard
+        in `AuthService` when `resendEmailConfirmation` is called inside the
+        15s cooldown window. Surfaces as "too many attempts".
+     4. `URLError` → `.network`.
+     5. Anything else → `.unknown`.
      */
     static func from(_ error: Error) -> VerificationError {
         if let apiError = error as? APIError {
             return from(apiError: apiError)
+        }
+        if let authError = error as? AuthError {
+            return from(authError: authError)
+        }
+        if let emailError = error as? EmailVerificationError {
+            return from(emailVerificationError: emailError)
         }
         if error is URLError {
             return .network
@@ -58,6 +72,35 @@ extension VerificationError {
             return goTrueDetailCode(apiError) == GoTrue.otpExpired ? .expired : .invalidCode
         default:
             return .unknown
+        }
+    }
+
+    /// Supabase GoTrue conflates "wrong code" and "expired code" under a single
+    /// `otp_expired` error code, so a failed verify maps to `.invalidCode` — the
+    /// user reaction is the same (try a different code or request a new one) and
+    /// the message is more accurate than claiming the code expired.
+    ///
+    /// Rate-limit codes (`over_request_rate_limit`, `over_email_send_rate_limit`)
+    /// surface as `.tooManyAttempts`. `otp_disabled` (server has OTPs turned off)
+    /// surfaces as `.sendFailed` so the UI doesn't promise a code that won't
+    /// arrive. Anything else falls through to `.unknown`.
+    static func from(authError: AuthError) -> VerificationError {
+        switch authError.errorCode {
+        case .otpExpired:
+            return .invalidCode
+        case .overEmailSendRateLimit, .overRequestRateLimit:
+            return .tooManyAttempts
+        case .otpDisabled:
+            return .sendFailed
+        default:
+            return .unknown
+        }
+    }
+
+    static func from(emailVerificationError: EmailVerificationError) -> VerificationError {
+        switch emailVerificationError {
+        case .resendCooldown:
+            return .tooManyAttempts
         }
     }
 

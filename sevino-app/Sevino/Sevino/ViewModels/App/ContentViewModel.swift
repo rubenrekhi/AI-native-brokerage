@@ -1,11 +1,20 @@
 import Foundation
 
-/// Drives the root view routing between phone capture, onboarding, Alpaca setup, and home.
-/// Owns the onboarding status check and related resume data so the view stays declarative.
+/// Drives the root view routing between email verification, phone capture,
+/// onboarding, Alpaca setup, and home. Owns the onboarding status check and
+/// related resume data so the view stays declarative.
 @Observable
 final class ContentViewModel {
     private let onboardingService: any OnboardingServiceProtocol
     private let phoneVerificationService: any PhoneVerificationServiceProtocol
+    /// Exposed so `ContentView` can thread the same auth service into screens
+    /// that own their own VM (e.g. `EmailVerificationView`). Without this, those
+    /// screens' default-arg `AuthService.shared` would diverge from the one
+    /// `ContentViewModel` consults for routing decisions — fatal for tests
+    /// that inject a fake. `@ObservationIgnored` since the reference is a
+    /// constant dependency; the macro shouldn't track it as observable state.
+    @ObservationIgnored
+    let authService: any AuthServiceProtocol
 
     // MARK: - Routing
 
@@ -19,19 +28,38 @@ final class ContentViewModel {
 
     init(
         onboardingService: any OnboardingServiceProtocol = OnboardingService.shared,
-        phoneVerificationService: any PhoneVerificationServiceProtocol = PhoneVerificationService.shared
+        phoneVerificationService: any PhoneVerificationServiceProtocol = PhoneVerificationService.shared,
+        authService: any AuthServiceProtocol = AuthService.shared
     ) {
         self.onboardingService = onboardingService
         self.phoneVerificationService = phoneVerificationService
+        self.authService = authService
     }
 
     // MARK: - Auth transitions
 
-    /// Fresh signup: skip the status check and go straight to phone capture.
-    /// There is no server-side status to resume from on a brand new account, so
-    /// the onboarding flow starts once the phone number is saved.
-    func startFreshSignUpFlow() {
-        route = .phone
+    /// Fresh signup: skip the status check and go straight to email verification.
+    /// Supabase auto-sent the confirmation OTP as a side effect of `signUp`, so
+    /// the user lands on the OTP screen with a code already in flight. The email
+    /// is read from the active session — `AuthView` doesn't pass it through.
+    ///
+    /// If a future auth provider (OAuth, magic link, etc.) lands on this method
+    /// with an already-confirmed session, skip the gate — `EmailVerificationView`
+    /// only advances on a `false → true` transition of `isEmailVerified`, so an
+    /// already-verified user would otherwise stall on the OTP screen with no
+    /// trigger to advance.
+    func startFreshSignUpFlow() async {
+        if authService.isEmailVerified {
+            route = .phone
+            return
+        }
+        guard let email = await authService.currentEmail else {
+            // Defensive — `signUp` succeeded so a session must exist, but bail
+            // safely to the retry view rather than crashing on a force unwrap.
+            route = .statusCheckFailed
+            return
+        }
+        route = .emailVerification(email: email)
     }
 
     func completeOnboarding(userName: String) {
@@ -95,12 +123,44 @@ final class ContentViewModel {
         route = .phone
     }
 
+    /// Called by `EmailVerificationView` once Supabase flips
+    /// `isEmailVerified = true`. Advances to phone capture, the next gate
+    /// before onboarding.
+    func onEmailVerified() {
+        route = .phone
+    }
+
     /// Fetches onboarding status and routes to the matching destination. On failure,
     /// routes to `.statusCheckFailed` so the view shows a retry prompt instead of
     /// silently falling through to home.
+    ///
+    /// Email verification is checked locally first — Supabase tracks
+    /// `isEmailVerified` on the session, so an unverified user is routed to
+    /// `.emailVerification` without bothering the backend (no server-side
+    /// state would be resumeable anyway).
     func checkOnboardingStatus() async {
         error = nil
         route = .loading
+
+        if !authService.isEmailVerified {
+            let email = await authService.currentEmail
+            // Re-read `isEmailVerified` after the await — the Supabase
+            // `userUpdated` listener can land between the sync read above and
+            // resumption here, in which case fall through to the status check.
+            if authService.isEmailVerified {
+                // race: verification landed mid-await; proceed normally
+            } else if let email {
+                route = .emailVerification(email: email)
+                return
+            } else {
+                // `error` intentionally stays nil — `StatusCheckRetryView`
+                // shows generic copy and ignores the field, so leaving it
+                // unset matches the no-network baseline.
+                route = .statusCheckFailed
+                return
+            }
+        }
+
         do {
             let status = try await onboardingService.getStatus()
             apply(OnboardingResumeManager.destination(from: status))

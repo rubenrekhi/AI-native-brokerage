@@ -42,6 +42,13 @@ struct ContentView: View {
             loadingView
         case .statusCheckFailed:
             StatusCheckRetryView(onRetry: checkStatus)
+        case .emailVerification(let email):
+            EmailVerificationView(
+                email: email,
+                authService: viewModel.authService,
+                onVerified: viewModel.onEmailVerified,
+                onChangeEmail: signOut
+            )
         case .phone:
             PhoneNumberView(onComplete: savePhoneNumber)
                 .alert(
@@ -107,16 +114,38 @@ struct ContentView: View {
 
     @ViewBuilder
     private var unauthenticatedView: some View {
-        switch authRoute {
-        case .welcome:
-            WelcomeView(
-                onLogIn: { authRoute = .signIn },
-                onSignUp: { authRoute = .signUp }
+        // When `enable_confirmations = true` Supabase signs the user up but
+        // doesn't issue a session — they're unauthenticated until they verify
+        // the OTP. Render the verification screen here so the user can
+        // complete the flow; once verify succeeds Supabase emits .signedIn,
+        // `isAuthenticated` flips, and the authenticated path takes over.
+        if let email = authVM.pendingConfirmationEmail {
+            EmailVerificationView(
+                email: email,
+                authService: authVM.authService,
+                onVerified: {},
+                onChangeEmail: {
+                    // Drop the stashed email AND reset the auth route so the
+                    // user lands on Welcome (not back on a half-filled signup
+                    // form, which would also confuse a subsequent sign-in
+                    // through `handleAuthChange`'s `authRoute == .signUp`
+                    // branch).
+                    authVM.clearPendingConfirmation()
+                    authRoute = .welcome
+                }
             )
-        case .signIn:
-            AuthView(isSignUp: false, onBack: { authRoute = .welcome }, authVM: authVM)
-        case .signUp:
-            AuthView(isSignUp: true, onBack: { authRoute = .welcome }, authVM: authVM)
+        } else {
+            switch authRoute {
+            case .welcome:
+                WelcomeView(
+                    onLogIn: { authRoute = .signIn },
+                    onSignUp: { authRoute = .signUp }
+                )
+            case .signIn:
+                AuthView(isSignUp: false, onBack: { authRoute = .welcome }, authVM: authVM)
+            case .signUp:
+                AuthView(isSignUp: true, onBack: { authRoute = .welcome }, authVM: authVM)
+            }
         }
     }
 
@@ -128,7 +157,7 @@ struct ContentView: View {
         }
         if authRoute == .signUp {
             // Skip status check — a brand-new account has no server state to resume from.
-            viewModel.startFreshSignUpFlow()
+            Task { await viewModel.startFreshSignUpFlow() }
         } else {
             checkStatus()
         }

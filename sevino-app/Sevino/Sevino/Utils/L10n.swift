@@ -41,7 +41,8 @@ enum L10n {
             String(format: String(localized: "auth.otp_resend_countdown"), seconds)
         }
         static let otpInputA11yLabel = String(localized: "auth.otp_input_a11y_label")
-        static let otpInputA11yHint = String(localized: "auth.otp_input_a11y_hint")
+        static let otpInputA11yHintPhone = String(localized: "auth.otp_input_a11y_hint_phone")
+        static let otpInputA11yHintEmail = String(localized: "auth.otp_input_a11y_hint_email")
         static let otpInvalidCode = String(localized: "auth.otp_invalid_code")
         static let otpExpired = String(localized: "auth.otp_expired")
         static let otpTooManyAttempts = String(localized: "auth.otp_too_many_attempts")
@@ -52,6 +53,8 @@ enum L10n {
         static let emailPlaceholder = String(localized: "auth.email_placeholder")
         static let passwordPlaceholder = String(localized: "auth.password_placeholder")
         static let emailConfirmation = String(localized: "auth.email_confirmation")
+        static let emailVerifyTitle = String(localized: "auth.email_verify_title")
+        static let emailVerifySubtitle = String(localized: "auth.email_verify_subtitle")
         static let switchToSignIn = String(localized: "auth.switch_to_sign_in")
         static let switchToSignUp = String(localized: "auth.switch_to_sign_up")
         static let reqUppercase = String(localized: "auth.req_uppercase")

@@ -11,6 +11,10 @@ enum AuthenticatedRoute: Equatable {
     case idle
     case loading
     case statusCheckFailed
+    /// Inserted before `.phone` so a user with an unverified email can never
+    /// reach phone capture / onboarding. The email is read from the active
+    /// Supabase session and forwarded so the OTP screen title reflects it.
+    case emailVerification(email: String)
     case phone
     /// Inserted between `.phone` and `.onboarding` so a user can't enter the
     /// 18-step onboarding without first verifying the SMS OTP. The phone number

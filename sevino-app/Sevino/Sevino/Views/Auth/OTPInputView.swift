@@ -16,6 +16,11 @@ struct OTPInputView: View {
     @Binding var code: String
     let scale: CGFloat
     let errorState: Bool
+    /// Localized VoiceOver hint announced when the input gets focus. Required
+    /// (no default) so the phone vs. email channel is explicit at the call site —
+    /// VoiceOver users on the email screen would otherwise hear "we sent to your
+    /// phone" verbatim.
+    let accessibilityHint: String
     let onCodeChange: (String) -> Void
 
     @FocusState private var isFocused: Bool
@@ -43,7 +48,7 @@ struct OTPInputView: View {
             .frame(width: 1, height: 1)
             .opacity(0.001)
             .accessibilityLabel(L10n.Auth.otpInputA11yLabel)
-            .accessibilityHint(L10n.Auth.otpInputA11yHint)
+            .accessibilityHint(accessibilityHint)
             .accessibilityValue(Text(code).speechSpellsOutCharacters())
             .onChange(of: code) { _, newValue in
                 let filtered = Self.sanitize(newValue)
@@ -204,6 +209,7 @@ private struct OTPInputViewPreviewWrapper: View {
                 code: $code,
                 scale: 1,
                 errorState: errorState,
+                accessibilityHint: L10n.Auth.otpInputA11yHintPhone,
                 onCodeChange: { _ in }
             )
         }
