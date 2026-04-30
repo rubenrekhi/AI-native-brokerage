@@ -108,11 +108,24 @@ final class PreviewFailingSettingsService: SettingsServiceProtocol, @unchecked S
 }
 
 /// AuthService stub for SwiftUI previews. Defaults to authenticated; `signIn` flips
-/// the flag to mimic the live listener. All write methods are no-ops.
+/// the flag to mimic the live listener. Most write methods are no-ops; `verifyError`
+/// and `verifyDelaySeconds` exist so previews can render the alert and the spinner
+/// states of the email verification screen without a live backend.
 @Observable
 final class PreviewAuthService: AuthServiceProtocol {
     var isAuthenticated: Bool
+    var isEmailVerified: Bool = false
+    var emailResendAvailableAt: Date?
+    var canResendEmailConfirmation: Bool { true }
     var accessToken: String? { nil }
+    var currentEmail: String? { "preview@example.com" }
+
+    /// When non-nil, `verifyEmailConfirmation` throws this error instead of
+    /// flipping `isEmailVerified`. Used to preview the "invalid code" alert.
+    var verifyError: Error?
+    /// When > 0, `verifyEmailConfirmation` sleeps that many seconds before
+    /// resolving — used to preview the `isConfirming` spinner state.
+    var verifyDelaySeconds: Int = 0
 
     init(isAuthenticated: Bool = true) {
         self.isAuthenticated = isAuthenticated
@@ -122,6 +135,14 @@ final class PreviewAuthService: AuthServiceProtocol {
     func signIn(email: String, password: String) async throws { isAuthenticated = true }
     func signOut() async throws { isAuthenticated = false }
     func updatePassword(currentPassword: String, newPassword: String) async throws {}
+    func resendEmailConfirmation(email: String) async throws {}
+    func verifyEmailConfirmation(email: String, code: String) async throws {
+        if verifyDelaySeconds > 0 {
+            try? await Task.sleep(for: .seconds(verifyDelaySeconds))
+        }
+        if let verifyError { throw verifyError }
+        isEmailVerified = true
+    }
 }
 
 /// FundingService stub that satisfies the protocol without performing any work.

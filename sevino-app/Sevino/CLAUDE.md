@@ -73,4 +73,3 @@ Follow the monorepo conventions in the root CLAUDE.md:
 - Use SwiftUI's declarative patterns; avoid UIKit unless necessary
 - Protocol-based dependency injection for testability (define protocol, conform real + mock implementations)
 - Keep views thin — business logic belongs in view models or services
-- Money / quantity / percentage fields decode via the `@DecimalString` property wrapper (`Sevino/Utils/DecimalString.swift`) — they arrive as JSON strings, not numbers. Format at the view layer using the `Decimal` extensions in `Sevino/Utils/NumberFormatting.swift` (`asCurrency`, `asSignedCurrency`, `asSignedPercent`, `asShareCount`). Never render `Decimal.description` directly; never decode money as `Double`.

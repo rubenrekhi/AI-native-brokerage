@@ -1,35 +1,36 @@
 import Foundation
 
-/// View-model for the phone OTP entry screen.
+/// View-model for the email OTP entry screen.
 ///
 /// Lifecycle:
-/// 1. The parent (`ContentViewModel.savePhoneNumber`) dispatches the initial
-///    OTP before routing here, so the user never lands on this screen unless
-///    the send actually succeeded. The view calls `onAppear()` once on
-///    appearance — that just primes the resend cooldown.
-/// 2. The view drives `updateOTP(_:)` from the OTP TextField; the VM strips non-digits,
-///    caps at 6, and auto-confirms when the 6th digit lands.
-/// 3. On a successful confirm `isVerified` becomes `true`; the view observes it to
-///    advance the route.
-/// 4. If the user wants a new code, they tap "Resend" — gated by `canResend` which
-///    flips to `true` only after the cooldown counts down to zero.
+/// 1. The user lands here after a fresh signup. Supabase auto-sends the
+///    confirmation OTP as a side-effect of `signUp`, so this screen never
+///    dispatches the initial code — `onAppear()` only primes the resend
+///    cooldown.
+/// 2. The view drives `updateOTP(_:)` from the OTP TextField; the VM strips
+///    non-digits, caps at 6, and auto-confirms when the 6th digit lands.
+/// 3. On a successful verify Supabase fires a `userUpdated` event and
+///    `AuthService.isEmailVerified` flips reactively. `isVerified` is a
+///    computed property reading that flag, so the view's `onChange(of:)`
+///    on `vm.isVerified` advances the route.
+/// 4. If the user wants a new code, they tap "Resend" — gated by `canResend`
+///    which only returns true after the 15s cooldown has counted down.
 @Observable
-final class PhoneVerificationViewModel {
-    static let cooldownSeconds: Int = 30
+final class EmailVerificationViewModel {
+    static let cooldownSeconds: Int = 15
 
-    private let service: any PhoneVerificationServiceProtocol
+    private let authService: any AuthServiceProtocol
     private let clock: any ClockProtocol
 
-    /// Formatted phone number shown in the title (e.g. `"(555) 123-4567"`).
-    /// Immutable for the lifetime of the screen — to change the number the user pops
-    /// back to `PhoneNumberView`.
-    let phoneNumber: String
+    /// The email shown in the title and used for verify/resend calls. Immutable
+    /// for the lifetime of the screen — to change the email the user pops back
+    /// out of the flow, since Supabase has already created the account.
+    let email: String
 
     private(set) var otp: String = ""
     private(set) var isSending: Bool = false
     private(set) var isConfirming: Bool = false
     private(set) var error: VerificationError?
-    private(set) var isVerified: Bool = false
     private(set) var secondsRemaining: Int = 0
 
     @ObservationIgnored
@@ -43,23 +44,29 @@ final class PhoneVerificationViewModel {
 
     var isOTPComplete: Bool { otp.count == 6 }
 
+    /// Reactive — derived from `AuthService.isEmailVerified`, which the Supabase
+    /// `userUpdated` listener flips. Requires `AuthServiceProtocol` conformers
+    /// to be `@Observable` for SwiftUI to re-evaluate downstream `onChange(of:)`
+    /// hooks; both `AuthService` and `MockAuthService` already are.
+    var isVerified: Bool { authService.isEmailVerified }
+
     var canResend: Bool {
         secondsRemaining == 0 && !isSending && !isConfirming && !isVerified
     }
 
     init(
-        phoneNumber: String,
-        service: any PhoneVerificationServiceProtocol = PhoneVerificationService.shared,
+        email: String,
+        authService: any AuthServiceProtocol = AuthService.shared,
         clock: any ClockProtocol = SystemClock()
     ) {
-        self.phoneNumber = phoneNumber
-        self.service = service
+        self.email = email
+        self.authService = authService
         self.clock = clock
     }
 
     /// Starts the resend cooldown on first call. Idempotent across SwiftUI
-    /// `.task` re-runs. The OTP itself was already sent by `ContentViewModel`
-    /// before navigating here, so this method intentionally does no network.
+    /// `.task` re-runs. The OTP itself was already dispatched by Supabase
+    /// during `signUp`, so this method intentionally does no network.
     func onAppear() {
         guard !didStartCooldown else { return }
         didStartCooldown = true
@@ -81,8 +88,7 @@ final class PhoneVerificationViewModel {
         error = nil
         defer { isConfirming = false }
         do {
-            try await service.confirmOTP(phoneNumber: phoneNumber, code: otp)
-            isVerified = true
+            try await authService.verifyEmailConfirmation(email: email, code: otp)
         } catch {
             self.error = VerificationError.from(error)
         }
@@ -107,7 +113,7 @@ final class PhoneVerificationViewModel {
         error = nil
         defer { isSending = false }
         do {
-            try await service.sendOTP(phoneNumber: phoneNumber)
+            try await authService.resendEmailConfirmation(email: email)
             startCooldown()
         } catch {
             self.error = VerificationError.from(error)

@@ -83,63 +83,45 @@ struct HoldingRow: View {
 
     private var detailSection: some View {
         VStack(spacing: 0) {
-            detailHeader
-            daysGainRow
-            totalGainRow
-            averageCostBlock
+            Text(L10n.Home.holdingsMyHoldings)
+                .font(.system(size: 15 * scale, weight: .bold))
+                .foregroundStyle(Color.sevinoSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, 8 * scale)
+
+            if let daysGain = holding.daysGain, let daysPercent = holding.daysGainPercent {
+                detailRow(
+                    label: L10n.Home.holdingsDaysGain,
+                    value: "\(daysGain) (\(daysPercent))",
+                    isPositive: holding.isPositive
+                )
+            }
+
+            if let totalGain = holding.totalGain, let totalPercent = holding.totalGainPercent {
+                detailRow(
+                    label: L10n.Home.holdingsTotalGain,
+                    value: "\(totalGain) (\(totalPercent))",
+                    isPositive: holding.isPositive
+                )
+            }
+
+            if let avgCost = holding.averageCost {
+                VStack(alignment: .leading, spacing: 4 * scale) {
+                    Text(L10n.Home.holdingsAverageCost)
+                        .font(.system(size: 13 * scale))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                    Text(avgCost)
+                        .font(.system(size: 18 * scale, weight: .bold))
+                        .foregroundStyle(Color.sevinoSecondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 8 * scale)
+            }
         }
         .padding(12 * scale)
         .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
         .padding(.top, 8 * scale)
         .transition(.opacity)
-    }
-
-    private var detailHeader: some View {
-        Text(L10n.Home.holdingsMyHoldings)
-            .font(.system(size: 15 * scale, weight: .bold))
-            .foregroundStyle(Color.sevinoSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.bottom, 8 * scale)
-    }
-
-    @ViewBuilder
-    private var daysGainRow: some View {
-        if let daysGain = holding.daysGain, let daysPercent = holding.daysGainPercent {
-            let value = "\(daysGain) (\(daysPercent))"
-            detailRow(
-                label: L10n.Home.holdingsDaysGain,
-                value: value,
-                isPositive: holding.isPositive
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var totalGainRow: some View {
-        if let totalGain = holding.totalGain, let totalPercent = holding.totalGainPercent {
-            let value = "\(totalGain) (\(totalPercent))"
-            detailRow(
-                label: L10n.Home.holdingsTotalGain,
-                value: value,
-                isPositive: holding.isPositive
-            )
-        }
-    }
-
-    @ViewBuilder
-    private var averageCostBlock: some View {
-        if let avgCost = holding.averageCost {
-            VStack(alignment: .leading, spacing: 4 * scale) {
-                Text(L10n.Home.holdingsAverageCost)
-                    .font(.system(size: 13 * scale))
-                    .foregroundStyle(Color.sevinoGreyContrast)
-                Text(avgCost)
-                    .font(.system(size: 18 * scale, weight: .bold))
-                    .foregroundStyle(Color.sevinoSecondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 8 * scale)
-        }
     }
 
     private func detailRow(label: String, value: String, isPositive: Bool?) -> some View {

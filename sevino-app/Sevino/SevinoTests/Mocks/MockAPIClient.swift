@@ -4,7 +4,6 @@ import Foundation
 final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
     var lastPath: String?
     var lastMethod: String?
-    var lastQuery: [String: String]?
     var lastBody: (any Encodable)?
     var responseToReturn: Any?
     var errorToThrow: Error?
@@ -16,10 +15,9 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return response
     }
 
-    func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T {
+    func get<T: Decodable>(_ path: String) async throws -> T {
         lastPath = path
         lastMethod = "GET"
-        lastQuery = query
         if let error = errorToThrow { throw error }
         return try castResponse()
     }

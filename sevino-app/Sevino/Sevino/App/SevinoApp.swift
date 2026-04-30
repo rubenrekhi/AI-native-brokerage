@@ -18,12 +18,32 @@ struct SevinoApp: App {
                 // connection) when the app is launched as a test host.
                 Text(verbatim: "Running tests…")
             } else {
-                ContentView()
+                contentView
                     .environment(\.textSizeMultiplier, textMultiplier)
                     .task { applyTheme() }
                     .onChange(of: appTheme) { applyTheme() }
             }
         }
+    }
+
+    /// Picks the right `ContentView` wiring. In normal launches this returns the
+    /// default `ContentView()`; under XCUITest a fake `AuthService` is injected
+    /// when `--ui-test-mode=...` is set so tests can drive the auth state without
+    /// hitting Supabase. The `#if DEBUG` keeps the fake out of Release builds.
+    @ViewBuilder
+    private var contentView: some View {
+        #if DEBUG
+        if let fake = FakeAuthServiceForUITests.makeFromLaunchArguments() {
+            ContentView(
+                authVM: AuthViewModel(authService: fake),
+                viewModel: ContentViewModel(authService: fake)
+            )
+        } else {
+            ContentView()
+        }
+        #else
+        ContentView()
+        #endif
     }
 
     private func applyTheme() {

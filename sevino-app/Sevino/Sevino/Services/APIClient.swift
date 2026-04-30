@@ -1,7 +1,7 @@
 import Foundation
 
 protocol APIClientProtocol: Sendable {
-    func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T
+    func get<T: Decodable>(_ path: String) async throws -> T
     func post<T: Decodable>(_ path: String) async throws -> T
     func post<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func post(_ path: String) async throws
@@ -14,46 +14,24 @@ protocol APIClientProtocol: Sendable {
     func downloadFile(_ path: String, suggestedExtension: String?) async throws -> URL
 }
 
-extension APIClientProtocol {
-    func get<T: Decodable>(_ path: String) async throws -> T {
-        try await get(path, query: [:])
-    }
-}
-
 final class APIClient: APIClientProtocol {
     static let shared = APIClient()
-
-    static func makeEncoder() -> JSONEncoder {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        return e
-    }
-
-    /// Mirrors what the live client uses on the wire — tests should call this
-    /// instead of building their own `JSONDecoder` so backend-decoder drift
-    /// (e.g. snake-case keys, fractional-second timestamps) is caught here too.
-    static func makeDecoder() -> JSONDecoder {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        d.dateDecodingStrategy = .custom { decoder in
-            let container = try decoder.singleValueContainer()
-            let raw = try container.decode(String.self)
-            if let date = _isoFractional.date(from: raw) { return date }
-            if let date = _isoPlain.date(from: raw) { return date }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ISO-8601 date: \(raw)"
-            )
-        }
-        return d
-    }
 
     private let baseURL: String
     private let session: URLSession
     private let tokenProvider: @Sendable () async -> String?
 
-    private let encoder: JSONEncoder = APIClient.makeEncoder()
-    private let decoder: JSONDecoder = APIClient.makeDecoder()
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.keyEncodingStrategy = .convertToSnakeCase
+        return e
+    }()
+
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.keyDecodingStrategy = .convertFromSnakeCase
+        return d
+    }()
 
     init(
         baseURL: String = AppConfig.apiBaseURL,
@@ -67,8 +45,8 @@ final class APIClient: APIClientProtocol {
         self.tokenProvider = tokenProvider
     }
 
-    func get<T: Decodable>(_ path: String, query: [String: String]) async throws -> T {
-        try await request(path, method: "GET", query: query)
+    func get<T: Decodable>(_ path: String) async throws -> T {
+        try await request(path, method: "GET")
     }
 
     func post<T: Decodable>(_ path: String) async throws -> T {
@@ -155,18 +133,9 @@ final class APIClient: APIClientProtocol {
     private func request<T: Decodable>(
         _ path: String,
         method: String,
-        query: [String: String] = [:],
         body: (some Encodable)? = nil as Empty?
     ) async throws -> T {
-        guard var components = URLComponents(string: baseURL + path) else {
-            throw URLError(.badURL)
-        }
-        if !query.isEmpty {
-            components.queryItems = query
-                .sorted(by: { $0.key < $1.key })
-                .map { URLQueryItem(name: $0.key, value: $0.value) }
-        }
-        guard let url = components.url else {
+        guard let url = URL(string: baseURL + path) else {
             throw URLError(.badURL)
         }
 
@@ -247,18 +216,3 @@ final class APIClient: APIClientProtocol {
 // Concrete Encodable sentinel satisfying the generic default `nil as Empty?` —
 // allows callers to omit `body` without specifying a type.
 private struct Empty: Encodable {}
-
-// Pydantic v2 emits ISO-8601 with fractional seconds by default
-// (e.g. "2026-04-24T12:34:56.789012+00:00"); some serializers strip them.
-// Try the fractional variant first, then fall back to plain.
-private let _isoFractional: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()
-
-private let _isoPlain: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
-}()

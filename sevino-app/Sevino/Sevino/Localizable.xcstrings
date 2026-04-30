@@ -54,6 +54,26 @@
         }
       }
     },
+    "auth.email_verify_subtitle" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check your inbox and enter it below."
+          }
+        }
+      }
+    },
+    "auth.email_verify_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We sent a code to"
+          }
+        }
+      }
+    },
     "auth.email_placeholder" : {
       "localizations" : {
         "en" : {
@@ -94,7 +114,17 @@
         }
       }
     },
-    "auth.otp_input_a11y_hint" : {
+    "auth.otp_input_a11y_hint_email" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the 6-digit code we sent to your email"
+          }
+        }
+      }
+    },
+    "auth.otp_input_a11y_hint_phone" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -954,172 +984,12 @@
         }
       }
     },
-    "home.home_load_error_dismiss" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss"
-          }
-        }
-      }
-    },
-    "home.home_load_error_retry" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Try again"
-          }
-        }
-      }
-    },
-    "home.home_load_error_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Couldn't load home"
-          }
-        }
-      }
-    },
     "home.holdings_empty_message" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Your positions will appear here once you make your first trade."
-          }
-        }
-      }
-    },
-    "home.holdings_empty_unfunded_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add cash to start investing"
-          }
-        }
-      }
-    },
-    "home.holdings_empty_unfunded_message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fund your account to begin building your portfolio."
-          }
-        }
-      }
-    },
-    "home.holdings_cash_only_hint" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Search for a stock to start investing"
-          }
-        }
-      }
-    },
-    "home.account_pending_short" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Being reviewed"
-          }
-        }
-      }
-    },
-    "home.account_action_required_short" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finish setup"
-          }
-        }
-      }
-    },
-    "home.account_rejected_short" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unavailable"
-          }
-        }
-      }
-    },
-    "home.account_pending_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your account is being reviewed"
-          }
-        }
-      }
-    },
-    "home.account_pending_message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We'll notify you as soon as it's ready. Holdings will appear once your account is active."
-          }
-        }
-      }
-    },
-    "home.account_action_required_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finish setting up your account"
-          }
-        }
-      }
-    },
-    "home.account_action_required_message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "We need a bit more information before your account can be activated."
-          }
-        }
-      }
-    },
-    "home.account_action_required_cta" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Finish setup"
-          }
-        }
-      }
-    },
-    "home.account_rejected_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Account unavailable"
-          }
-        }
-      }
-    },
-    "home.account_rejected_message" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please contact support so we can help get you set up."
           }
         }
       }
@@ -1210,6 +1080,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Total value"
+          }
+        }
+      }
+    },
+    "home.home_load_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss"
+          }
+        }
+      }
+    },
+    "home.home_load_error_retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Try again"
+          }
+        }
+      }
+    },
+    "home.home_load_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't load home"
           }
         }
       }
@@ -1400,16 +1300,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Portfolio"
-          }
-        }
-      }
-    },
-    "home.portfolio_loading_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Loading"
           }
         }
       }

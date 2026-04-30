@@ -12,6 +12,10 @@ struct SettingsView: View {
     @State private var showLogOutConfirmation = false
     @State private var path = NavigationPath()
     @State private var baseScale: CGFloat = 1
+    #if DEBUG
+    @State private var tradeVM = TradeExecutionViewModel()
+    @State private var showTradeTest = false
+    #endif
 
     private var scale: CGFloat { baseScale * textMultiplier }
 
@@ -27,6 +31,10 @@ struct SettingsView: View {
                         settingsRow(icon: "lock", title: L10n.Settings.loginSecurity, action: navigateToLoginSecurity)
                         settingsRow(icon: "doc.text", title: L10n.Settings.personalInfo, action: navigateToPersonalInfo)
                         settingsRow(icon: "paintbrush", title: L10n.Settings.appearance, action: navigateToAppearance)
+                        #if DEBUG
+                        // Debug-only row — never ships, intentionally hardcoded English.
+                        settingsRow(icon: "hammer", title: "Test Trade Execution", action: presentTradeTest)
+                        #endif
                     }
 
                     Spacer()
@@ -62,6 +70,11 @@ struct SettingsView: View {
             }
             .navigationBarBackButtonHidden()
             .task { await settingsVM.load() }
+            #if DEBUG
+            .sheet(isPresented: $showTradeTest) {
+                TradeTestSheet(viewModel: tradeVM)
+            }
+            #endif
             .navigationDestination(for: SettingsDestination.self) { destination in
                 switch destination {
                 case .accounts:
@@ -174,6 +187,13 @@ struct SettingsView: View {
     private func navigateToAppearance() {
         path.append(SettingsDestination.appearance)
     }
+
+    #if DEBUG
+    private func presentTradeTest() {
+        tradeVM.prepareTrade()
+        showTradeTest = true
+    }
+    #endif
 
     private func confirmLogOut() {
         showLogOutConfirmation = true

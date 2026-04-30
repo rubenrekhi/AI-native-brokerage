@@ -6,14 +6,21 @@ final class ContentViewModelTests: XCTestCase {
 
     private var mockOnboarding: MockOnboardingService!
     private var mockPhoneVerification: MockPhoneVerificationService!
+    private var mockAuth: MockAuthService!
     private var viewModel: ContentViewModel!
 
     override func setUp() {
         mockOnboarding = MockOnboardingService()
         mockPhoneVerification = MockPhoneVerificationService()
+        mockAuth = MockAuthService()
+        // Default to a verified-email session so tests focused on phone /
+        // onboarding behavior bypass the email gate.
+        mockAuth.isEmailVerified = true
+        mockAuth.currentEmail = "test@example.com"
         viewModel = ContentViewModel(
             onboardingService: mockOnboarding,
-            phoneVerificationService: mockPhoneVerification
+            phoneVerificationService: mockPhoneVerification,
+            authService: mockAuth
         )
     }
 
@@ -28,17 +35,44 @@ final class ContentViewModelTests: XCTestCase {
 
     // MARK: - startFreshSignUpFlow
 
-    func testStartFreshSignUpFlowSkipsStatusCheck() {
-        viewModel.startFreshSignUpFlow()
+    func testStartFreshSignUpFlowRoutesToEmailVerification() async {
+        // Fresh Supabase email/password signup leaves `isEmailVerified == false`
+        // since `signUp` returns before the user clicks the confirmation link.
+        mockAuth.isEmailVerified = false
 
-        XCTAssertEqual(viewModel.route, .phone)
-        XCTAssertEqual(mockOnboarding.getStatusCallCount, 0)
+        await viewModel.startFreshSignUpFlow()
+
+        XCTAssertEqual(viewModel.route, .emailVerification(email: "test@example.com"))
+        XCTAssertEqual(mockOnboarding.getStatusCallCount, 0,
+                       "fresh signup must not hit /onboarding/status — there's no server-side state to resume yet")
+    }
+
+    func testStartFreshSignUpFlowMissingEmailRoutesToStatusCheckFailed() async {
+        mockAuth.isEmailVerified = false
+        mockAuth.currentEmail = nil
+
+        await viewModel.startFreshSignUpFlow()
+
+        XCTAssertEqual(viewModel.route, .statusCheckFailed,
+                       "missing session email is unexpected post-signup; bail safely instead of routing to .emailVerification with an empty string")
+    }
+
+    func testStartFreshSignUpFlowAlreadyVerifiedSkipsEmailGate() async {
+        // Defensive against a future auto-verifying auth provider (OAuth, magic
+        // link) — `EmailVerificationView` only advances on a `false → true`
+        // transition, so already-verified users would otherwise stall there.
+        mockAuth.isEmailVerified = true
+
+        await viewModel.startFreshSignUpFlow()
+
+        XCTAssertEqual(viewModel.route, .phone,
+                       "an auto-verified fresh signup must skip the email gate, not get stuck on the OTP screen with no advance trigger")
     }
 
     // MARK: - savePhoneNumber
 
     func testSavePhoneNumberSuccessAdvancesToPhoneVerification() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
 
         await viewModel.savePhoneNumber("4165551234")
 
@@ -52,7 +86,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testSavePhoneNumberSendOTPFailureKeepsPhoneRoute() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "SMS provider down"]
@@ -69,7 +103,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testSavePhoneNumberPhoneTakenShowsLocalizedMessage() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         mockPhoneVerification.sendOTPError = APIError(
             error: "ignored backend message",
             code: "PHONE_NUMBER_TAKEN"
@@ -85,7 +119,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testSavePhoneNumberRetrySuccessClearsErrorFlag() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         mockPhoneVerification.sendOTPError = NSError(
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
@@ -102,7 +136,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testSavePhoneNumberPhoneTakenThenRetryWithNewNumberAdvances() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         mockPhoneVerification.sendOTPError = APIError(
             error: "ignored backend message",
             code: "PHONE_NUMBER_TAKEN"
@@ -121,10 +155,61 @@ final class ContentViewModelTests: XCTestCase {
                        "OTP must be dispatched against the new number after the duplicate-phone retry")
     }
 
+    // MARK: - Email verification transitions
+
+    func testOnEmailVerifiedAdvancesToPhone() {
+        viewModel.onEmailVerified()
+
+        XCTAssertEqual(viewModel.route, .phone,
+                       "post email verification, the user becomes eligible to enter their phone number")
+    }
+
+    func testCheckOnboardingStatusUnverifiedEmailRoutesToEmailVerification() async {
+        mockAuth.isEmailVerified = false
+        mockAuth.currentEmail = "unverified@example.com"
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertEqual(viewModel.route, .emailVerification(email: "unverified@example.com"))
+        XCTAssertEqual(mockOnboarding.getStatusCallCount, 0,
+                       "unverified email must short-circuit before hitting /onboarding/status — there's no resumeable state for an unconfirmed account")
+    }
+
+    func testCheckOnboardingStatusUnverifiedEmailMissingEmailRoutesToStatusCheckFailed() async {
+        mockAuth.isEmailVerified = false
+        mockAuth.currentEmail = nil
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertEqual(viewModel.route, .statusCheckFailed,
+                       "an unverified session with no email is unrecoverable from the app's perspective; bail to retry rather than route to .emailVerification(email: \"\")")
+    }
+
+    func testCheckOnboardingStatusVerifiedEmailProceedsToBackend() async {
+        // Pin the implicit assertion: a verified email must NOT short-circuit
+        // the backend status fetch. Without this, regressing the gate to
+        // accidentally always-true would silently break resume routing.
+        mockAuth.isEmailVerified = true
+        mockOnboarding.statusResponse = OnboardingStatusResponse(
+            onboardingCompleted: true,
+            onboardingStep: nil,
+            accountStatus: nil,
+            profile: nil,
+            financialProfile: nil,
+            phoneVerified: true
+        )
+
+        await viewModel.checkOnboardingStatus()
+
+        XCTAssertEqual(mockOnboarding.getStatusCallCount, 1,
+                       "verified email must NOT short-circuit the backend status check")
+        XCTAssertEqual(viewModel.route, .home)
+    }
+
     // MARK: - Phone verification transitions
 
     func testOnPhoneVerifiedAdvancesToOnboarding() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         await viewModel.savePhoneNumber("4165551234")
         XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
 
@@ -134,7 +219,7 @@ final class ContentViewModelTests: XCTestCase {
     }
 
     func testOnChangeNumberReturnsToPhone() async {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         await viewModel.savePhoneNumber("4165551234")
         XCTAssertEqual(viewModel.route, .phoneVerification(phoneNumber: "(416) 555-1234"))
 
@@ -148,7 +233,7 @@ final class ContentViewModelTests: XCTestCase {
             domain: "", code: 0,
             userInfo: [NSLocalizedDescriptionKey: "Network error"]
         )
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
         await viewModel.savePhoneNumber("4165551234")
         XCTAssertNotNil(viewModel.error)
         XCTAssertTrue(viewModel.showPhoneError)
@@ -249,7 +334,7 @@ final class ContentViewModelTests: XCTestCase {
     // MARK: - Flow transitions
 
     func testCompleteOnboardingAdvancesToAlpacaSetup() {
-        viewModel.startFreshSignUpFlow()
+        viewModel.onEmailVerified()
 
         viewModel.completeOnboarding(userName: "Riley")
 
@@ -283,6 +368,10 @@ final class ContentViewModelTests: XCTestCase {
         XCTAssertNotEqual(
             AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 123-4567"),
             AuthenticatedRoute.phoneVerification(phoneNumber: "(555) 999-0000")
+        )
+        XCTAssertNotEqual(
+            AuthenticatedRoute.emailVerification(email: "a@example.com"),
+            AuthenticatedRoute.emailVerification(email: "b@example.com")
         )
         var dataA = OnboardingResumeManager.OnboardingResumeData()
         dataA.userName = "A"

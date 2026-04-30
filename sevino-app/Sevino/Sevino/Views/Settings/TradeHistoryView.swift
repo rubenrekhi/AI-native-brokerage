@@ -406,6 +406,18 @@ private final class PreviewEmptyTradingService: TradingServiceProtocol, @uncheck
     ) async throws -> [OrderResponse] { [] }
 
     func listPositions() async throws -> [PositionResponse] { [] }
+
+    func placeOrder(_ request: PlaceOrderRequest) async throws -> PlaceOrderResponse {
+        throw URLError(.unsupportedURL)
+    }
+
+    func cancelOrder(id: String) async throws -> OrderDetailResponse {
+        throw URLError(.unsupportedURL)
+    }
+
+    func getOrder(id: String) async throws -> OrderDetailResponse {
+        throw URLError(.unsupportedURL)
+    }
 }
 
 private final class PreviewLoadedTradingService: TradingServiceProtocol, @unchecked Sendable {
@@ -431,6 +443,18 @@ private final class PreviewLoadedTradingService: TradingServiceProtocol, @unchec
             PositionResponse(symbol: "AAPL", assetClass: "us_equity", qty: "10", marketValue: "1842.00"),
             PositionResponse(symbol: "TSLA", assetClass: "us_equity", qty: "2", marketValue: "480.20"),
         ]
+    }
+
+    func placeOrder(_ request: PlaceOrderRequest) async throws -> PlaceOrderResponse {
+        throw URLError(.unsupportedURL)
+    }
+
+    func cancelOrder(id: String) async throws -> OrderDetailResponse {
+        throw URLError(.unsupportedURL)
+    }
+
+    func getOrder(id: String) async throws -> OrderDetailResponse {
+        throw URLError(.unsupportedURL)
     }
 }
 

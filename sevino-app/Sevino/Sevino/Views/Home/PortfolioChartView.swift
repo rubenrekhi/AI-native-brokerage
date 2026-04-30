@@ -55,11 +55,7 @@ struct PortfolioChartView: View {
             }
             .contentShape(.rect)
             .gesture(
-                // minimumDistance: 4 lets the modal's ScrollView win
-                // vertical pull-to-refresh drags before the chart claims them
-                // for scrubbing — touches starting on the chart still need to
-                // refresh the portfolio.
-                DragGesture(minimumDistance: 4)
+                DragGesture(minimumDistance: 0)
                     .onChanged { value in
                         updateScrub(at: value.location.x, width: width)
                     }
