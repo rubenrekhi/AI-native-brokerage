@@ -61,25 +61,24 @@ Items numbered to match the v0 component checklist (1–28). Status legend:
 
 | # | Item | Status | Current state | What's needed |
 |---|---|---|---|---|
-| 20 | Local dev recipe | 🟡 | `Makefile` has `infra`, `server`, `worker`, `test`, `migrate`. No AI-specific targets. No fixture for "one user + one conversation". | New `Makefile` targets: `make ai-curl` (runs a sample turn against local server with bearer token from a known dev fixture), `make ai-fixtures` (seeds one user + one conversation in local Supabase). New `scripts/ai_curl.sh` showing the exact curl invocation with idempotency key generation. |
-| 21 | Smoke harness | 🟡 | No `.github/workflows/` exists at all. | **Split across phases.** Phase 1: CI scaffold (`.github/workflows/ci.yml` running `make test` on every PR; no smoke yet). Phase 2: smoke cases for `"hello"` + iteration cap (real Anthropic, cheap model — Haiku — env-flagged via `RUN_AI_SMOKE=1`). Phase 3: third smoke case for AMD price query exercising `get_stock_info`. Smoke harness gated on `RUN_AI_SMOKE` secret to avoid bills on every contributor's PR — runs on `main` push. |
+| 20 | Smoke harness | 🟡 | No `.github/workflows/` exists at all. | **Split across phases.** Phase 1: CI scaffold (`.github/workflows/ci.yml` running `make test` on every PR; no smoke yet). Phase 2: smoke cases for `"hello"` + iteration cap (real Anthropic, cheap model — Haiku — env-flagged via `RUN_AI_SMOKE=1`). Phase 3: third smoke case for AMD price query exercising `get_stock_info`. Smoke harness gated on `RUN_AI_SMOKE` secret to avoid bills on every contributor's PR — runs on `main` push. |
 
 ### iOS
 
 | # | Item | Status | Current state | What's needed |
 |---|---|---|---|---|
-| 22 | `SSEClient` actor | 🔴 | No SSE/WebSocket client in iOS. (`URLSessionWebSocketTask`, `URLSession.bytes`, `EventSource` — zero matches.) | New `Sevino/Services/Chat/SSEClient.swift`: actor built on `URLSession.bytes(for:)`. Line buffering, parses `event:`/`data:`/`id:`. Exposes `AsyncStream<SSEEvent>`. Header provider closure for auth (don't bake JWT — reuse the same pattern as `APIClient.swift:39-41` `tokenProvider`). API designed so reconnect can be added later without callers changing. |
-| 23 | Typed event decoder | 🔴 | None. iOS already uses discriminated-union pattern for `OrderSide` (TradingDTOs.swift) — good reference. | New `Sevino/Models/Chat/SSEEvent.swift`: `enum SSEEvent: Decodable` with associated values per backend variant. Decode via custom `init(from:)` checking the `type` discriminator. Loud `os_log` decode-failure logging in DEBUG builds (don't crash; surface to Sentry equivalent). |
-| 24 | Block-based message model | 🔴 | None. Current `ChatItem` (Models/Home/ChatItem.swift) is a stub for the recents sidebar — different concern. | New `Sevino/Models/Chat/Message.swift`: `struct Message { id: UUID; role: Role; var blocks: [Block] }`, `enum Block: Codable, Identifiable` matching backend. Each block addressable by `block_id` for delta patching. Use `@Observable` on the parent store (not the model) so SwiftUI re-renders incrementally. |
-| 25 | `ConversationStore` | 🔴 | `HomeViewModel.swift` shows the right `@Observable` shape. `PlaceholderChatService` is a placeholder we'll replace. | New `Sevino/ViewModels/Chat/ConversationStore.swift`: `@Observable @MainActor final class ConversationStore`. Owns `messages: [Message]` and `state: TurnState`. Method `send(text:) async throws` opens an SSE stream via `SSEClient`, applies events to message list. No networking in views. Replaces `ChatService.swift` placeholder. |
-| 26 | Chat view + 3 block renderers | 🟡 | Home is the chat surface. `HomeChatInputBar.swift` already handles input, ticker mentions (`TickerMentionViewModel`), dictation, and emits `[MessageSegment]` on send. The message list is the missing piece. | Three new renderer views: `Sevino/Views/Chat/Blocks/TextBlockView.swift` (markdown — see decision §4 for library), `StatusPillView.swift`, `StockCardView.swift` (real, matches design — Swift Charts for the line chart, range pills, progressive population as `block_data` events arrive). New `Sevino/Views/Chat/MessageListView.swift` rendering `[Message]` with one row per message, blocks inside a `VStack`. **Integration into Home:** add a `messages: [Message]` overlay in `HomeView` body that takes over the main content area when `conversationStore.messages.isEmpty == false` (chat fills home; suggestions/greeting hidden once conversation starts). The existing `HomeChatInputBar` stays put — wire its `onSend` callback into `conversationStore.send(...)`. |
-| 27 | Auth integration | 🟢 | `AuthService.shared.accessToken` already returns the Supabase JWT (auto-refreshed by SDK). `APIClient.swift:39-41` shows the `tokenProvider` closure pattern. | Pass the same closure to `SSEClient` constructor: `tokenProvider: { await AuthService.shared.accessToken }`. Zero new auth code. |
+| 21 | `SSEClient` actor | 🔴 | No SSE/WebSocket client in iOS. (`URLSessionWebSocketTask`, `URLSession.bytes`, `EventSource` — zero matches.) | New `Sevino/Services/Chat/SSEClient.swift`: actor built on `URLSession.bytes(for:)`. Line buffering, parses `event:`/`data:`/`id:`. Exposes `AsyncStream<SSEEvent>`. Header provider closure for auth (don't bake JWT — reuse the same pattern as `APIClient.swift:39-41` `tokenProvider`). API designed so reconnect can be added later without callers changing. |
+| 22 | Typed event decoder | 🔴 | None. iOS already uses discriminated-union pattern for `OrderSide` (TradingDTOs.swift) — good reference. | New `Sevino/Models/Chat/SSEEvent.swift`: `enum SSEEvent: Decodable` with associated values per backend variant. Decode via custom `init(from:)` checking the `type` discriminator. Loud `os_log` decode-failure logging in DEBUG builds (don't crash; surface to Sentry equivalent). |
+| 23 | Block-based message model | 🔴 | None. Current `ChatItem` (Models/Home/ChatItem.swift) is a stub for the recents sidebar — different concern. | New `Sevino/Models/Chat/Message.swift`: `struct Message { id: UUID; role: Role; var blocks: [Block] }`, `enum Block: Codable, Identifiable` matching backend. Each block addressable by `block_id` for delta patching. Use `@Observable` on the parent store (not the model) so SwiftUI re-renders incrementally. |
+| 24 | `ConversationStore` | 🔴 | `HomeViewModel.swift` shows the right `@Observable` shape. `PlaceholderChatService` is a placeholder we'll replace. | New `Sevino/ViewModels/Chat/ConversationStore.swift`: `@Observable @MainActor final class ConversationStore`. Owns `messages: [Message]` and `state: TurnState`. Method `send(text:) async throws` opens an SSE stream via `SSEClient`, applies events to message list. No networking in views. Replaces `ChatService.swift` placeholder. |
+| 25 | Chat view + 3 block renderers | 🟡 | Home is the chat surface. `HomeChatInputBar.swift` already handles input, ticker mentions (`TickerMentionViewModel`), dictation, and emits `[MessageSegment]` on send. The message list is the missing piece. | Three new renderer views: `Sevino/Views/Chat/Blocks/TextBlockView.swift` (markdown — see decision §4 for library), `StatusPillView.swift`, `StockCardView.swift` (real, matches design — Swift Charts for the line chart, range pills, progressive population as `block_data` events arrive). New `Sevino/Views/Chat/MessageListView.swift` rendering `[Message]` with one row per message, blocks inside a `VStack`. **Integration into Home:** add a `messages: [Message]` overlay in `HomeView` body that takes over the main content area when `conversationStore.messages.isEmpty == false` (chat fills home; suggestions/greeting hidden once conversation starts). The existing `HomeChatInputBar` stays put — wire its `onSend` callback into `conversationStore.send(...)`. |
+| 26 | Auth integration | 🟢 | `AuthService.shared.accessToken` already returns the Supabase JWT (auto-refreshed by SDK). `APIClient.swift:39-41` shows the `tokenProvider` closure pattern. | Pass the same closure to `SSEClient` constructor: `tokenProvider: { await AuthService.shared.accessToken }`. Zero new auth code. |
 
 ### Cross-cutting
 
 | # | Item | Status | Current state | What's needed |
 |---|---|---|---|---|
-| 28 | Shared schema artifact | 🔴 | None. | Generate JSON schema from Pydantic discriminated union at build time → committed at `sevino-api/app/ai/schema/v1.json`. **Recommendation: hand-mirror Swift, CI-diff** (see decision §4). New `make ai-schema-export` target writes the JSON; new `tests/ai/test_schema_in_sync.py` fails if Pydantic exports diverge from the committed JSON; iOS `enum Block` is hand-maintained but a CI check (in iOS CI when it lands) compares variant names against the JSON keys. |
+| 27 | Shared schema artifact | 🔴 | None. | Generate JSON schema from Pydantic discriminated union at build time → committed at `sevino-api/app/ai/schema/v1.json`. **Recommendation: hand-mirror Swift, CI-diff** (see decision §4). New `make ai-schema-export` target writes the JSON; new `tests/ai/test_schema_in_sync.py` fails if Pydantic exports diverge from the committed JSON; iOS `enum Block` is hand-maintained but a CI check (in iOS CI when it lands) compares variant names against the JSON keys. |
 
 ---
 
@@ -374,7 +373,6 @@ sevino-app/Sevino/SevinoTests/
 > - `area:ios` — anything in `sevino-app/`
 > - `area:schema` — block / event Pydantic models, schema-sync artifact
 > - `area:ci` — GitHub Actions, smoke harness
-> - `area:dev-loop` — make targets, fixtures, local scripts
 
 **Conventions used below:**
 - Issue IDs (`A1.1`, `B2.3`, etc.) are local to this doc for cross-referencing dependencies. Linear will assign its own `SEV-XXX` IDs at creation time.
@@ -518,22 +516,8 @@ Langfuse Cloud, traces, cost.
 - **Depends on:** A3.2, A2.5
 - **Estimate:** S
 
-#### Issues — `area:dev-loop`, `area:ci`
-Make the system ergonomic to work on locally + scaffold CI.
-
-**A4.1 — `make ai-curl` target + script**
-- New `scripts/ai_curl.sh` that: generates an idempotency UUID, fetches a JWT from local Supabase fixture user, posts to `/v1/conversations/$ID/turns` with a sample message, pretty-prints the response. New `Makefile` target `ai-curl` invoking the script.
-- **Acceptance:** Running `make ai-curl` after `make server` returns a real Claude response from the local dev environment; script handles missing env vars with a helpful error.
-- **Files:** `sevino-api/Makefile`, `sevino-api/scripts/ai_curl.sh`
-- **Depends on:** A1.9
-- **Estimate:** S
-
-**A4.2 — `make ai-fixtures` for local seeding**
-- New `scripts/seed_ai_fixtures.py` (Python, like the existing `seed_funding_sandbox.py`): inserts one user into local Supabase auth + `user_profiles`, prints the JWT. New `Makefile` target.
-- **Acceptance:** Running `make ai-fixtures` on a fresh local Supabase produces a known user + JWT printed to stdout; idempotent (re-running doesn't error).
-- **Files:** `sevino-api/Makefile`, `sevino-api/scripts/seed_ai_fixtures.py`
-- **Depends on:** A2.1
-- **Estimate:** M
+#### Issues — `area:ci`
+Scaffold CI.
 
 **A4.3 — GitHub Actions CI scaffold**
 - New `.github/workflows/ci.yml` running `uv sync` + `make test` on every PR. Postgres + Redis services in the workflow. **Smoke harness deferred to Project B.** No Anthropic-related secrets needed at this stage.
@@ -560,7 +544,6 @@ Wave 1 (start day 1, all independent):
 Wave 2 (after Wave 1 ships):
   A2.1 (SEV-469) Alembic migration            ← depends on A2.2, A2.3
   A2.4 (SEV-472) ConversationRepository       ← depends on A2.2, A2.3
-  A4.2 (SEV-478) make ai-fixtures             ← depends on A2.1 (sequential after migration applied locally)
 
 Wave 3 (after Wave 2):
   A1.6 (SEV-465) Agent loop core              ← depends on A1.1-1.5, A2.4
@@ -574,14 +557,13 @@ Wave 4 (after A1.6):
 
 Wave 5 (after Wave 4):
   A3.3 (SEV-476) Cost on traces                ← A3.2 + A2.5
-  A4.1 (SEV-477) make ai-curl                  ← A1.9
 ```
 
 **Critical path:** `A2.2/A2.3 (SEV-470/471) → A2.4 (SEV-472) → A1.6 (SEV-465) → A1.9 (SEV-468) → demo`. Roughly 1 day per wave with one engineer; with two engineers in parallel on Wave 1, the critical path drives the timeline (~3 days). With 3+ engineers there's diminishing return — A1.6 is one PR.
 
 **For two engineers:**
-- **E1 (sequential / critical path):** A2.2 (SEV-470) → A2.4 (SEV-472) → A1.6 (SEV-465) → A1.9 (SEV-468) → A4.1 (SEV-477)
-- **E2 (parallel / supporting):** A1.1 (SEV-460), A1.2 (SEV-461), A1.3 (SEV-462), A1.4 (SEV-463), A1.5 (SEV-464) (Wave 1) → A2.1 (SEV-469), A2.3 (SEV-471) (Wave 2) → A1.7 (SEV-466), A1.8 (SEV-467), A3.1 (SEV-474) → A3.2 (SEV-475), A3.3 (SEV-476) → A4.3 (SEV-479), A4.2 (SEV-478)
+- **E1 (sequential / critical path):** A2.2 (SEV-470) → A2.4 (SEV-472) → A1.6 (SEV-465) → A1.9 (SEV-468)
+- **E2 (parallel / supporting):** A1.1 (SEV-460), A1.2 (SEV-461), A1.3 (SEV-462), A1.4 (SEV-463), A1.5 (SEV-464) (Wave 1) → A2.1 (SEV-469), A2.3 (SEV-471) (Wave 2) → A1.7 (SEV-466), A1.8 (SEV-467), A3.1 (SEV-474) → A3.2 (SEV-475), A3.3 (SEV-476) → A4.3 (SEV-479)
 
 ---
 
