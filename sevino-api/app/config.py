@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     railway_environment_name: str = ""
     anthropic_model_main: str = "claude-sonnet-4-6"
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_host: str = "https://us.cloud.langfuse.com"
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
