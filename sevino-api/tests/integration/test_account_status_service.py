@@ -3,7 +3,7 @@ Integration tests for apply_account_status_change against real local Postgres.
 
 Covers the SEV-327 contract: first-time ACTIVE transition flips the
 user_profile.onboarding_completed flag atomically with the brokerage_account
-status update, and replays are no-ops.
+status update, and replays are no-ops. Also covers SEV-529's sweep helper.
 
 Also covers the SEV-528 contract: the same first-time ACTIVE transition
 PATCHes Alpaca to enroll the account in the configured FDIC sweep tier,
@@ -21,7 +21,10 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.account_status import apply_account_status_change
+from app.services.account_status import (
+    apply_account_status_change,
+    apply_sweep_status_change,
+)
 from app.services.alpaca_broker import AlpacaBrokerError
 from tests.integration.conftest import TEST_USER_ID, _pg_available_sync
 
@@ -285,3 +288,98 @@ class TestSweepEnrollmentPersistence:
         result = row.one()
         assert result.sweep_status is None
         assert result.sweep_enrolled_at is None
+
+
+class TestApplySweepStatusChange:
+    """SEV-529: cash_interest SSE events update ``sweep_status`` in isolation
+    from ``account_status``. Mirrors the sibling helper's coverage against
+    real DB writes — protects against silent column renames (the repo's
+    ``hasattr``-filter would otherwise mask them) and verifies the documented
+    no-write-to-account_status invariant."""
+
+    async def test_active_transition_writes_sweep_status_only(
+        self, db_session: AsyncSession, test_user: uuid.UUID
+    ):
+        alpaca_id = f"acct-{uuid.uuid4()}"
+        await _insert_brokerage_account(
+            db_session, test_user, alpaca_id, status="ACTIVE"
+        )
+
+        await apply_sweep_status_change(
+            db_session, alpaca_account_id=alpaca_id, new_status="ACTIVE"
+        )
+
+        row = await db_session.execute(
+            text(
+                "SELECT account_status, sweep_status, sweep_enrolled_at "
+                "FROM brokerage_accounts WHERE alpaca_account_id = :aid"
+            ),
+            {"aid": alpaca_id},
+        )
+        result = row.one()
+        assert result.account_status == "ACTIVE"
+        assert result.sweep_status == "ACTIVE"
+        # ``event_time`` is documented as not yet persisted — the enrollment
+        # request flow owns ``sweep_enrolled_at``, not the listener.
+        assert result.sweep_enrolled_at is None
+
+    async def test_replay_same_sweep_status_is_noop(
+        self, db_session: AsyncSession, test_user: uuid.UUID
+    ):
+        alpaca_id = f"acct-{uuid.uuid4()}"
+        await _insert_brokerage_account(
+            db_session, test_user, alpaca_id, status="ACTIVE"
+        )
+        await apply_sweep_status_change(
+            db_session, alpaca_account_id=alpaca_id, new_status="ACTIVE"
+        )
+
+        # Replaying the same event shouldn't error or flip anything.
+        await apply_sweep_status_change(
+            db_session, alpaca_account_id=alpaca_id, new_status="ACTIVE"
+        )
+
+        row = await db_session.execute(
+            text(
+                "SELECT sweep_status FROM brokerage_accounts "
+                "WHERE alpaca_account_id = :aid"
+            ),
+            {"aid": alpaca_id},
+        )
+        assert row.scalar_one() == "ACTIVE"
+
+    async def test_sweep_does_not_overwrite_account_status(
+        self, db_session: AsyncSession, test_user: uuid.UUID
+    ):
+        """Cash_interest events arrive against accounts in any lifecycle
+        state. The sweep helper must not regress ``account_status`` — pin
+        it against an end-state value the listener should never write."""
+        alpaca_id = f"acct-{uuid.uuid4()}"
+        await _insert_brokerage_account(
+            db_session, test_user, alpaca_id, status="ACTIVE"
+        )
+
+        await apply_sweep_status_change(
+            db_session, alpaca_account_id=alpaca_id, new_status="INACTIVE"
+        )
+
+        row = await db_session.execute(
+            text(
+                "SELECT account_status, sweep_status FROM brokerage_accounts "
+                "WHERE alpaca_account_id = :aid"
+            ),
+            {"aid": alpaca_id},
+        )
+        result = row.one()
+        assert result.account_status == "ACTIVE"
+        assert result.sweep_status == "INACTIVE"
+
+    async def test_unknown_account_is_noop(self, db_session: AsyncSession):
+        """Alpaca multiplexes every account on the API key, including ones
+        that don't belong to any Sevino user. Unknown ``account_id`` must
+        log + skip, not error."""
+        await apply_sweep_status_change(
+            db_session,
+            alpaca_account_id=f"acct-unknown-{uuid.uuid4()}",
+            new_status="ACTIVE",
+        )

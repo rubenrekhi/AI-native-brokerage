@@ -41,6 +41,8 @@ async def apply_account_status_change(
     short-circuiting on status alone would drop reviewer-amended rejection
     notes that ride on a same-status event (see SEV-213 review discussion).
     """
+    if not new_status:
+        return
     account = await BrokerageAccountRepository.get_by_alpaca_account_id(
         session, alpaca_account_id
     )
@@ -160,4 +162,52 @@ async def apply_account_status_change(
         previous_status=previous_status,
         new_status=new_status,
         kyc_changed=kyc_changed,
+    )
+
+
+async def apply_sweep_status_change(
+    session: AsyncSession,
+    *,
+    alpaca_account_id: str,
+    new_status: str,
+    event_time: datetime | None = None,
+) -> None:
+    """Update ``brokerage_accounts.sweep_status`` in response to an Alpaca
+    ``cash_interest`` SSE event.
+
+    Runs inside the caller's transaction — the caller is responsible for
+    committing. Same shape as ``apply_account_status_change``: idempotent on
+    replay, skips silently when the event references an account we don't
+    own. ``event_time`` is accepted for symmetry with the sibling helper but
+    is not yet persisted — the schema has no sweep-event timestamp column
+    distinct from ``sweep_enrolled_at``, which is owned by the enrollment
+    request flow rather than this listener.
+    """
+    if not new_status:
+        return
+    account = await BrokerageAccountRepository.get_by_alpaca_account_id(
+        session, alpaca_account_id
+    )
+    if account is None:
+        logger.info(
+            "sweep_status_account_not_found",
+            alpaca_account_id=alpaca_account_id,
+            new_status=new_status,
+        )
+        return
+
+    if account.sweep_status == new_status:
+        return
+
+    previous = account.sweep_status
+    await BrokerageAccountRepository.update_status(
+        session,
+        account.id,
+        sweep_status=new_status,
+    )
+    logger.info(
+        "sweep_status_applied",
+        alpaca_account_id=alpaca_account_id,
+        previous_sweep_status=previous,
+        new_sweep_status=new_status,
     )

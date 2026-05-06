@@ -4,7 +4,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.services.account_status import apply_account_status_change
+from app.services.account_status import (
+    apply_account_status_change,
+    apply_sweep_status_change,
+)
 from app.services.alpaca_broker import (
     AlpacaBrokerError,
     AlpacaBrokerUnavailableError,
@@ -16,11 +19,12 @@ def session():
     return AsyncMock()
 
 
-def _account(status: str, kyc_results=None):
+def _account(status: str, kyc_results=None, sweep_status=None):
     acct = MagicMock()
     acct.id = uuid.uuid4()
     acct.account_status = status
     acct.kyc_results = kyc_results
+    acct.sweep_status = sweep_status
     return acct
 
 
@@ -256,6 +260,197 @@ async def test_active_replay_is_noop_for_profile_flag(session, monkeypatch):
 
     update.assert_not_awaited()
     profile_update.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# apply_sweep_status_change (SEV-529)
+# ---------------------------------------------------------------------------
+
+
+async def test_sweep_no_matching_account_is_noop(session, monkeypatch):
+    """Cash_interest events from accounts not owned by Sevino (multiplexed
+    on the same API key) must log + skip, never error."""
+    get = AsyncMock(return_value=None)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="unknown", new_status="ACTIVE"
+    )
+
+    get.assert_awaited_once()
+    update.assert_not_awaited()
+
+
+async def test_sweep_active_transition_updates_sweep_status(session, monkeypatch):
+    account = _account("ACTIVE", sweep_status=None)
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="abc", new_status="ACTIVE"
+    )
+
+    update.assert_awaited_once_with(
+        session, account.id, sweep_status="ACTIVE"
+    )
+
+
+async def test_sweep_inactive_transition_updates_sweep_status(session, monkeypatch):
+    account = _account("ACTIVE", sweep_status="ACTIVE")
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="abc", new_status="INACTIVE"
+    )
+
+    update.assert_awaited_once_with(
+        session, account.id, sweep_status="INACTIVE"
+    )
+
+
+async def test_sweep_replay_same_status_is_noop(session, monkeypatch):
+    """Replays of already-applied cash_interest events must not re-write."""
+    account = _account("ACTIVE", sweep_status="ACTIVE")
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="abc", new_status="ACTIVE"
+    )
+
+    update.assert_not_awaited()
+
+
+async def test_sweep_does_not_change_account_status(session, monkeypatch):
+    """The sweep helper must preserve the existing ``account_status`` — only
+    ``sweep_status`` belongs to it. Regression guard against accidentally
+    coupling cash_interest events to the account-lifecycle column."""
+    account = _account("ACTIVE", sweep_status="INACTIVE")
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="abc", new_status="ACTIVE"
+    )
+
+    # ``update_status`` must be called without a positional ``status`` arg —
+    # otherwise the repo would overwrite ``account_status`` with whatever the
+    # sweep helper passed.
+    args, kwargs = update.call_args
+    assert len(args) == 2  # (session, account_id) — no status positional
+    assert "status" not in kwargs
+
+
+async def test_sweep_event_time_not_persisted(session, monkeypatch):
+    """``event_time`` is documented as accepted-but-ignored on the sweep
+    helper. Pin that contract so a future refactor that adds persistence
+    cannot do so silently."""
+    account = _account("ACTIVE", sweep_status=None)
+    get = AsyncMock(return_value=account)
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session,
+        alpaca_account_id="abc",
+        new_status="ACTIVE",
+        event_time=datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc),
+    )
+
+    update.assert_awaited_once()
+    kwargs = update.await_args.kwargs
+    assert kwargs == {"sweep_status": "ACTIVE"}
+
+
+async def test_sweep_empty_new_status_is_noop(session, monkeypatch):
+    """Defensive precondition: empty ``new_status`` must not write — protects
+    future callers that bypass the listener's falsy filter."""
+    get = AsyncMock()
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_sweep_status_change(
+        session, alpaca_account_id="abc", new_status=""
+    )
+
+    get.assert_not_awaited()
+    update.assert_not_awaited()
+
+
+async def test_account_status_empty_new_status_is_noop(session, monkeypatch):
+    """Same precondition for the sibling helper."""
+    get = AsyncMock()
+    update = AsyncMock()
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.get_by_alpaca_account_id",
+        get,
+    )
+    monkeypatch.setattr(
+        "app.services.account_status.BrokerageAccountRepository.update_status",
+        update,
+    )
+
+    await apply_account_status_change(
+        session, alpaca_account_id="abc", new_status=""
+    )
+
+    get.assert_not_awaited()
+    update.assert_not_awaited()
 
 
 class TestSweepEnrollmentOnActive:

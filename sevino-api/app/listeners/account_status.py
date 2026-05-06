@@ -5,7 +5,10 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.listeners.base_sse import BaseSSEListener
-from app.services.account_status import apply_account_status_change
+from app.services.account_status import (
+    apply_account_status_change,
+    apply_sweep_status_change,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -56,25 +59,50 @@ class AccountStatusListener(BaseSSEListener):
         # AttributeError and we'd lose the structured "malformed_event"
         # breadcrumb to a generic exception capture. Fold the type check into
         # the main guard so every bad shape hits one warning path.
-        if (
-            not isinstance(data, dict)
-            or not data.get("account_id")
-            or not data.get("status_to")
-        ):
+        if not isinstance(data, dict) or not data.get("account_id"):
             logger.warning(
                 "account_status_malformed_event",
                 data_type=type(data).__name__,
                 data_keys=sorted(data.keys()) if isinstance(data, dict) else None,
             )
             return
-        alpaca_account_id = data["account_id"]
-        new_status = data["status_to"]
 
-        await apply_account_status_change(
-            session,
-            alpaca_account_id=alpaca_account_id,
-            new_status=new_status,
-            kyc_results=data.get("kyc_results"),
-            event_time=_parse_alpaca_timestamp(data.get("at")),
-            alpaca=self._broker,
+        alpaca_account_id = data["account_id"]
+        event_time = _parse_alpaca_timestamp(data.get("at"))
+
+        # Path 1: account-lifecycle status change (KYC / account_status).
+        # ``alpaca=self._broker`` is forwarded so the service can PATCH the
+        # FDIC sweep tier on the first ACTIVE transition (SEV-318/SEV-528).
+        if data.get("status_to"):
+            await apply_account_status_change(
+                session,
+                alpaca_account_id=alpaca_account_id,
+                new_status=data["status_to"],
+                kyc_results=data.get("kyc_results"),
+                event_time=event_time,
+                alpaca=self._broker,
+            )
+            return
+
+        # Path 2: cash_interest (FDIC sweep) status change. The status delta
+        # is nested under cash_interest.USD with no top-level status_to —
+        # see SEV-529 for the payload shape.
+        cash_interest_usd = (data.get("cash_interest") or {}).get("USD")
+        if cash_interest_usd and cash_interest_usd.get("status_to"):
+            await apply_sweep_status_change(
+                session,
+                alpaca_account_id=alpaca_account_id,
+                new_status=cash_interest_usd["status_to"],
+                event_time=event_time,
+            )
+            return
+
+        # Unknown payload shape — debug log so we can spot new event types
+        # Alpaca starts emitting on this stream without paging on every one
+        # (per SEV-529). Note: this also catches account-lifecycle payloads
+        # that pass the ``account_id`` guard but carry an empty/missing
+        # ``status_to`` — they're silently dropped here, not warned.
+        logger.debug(
+            "account_status_unhandled_event",
+            data_keys=sorted(data.keys()),
         )

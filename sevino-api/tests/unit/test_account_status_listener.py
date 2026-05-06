@@ -126,18 +126,127 @@ async def test_kyc_results_forwarded(listener, session, monkeypatch):
         "int",
     ],
 )
-async def test_malformed_event_skips_service_call(
+async def test_malformed_or_unhandled_event_skips_service_calls(
     listener, session, monkeypatch, data
 ):
-    apply = AsyncMock()
+    apply_status = AsyncMock()
+    apply_sweep = AsyncMock()
     monkeypatch.setattr(
-        "app.listeners.account_status.apply_account_status_change", apply
+        "app.listeners.account_status.apply_account_status_change", apply_status
+    )
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_sweep_status_change", apply_sweep
     )
 
-    # Must NOT raise — the warning log is the only observable effect.
+    # Must NOT raise — log is the only observable effect.
     await listener.handle_event(session, "", data)
 
-    apply.assert_not_awaited()
+    apply_status.assert_not_awaited()
+    apply_sweep.assert_not_awaited()
+
+
+async def test_cash_interest_event_calls_sweep_service(
+    listener, session, monkeypatch
+):
+    apply_status = AsyncMock()
+    apply_sweep = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_account_status_change", apply_status
+    )
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_sweep_status_change", apply_sweep
+    )
+
+    data = {
+        "cash_interest": {
+            "USD": {
+                "apr_tier_name_from": None,
+                "apr_tier_name_to": "standard",
+                "status_from": "PENDING_CHANGE",
+                "status_to": "ACTIVE",
+            }
+        },
+        "account_id": "382dd20d-0000-4000-8000-000000000001",
+        "at": "2024-06-11T19:00:00.000000Z",
+        "event_ulid": "01J2VQMVJRMXQRPNS3831XFE1Y",
+    }
+
+    await listener.handle_event(session, "", data)
+
+    apply_status.assert_not_awaited()
+    apply_sweep.assert_awaited_once_with(
+        session,
+        alpaca_account_id="382dd20d-0000-4000-8000-000000000001",
+        new_status="ACTIVE",
+        event_time=datetime(2024, 6, 11, 19, 0, 0, tzinfo=timezone.utc),
+    )
+
+
+async def test_cash_interest_inactive_status_forwarded(
+    listener, session, monkeypatch
+):
+    apply_sweep = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_account_status_change", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_sweep_status_change", apply_sweep
+    )
+
+    await listener.handle_event(
+        session,
+        "",
+        {
+            "account_id": "abc",
+            "cash_interest": {"USD": {"status_to": "INACTIVE"}},
+        },
+    )
+
+    assert apply_sweep.await_args.kwargs["new_status"] == "INACTIVE"
+
+
+async def test_account_status_event_does_not_dispatch_sweep(
+    listener, session, monkeypatch
+):
+    """Path 1 short-circuits before Path 2 — a status-change event with no
+    cash_interest payload must not touch the sweep service."""
+    apply_status = AsyncMock()
+    apply_sweep = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_account_status_change", apply_status
+    )
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_sweep_status_change", apply_sweep
+    )
+
+    await listener.handle_event(
+        session, "", {"account_id": "abc", "status_to": "ACTIVE"}
+    )
+
+    apply_status.assert_awaited_once()
+    apply_sweep.assert_not_awaited()
+
+
+async def test_cash_interest_event_with_empty_status_to_skipped(
+    listener, session, monkeypatch
+):
+    """Defensive: nested status_to that is empty/None must not dispatch
+    to the sweep service — same falsy-string contract as Path 1."""
+    apply_sweep = AsyncMock()
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_account_status_change", AsyncMock()
+    )
+    monkeypatch.setattr(
+        "app.listeners.account_status.apply_sweep_status_change", apply_sweep
+    )
+
+    await listener.handle_event(
+        session,
+        "",
+        {"account_id": "abc", "cash_interest": {"USD": {"status_to": ""}}},
+    )
+
+    apply_sweep.assert_not_awaited()
 
 
 async def test_unparseable_at_timestamp_passes_none(
