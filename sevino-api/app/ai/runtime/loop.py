@@ -118,10 +118,15 @@ async def run_agent_turn(
     terminal_state: str | None = None
     error_code: ErrorCode | None = None
 
-    # System block uses list shape so A1.8 can append cache_control without
-    # restructuring the request.
+    # Per A1.8: mark the system block as a cache breakpoint. Anthropic caches
+    # everything up to the marker, so the system prompt is reused across turns
+    # within the 5m TTL — input cost drops to the cache-read rate on hits.
     request_system: list[dict[str, Any]] = [
-        {"type": "text", "text": system_prompt.text}
+        {
+            "type": "text",
+            "text": system_prompt.text,
+            "cache_control": {"type": "ephemeral"},
+        }
     ]
 
     try:
@@ -141,9 +146,16 @@ async def run_agent_turn(
                 "max_tokens": hard_caps.max_output_tokens,
             }
             # Anthropic 400s on an empty tools array, so omit the key
-            # entirely when no tools are registered (the v0 case).
+            # entirely when no tools are registered (the v0 case). Per A1.8:
+            # mark the last tool with cache_control so the entire tools array
+            # is cached together with the system prompt.
             if not tool_registry.is_empty:
-                create_kwargs["tools"] = tool_registry.to_anthropic_spec()
+                tools_spec = list(tool_registry.to_anthropic_spec() or [])
+                tools_spec[-1] = {
+                    **tools_spec[-1],
+                    "cache_control": {"type": "ephemeral"},
+                }
+                create_kwargs["tools"] = tools_spec
 
             iter_started = time.monotonic()
             try:

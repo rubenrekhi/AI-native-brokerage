@@ -203,7 +203,11 @@ class TestHappyPath:
         assert kwargs["iteration_index"] == 0
         assert kwargs["model_id"] == MODEL_ID
         assert kwargs["request_system"] == [
-            {"type": "text", "text": SYSTEM_PROMPT.text}
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
         # The request_messages list is built from history; with empty history
         # plus the just-persisted user message it would be [], because the
@@ -283,7 +287,11 @@ class TestRequestShape:
         assert "tools" not in create_kwargs
         assert create_kwargs["model"] == MODEL_ID
         assert create_kwargs["system"] == [
-            {"type": "text", "text": SYSTEM_PROMPT.text}
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
         assert create_kwargs["max_tokens"] == HardCaps().max_output_tokens
 
@@ -291,9 +299,13 @@ class TestRequestShape:
         self, repo_mocks
     ):
         # Sanity check the contract for Project C: when a non-empty registry
-        # is passed, the loop forwards its spec verbatim. The actual Tool
-        # ABC and registry implementation land later.
-        spec = [{"name": "get_stock_info", "description": "...", "input_schema": {}}]
+        # is passed, the loop forwards its spec (with the A1.8 cache marker
+        # appended to the last entry). The actual Tool ABC and registry
+        # implementation land later.
+        spec = [
+            {"name": "get_stock_info", "description": "...", "input_schema": {}},
+            {"name": "get_quote", "description": "...", "input_schema": {}},
+        ]
 
         class _Reg:
             @property
@@ -308,7 +320,35 @@ class TestRequestShape:
         await _run(client, repo_mocks, tool_registry=_Reg())
 
         create_kwargs = client.messages.create.call_args.kwargs
-        assert create_kwargs["tools"] == spec
+        # Only the last tool gets cache_control; earlier tools are unchanged.
+        assert create_kwargs["tools"] == [
+            {"name": "get_stock_info", "description": "...", "input_schema": {}},
+            {
+                "name": "get_quote",
+                "description": "...",
+                "input_schema": {},
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+        # Registry's own list must not be mutated — the loop copies before
+        # appending the cache marker.
+        assert "cache_control" not in spec[-1]
+
+    async def test_system_block_carries_cache_control(self, repo_mocks):
+        # A1.8 acceptance: the system block sent to Anthropic must carry the
+        # ephemeral cache marker so the prompt is cached across turns.
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        create_kwargs = client.messages.create.call_args.kwargs
+        assert create_kwargs["system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
 
 
 # ---------- cap breaches ----------

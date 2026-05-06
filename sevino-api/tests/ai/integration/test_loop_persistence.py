@@ -231,9 +231,15 @@ class TestHappyPathPersistence:
             assert inv.model_id == MODEL_ID
             assert inv.stop_reason == "end_turn"
             # JSONB shape: full request/response captured for audit + the
-            # next-turn thinking-signature roundtrip A1.7 will rely on.
+            # next-turn thinking-signature roundtrip A1.7 will rely on. Per
+            # A1.8 the system block is persisted with its cache_control
+            # marker so the audit row matches what was actually sent.
             assert inv.request_system == [
-                {"type": "text", "text": SYSTEM_PROMPT.text}
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT.text,
+                    "cache_control": {"type": "ephemeral"},
+                }
             ]
             assert inv.request_messages == [
                 {
