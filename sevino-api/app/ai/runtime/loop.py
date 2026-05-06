@@ -6,6 +6,15 @@ exactly one Anthropic call per turn (``stop_reason == "end_turn"``
 immediately) — but the loop is structured to handle multi-iteration tool
 use without restructuring once Project C lands.
 
+A1.7 adds extended thinking: every Anthropic call sends
+``thinking={"type": "enabled", "budget_tokens": 1024}`` and the loop
+continues iterating on ``stop_reason == "pause_turn"`` (Anthropic's
+documented "continue verbatim" signal). The prior assistant content —
+including ``thinking`` blocks **with their signatures** — is appended to
+``messages`` before the next call so iteration N+1's request roundtrips
+the iteration-N signature byte-for-byte. ``model_invocations.response_content``
+is the source of truth (decision R1 in the plan).
+
 **No FastAPI imports.** All collaborators (Anthropic client, DB factory,
 tool registry, system prompt, model config, hard caps) are passed in by
 the caller (typically the chat-turn endpoint added in A1.9) so the same
@@ -50,6 +59,36 @@ _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
     CapBreach.TIMEOUT: ErrorCode.INTERNAL_ERROR,
 }
 
+# A1.7. Anthropic requires budget_tokens >= 1024 and < max_tokens for
+# extended thinking. v0 hardcodes the floor; future model configs can
+# carry a per-turn override (see ``ModelConfig`` docstring).
+_THINKING_BUDGET_TOKENS = 1024
+
+# Rough chars-per-token used to estimate thinking token usage from the
+# visible thinking block content. Anthropic bundles thinking tokens into
+# ``Usage.output_tokens`` and does not expose a per-block breakdown, so
+# this heuristic gives an order-of-magnitude indicator for the
+# ``thinking_tokens`` audit columns. ``redacted_thinking`` blocks have
+# encrypted content that doesn't correlate with token count, so they
+# contribute zero — the audit row will undercount when redacted thinking
+# fires, which is acceptable for v0 observability.
+_CHARS_PER_TOKEN = 4
+
+
+def _estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:
+    """Approximate thinking tokens from the visible ``thinking`` block text.
+
+    See ``_CHARS_PER_TOKEN`` for why this is a heuristic rather than an
+    exact count.
+    """
+    total = 0
+    for block in response_content:
+        if block.get("type") == "thinking":
+            text = block.get("thinking") or ""
+            if isinstance(text, str):
+                total += len(text) // _CHARS_PER_TOKEN
+    return total
+
 
 async def run_agent_turn(
     *,
@@ -74,7 +113,19 @@ async def run_agent_turn(
 
     The conversation row at ``conversation_id`` must already exist (the
     endpoint creates it on first turn per decision D6).
+
+    Raises ``ValueError`` if ``hard_caps.max_output_tokens`` is not strictly
+    greater than the thinking budget — Anthropic 400s on every call when
+    ``budget_tokens >= max_tokens``. Fails fast before any DB writes so a
+    misconfigured cap can't leave half-written audit rows.
     """
+    if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
+        raise ValueError(
+            f"hard_caps.max_output_tokens ({hard_caps.max_output_tokens}) "
+            f"must be > thinking budget ({_THINKING_BUDGET_TOKENS}); "
+            f"Anthropic requires budget_tokens < max_tokens."
+        )
+
     # 1. Persist the user message before anything else so a crash mid-turn
     #    still leaves the user's input recorded.
     async with db_factory() as db:
@@ -113,6 +164,7 @@ async def run_agent_turn(
         "output": 0,
         "cache_read": 0,
         "cache_creation": 0,
+        "thinking": 0,
         "cost": 0,
     }
     terminal_state: str | None = None
@@ -144,6 +196,10 @@ async def run_agent_turn(
                 "system": request_system,
                 "messages": messages,
                 "max_tokens": hard_caps.max_output_tokens,
+                "thinking": {
+                    "type": "enabled",
+                    "budget_tokens": _THINKING_BUDGET_TOKENS,
+                },
             }
             # Anthropic 400s on an empty tools array, so omit the key
             # entirely when no tools are registered (the v0 case). Per A1.8:
@@ -175,6 +231,7 @@ async def run_agent_turn(
             response_content = [
                 block.model_dump(mode="json") for block in response.content
             ]
+            iter_thinking_tokens = _estimate_thinking_tokens(response_content)
 
             async with db_factory() as db:
                 await ConversationRepository.record_model_invocation(
@@ -194,6 +251,7 @@ async def run_agent_turn(
                     cache_creation_input_tokens=(
                         response.usage.cache_creation_input_tokens or 0
                     ),
+                    thinking_tokens=iter_thinking_tokens,
                     cost_usd_micros=cost,
                     latency_ms=latency_ms,
                 )
@@ -206,6 +264,7 @@ async def run_agent_turn(
             totals["cache_creation"] += (
                 response.usage.cache_creation_input_tokens or 0
             )
+            totals["thinking"] += iter_thinking_tokens
             totals["cost"] += cost
 
             messages.append({"role": "assistant", "content": response_content})
@@ -233,8 +292,18 @@ async def run_agent_turn(
                 terminal_state = "error"
                 error_code = ErrorCode.INTERNAL_ERROR
                 break
-            # Any other stop reason (pause_turn, refusal, etc.) — record
-            # verbatim so the audit row carries the real signal.
+            if response.stop_reason == "pause_turn":
+                # Anthropic paused a long-running turn (typically mid
+                # extended-thinking). Per the API contract we continue by
+                # passing the response content back as-is — already
+                # appended to ``messages`` above, so the next iteration's
+                # request will roundtrip the iteration-N thinking block
+                # with its signature intact (A1.7 requirement R1). The
+                # cap check at the top of the next iteration enforces
+                # wall-clock / iteration / output-token bounds.
+                continue
+            # Any other stop reason (refusal, stop_sequence, etc.) —
+            # record verbatim so the audit row carries the real signal.
             terminal_state = response.stop_reason or "unknown"
             break
     finally:
@@ -266,7 +335,7 @@ async def run_agent_turn(
                 total_output_tokens=totals["output"],
                 total_cache_read_tokens=totals["cache_read"],
                 total_cache_creation_tokens=totals["cache_creation"],
-                total_thinking_tokens=0,
+                total_thinking_tokens=totals["thinking"],
                 total_cost_usd_micros=totals["cost"],
             )
 
