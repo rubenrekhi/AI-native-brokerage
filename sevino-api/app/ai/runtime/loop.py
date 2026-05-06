@@ -150,7 +150,7 @@ async def run_agent_turn(
             # mark the last tool with cache_control so the entire tools array
             # is cached together with the system prompt.
             if not tool_registry.is_empty:
-                tools_spec = list(tool_registry.to_anthropic_spec() or [])
+                tools_spec = list(tool_registry.to_anthropic_spec())
                 tools_spec[-1] = {
                     **tools_spec[-1],
                     "cache_control": {"type": "ephemeral"},
