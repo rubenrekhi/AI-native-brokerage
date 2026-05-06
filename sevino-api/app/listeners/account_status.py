@@ -76,4 +76,5 @@ class AccountStatusListener(BaseSSEListener):
             new_status=new_status,
             kyc_results=data.get("kyc_results"),
             event_time=_parse_alpaca_timestamp(data.get("at")),
+            alpaca=self._broker,
         )
