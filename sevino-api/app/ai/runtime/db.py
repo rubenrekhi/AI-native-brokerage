@@ -17,6 +17,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator, Callable
 from contextlib import AbstractAsyncContextManager, asynccontextmanager
 
+from fastapi import Request
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -24,6 +25,13 @@ from sqlalchemy.ext.asyncio import (
 )
 
 DbSessionFactory = Callable[[], AbstractAsyncContextManager[AsyncSession]]
+
+
+def get_db_factory(request: Request) -> DbSessionFactory:
+    """FastAPI dependency that returns the singleton db_factory bound to
+    the app engine in ``lifespan``. Tests override via
+    ``app.dependency_overrides[get_db_factory]``."""
+    return request.app.state.db_factory
 
 
 def make_session_factory(engine: AsyncEngine) -> DbSessionFactory:

@@ -3,7 +3,9 @@ from arq.connections import create_pool
 from fastapi import FastAPI
 from app.ai.anthropic_client import create_anthropic_client
 from app.ai.observability.langfuse import create_langfuse_client
+from app.ai.runtime.db import make_session_factory
 from app.config import get_redis_settings, settings
+from app.database import engine
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.phone_verification import PhoneVerificationService
 from app.services.plaid import PlaidService
@@ -18,6 +20,7 @@ async def lifespan(app: FastAPI):
     app.state.supabase_admin = SupabaseAdminService()
     app.state.anthropic = create_anthropic_client()
     app.state.langfuse = create_langfuse_client(settings)
+    app.state.db_factory = make_session_factory(engine)
     yield
     app.state.langfuse.shutdown()
     await app.state.anthropic.close()
