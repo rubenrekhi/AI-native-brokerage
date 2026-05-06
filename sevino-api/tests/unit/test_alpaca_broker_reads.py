@@ -24,10 +24,10 @@ async def test_get_trading_account_calls_expected_endpoint(service):
     )
 
 
-async def test_get_positions_calls_expected_endpoint(service):
+async def test_list_positions_calls_expected_endpoint(service):
     service._request.return_value = [{"symbol": "AAPL", "qty": "10"}]
 
-    result = await service.get_positions("acc_abc")
+    result = await service.list_positions("acc_abc")
 
     assert result == [{"symbol": "AAPL", "qty": "10"}]
     service._request.assert_awaited_once_with(

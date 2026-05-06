@@ -12,7 +12,7 @@ from app.services.portfolio import HOLDINGS_TTL, PortfolioService
 def alpaca():
     svc = AsyncMock()
     svc.get_trading_account = AsyncMock()
-    svc.get_positions = AsyncMock()
+    svc.list_positions = AsyncMock()
     return svc
 
 
@@ -71,7 +71,7 @@ class TestHoldingsHappyPath:
         self, service, alpaca, redis
     ):
         alpaca.get_trading_account.return_value = _account()
-        alpaca.get_positions.return_value = [
+        alpaca.list_positions.return_value = [
             _position("AAPL", "200.00"),
             _position("TSLA", "1500.00"),
         ]
@@ -104,7 +104,7 @@ class TestHoldingsHappyPath:
         self, service, alpaca
     ):
         alpaca.get_trading_account.return_value = _account()
-        alpaca.get_positions.return_value = [_position("XYZ", "50.00")]
+        alpaca.list_positions.return_value = [_position("XYZ", "50.00")]
 
         with patch(
             "app.services.portfolio.AssetRepository.get_names_by_symbols",
@@ -122,7 +122,7 @@ class TestHoldingsTotals:
         self, service, alpaca
     ):
         alpaca.get_trading_account.return_value = _account(cash="9999.99")
-        alpaca.get_positions.return_value = [
+        alpaca.list_positions.return_value = [
             _position("AAA", "100.00"),
             _position("BBB", "200.00"),
             _position("CCC", "50.50"),
@@ -143,7 +143,7 @@ class TestHoldingsTotals:
         self, service, alpaca
     ):
         alpaca.get_trading_account.return_value = _account(cash="500.00")
-        alpaca.get_positions.return_value = []
+        alpaca.list_positions.return_value = []
 
         with patch(
             "app.services.portfolio.AssetRepository.get_names_by_symbols",
@@ -163,7 +163,7 @@ class TestHoldingsTotals:
 class TestHoldingsFractionalQty:
     async def test_fractional_qty_survives_serialization(self, service, alpaca):
         alpaca.get_trading_account.return_value = _account()
-        alpaca.get_positions.return_value = [
+        alpaca.list_positions.return_value = [
             _position("AAPL", "12.34", qty="0.125", avg_entry_price="98.72"),
         ]
 
@@ -183,7 +183,7 @@ class TestHoldingsConcurrency:
         self, service, alpaca
     ):
         alpaca.get_trading_account.return_value = _account()
-        alpaca.get_positions.return_value = []
+        alpaca.list_positions.return_value = []
 
         with patch(
             "app.services.portfolio.AssetRepository.get_names_by_symbols",
@@ -196,7 +196,7 @@ class TestHoldingsConcurrency:
         # concurrently. We can't observe the parallelism directly in a
         # mock, but we can verify both were awaited with the right args.
         alpaca.get_trading_account.assert_awaited_once_with("alp_acc_1")
-        alpaca.get_positions.assert_awaited_once_with("alp_acc_1")
+        alpaca.list_positions.assert_awaited_once_with("alp_acc_1")
 
 
 class TestHoldingsCaching:
@@ -232,6 +232,6 @@ class TestHoldingsCaching:
 
         assert response.model_dump(mode="json") == cached_payload
         alpaca.get_trading_account.assert_not_awaited()
-        alpaca.get_positions.assert_not_awaited()
+        alpaca.list_positions.assert_not_awaited()
         get_names.assert_not_awaited()
         redis.setex.assert_not_awaited()

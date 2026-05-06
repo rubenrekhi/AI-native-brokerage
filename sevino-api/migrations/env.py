@@ -14,16 +14,19 @@ if config.config_file_name is not None:
 
 from app.models import (  # noqa: F401, E402
     AchRelationship,
+    AgentTurn,
     Asset,
     Base,
     BrokerageAccount,
     Conversation,
     FeatureFlag,
     Message,
+    ModelInvocation,
     OrderEvent,
     PlaidItem,
     RadarItem,
     SseCheckpoint,
+    ToolExecution,
     UserFinancialProfile,
     UserProfile,
     UserSettings,
@@ -40,8 +43,17 @@ target_metadata = Base.metadata
 # `user_profiles.id` → `auth.users.id`. It's created via raw SQL in the
 # initial migration because `auth.users` is Supabase-managed and we
 # deliberately keep it out of the SQLAlchemy models.
+#
+# The `ix_assets_*` indexes are GIN trigram / partial indexes created via
+# raw SQL in the assets migration — SQLAlchemy can't express them, so they
+# only exist in the DB.
 _AUTOGEN_IGNORED_NAMES: dict[str, set[str]] = {
     "foreign_key_constraint": {"fk_user_profiles_auth_users"},
+    "index": {
+        "ix_assets_name_trgm",
+        "ix_assets_symbol_trgm",
+        "ix_assets_tradeable",
+    },
 }
 
 

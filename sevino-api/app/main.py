@@ -24,6 +24,7 @@ from app.routes.onboarding import router as onboarding_router
 from app.routes.phone_auth import router as phone_auth_router
 from app.routes.portfolio import router as portfolio_router
 from app.routes.settings import router as settings_router
+from app.routes.trading import router as trading_router
 
 configure_logging(settings.environment)
 
@@ -114,6 +115,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(brokerage_router, prefix="/v1/brokerage", tags=["brokerage"])
     app.include_router(portfolio_router, prefix="/v1/portfolio", tags=["portfolio"])
     app.include_router(settings_router, prefix="/v1/settings", tags=["settings"])
+    app.include_router(trading_router, prefix="/v1/trading", tags=["trading"])
 
 
 include_routers(app)

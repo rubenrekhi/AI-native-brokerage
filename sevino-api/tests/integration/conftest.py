@@ -50,6 +50,41 @@ except Exception:
     _pg_available_sync = False
 
 
+async def insert_auth_user(
+    session: AsyncSession, *, user_id: uuid.UUID, email: str
+) -> None:
+    """Insert a row into ``auth.users`` (and matching ``user_profiles``) so
+    integration tests can satisfy FKs without going through Supabase auth.
+
+    Reused by ``test_user`` and by tests that need to commit a user outside
+    the rolling-back ``db_session`` (e.g. cross-session concurrency tests).
+    """
+    await session.execute(
+        text("""
+            INSERT INTO auth.users (
+                id, instance_id, email, encrypted_password,
+                aud, role, raw_app_meta_data, raw_user_meta_data,
+                created_at, updated_at, confirmation_token, email_change,
+                email_change_token_new, recovery_token
+            ) VALUES (
+                :id, '00000000-0000-0000-0000-000000000000', :email, '',
+                'authenticated', 'authenticated', '{}', '{}',
+                now(), now(), '', '', '', ''
+            )
+            ON CONFLICT (id) DO NOTHING
+        """),
+        {"id": user_id, "email": email},
+    )
+    await session.execute(
+        text("""
+            INSERT INTO user_profiles (id, email, created_at, updated_at)
+            VALUES (:id, :email, now(), now())
+            ON CONFLICT (id) DO NOTHING
+        """),
+        {"id": user_id, "email": email},
+    )
+
+
 @pytest.fixture(scope="session")
 def db_engine():
     """Create a single engine for the entire test session."""
@@ -94,37 +129,55 @@ async def test_user(db_session: AsyncSession):
     Rolled back with the session after the test.
     """
     user_id = uuid.UUID(TEST_USER_ID)
-
-    # Insert into auth.users (minimal fields to satisfy the FK)
-    await db_session.execute(
-        text("""
-            INSERT INTO auth.users (
-                id, instance_id, email, encrypted_password,
-                aud, role, raw_app_meta_data, raw_user_meta_data,
-                created_at, updated_at, confirmation_token, email_change,
-                email_change_token_new, recovery_token
-            ) VALUES (
-                :id, '00000000-0000-0000-0000-000000000000', :email, '',
-                'authenticated', 'authenticated', '{}', '{}',
-                now(), now(), '', '', '', ''
-            )
-            ON CONFLICT (id) DO NOTHING
-        """),
-        {"id": user_id, "email": TEST_USER_EMAIL},
-    )
-
-    # Insert user_profiles row (normally done by trigger)
-    await db_session.execute(
-        text("""
-            INSERT INTO user_profiles (id, email, created_at, updated_at)
-            VALUES (:id, :email, now(), now())
-            ON CONFLICT (id) DO NOTHING
-        """),
-        {"id": user_id, "email": TEST_USER_EMAIL},
-    )
-
+    await insert_auth_user(db_session, user_id=user_id, email=TEST_USER_EMAIL)
     await db_session.flush()
     return user_id
+
+
+@pytest.fixture
+def make_extra_user(db_session: AsyncSession):
+    """Factory for inserting a fresh ``auth.users`` + ``user_profiles`` pair
+    inside the same session. Used by cross-user ownership tests that need a
+    *second* user alongside the default ``test_user`` fixture. The session-
+    level rollback in :func:`db_session` cleans up after the test, so no
+    explicit teardown is needed.
+    """
+
+    async def _make() -> uuid.UUID:
+        user_id = uuid.uuid4()
+        email = f"other-{user_id}@example.com"
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO auth.users (
+                    id, instance_id, email, encrypted_password,
+                    aud, role, raw_app_meta_data, raw_user_meta_data,
+                    created_at, updated_at, confirmation_token, email_change,
+                    email_change_token_new, recovery_token
+                ) VALUES (
+                    :id, '00000000-0000-0000-0000-000000000000', :email, '',
+                    'authenticated', 'authenticated', '{}', '{}',
+                    now(), now(), '', '', '', ''
+                )
+                ON CONFLICT (id) DO NOTHING
+                """
+            ),
+            {"id": user_id, "email": email},
+        )
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO user_profiles (id, email, created_at, updated_at)
+                VALUES (:id, :email, now(), now())
+                ON CONFLICT (id) DO NOTHING
+                """
+            ),
+            {"id": user_id, "email": email},
+        )
+        await db_session.flush()
+        return user_id
+
+    return _make
 
 
 @pytest.fixture
