@@ -961,6 +961,130 @@ async def test_stream_once_mixed_events_and_comments(
     assert any("dropped 10000" in msg for msg in captured_messages)
 
 
+async def test_stream_once_invokes_on_reconnect_before_events(
+    broker, fake_session, monkeypatch
+):
+    """The reconcile-sweep hook must run after the connect handshake but
+    before the first event is dispatched, so any gap not covered by
+    ``since_id`` replay is closed before live events start landing."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    class _OrderingListener(BaseSSEListener):
+        stream_name = "test_stream"
+        endpoint_path = "/"
+        silence_threshold_seconds = 60
+
+        def __init__(self, broker):
+            super().__init__(broker)
+            self.order: list[str] = []
+
+        async def on_reconnect(self):
+            self.order.append("reconnect")
+
+        async def handle_event(self, session, event_type, data):
+            self.order.append(f"event:{data['event_ulid']}")
+
+    sse_body = (
+        b"event: account_status\n"
+        b'data: {"event_ulid": "evt_1"}\n'
+        b"\n"
+        b"event: account_status\n"
+        b'data: {"event_ulid": "evt_2"}\n'
+        b"\n"
+    )
+
+    transport = httpx.MockTransport(lambda _req: _sse_response(sse_body))
+    listener = _OrderingListener(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    assert listener.order == ["reconnect", "event:evt_1", "event:evt_2"]
+
+
+async def test_stream_once_swallows_on_reconnect_exceptions(
+    broker, fake_session, monkeypatch
+):
+    """A broken on_reconnect hook must not kill the listener loop — events
+    still flow, and the failure flows to Sentry tagged with the stream and
+    phase so ops can filter for it."""
+    monkeypatch.setattr(broker, "_get_token", AsyncMock(return_value="tok"))
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.get",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "app.listeners.base_sse.SseCheckpointRepository.upsert", AsyncMock()
+    )
+
+    capture = MagicMock()
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.capture_exception", capture
+    )
+
+    error_calls: list[tuple[str, dict]] = []
+    monkeypatch.setattr(
+        "app.listeners.base_sse.logger.error",
+        lambda event, **kwargs: error_calls.append((event, kwargs)),
+    )
+
+    captured_tags: dict = {}
+
+    class _FakeScope:
+        def set_tag(self, k, v):
+            captured_tags[k] = v
+
+        def set_context(self, _k, _v):
+            pass
+
+    class _FakeScopeManager:
+        def __enter__(self):
+            return _FakeScope()
+
+        def __exit__(self, *_exc):
+            return None
+
+    monkeypatch.setattr(
+        "app.listeners.base_sse.sentry_sdk.new_scope",
+        lambda: _FakeScopeManager(),
+    )
+
+    class _FailingReconnect(_CaptureListener):
+        async def on_reconnect(self):
+            raise RuntimeError("reconcile boom")
+
+    sse_body = (
+        b"event: account_status\n"
+        b'data: {"event_ulid": "evt_1"}\n'
+        b"\n"
+    )
+
+    transport = httpx.MockTransport(lambda _req: _sse_response(sse_body))
+    listener = _FailingReconnect(broker)
+
+    async with httpx.AsyncClient(transport=transport) as client:
+        await listener._stream_once(client)
+
+    assert listener.handled == [("account_status", {"event_ulid": "evt_1"})]
+    capture.assert_called_once()
+    assert captured_tags["sse_stream"] == "test_stream"
+    assert captured_tags["sse_phase"] == "on_reconnect"
+    failure_logs = [
+        kwargs for event, kwargs in error_calls
+        if event == "sse_listener_on_reconnect_failed"
+    ]
+    assert len(failure_logs) == 1
+    assert failure_logs[0]["stream"] == "test_stream"
+    assert failure_logs[0]["exc_type"] == "RuntimeError"
+
+
 async def test_stream_once_comment_between_multiline_data_preserves_event(
     broker, fake_session, monkeypatch
 ):

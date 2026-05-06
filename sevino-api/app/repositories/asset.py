@@ -69,6 +69,16 @@ class AssetRepository:
         return {row.symbol: row.name for row in result}
 
     @staticmethod
+    async def get_by_symbol(db: AsyncSession, symbol: str) -> Asset | None:
+        result = await db.execute(
+            select(Asset).where(
+                Asset.symbol == symbol.upper(),
+                Asset.tradeable.is_(True),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def bulk_upsert(
         db: AsyncSession, assets: Iterable[dict[str, Any]]
     ) -> None:

@@ -10,6 +10,7 @@ from app.models.base import Base, TimestampMixin
 
 if TYPE_CHECKING:
     from app.models.ach_relationship import AchRelationship
+    from app.models.agent_turn import AgentTurn
     from app.models.brokerage_account import BrokerageAccount
     from app.models.conversation import Conversation
     from app.models.order_event import OrderEvent
@@ -87,5 +88,8 @@ class UserProfile(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan"
     )
     order_events: Mapped[list["OrderEvent"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_turns: Mapped[list["AgentTurn"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

@@ -19,7 +19,7 @@ test:
 
 # Run unit tests only
 test-unit:
-	uv run pytest tests/unit
+	uv run pytest tests/unit tests/ai/unit
 
 # Create a new migration
 migration:
