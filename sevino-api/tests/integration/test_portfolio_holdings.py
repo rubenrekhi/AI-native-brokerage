@@ -63,6 +63,8 @@ def _position(symbol: str, market_value: str, **overrides) -> dict:
         "cost_basis": "100.00",
         "unrealized_pl": "0.00",
         "unrealized_plpc": "0.0000",
+        "lastday_price": "100.00",
+        "change_today": "0.0000",
     }
     base.update(overrides)
     return base
@@ -166,6 +168,35 @@ class TestHoldingsHappyPath:
         assert response.status_code == 200
         body = response.json()
         assert body["positions"][0]["qty"] == "0.125"
+
+    async def test_change_today_renders_in_response(
+        self,
+        authenticated_db_client,
+        test_brokerage_account,
+        portfolio_deps,
+        seed_assets,
+    ):
+        # 100 shares moved $10 each today = $1000 position-level $
+        # gain. iOS renders this directly under "Day's Gain" — no further
+        # multiplication.
+        alpaca_mock, _ = portfolio_deps
+        alpaca_mock.list_positions.return_value = [
+            _position(
+                "TSLA",
+                "11000.00",
+                qty="100",
+                current_price="110.00",
+                lastday_price="100.00",
+                change_today="0.10",
+            ),
+        ]
+
+        response = await authenticated_db_client.get("/v1/portfolio/holdings")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["positions"][0]["change_today"] == "1000.00"
+        assert body["positions"][0]["change_today_percent"] == "0.1000"
 
     async def test_unknown_symbol_falls_back_to_symbol_as_name(
         self,

@@ -61,6 +61,8 @@ def _position(symbol: str, market_value: str, **overrides) -> dict:
         "cost_basis": "100.00",
         "unrealized_pl": "0.00",
         "unrealized_plpc": "0.0000",
+        "lastday_price": "100.00",
+        "change_today": "0.0000",
     }
     base.update(overrides)
     return base
@@ -160,6 +162,106 @@ class TestHoldingsTotals:
         get_names.assert_awaited_once_with(service._db, [])
 
 
+class TestHoldingsChangeToday:
+    async def test_positive_change_today_is_position_level(self, service, alpaca):
+        # 100 shares moved $10 each = $1000 position-level today.
+        alpaca.get_trading_account.return_value = _account()
+        alpaca.list_positions.return_value = [
+            _position(
+                "TSLA",
+                "11000.00",
+                qty="100",
+                current_price="110.00",
+                lastday_price="100.00",
+                change_today="0.10",
+            ),
+        ]
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["positions"][0]["change_today"] == "1000.00"
+        assert dumped["positions"][0]["change_today_percent"] == "0.1000"
+
+    async def test_negative_change_today_is_position_level(self, service, alpaca):
+        alpaca.get_trading_account.return_value = _account()
+        alpaca.list_positions.return_value = [
+            _position(
+                "AMD",
+                "9000.00",
+                qty="100",
+                current_price="90.00",
+                lastday_price="100.00",
+                change_today="-0.10",
+            ),
+        ]
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["positions"][0]["change_today"] == "-1000.00"
+        assert dumped["positions"][0]["change_today_percent"] == "-0.1000"
+
+    async def test_fractional_qty_scales_change_today(self, service, alpaca):
+        # 0.5 shares × $10 move = $5.00 position-level.
+        alpaca.get_trading_account.return_value = _account()
+        alpaca.list_positions.return_value = [
+            _position(
+                "AAPL",
+                "55.00",
+                qty="0.5",
+                current_price="110.00",
+                lastday_price="100.00",
+                change_today="0.10",
+            ),
+        ]
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["positions"][0]["change_today"] == "5.00"
+        assert dumped["positions"][0]["change_today_percent"] == "0.1000"
+
+    async def test_missing_lastday_price_zeros_both_fields(self, service, alpaca):
+        # New listing with no prior trading day. Both $ and % must zero
+        # together — the response must never pair $0.00 with a non-zero %.
+        alpaca.get_trading_account.return_value = _account()
+        position = _position(
+            "NEW",
+            "100.00",
+            current_price="100.00",
+            change_today="0.0084",  # stale residual percent from Alpaca
+        )
+        position.pop("lastday_price")
+        alpaca.list_positions.return_value = [position]
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["positions"][0]["change_today"] == "0.00"
+        assert dumped["positions"][0]["change_today_percent"] == "0.0000"
+
+
 class TestHoldingsFractionalQty:
     async def test_fractional_qty_survives_serialization(self, service, alpaca):
         alpaca.get_trading_account.return_value = _account()
@@ -219,6 +321,8 @@ class TestHoldingsCaching:
                     "cost_basis": "150.00",
                     "unrealized_pl": "50.00",
                     "unrealized_plpc": "0.3333",
+                    "change_today": "5.00",
+                    "change_today_percent": "0.0257",
                 }
             ],
         }

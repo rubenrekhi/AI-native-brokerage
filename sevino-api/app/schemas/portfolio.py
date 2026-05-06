@@ -32,6 +32,8 @@ class Position(BaseModel):
     cost_basis: MoneyStr
     unrealized_pl: MoneyStr
     unrealized_plpc: PctStr
+    change_today: MoneyStr
+    change_today_percent: PctStr
 
 
 class HoldingsResponse(BaseModel):

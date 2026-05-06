@@ -247,8 +247,12 @@ Full transfer status values: `QUEUED`, `APPROVAL_PENDING`, `PENDING`, `SENT_TO_C
 
 - `symbol`, `qty`, `current_price`, `market_value`
 - `cost_basis`, `unrealized_pl`, `unrealized_plpc`
+- `lastday_price` (previous trading day's close, $)
+- `change_today` (Alpaca's name; **percent factor of 1**, e.g. `"0.0084"` = 0.84%)
 
 Market values are updated live by Alpaca — a fresh call returns current data.
+
+> Note: Alpaca's `change_today` is a **percent factor**, not a dollar amount. Sevino's `/v1/portfolio/holdings` response renames this to `change_today_percent` and adds a separate `change_today` field that is the **position-level** `$` gain today (`(current_price − lastday_price) × qty`). Position-level matches the unit of `unrealized_pl`, so the iOS "Day's Gain" and "Total Gain" rows are directly comparable. When `lastday_price` is missing or zero (e.g. brand new listings), both fields zero out together — the response never pairs `$0.00` with a non-zero `%`.
 
 **Used for:**
 

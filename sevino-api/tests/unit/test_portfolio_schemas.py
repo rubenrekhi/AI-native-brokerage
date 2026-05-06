@@ -90,6 +90,8 @@ def _make_position(**overrides) -> Position:
         "cost_basis": Decimal("840.00"),
         "unrealized_pl": Decimal("35.00"),
         "unrealized_plpc": Decimal("0.0417"),
+        "change_today": Decimal("2.50"),
+        "change_today_percent": Decimal("0.0101"),
     }
     data.update(overrides)
     return Position(**data)
@@ -141,6 +143,8 @@ class TestHoldingsResponse:
         assert first["cost_basis"] == "840.00"
         assert first["unrealized_pl"] == "35.00"
         assert first["unrealized_plpc"] == "0.0417"
+        assert first["change_today"] == "2.50"
+        assert first["change_today_percent"] == "0.0101"
 
         revived = HoldingsResponse.model_validate(dumped)
         assert revived == holdings

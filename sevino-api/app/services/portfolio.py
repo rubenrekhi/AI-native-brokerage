@@ -160,20 +160,35 @@ def _build_holdings(
     names: dict[str, str],
     status: str,
 ) -> dict:
-    positions = [
-        Position(
-            symbol=p["symbol"],
-            name=names.get(p["symbol"], p["symbol"]),
-            qty=Decimal(p.get("qty") or "0"),
-            avg_entry_price=Decimal(p.get("avg_entry_price") or "0"),
-            current_price=Decimal(p.get("current_price") or "0"),
-            market_value=Decimal(p.get("market_value") or "0"),
-            cost_basis=Decimal(p.get("cost_basis") or "0"),
-            unrealized_pl=Decimal(p.get("unrealized_pl") or "0"),
-            unrealized_plpc=Decimal(p.get("unrealized_plpc") or "0"),
+    positions: list[Position] = []
+    for p in raw_positions:
+        qty = Decimal(p.get("qty") or "0")
+        current_price = Decimal(p.get("current_price") or "0")
+        lastday_price = Decimal(p.get("lastday_price") or "0")
+        # New listings can omit lastday_price — treat as no change. Both
+        # fields zero out together so the response can't surface the
+        # contradictory "$0.00 (+X%)" pairing.
+        if lastday_price > 0:
+            change_today = (current_price - lastday_price) * qty
+            change_today_percent = Decimal(p.get("change_today") or "0")
+        else:
+            change_today = Decimal("0")
+            change_today_percent = Decimal("0")
+        positions.append(
+            Position(
+                symbol=p["symbol"],
+                name=names.get(p["symbol"], p["symbol"]),
+                qty=qty,
+                avg_entry_price=Decimal(p.get("avg_entry_price") or "0"),
+                current_price=current_price,
+                market_value=Decimal(p.get("market_value") or "0"),
+                cost_basis=Decimal(p.get("cost_basis") or "0"),
+                unrealized_pl=Decimal(p.get("unrealized_pl") or "0"),
+                unrealized_plpc=Decimal(p.get("unrealized_plpc") or "0"),
+                change_today=change_today,
+                change_today_percent=change_today_percent,
+            )
         )
-        for p in raw_positions
-    ]
     positions.sort(key=lambda p: p.market_value, reverse=True)
     total = sum((p.market_value for p in positions), Decimal("0"))
     return HoldingsResponse(
