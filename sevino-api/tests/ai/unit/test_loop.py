@@ -122,9 +122,13 @@ def repo_mocks(monkeypatch):
 
 def _make_client(response_or_exc: Any) -> AsyncMock:
     """Build a fake ``AsyncAnthropic`` whose ``messages.create`` returns
-    ``response_or_exc`` (or raises if it's an exception)."""
+    ``response_or_exc`` (or raises if it's an exception). When a list is
+    passed, each call yields the next item in order — used to exercise
+    multi-iteration loops (A1.7)."""
     client = AsyncMock(spec=anthropic.AsyncAnthropic)
     if isinstance(response_or_exc, BaseException):
+        client.messages.create = AsyncMock(side_effect=response_or_exc)
+    elif isinstance(response_or_exc, list):
         client.messages.create = AsyncMock(side_effect=response_or_exc)
     else:
         client.messages.create = AsyncMock(return_value=response_or_exc)
@@ -287,6 +291,20 @@ class TestRequestShape:
         ]
         assert create_kwargs["max_tokens"] == HardCaps().max_output_tokens
 
+    async def test_thinking_config_sent_on_every_call(self, repo_mocks):
+        # A1.7 requires every Anthropic call to enable extended thinking
+        # with budget_tokens >= 1024 — Anthropic returns 400s otherwise
+        # when thinking blocks roundtrip on later iterations.
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        create_kwargs = client.messages.create.call_args.kwargs
+        assert create_kwargs["thinking"] == {
+            "type": "enabled",
+            "budget_tokens": 1024,
+        }
+
     async def test_tools_kwarg_included_when_registry_has_tools(
         self, repo_mocks
     ):
@@ -360,14 +378,14 @@ class TestCapBreaches:
     async def test_output_token_cap_breach_after_first_iteration(
         self, repo_mocks
     ):
-        # First iteration succeeds and reports 100 output tokens; second
-        # iteration's ``check_caps`` breaches because state.output_tokens (100)
-        # >= max_output_tokens (10). Tool registry stays empty so we'd loop
-        # forever without the cap — the only way to force >1 iteration in v0
-        # without tools is a stop_reason that doesn't trigger the break.
+        # First iteration succeeds and reports 100 output tokens; the
+        # ``pause_turn`` stop reason continues the loop. The second
+        # iteration's ``check_caps`` then breaches because
+        # state.output_tokens (100) >= max_output_tokens (10), so the loop
+        # exits with the cap-breach terminal state.
         client = _make_client(
             _make_response(
-                stop_reason="pause_turn",  # not end_turn, not max_tokens
+                stop_reason="pause_turn",
                 output_tokens=100,
             )
         )
@@ -376,9 +394,129 @@ class TestCapBreaches:
             client, repo_mocks, hard_caps=HardCaps(max_output_tokens=10)
         )
 
-        # First iteration broke on the unknown stop_reason. We never reached
-        # the second-iteration cap check, so terminal_state reflects the stop.
-        assert result.terminal_state == "pause_turn"
+        assert result.terminal_state == "output_token_limit"
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["error_code"] == ErrorCode.OUTPUT_TOKEN_LIMIT.value
+        # Only one Anthropic call: iteration 2's cap check fires before
+        # the second create() would have been issued.
+        client.messages.create.assert_awaited_once()
+
+
+# ---------- A1.7: extended thinking + signature roundtripping ----------
+
+
+class TestThinkingRoundtrip:
+    async def test_pause_turn_continues_loop_to_next_iteration(self, repo_mocks):
+        # ``pause_turn`` is Anthropic's "continue verbatim" signal. The loop
+        # must continue past it — a single ``pause_turn`` followed by
+        # ``end_turn`` should yield two iterations.
+        client = _make_client(
+            [
+                _make_response(text="working...", stop_reason="pause_turn"),
+                _make_response(text="done", stop_reason="end_turn"),
+            ]
+        )
+
+        result = await _run(client, repo_mocks)
+
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 2
+        assert client.messages.create.await_count == 2
+
+    async def test_iteration_two_request_includes_iteration_one_thinking(
+        self, repo_mocks
+    ):
+        # The R1 contract: model_invocations.response_content from
+        # iteration N is what gets passed back as iteration N+1's assistant
+        # message — never reconstructed. Verify the thinking block (with
+        # signature) survives the roundtrip byte-for-byte.
+        #
+        # The loop reuses (and mutates) one ``messages`` list across
+        # iterations, so AsyncMock's call-args recording — which holds the
+        # list by reference — would show the post-mutation state and miss
+        # what was actually sent. Snapshot in a side_effect instead.
+        import copy
+
+        thinking = ThinkingBlock(
+            thinking="careful reasoning",
+            signature="sig_iter_1",
+            type="thinking",
+        )
+        responses = [
+            _make_response(
+                text="working",
+                stop_reason="pause_turn",
+                extra_blocks=[thinking],
+            ),
+            _make_response(text="final", stop_reason="end_turn"),
+        ]
+        captured_messages: list[list[dict[str, Any]]] = []
+
+        async def _side_effect(**kwargs: Any) -> Message:
+            captured_messages.append(copy.deepcopy(kwargs["messages"]))
+            return responses[len(captured_messages) - 1]
+
+        client = AsyncMock(spec=anthropic.AsyncAnthropic)
+        client.messages.create = AsyncMock(side_effect=_side_effect)
+
+        await _run(client, repo_mocks)
+
+        assert len(captured_messages) == 2
+        # Iteration 2's request must contain exactly one assistant turn —
+        # iteration 1's response, with the signed thinking block intact.
+        sent_messages = captured_messages[1]
+        assistant_turns = [m for m in sent_messages if m["role"] == "assistant"]
+        assert len(assistant_turns) == 1
+        roundtripped = assistant_turns[0]["content"]
+        thinking_blocks = [b for b in roundtripped if b.get("type") == "thinking"]
+        assert len(thinking_blocks) == 1
+        assert thinking_blocks[0]["thinking"] == "careful reasoning"
+        assert thinking_blocks[0]["signature"] == "sig_iter_1"
+
+    async def test_total_thinking_tokens_sums_per_iteration_estimates(
+        self, repo_mocks
+    ):
+        # The heuristic estimates ``len(thinking_text) // 4`` per iteration
+        # and accumulates into ``agent_turns.total_thinking_tokens``.
+        # 16 chars and 24 chars → 4 + 6 = 10 tokens.
+        client = _make_client(
+            [
+                _make_response(
+                    text="...",
+                    stop_reason="pause_turn",
+                    extra_blocks=[
+                        ThinkingBlock(
+                            thinking="x" * 16,
+                            signature="sig_a",
+                            type="thinking",
+                        ),
+                    ],
+                ),
+                _make_response(
+                    text="done",
+                    stop_reason="end_turn",
+                    extra_blocks=[
+                        ThinkingBlock(
+                            thinking="y" * 24,
+                            signature="sig_b",
+                            type="thinking",
+                        ),
+                    ],
+                ),
+            ]
+        )
+
+        await _run(client, repo_mocks)
+
+        complete_kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert complete_kwargs["total_thinking_tokens"] == 10
+        # Each iteration's record_model_invocation also carries its own
+        # per-iteration estimate.
+        per_iter = [
+            call.kwargs["thinking_tokens"]
+            for call in repo_mocks["record_model_invocation"].await_args_list
+        ]
+        assert per_iter == [4, 6]
 
 
 # ---------- exception handling ----------
