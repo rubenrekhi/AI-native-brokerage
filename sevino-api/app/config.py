@@ -49,6 +49,7 @@ class Settings(BaseSettings):
     api_key: str = ""
     alpaca_api_key: str
     alpaca_secret_key: str
+    alpaca_apr_tier_name: str = ""
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
