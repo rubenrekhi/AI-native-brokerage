@@ -336,15 +336,78 @@ class AlpacaBrokerService:
             params={"status": status, "asset_class": asset_class},
         )
 
+    async def get_apr_tiers(self) -> dict[str, Any]:
+        """GET /v1/cash_interest/apr_tiers — list configured APR tiers.
+
+        Not account-scoped: a 404 here means endpoint/tenant misconfiguration,
+        not a missing account, so we opt out of the default `NotFoundError`
+        mapping and surface the upstream status as `AlpacaBrokerError`.
+        """
+        return await self._request(
+            "GET", "/v1/cash_interest/apr_tiers", not_found_resource=None
+        )
+
+    async def get_eod_cash_interest(
+        self,
+        *,
+        account_id: str,
+        after: str | None = None,
+        before: str | None = None,
+        date: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/reporting/eod/cash_interest — daily accrual records.
+
+        `date` is mutually exclusive with `after`/`before` per the upstream
+        contract; passing both raises `ValueError` to fail fast at the call
+        site rather than silently dropping the range params.
+
+        Alpaca wraps the records in `{"interest": [...], "next_page_token": ...}`;
+        we unwrap to the records list since callers iterate them. Pagination is
+        not yet exposed — one page (default 1000) covers a full month.
+        """
+        if date is not None and (after is not None or before is not None):
+            raise ValueError(
+                "`date` is mutually exclusive with `after`/`before`"
+            )
+        params: dict[str, str] = {"account_id": account_id}
+        if date is not None:
+            params["date"] = date
+        if after is not None:
+            params["after"] = after
+        if before is not None:
+            params["before"] = before
+        response = await self._request(
+            "GET", "/v1/reporting/eod/cash_interest", params=params
+        )
+        return response.get("interest", [])
+
+    async def get_interest_activities(
+        self, *, account_id: str
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/activities/INT — interest activity history.
+
+        Returns all INT activities (SWP sweep interest, MGN margin interest,
+        etc.). Filtering by `activity_sub_type` is the caller's responsibility.
+        """
+        return await self._request(
+            "GET",
+            "/v1/accounts/activities/INT",
+            params={"account_id": account_id},
+        )
+
     async def _request(
         self,
         method: str,
         path: str,
         json: dict[str, Any] | None = None,
         params: dict[str, Any] | None = None,
+        *,
+        not_found_resource: str | None = "alpaca_account",
     ) -> Any:
         response = await self._execute(method, path, json=json, params=params)
-        return self._handle_response(response)
+        return self._handle_response(
+            response, not_found_resource=not_found_resource
+        )
 
     async def _execute(
         self,
@@ -367,7 +430,12 @@ class AlpacaBrokerService:
             logger.error("alpaca_connection_failed", error=str(exc), path=path)
             raise AlpacaBrokerUnavailableError(str(exc)) from exc
 
-    def _handle_response(self, response: httpx.Response) -> Any:
+    def _handle_response(
+        self,
+        response: httpx.Response,
+        *,
+        not_found_resource: str | None = "alpaca_account",
+    ) -> Any:
         if response.status_code == 204:
             return {}
         if response.status_code in (200, 201):
@@ -387,10 +455,10 @@ class AlpacaBrokerService:
             url=str(response.url),
         )
 
-        if response.status_code == 404:
+        if response.status_code == 404 and not_found_resource is not None:
             raise NotFoundError(
                 f"Alpaca resource not found: {message}",
-                resource="alpaca_account",
+                resource=not_found_resource,
             )
 
         raise AlpacaBrokerError(
