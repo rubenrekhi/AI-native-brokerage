@@ -113,7 +113,19 @@ async def run_agent_turn(
 
     The conversation row at ``conversation_id`` must already exist (the
     endpoint creates it on first turn per decision D6).
+
+    Raises ``ValueError`` if ``hard_caps.max_output_tokens`` is not strictly
+    greater than the thinking budget — Anthropic 400s on every call when
+    ``budget_tokens >= max_tokens``. Fails fast before any DB writes so a
+    misconfigured cap can't leave half-written audit rows.
     """
+    if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
+        raise ValueError(
+            f"hard_caps.max_output_tokens ({hard_caps.max_output_tokens}) "
+            f"must be > thinking budget ({_THINKING_BUDGET_TOKENS}); "
+            f"Anthropic requires budget_tokens < max_tokens."
+        )
+
     # 1. Persist the user message before anything else so a crash mid-turn
     #    still leaves the user's input recorded.
     async with db_factory() as db:

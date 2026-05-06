@@ -378,20 +378,22 @@ class TestCapBreaches:
     async def test_output_token_cap_breach_after_first_iteration(
         self, repo_mocks
     ):
-        # First iteration succeeds and reports 100 output tokens; the
+        # First iteration succeeds and reports 1500 output tokens; the
         # ``pause_turn`` stop reason continues the loop. The second
         # iteration's ``check_caps`` then breaches because
-        # state.output_tokens (100) >= max_output_tokens (10), so the loop
-        # exits with the cap-breach terminal state.
+        # state.output_tokens (1500) >= max_output_tokens (1100), so the
+        # loop exits with the cap-breach terminal state.
+        # ``max_output_tokens`` must stay > 1024 (thinking budget) for
+        # ``run_agent_turn`` to accept the caps.
         client = _make_client(
             _make_response(
                 stop_reason="pause_turn",
-                output_tokens=100,
+                output_tokens=1500,
             )
         )
 
         result = await _run(
-            client, repo_mocks, hard_caps=HardCaps(max_output_tokens=10)
+            client, repo_mocks, hard_caps=HardCaps(max_output_tokens=1100)
         )
 
         assert result.terminal_state == "output_token_limit"
@@ -400,6 +402,23 @@ class TestCapBreaches:
         # Only one Anthropic call: iteration 2's cap check fires before
         # the second create() would have been issued.
         client.messages.create.assert_awaited_once()
+
+    async def test_max_output_tokens_at_or_below_thinking_budget_raises(
+        self, repo_mocks
+    ):
+        # Anthropic 400s when budget_tokens >= max_tokens. The loop fails
+        # fast at the entry to surface the misconfig before any DB writes.
+        client = _make_client(_make_response())
+
+        with pytest.raises(ValueError, match="thinking budget"):
+            await _run(
+                client, repo_mocks, hard_caps=HardCaps(max_output_tokens=1024)
+            )
+
+        # No persistence side-effects from the rejected call.
+        repo_mocks["append_user_message"].assert_not_awaited()
+        repo_mocks["start_agent_turn"].assert_not_awaited()
+        client.messages.create.assert_not_awaited()
 
 
 # ---------- A1.7: extended thinking + signature roundtripping ----------
