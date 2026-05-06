@@ -144,7 +144,6 @@ class AlpacaBrokerService:
             "GET", f"/v1/trading/accounts/{account_id}/positions/{symbol}"
         )
 
-
     async def list_orders(
         self,
         account_id: str,
@@ -199,7 +198,6 @@ class AlpacaBrokerService:
             "DELETE",
             f"/v1/trading/accounts/{account_id}/orders/{order_id}",
         )
-
 
     async def create_ach_relationship(
         self, account_id: str, *, processor_token: str
@@ -336,28 +334,6 @@ class AlpacaBrokerService:
             "GET",
             "/v1/assets",
             params={"status": status, "asset_class": asset_class},
-        )
-
-    async def get_trading_account(self, account_id: str) -> dict[str, Any]:
-        """GET /v1/trading/accounts/{account_id}/account.
-
-        Returns the trading account object (equity, cash, buying_power, status, ...).
-        Money fields are strings in the upstream response — pass through unchanged.
-        """
-        return await self._request(
-            "GET",
-            f"/v1/trading/accounts/{account_id}/account",
-        )
-
-    async def get_positions(self, account_id: str) -> list[dict[str, Any]]:
-        """GET /v1/trading/accounts/{account_id}/positions.
-
-        Returns a (possibly empty) list of position dicts. Does NOT include
-        company name — caller must join with the `assets` table.
-        """
-        return await self._request(
-            "GET",
-            f"/v1/trading/accounts/{account_id}/positions",
         )
 
     async def get_portfolio_history(

@@ -72,7 +72,7 @@ def _position(symbol: str, market_value: str, **overrides) -> dict:
 def alpaca_mock() -> AsyncMock:
     svc = AsyncMock()
     svc.get_trading_account = AsyncMock(return_value=_account())
-    svc.get_positions = AsyncMock(return_value=[])
+    svc.list_positions = AsyncMock(return_value=[])
     return svc
 
 
@@ -125,7 +125,7 @@ class TestHoldingsHappyPath:
         seed_assets,
     ):
         alpaca_mock, _ = portfolio_deps
-        alpaca_mock.get_positions.return_value = [
+        alpaca_mock.list_positions.return_value = [
             _position("AMD", "200.00"),
             _position("TSLA", "1500.00"),
         ]
@@ -145,7 +145,7 @@ class TestHoldingsHappyPath:
         alpaca_mock.get_trading_account.assert_awaited_once_with(
             test_brokerage_account["alpaca_account_id"]
         )
-        alpaca_mock.get_positions.assert_awaited_once_with(
+        alpaca_mock.list_positions.assert_awaited_once_with(
             test_brokerage_account["alpaca_account_id"]
         )
 
@@ -157,7 +157,7 @@ class TestHoldingsHappyPath:
         seed_assets,
     ):
         alpaca_mock, _ = portfolio_deps
-        alpaca_mock.get_positions.return_value = [
+        alpaca_mock.list_positions.return_value = [
             _position("TSLA", "12.34", qty="0.125", avg_entry_price="98.72"),
         ]
 
@@ -175,7 +175,7 @@ class TestHoldingsHappyPath:
     ):
         # No `seed_assets` fixture — the symbol has no row in `assets`.
         alpaca_mock, _ = portfolio_deps
-        alpaca_mock.get_positions.return_value = [_position("XYZ", "50.00")]
+        alpaca_mock.list_positions.return_value = [_position("XYZ", "50.00")]
 
         response = await authenticated_db_client.get("/v1/portfolio/holdings")
 
@@ -194,7 +194,7 @@ class TestHoldingsEmpty:
     ):
         alpaca_mock, _ = portfolio_deps
         alpaca_mock.get_trading_account.return_value = _account(cash="500.00")
-        alpaca_mock.get_positions.return_value = []
+        alpaca_mock.list_positions.return_value = []
 
         response = await authenticated_db_client.get("/v1/portfolio/holdings")
 
@@ -223,7 +223,7 @@ class TestHoldingsAccountStatusGate:
         assert body["code"] == "ACCOUNT_NOT_ACTIVE"
         assert body["detail"] == {"account_status": "APPROVAL_PENDING"}
         alpaca_mock.get_trading_account.assert_not_called()
-        alpaca_mock.get_positions.assert_not_called()
+        alpaca_mock.list_positions.assert_not_called()
 
     async def test_no_brokerage_row_returns_409_account_not_active(
         self,
@@ -240,7 +240,7 @@ class TestHoldingsAccountStatusGate:
         assert body["code"] == "ACCOUNT_NOT_ACTIVE"
         assert body["detail"] == {"account_status": None}
         alpaca_mock.get_trading_account.assert_not_called()
-        alpaca_mock.get_positions.assert_not_called()
+        alpaca_mock.list_positions.assert_not_called()
 
 
 class TestHoldingsAlpacaErrors:
@@ -250,10 +250,10 @@ class TestHoldingsAlpacaErrors:
         test_brokerage_account,
         portfolio_deps,
     ):
-        # Holdings fans out `get_trading_account` + `get_positions` via
+        # Holdings fans out `get_trading_account` + `list_positions` via
         # `asyncio.gather`; either side raising should still surface 503.
         alpaca_mock, _ = portfolio_deps
-        alpaca_mock.get_positions.side_effect = AlpacaBrokerUnavailableError()
+        alpaca_mock.list_positions.side_effect = AlpacaBrokerUnavailableError()
 
         response = await authenticated_db_client.get("/v1/portfolio/holdings")
 
@@ -270,7 +270,7 @@ class TestHoldingsCaching:
         seed_assets,
     ):
         alpaca_mock, fake_redis = portfolio_deps
-        alpaca_mock.get_positions.return_value = [_position("TSLA", "1500.00")]
+        alpaca_mock.list_positions.return_value = [_position("TSLA", "1500.00")]
 
         first = await authenticated_db_client.get("/v1/portfolio/holdings")
         second = await authenticated_db_client.get("/v1/portfolio/holdings")
@@ -279,7 +279,7 @@ class TestHoldingsCaching:
         assert second.status_code == 200
         assert first.json() == second.json()
         assert alpaca_mock.get_trading_account.call_count == 1
-        assert alpaca_mock.get_positions.call_count == 1
+        assert alpaca_mock.list_positions.call_count == 1
 
         cache_key = f"portfolio:holdings:{test_brokerage_account['user_id']}"
         cached_raw = await fake_redis.get(cache_key)

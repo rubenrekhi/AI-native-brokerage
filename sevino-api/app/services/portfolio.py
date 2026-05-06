@@ -103,7 +103,7 @@ class PortfolioService:
         async def fetch() -> dict:
             raw_account, raw_positions = await asyncio.gather(
                 self._alpaca.get_trading_account(ctx.alpaca_account_id),
-                self._alpaca.get_positions(ctx.alpaca_account_id),
+                self._alpaca.list_positions(ctx.alpaca_account_id),
             )
             symbols = [p["symbol"] for p in raw_positions]
             names = await AssetRepository.get_names_by_symbols(self._db, symbols)
