@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     alpaca_api_key: str
     alpaca_secret_key: str
     alpaca_apr_tier_name: str = ""
+    cash_sweep_fdic_insured_limit: str = "2500000"
+    cash_sweep_payout_cadence: str = "monthly"
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str

@@ -10,8 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.schemas.brokerage import OrderListResponse, PositionListResponse
+from app.schemas.cash_interest import CashInterestResponse
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.brokerage import BrokerageService
+from app.services.cash_interest import CashInterestService
 
 router = APIRouter()
 
@@ -61,5 +63,17 @@ async def list_positions(
 ) -> PositionListResponse:
     """List open positions for the authenticated user's brokerage account."""
     return await BrokerageService.list_positions(
+        db, alpaca=alpaca, user_id=uuid.UUID(user_id)
+    )
+
+
+@router.get("/cash-interest", response_model=CashInterestResponse)
+async def get_cash_interest(
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> CashInterestResponse:
+    """Aggregated cash sweep snapshot: balance, APY, accrued and realized interest."""
+    return await CashInterestService.get_cash_interest(
         db, alpaca=alpaca, user_id=uuid.UUID(user_id)
     )

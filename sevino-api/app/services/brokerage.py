@@ -39,7 +39,7 @@ class BrokerageService:
         until: str | None = None,
         limit: int | None = None,
     ) -> OrderListResponse:
-        brokerage = await _require_brokerage(db, user_id)
+        brokerage = await require_brokerage(db, user_id)
 
         # Default to "all" to surface the full history (filled + open + canceled
         # + rejected). Without this, Alpaca defaults to "open" only and the
@@ -67,7 +67,7 @@ class BrokerageService:
         alpaca: AlpacaBrokerService,
         user_id: uuid.UUID,
     ) -> PositionListResponse:
-        brokerage = await _require_brokerage(db, user_id)
+        brokerage = await require_brokerage(db, user_id)
 
         raw = await alpaca.list_positions(brokerage.alpaca_account_id)
         positions = _project(
@@ -76,7 +76,7 @@ class BrokerageService:
         return PositionListResponse(positions=positions)
 
 
-async def _require_brokerage(db: AsyncSession, user_id: uuid.UUID):
+async def require_brokerage(db: AsyncSession, user_id: uuid.UUID):
     """Brokerage gate for read-only views.
 
     Mirrors `SettingsService.get_account_value` rather than the funding
