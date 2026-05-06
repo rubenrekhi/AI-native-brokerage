@@ -3,7 +3,8 @@ from dataclasses import FrozenInstanceError
 
 import pytest
 
-from app.ai.runtime.caps import CapBreach, HardCaps, LoopState, check_caps
+from app.ai.runtime.caps import CapBreach, HardCaps, check_caps
+from app.ai.runtime.types import LoopState
 
 
 class TestHardCaps:
