@@ -622,8 +622,8 @@ The endpoint flips from JSON to SSE.
 
 #### Issues — `area:safety`
 
-**B3.1 — Redis idempotency middleware**
-- New `app/ai/transport/idempotency.py`. Function-style middleware (not Starlette `BaseHTTPMiddleware` — applied as a route dependency for surgical control). State machine: not present → set `{status: "in_flight", turn_id, started_at}` 2-min TTL; complete → return marker for replay; in_flight → 409. `try/finally` in the endpoint marks `failed` on crash.
+**B3.1 — Redis idempotency helpers**
+- New `app/ai/transport/idempotency.py`. Helper module of plain async functions (`claim_idempotency`, `mark_complete`, `mark_failed`) called directly by the chat-turn route — *not* a Starlette `BaseHTTPMiddleware` and not a single FastAPI dependency, because the route needs surgical control over the `claim → mark_complete` / `mark_failed` boundaries that wrap `run_agent_turn`. State machine: not present → set `{status: "in_flight", turn_id, started_at}` 2-min TTL; complete → return marker for replay; in_flight → 409. `try/finally` in the endpoint marks `failed` on crash.
 - **Acceptance:** Unit test (with fakeredis): two parallel requests with same key — first runs, second 409s. After first completes, third request with same key returns the complete marker. Crashed `try/finally` correctly transitions in_flight → failed within the TTL window.
 - **Files:** `app/ai/transport/idempotency.py`, `tests/ai/unit/test_idempotency.py`
 - **Depends on:** —
