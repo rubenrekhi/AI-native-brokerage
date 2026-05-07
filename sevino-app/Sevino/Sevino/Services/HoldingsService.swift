@@ -24,38 +24,34 @@ final class APIHoldingsService: HoldingsServiceProtocol {
 
 /// Convert the wire-shape `HoldingsDTO` into the UI-shape `[Holding]`.
 ///
-/// Decimal formatting happens here, at the service boundary, so the rest of
-/// the app stays in the pre-formatted-string world that `HoldingRow`
-/// already expects. The synthetic CASH row is always at index 0 — pinning
-/// happens here, not in the view or view-model.
+/// Pure passthrough of Decimals — no formatting. The view formats at
+/// render time using `NumberFormatting`, which keeps sort/filter logic
+/// (PR #4) trivial: the VM compares `Decimal`s directly, never strings.
+/// The synthetic CASH row is always at index 0.
 func mapHoldings(_ dto: HoldingsDTO) -> [Holding] {
     let cashRow = Holding(
         ticker: "CASH",
         isCash: true,
-        shares: nil,
-        value: dto.cash.asCurrency(),
-        gainLossText: nil,
-        isPositive: nil,
-        daysGain: nil,
-        daysGainPercent: nil,
-        totalGain: nil,
-        totalGainPercent: nil,
-        averageCost: nil
+        qty: nil,
+        marketValue: dto.cash,
+        unrealizedPl: nil,
+        unrealizedPlpc: nil,
+        changeToday: nil,
+        changeTodayPercent: nil,
+        avgEntryPrice: nil
     )
 
     let positionRows = dto.positions.map { p in
         Holding(
             ticker: p.symbol,
             isCash: false,
-            shares: p.qty.asShareCount(),
-            value: p.marketValue.asCurrency(),
-            gainLossText: "\(p.unrealizedPl.asSignedCurrency()) (\(p.unrealizedPlpc.asSignedPercent()))",
-            isPositive: p.unrealizedPl >= 0,
-            daysGain: p.changeToday.asSignedCurrency(),
-            daysGainPercent: p.changeTodayPercent.asSignedPercent(),
-            totalGain: p.unrealizedPl.asSignedCurrency(),
-            totalGainPercent: p.unrealizedPlpc.asSignedPercent(),
-            averageCost: p.avgEntryPrice.asCurrency()
+            qty: p.qty,
+            marketValue: p.marketValue,
+            unrealizedPl: p.unrealizedPl,
+            unrealizedPlpc: p.unrealizedPlpc,
+            changeToday: p.changeToday,
+            changeTodayPercent: p.changeTodayPercent,
+            avgEntryPrice: p.avgEntryPrice
         )
     }
 

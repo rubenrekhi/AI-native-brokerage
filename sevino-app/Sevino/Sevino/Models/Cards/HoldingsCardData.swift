@@ -1,6 +1,6 @@
 import Foundation
 
-struct HoldingsCardData: Codable {
+struct HoldingsCardData: Equatable {
     let holdings: [Holding]
     let displayOption: String
 }

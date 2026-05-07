@@ -16,7 +16,11 @@ final class HoldingsMapperTests: XCTestCase {
 
         XCTAssertEqual(holdings.first?.ticker, "CASH")
         XCTAssertEqual(holdings.first?.isCash, true)
-        XCTAssertEqual(holdings.first?.value, "$500.00")
+        XCTAssertEqual(holdings.first?.marketValue, Decimal(string: "500.00"))
+        XCTAssertNil(holdings.first?.qty)
+        XCTAssertNil(holdings.first?.unrealizedPl)
+        XCTAssertNil(holdings.first?.changeToday)
+        XCTAssertNil(holdings.first?.avgEntryPrice)
     }
 
     func test_emptyPositions_returnsOnlyCashRow() {
@@ -26,12 +30,12 @@ final class HoldingsMapperTests: XCTestCase {
 
         XCTAssertEqual(holdings.count, 1)
         XCTAssertEqual(holdings[0].ticker, "CASH")
-        XCTAssertEqual(holdings[0].value, "$1,000.00")
+        XCTAssertEqual(holdings[0].marketValue, Decimal(string: "1000.00"))
     }
 
-    // MARK: - Position formatting
+    // MARK: - Position passthrough
 
-    func test_positivePosition_formatsAllFields() {
+    func test_positionFields_passThroughAsDecimals() {
         let dto = Self.makeDTO(
             cash: Decimal(0),
             positions: [
@@ -52,18 +56,16 @@ final class HoldingsMapperTests: XCTestCase {
 
         XCTAssertEqual(position.ticker, "TSLA")
         XCTAssertEqual(position.isCash, false)
-        XCTAssertEqual(position.shares, "57")
-        XCTAssertEqual(position.value, "$21,748.18")
-        XCTAssertEqual(position.gainLossText, "+$7,418.90 (+51.74%)")
-        XCTAssertEqual(position.isPositive, true)
-        XCTAssertEqual(position.daysGain, "+$734.73")
-        XCTAssertEqual(position.daysGainPercent, "+3.50%")
-        XCTAssertEqual(position.totalGain, "+$7,418.90")
-        XCTAssertEqual(position.totalGainPercent, "+51.74%")
-        XCTAssertEqual(position.averageCost, "$248.91")
+        XCTAssertEqual(position.qty, Decimal(57))
+        XCTAssertEqual(position.marketValue, Decimal(string: "21748.18"))
+        XCTAssertEqual(position.unrealizedPl, Decimal(string: "7418.90"))
+        XCTAssertEqual(position.unrealizedPlpc, Decimal(string: "0.5174"))
+        XCTAssertEqual(position.changeToday, Decimal(string: "734.73"))
+        XCTAssertEqual(position.changeTodayPercent, Decimal(string: "0.0350"))
+        XCTAssertEqual(position.avgEntryPrice, Decimal(string: "248.91"))
     }
 
-    func test_negativePosition_setsIsPositiveFalseAndPreservesSigns() {
+    func test_negativePosition_signsPreserved() {
         let dto = Self.makeDTO(
             cash: Decimal(0),
             positions: [
@@ -79,42 +81,26 @@ final class HoldingsMapperTests: XCTestCase {
 
         let position = mapHoldings(dto)[1]
 
-        XCTAssertEqual(position.isPositive, false)
-        XCTAssertEqual(position.gainLossText, "-$1,049.32 (-8.38%)")
-        XCTAssertEqual(position.daysGain, "-$89.21")
-        XCTAssertEqual(position.daysGainPercent, "-0.77%")
-        XCTAssertEqual(position.totalGain, "-$1,049.32")
-        XCTAssertEqual(position.totalGainPercent, "-8.38%")
+        XCTAssertEqual(position.unrealizedPl, Decimal(string: "-1049.32"))
+        XCTAssertEqual(position.unrealizedPlpc, Decimal(string: "-0.0838"))
+        XCTAssertEqual(position.changeToday, Decimal(string: "-89.21"))
+        XCTAssertEqual(position.changeTodayPercent, Decimal(string: "-0.0077"))
     }
 
-    func test_fractionalQty_rendersWithoutTrailingZeros() {
+    func test_fractionalQty_passesThroughExactly() {
         let dto = Self.makeDTO(
             cash: Decimal(0),
             positions: [Self.makePosition(symbol: "TSLA", qty: Decimal(string: "0.125")!)]
         )
 
-        XCTAssertEqual(mapHoldings(dto)[1].shares, "0.125")
+        XCTAssertEqual(mapHoldings(dto)[1].qty, Decimal(string: "0.125"))
     }
 
-    func test_zeroGain_isPositiveTrue() {
-        // unrealized_pl == 0 is treated as neutral/positive: the gain row
-        // renders with the positive style (not the loss-red color).
-        let dto = Self.makeDTO(
-            cash: Decimal(0),
-            positions: [Self.makePosition(symbol: "AAPL", unrealizedPl: Decimal(0))]
-        )
-
-        XCTAssertEqual(mapHoldings(dto)[1].isPositive, true)
-    }
-
-    func test_zeroChangeToday_rendersSymmetricZeroPair() {
+    func test_zeroChangeToday_passedThroughAsZero() {
         // Mirrors the backend's symmetric-zero invariant from PR #643:
-        // when the server can't compute a usable previous close
-        // (e.g. brand new listing), both change_today and
-        // change_today_percent are pinned to 0. NumberFormatter treats
-        // zero as positive, so the mapper currently renders "+$0.00 /
-        // +0.00%". Pin that here so a future formatter tweak doesn't
-        // silently change what users see on a "no data" day.
+        // when the server can't compute a usable previous close (e.g. brand
+        // new listing), both fields are pinned to 0. The mapper now passes
+        // them through as Decimal(0); the view formats them at render time.
         let dto = Self.makeDTO(
             cash: Decimal(0),
             positions: [
@@ -127,9 +113,8 @@ final class HoldingsMapperTests: XCTestCase {
         )
 
         let position = mapHoldings(dto)[1]
-
-        XCTAssertEqual(position.daysGain, "+$0.00")
-        XCTAssertEqual(position.daysGainPercent, "+0.00%")
+        XCTAssertEqual(position.changeToday, Decimal(0))
+        XCTAssertEqual(position.changeTodayPercent, Decimal(0))
     }
 
     // MARK: - Fixtures
@@ -225,9 +210,9 @@ final class APIHoldingsServiceTests: XCTestCase {
         // CASH always at index 0; one position from the fixture follows.
         XCTAssertEqual(holdings.count, 2)
         XCTAssertEqual(holdings[0].ticker, "CASH")
-        XCTAssertEqual(holdings[0].value, "$500.00")
+        XCTAssertEqual(holdings[0].marketValue, Decimal(string: "500.00"))
         XCTAssertEqual(holdings[1].ticker, "TSLA")
-        XCTAssertEqual(holdings[1].shares, "5")
+        XCTAssertEqual(holdings[1].qty, Decimal(5))
     }
 
     func test_fetchHoldings_propagatesAPIClientError() async {

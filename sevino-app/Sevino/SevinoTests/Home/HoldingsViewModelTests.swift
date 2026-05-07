@@ -111,12 +111,15 @@ final class HoldingsViewModelTests: XCTestCase {
 
     private static func makeHolding(ticker: String) -> Holding {
         Holding(
-            ticker: ticker, isCash: false,
-            shares: "10", value: "$1,000.00",
-            gainLossText: "+$10.00 (+1.00%)", isPositive: true,
-            daysGain: "+1.00", daysGainPercent: "+0.10%",
-            totalGain: "+$10.00", totalGainPercent: "+1.00%",
-            averageCost: "$99.00"
+            ticker: ticker,
+            isCash: false,
+            qty: Decimal(10),
+            marketValue: Decimal(string: "1000.00")!,
+            unrealizedPl: Decimal(string: "10.00")!,
+            unrealizedPlpc: Decimal(string: "0.0100")!,
+            changeToday: Decimal(string: "1.00")!,
+            changeTodayPercent: Decimal(string: "0.0010")!,
+            avgEntryPrice: Decimal(string: "99.00")!
         )
     }
 }

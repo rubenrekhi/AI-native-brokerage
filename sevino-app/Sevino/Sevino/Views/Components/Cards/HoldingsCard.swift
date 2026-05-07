@@ -93,28 +93,24 @@ private struct HoldingsCardPreview: View {
                                 Holding(
                                     ticker: "AAPL",
                                     isCash: false,
-                                    shares: "10",
-                                    value: "$1,820.50",
-                                    gainLossText: "+$120.50 (7.08%)",
-                                    isPositive: true,
-                                    daysGain: "+$12.30",
-                                    daysGainPercent: "0.68%",
-                                    totalGain: "+$120.50",
-                                    totalGainPercent: "7.08%",
-                                    averageCost: "$170.00"
+                                    qty: Decimal(10),
+                                    marketValue: Decimal(string: "1820.50")!,
+                                    unrealizedPl: Decimal(string: "120.50")!,
+                                    unrealizedPlpc: Decimal(string: "0.0708")!,
+                                    changeToday: Decimal(string: "12.30")!,
+                                    changeTodayPercent: Decimal(string: "0.0068")!,
+                                    avgEntryPrice: Decimal(string: "170.00")!
                                 ),
                                 Holding(
-                                    ticker: "Cash",
+                                    ticker: "CASH",
                                     isCash: true,
-                                    shares: nil,
-                                    value: "$250.00",
-                                    gainLossText: nil,
-                                    isPositive: nil,
-                                    daysGain: nil,
-                                    daysGainPercent: nil,
-                                    totalGain: nil,
-                                    totalGainPercent: nil,
-                                    averageCost: nil
+                                    qty: nil,
+                                    marketValue: Decimal(string: "250.00")!,
+                                    unrealizedPl: nil,
+                                    unrealizedPlpc: nil,
+                                    changeToday: nil,
+                                    changeTodayPercent: nil,
+                                    avgEntryPrice: nil
                                 )
                             ],
                             displayOption: "Total Value"
