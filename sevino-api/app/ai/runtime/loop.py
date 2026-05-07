@@ -130,7 +130,11 @@ async def run_agent_turn(
     ``conversation_id``, ``turn_id``, ``prompt_hash``, ``environment``,
     ``model_id``) are set via ``propagate_attributes`` so they apply to
     every child observation in the trace. Each Anthropic call is its own
-    ``generation`` observation with input/output captured verbatim.
+    ``generation`` observation with input/output captured verbatim. A3.3
+    extends the generation update with ``usage_details`` (per-bucket token
+    counts including the thinking estimate) and ``cost_details`` (total
+    USD from :func:`cost_usd_micros`), so Langfuse Cloud aggregates cost
+    per turn and shows the token breakdown.
     """
     if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
         raise ValueError(
@@ -299,12 +303,48 @@ async def run_agent_turn(
                             block.model_dump(mode="json")
                             for block in response.content
                         ]
-                        gen.update(output=response_content)
-
-                    cost = cost_usd_micros(response.usage, model_config.model_id)
-                    iter_thinking_tokens = _estimate_thinking_tokens(
-                        response_content
-                    )
+                        cost = cost_usd_micros(
+                            response.usage, model_config.model_id
+                        )
+                        iter_thinking_tokens = _estimate_thinking_tokens(
+                            response_content
+                        )
+                        cache_read = (
+                            response.usage.cache_read_input_tokens or 0
+                        )
+                        cache_create = (
+                            response.usage.cache_creation_input_tokens or 0
+                        )
+                        # A3.3: ingest usage + cost on the generation so the
+                        # Langfuse trace shows USD per turn and the token
+                        # breakdown. ``thinking`` is reported as our heuristic
+                        # estimate from the visible thinking text — Anthropic
+                        # bundles thinking tokens into ``output_tokens`` and
+                        # bills them at the output rate, so ``cost_details``
+                        # is a single ``total`` (no per-bucket split). We set
+                        # ``total`` explicitly to ``input + output +
+                        # cache_read + cache_creation``; ``thinking`` is
+                        # omitted because it is already accounted for inside
+                        # ``output_tokens``, and without an explicit ``total``
+                        # Langfuse would auto-sum every bucket and inflate the
+                        # per-trace count.
+                        gen.update(
+                            output=response_content,
+                            usage_details={
+                                "input": response.usage.input_tokens,
+                                "output": response.usage.output_tokens,
+                                "cache_read_input_tokens": cache_read,
+                                "cache_creation_input_tokens": cache_create,
+                                "thinking": iter_thinking_tokens,
+                                "total": (
+                                    response.usage.input_tokens
+                                    + response.usage.output_tokens
+                                    + cache_read
+                                    + cache_create
+                                ),
+                            },
+                            cost_details={"total": cost / 1_000_000},
+                        )
 
                     async with db_factory() as db:
                         await ConversationRepository.record_model_invocation(
@@ -318,12 +358,8 @@ async def run_agent_turn(
                             stop_reason=response.stop_reason,
                             input_tokens=response.usage.input_tokens,
                             output_tokens=response.usage.output_tokens,
-                            cache_read_input_tokens=(
-                                response.usage.cache_read_input_tokens or 0
-                            ),
-                            cache_creation_input_tokens=(
-                                response.usage.cache_creation_input_tokens or 0
-                            ),
+                            cache_read_input_tokens=cache_read,
+                            cache_creation_input_tokens=cache_create,
                             thinking_tokens=iter_thinking_tokens,
                             cost_usd_micros=cost,
                             latency_ms=latency_ms,
@@ -333,12 +369,8 @@ async def run_agent_turn(
                     state.output_tokens += response.usage.output_tokens
                     totals["input"] += response.usage.input_tokens
                     totals["output"] += response.usage.output_tokens
-                    totals["cache_read"] += (
-                        response.usage.cache_read_input_tokens or 0
-                    )
-                    totals["cache_creation"] += (
-                        response.usage.cache_creation_input_tokens or 0
-                    )
+                    totals["cache_read"] += cache_read
+                    totals["cache_creation"] += cache_create
                     totals["thinking"] += iter_thinking_tokens
                     totals["cost"] += cost
 
