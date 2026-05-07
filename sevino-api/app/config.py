@@ -142,6 +142,15 @@ class Settings(BaseSettings):
             )
         return self
 
+    @model_validator(mode="after")
+    def require_fmp_api_key_outside_dev(self) -> "Settings":
+        # FMP backs the entire market-data surface. A missing key in dev
+        # is fine (lifecycle skips client construction); in staging/prod
+        # it would surface as a NoneType crash on first market-data call.
+        if self.environment != "dev" and not self.fmp_api_key:
+            raise ValueError("FMP_API_KEY is required outside of dev")
+        return self
+
 
 settings = Settings()
 

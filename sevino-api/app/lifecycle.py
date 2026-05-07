@@ -7,6 +7,7 @@ from app.ai.runtime.db import make_session_factory
 from app.config import get_redis_settings, settings
 from app.database import engine
 from app.services.alpaca_broker import AlpacaBrokerService
+from app.services.fmp import FmpClient
 from app.services.phone_verification import PhoneVerificationService
 from app.services.plaid import PlaidService
 from app.services.supabase_admin import SupabaseAdminService
@@ -21,7 +22,12 @@ async def lifespan(app: FastAPI):
     app.state.anthropic = create_anthropic_client()
     app.state.langfuse = create_langfuse_client(settings)
     app.state.db_factory = make_session_factory(engine)
+    app.state.fmp = (
+        FmpClient(api_key=settings.fmp_api_key) if settings.fmp_api_key else None
+    )
     yield
+    if app.state.fmp is not None:
+        await app.state.fmp.close()
     app.state.langfuse.shutdown()
     await app.state.anthropic.close()
     await app.state.supabase_admin.close()

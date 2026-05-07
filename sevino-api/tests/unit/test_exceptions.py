@@ -11,6 +11,9 @@ from app.exceptions import (
     AuthenticationError,
     AuthorizationError,
     ConflictError,
+    MarketDataError,
+    MarketDataUnavailableError,
+    MarketDataUpstreamError,
     NotFoundError,
     _extract_column,
     alpaca_error_handler,
@@ -21,6 +24,9 @@ from app.exceptions import (
     generic_exception_handler,
     http_exception_handler,
     integrity_error_handler,
+    market_data_error_handler,
+    market_data_unavailable_handler,
+    market_data_upstream_handler,
     not_found_error_handler,
     plaid_service_error_handler,
     programming_error_handler,
@@ -422,3 +428,37 @@ async def test_all_responses_have_error_and_code_keys(handler, exc):
     body = _body(await handler(request, exc))
     assert "error" in body
     assert "code" in body
+
+
+# ---------------------------------------------------------------------------
+# Market data handlers
+# ---------------------------------------------------------------------------
+
+async def test_market_data_error_returns_404_with_symbol():
+    exc = MarketDataError("No quote data for ZZZZ", symbol="ZZZZ")
+    resp = await market_data_error_handler(request, exc)
+    body = _body(resp)
+
+    assert resp.status_code == 404
+    assert body["code"] == "MARKET_DATA_NOT_FOUND"
+    assert body["detail"] == {"symbol": "ZZZZ"}
+
+
+async def test_market_data_upstream_returns_502_with_generic_message():
+    exc = MarketDataUpstreamError(status_code=429)
+    resp = await market_data_upstream_handler(request, exc)
+    body = _body(resp)
+
+    assert resp.status_code == 502
+    assert body["code"] == "MARKET_DATA_UPSTREAM_ERROR"
+    # Status code must not leak into the client-facing message.
+    assert "429" not in body["error"]
+
+
+async def test_market_data_unavailable_returns_503():
+    exc = MarketDataUnavailableError()
+    resp = await market_data_unavailable_handler(request, exc)
+    body = _body(resp)
+
+    assert resp.status_code == 503
+    assert body["code"] == "MARKET_DATA_UNAVAILABLE"

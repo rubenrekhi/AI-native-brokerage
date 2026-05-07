@@ -70,6 +70,45 @@ class IncompleteOnboardingError(Exception):
         self.missing_fields = missing_fields or []
 
 
+class MarketDataError(Exception):
+    """No data available for the requested symbol (e.g. unknown ticker)."""
+
+    def __init__(self, message: str, *, symbol: str | None = None):
+        self.message = message
+        self.symbol = symbol
+        super().__init__(message)
+
+
+class MarketDataUpstreamError(Exception):
+    """Market-data provider returned a non-2xx response."""
+
+    def __init__(
+        self,
+        message: str = "Market data request failed",
+        *,
+        status_code: int | None = None,
+        symbol: str | None = None,
+    ):
+        self.message = message
+        self.status_code = status_code
+        self.symbol = symbol
+        super().__init__(message)
+
+
+class MarketDataUnavailableError(Exception):
+    """Market-data provider is unreachable (network error, timeout)."""
+
+    def __init__(
+        self,
+        message: str = "Market data service unavailable",
+        *,
+        symbol: str | None = None,
+    ):
+        self.message = message
+        self.symbol = symbol
+        super().__init__(message)
+
+
 async def validation_error_handler(
     request: Request, exc: RequestValidationError
 ) -> JSONResponse:
@@ -217,15 +256,28 @@ async def phone_verification_unavailable_handler(
 
 
 async def market_data_error_handler(
-    request: Request, exc: "MarketDataError"
+    request: Request, exc: MarketDataError
 ) -> JSONResponse:
-    logger.warning("market_data_error", message=exc.message, symbol=exc.symbol)
+    logger.warning("market_data_not_found", message=exc.message, symbol=exc.symbol)
     detail = {"symbol": exc.symbol} if exc.symbol else None
-    return error_response(422, exc.message, "MARKET_DATA_ERROR", detail)
+    return error_response(404, exc.message, "MARKET_DATA_NOT_FOUND", detail)
+
+
+async def market_data_upstream_handler(
+    request: Request, exc: MarketDataUpstreamError
+) -> JSONResponse:
+    logger.error(
+        "market_data_upstream_error",
+        status_code=exc.status_code,
+        symbol=exc.symbol,
+    )
+    return error_response(
+        502, "Market data request failed", "MARKET_DATA_UPSTREAM_ERROR"
+    )
 
 
 async def market_data_unavailable_handler(
-    request: Request, exc: "MarketDataUnavailableError"
+    request: Request, exc: MarketDataUnavailableError
 ) -> JSONResponse:
     logger.error("market_data_unavailable", error=exc.message)
     return error_response(
@@ -351,6 +403,11 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(PhoneVerificationError, phone_verification_error_handler)
     app.add_exception_handler(
         PhoneVerificationUnavailableError, phone_verification_unavailable_handler
+    )
+    app.add_exception_handler(MarketDataError, market_data_error_handler)
+    app.add_exception_handler(MarketDataUpstreamError, market_data_upstream_handler)
+    app.add_exception_handler(
+        MarketDataUnavailableError, market_data_unavailable_handler
     )
     # SQLAlchemy handlers — registered before generic Exception
     app.add_exception_handler(DataError, data_error_handler)

@@ -17,6 +17,7 @@ def _make_settings(**overrides) -> Settings:
         "plaid_client_id": "x",
         "plaid_secret": "x",
         "plaid_env": "sandbox",
+        "fmp_api_key": "fmp_test",
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -63,13 +64,18 @@ class TestSupabaseServiceRoleKey:
 
 
 class TestFmpApiKey:
-    def test_defaults_to_empty(self):
-        s = _make_settings()
-        assert s.fmp_api_key == ""
-
     def test_loads_from_input(self):
         s = _make_settings(fmp_api_key="fmp_abc")
         assert s.fmp_api_key == "fmp_abc"
+
+    def test_optional_in_dev(self):
+        s = _make_settings(environment="dev", fmp_api_key="")
+        assert s.fmp_api_key == ""
+
+    @pytest.mark.parametrize("env", ["staging", "prod"])
+    def test_required_outside_dev(self, env):
+        with pytest.raises(ValidationError, match="FMP_API_KEY"):
+            _make_settings(environment=env, fmp_api_key="")
 
 
 class TestAlpacaDataBaseUrl:
