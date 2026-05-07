@@ -319,5 +319,9 @@ private final class PreviewAccountHistoryFundingService: FundingServiceProtocol,
             ),
         ]
     }
+
+    func getCashInterest() async throws -> CashInterestResponse {
+        throw PreviewUnimplemented()
+    }
 }
 #endif
