@@ -115,7 +115,6 @@ private struct HoldingsMorphingPreview: View {
             )
             .padding(16)
         }
-        .task { await viewModel.loadHoldings() }
     }
 }
 

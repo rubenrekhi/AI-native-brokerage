@@ -11,7 +11,7 @@ final class HoldingsViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
 
-    init(service: any HoldingsServiceProtocol = PlaceholderHoldingsService.shared) {
+    init(service: any HoldingsServiceProtocol = APIHoldingsService.shared) {
         self.service = service
     }
 
