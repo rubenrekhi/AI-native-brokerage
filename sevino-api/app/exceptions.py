@@ -216,6 +216,25 @@ async def phone_verification_unavailable_handler(
     )
 
 
+async def market_data_error_handler(
+    request: Request, exc: "MarketDataError"
+) -> JSONResponse:
+    logger.warning("market_data_error", message=exc.message, symbol=exc.symbol)
+    detail = {"symbol": exc.symbol} if exc.symbol else None
+    return error_response(422, exc.message, "MARKET_DATA_ERROR", detail)
+
+
+async def market_data_unavailable_handler(
+    request: Request, exc: "MarketDataUnavailableError"
+) -> JSONResponse:
+    logger.error("market_data_unavailable", error=exc.message)
+    return error_response(
+        503,
+        "Market data service unavailable, please try again",
+        "MARKET_DATA_UNAVAILABLE",
+    )
+
+
 def _extract_column(exc: Exception) -> str | None:
     """Extract the offending column name from an asyncpg-wrapped SQLAlchemy error.
 

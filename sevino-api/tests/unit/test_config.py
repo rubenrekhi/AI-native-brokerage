@@ -62,6 +62,30 @@ class TestSupabaseServiceRoleKey:
             _make_settings(environment=env, supabase_service_role_key="")
 
 
+class TestFmpApiKey:
+    def test_defaults_to_empty(self):
+        s = _make_settings()
+        assert s.fmp_api_key == ""
+
+    def test_loads_from_input(self):
+        s = _make_settings(fmp_api_key="fmp_abc")
+        assert s.fmp_api_key == "fmp_abc"
+
+
+class TestAlpacaDataBaseUrl:
+    def test_dev_uses_sandbox(self):
+        s = _make_settings(environment="dev")
+        assert s.alpaca_data_base_url == "https://data.sandbox.alpaca.markets"
+
+    def test_staging_uses_sandbox(self):
+        s = _make_settings(environment="staging")
+        assert s.alpaca_data_base_url == "https://data.sandbox.alpaca.markets"
+
+    def test_prod_uses_live(self):
+        s = _make_settings(environment="prod")
+        assert s.alpaca_data_base_url == "https://data.alpaca.markets"
+
+
 class TestSentryEnvironment:
     """``sentry_environment`` overrides the env tag for Railway PR-preview
     deploys (so torn-down preview noise is filterable) but leaves the tag

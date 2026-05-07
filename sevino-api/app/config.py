@@ -63,6 +63,7 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://us.cloud.langfuse.com"
+    fmp_api_key: str = ""
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
@@ -96,6 +97,12 @@ class Settings(BaseSettings):
         if self.environment == "prod":
             return "https://broker-api.alpaca.markets"
         return "https://broker-api.sandbox.alpaca.markets"
+
+    @property
+    def alpaca_data_base_url(self) -> str:
+        if self.environment == "prod":
+            return "https://data.alpaca.markets"
+        return "https://data.sandbox.alpaca.markets"
 
     @property
     def alpaca_auth_url(self) -> str:
