@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     api_key: str = ""
     alpaca_api_key: str
     alpaca_secret_key: str
-    alpaca_apr_tier_name: str = ""
+    alpaca_apr_tier_name: str
     cash_sweep_fdic_insured_limit: str = "2500000"
     cash_sweep_payout_cadence: str = "monthly"
     plaid_client_id: str
@@ -63,7 +63,7 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://us.cloud.langfuse.com"
-    fmp_api_key: str = ""
+    fmp_api_key: str
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
@@ -142,14 +142,6 @@ class Settings(BaseSettings):
             )
         return self
 
-    @model_validator(mode="after")
-    def require_fmp_api_key_outside_dev(self) -> "Settings":
-        # FMP backs the entire market-data surface. A missing key in dev
-        # is fine (lifecycle skips client construction); in staging/prod
-        # it would surface as a NoneType crash on first market-data call.
-        if self.environment != "dev" and not self.fmp_api_key:
-            raise ValueError("FMP_API_KEY is required outside of dev")
-        return self
 
 
 settings = Settings()

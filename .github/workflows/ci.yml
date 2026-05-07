@@ -61,6 +61,8 @@ jobs:
       API_KEY: ""
       ALPACA_API_KEY: ci-alpaca-key
       ALPACA_SECRET_KEY: ci-alpaca-secret
+      ALPACA_APR_TIER_NAME: ci-tier
+      FMP_API_KEY: ci-fmp-key
       PLAID_CLIENT_ID: ci-plaid-id
       PLAID_SECRET: ci-plaid-secret
       PLAID_ENV: sandbox

@@ -18,6 +18,7 @@ def _make_settings(**overrides) -> Settings:
         "plaid_secret": "x",
         "plaid_env": "sandbox",
         "fmp_api_key": "fmp_test",
+        "alpaca_apr_tier_name": "standard",
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -68,14 +69,19 @@ class TestFmpApiKey:
         s = _make_settings(fmp_api_key="fmp_abc")
         assert s.fmp_api_key == "fmp_abc"
 
-    def test_optional_in_dev(self):
-        s = _make_settings(environment="dev", fmp_api_key="")
-        assert s.fmp_api_key == ""
+    def test_required(self):
+        with pytest.raises(ValidationError):
+            _make_settings(fmp_api_key=None)
 
-    @pytest.mark.parametrize("env", ["staging", "prod"])
-    def test_required_outside_dev(self, env):
-        with pytest.raises(ValidationError, match="FMP_API_KEY"):
-            _make_settings(environment=env, fmp_api_key="")
+
+class TestAlpacaAprTierName:
+    def test_loads_from_input(self):
+        s = _make_settings(alpaca_apr_tier_name="premium")
+        assert s.alpaca_apr_tier_name == "premium"
+
+    def test_required(self):
+        with pytest.raises(ValidationError):
+            _make_settings(alpaca_apr_tier_name=None)
 
 
 class TestAlpacaDataBaseUrl:
