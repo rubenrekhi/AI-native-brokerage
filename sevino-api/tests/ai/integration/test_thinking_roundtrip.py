@@ -30,6 +30,7 @@ from anthropic.types import (
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
@@ -159,6 +160,8 @@ async def test_iteration_two_request_messages_contain_iteration_one_signature(
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
+            langfuse=_NoopLangfuse(),
+            environment="test",
         )
 
         assert result.terminal_state == "end_turn"

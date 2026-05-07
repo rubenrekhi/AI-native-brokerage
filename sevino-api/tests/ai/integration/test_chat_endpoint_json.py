@@ -22,6 +22,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.anthropic_client import get_anthropic
+from app.ai.observability.langfuse import _NoopLangfuse, get_langfuse
 from app.ai.runtime.db import get_db_factory, make_session_factory
 from app.auth import get_current_user
 from app.main import app
@@ -150,6 +151,10 @@ async def chat_client(db_engine, fixture):
 
     app.dependency_overrides[get_current_user] = lambda: str(fixture.user_id)
     app.dependency_overrides[get_db_factory] = lambda: db_factory
+    # No real Langfuse in tests — the noop stub satisfies the dependency
+    # without sending traces. The lifespan that normally wires
+    # ``app.state.langfuse`` doesn't run here.
+    app.dependency_overrides[get_langfuse] = lambda: _NoopLangfuse()
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -161,6 +166,7 @@ async def chat_client(db_engine, fixture):
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_db_factory, None)
     app.dependency_overrides.pop(get_anthropic, None)
+    app.dependency_overrides.pop(get_langfuse, None)
 
 
 def _install_anthropic(stub: AsyncMock) -> None:

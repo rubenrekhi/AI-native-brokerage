@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession  # noqa: E402
 
 from app.ai.anthropic_client import create_anthropic_client  # noqa: E402
 from app.ai.models import MODELS  # noqa: E402
+from app.ai.observability.langfuse import create_langfuse_client  # noqa: E402
 from app.ai.prompts import SYSTEM_PROMPT_V1  # noqa: E402
 from app.ai.runtime.caps import HardCaps  # noqa: E402
 from app.ai.runtime.db import make_session_factory  # noqa: E402
@@ -247,6 +248,7 @@ async def main() -> int:
     print()
 
     client = create_anthropic_client()
+    langfuse = create_langfuse_client(settings)
     try:
         await _seed(user_id, conversation_id)
         result = await run_agent_turn(
@@ -259,6 +261,8 @@ async def main() -> int:
             system_prompt=SYSTEM_PROMPT_V1,
             model_config=ModelConfig(model_id=MODELS.SMOKE),
             hard_caps=HardCaps(),
+            langfuse=langfuse,
+            environment=settings.environment,
         )
         print(f"terminal_state    = {result.terminal_state}")
         print(f"iterations_count  = {result.iterations_count}")
@@ -285,6 +289,10 @@ async def main() -> int:
         return 1
     finally:
         await client.close()
+        # Flush + shutdown so any pending Langfuse spans land before we exit.
+        # No-op when LANGFUSE_*_KEY is unset (the noop client handles both).
+        langfuse.flush()
+        langfuse.shutdown()
         try:
             await _cleanup(user_id, conversation_id)
             print("Cleanup: all rows deleted.")

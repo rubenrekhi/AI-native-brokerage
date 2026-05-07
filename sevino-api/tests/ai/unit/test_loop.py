@@ -14,13 +14,14 @@ import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import anthropic
 import httpx
 import pytest
 from anthropic.types import Message, TextBlock, ThinkingBlock, Usage
 
+from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.errors import ErrorCode
@@ -142,10 +143,13 @@ async def _run(
     hard_caps: HardCaps | None = None,
     tool_registry: ToolRegistry | None = None,
     user_message: str = "hello",
+    langfuse: Any = None,
+    user_id: uuid.UUID | None = None,
+    conversation_id: uuid.UUID | None = None,
 ):
     return await run_agent_turn(
-        user_id=uuid.uuid4(),
-        conversation_id=uuid.uuid4(),
+        user_id=user_id or uuid.uuid4(),
+        conversation_id=conversation_id or uuid.uuid4(),
         user_message=user_message,
         anthropic_client=client,
         db_factory=_make_db_factory(),
@@ -153,6 +157,8 @@ async def _run(
         system_prompt=SYSTEM_PROMPT,
         model_config=ModelConfig(model_id=MODEL_ID),
         hard_caps=hard_caps or HardCaps(),
+        langfuse=langfuse if langfuse is not None else _NoopLangfuse(),
+        environment="test",
     )
 
 
@@ -625,3 +631,163 @@ class TestExceptions:
         assert result.terminal_state == "error"
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
         assert kwargs["error_code"] == ErrorCode.INTERNAL_ERROR.value
+
+
+# ---------- langfuse instrumentation ----------
+
+
+class _RecordingLangfuse:
+    """Records every call to ``start_as_current_observation`` and the
+    ``update`` calls made on the yielded observation.
+
+    Mirrors the surface ``run_agent_turn`` consumes so we can assert on the
+    trace_id, observation types, and update payloads without standing up a
+    real Langfuse backend.
+    """
+
+    def __init__(self) -> None:
+        self.observations: list[dict[str, Any]] = []
+
+    def start_as_current_observation(self, **kwargs: Any):
+        from contextlib import contextmanager
+
+        record: dict[str, Any] = {"kwargs": kwargs, "updates": []}
+        self.observations.append(record)
+
+        # ``span`` mirrors LangfuseSpan / LangfuseGeneration: ``.update(...)``
+        # captures kwargs into the record and returns ``span`` for chaining.
+        span = MagicMock()
+        span.update.side_effect = (
+            lambda **u: record["updates"].append(u) or span
+        )
+
+        @contextmanager
+        def cm():
+            yield span
+
+        return cm()
+
+
+class TestLangfuseInstrumentation:
+    """A3.2 acceptance: a trace per turn with the expected tags, plus a
+    ``generation`` observation per Anthropic call cross-referenced by
+    ``agent_turn.id`` (used as the trace_id)."""
+
+    async def test_outer_observation_uses_turn_id_hex_as_trace_id(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        # First observation is the outer "agent" span.
+        outer = recorder.observations[0]["kwargs"]
+        assert outer["as_type"] == "agent"
+        assert outer["name"] == "agent_turn"
+
+        expected_trace_id = repo_mocks["_ids"]["turn_id"].hex
+        assert outer["trace_context"] == {"trace_id": expected_trace_id}
+        assert outer["input"] == {"user_message": "hello"}
+
+    async def test_generation_observation_per_anthropic_call(self, repo_mocks):
+        client = _make_client(_make_response(text="answer"))
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        # Second observation is the per-iteration generation.
+        gen = recorder.observations[1]["kwargs"]
+        assert gen["as_type"] == "generation"
+        assert gen["name"] == "anthropic.messages.create"
+        assert gen["model"] == MODEL_ID
+        # A1.8 marks the system block with cache_control; the input is
+        # captured verbatim including that marker.
+        assert gen["input"] == {
+            "system": [
+                {
+                    "type": "text",
+                    "text": SYSTEM_PROMPT.text,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+            "messages": [],
+        }
+        assert gen["metadata"] == {"iteration_index": 0}
+
+    async def test_generation_update_carries_response_content(self, repo_mocks):
+        client = _make_client(_make_response(text="answer"))
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        gen_record = recorder.observations[1]
+        assert gen_record["updates"] == [
+            {"output": [{"citations": None, "text": "answer", "type": "text"}]}
+        ]
+
+    async def test_outer_observation_update_carries_terminal_state(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response(text="hi"))
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        outer_updates = recorder.observations[0]["updates"]
+        assert len(outer_updates) == 1
+        update = outer_updates[0]
+        assert update["output"]["terminal_state"] == "end_turn"
+        assert update["output"]["iterations"] == 1
+        assert update["level"] == "DEFAULT"
+        assert update["status_message"] is None
+
+    async def test_anthropic_error_marks_outer_and_inner_spans_as_error(
+        self, repo_mocks
+    ):
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(429, request=request)
+        exc = anthropic.RateLimitError(
+            "rate limited", response=response, body=None
+        )
+        client = _make_client(exc)
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        # The generation span captured the failure (no `output` update).
+        gen_updates = recorder.observations[1]["updates"]
+        assert len(gen_updates) == 1
+        assert gen_updates[0]["level"] == "ERROR"
+        assert "RateLimitError" in gen_updates[0]["status_message"]
+
+        # The outer agent span ends with ERROR level + error code in
+        # status_message so the trace is filterable in Langfuse.
+        outer_updates = recorder.observations[0]["updates"]
+        assert outer_updates[0]["level"] == "ERROR"
+        assert outer_updates[0]["status_message"] == (
+            ErrorCode.MODEL_RATE_LIMIT.value
+        )
+
+    async def test_cap_breach_does_not_open_generation_observation(
+        self, repo_mocks
+    ):
+        # Iteration cap of 0 means the loop never makes an Anthropic call.
+        # Only the outer "agent" observation should be opened — no generation.
+        client = _make_client(_make_response())
+        recorder = _RecordingLangfuse()
+
+        await _run(
+            client,
+            repo_mocks,
+            langfuse=recorder,
+            hard_caps=HardCaps(max_iterations=0),
+        )
+
+        as_types = [o["kwargs"]["as_type"] for o in recorder.observations]
+        assert as_types == ["agent"]
+        outer_updates = recorder.observations[0]["updates"]
+        assert outer_updates[0]["level"] == "ERROR"
+        assert outer_updates[0]["status_message"] == (
+            ErrorCode.TURN_ITERATION_LIMIT.value
+        )

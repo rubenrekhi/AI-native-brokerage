@@ -17,12 +17,14 @@ from fastapi import APIRouter, Depends, Request
 
 from app.ai.anthropic_client import get_anthropic
 from app.ai.models import MODELS
+from app.ai.observability.langfuse import LangfuseClient, get_langfuse
 from app.ai.prompts import SYSTEM_PROMPT_V1
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
 from app.auth import get_current_user
+from app.config import settings
 from app.rate_limit import limiter
 from app.repositories.conversation import ConversationRepository
 from app.schemas.conversations import ChatTurnRequest, ChatTurnResponse
@@ -41,6 +43,7 @@ async def post_turn(
     user_id: str = Depends(get_current_user),
     db_factory: DbSessionFactory = Depends(get_db_factory),
     anthropic_client: AsyncAnthropic = Depends(get_anthropic),
+    langfuse: LangfuseClient = Depends(get_langfuse),
 ) -> ChatTurnResponse:
     """Run one agent turn and return the assistant blocks as JSON.
 
@@ -68,6 +71,8 @@ async def post_turn(
         system_prompt=SYSTEM_PROMPT_V1,
         model_config=ModelConfig(model_id=MODELS.MAIN),
         hard_caps=HardCaps(),
+        langfuse=langfuse,
+        environment=settings.environment,
     )
 
     return ChatTurnResponse(
