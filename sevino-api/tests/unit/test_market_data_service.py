@@ -225,21 +225,21 @@ class TestGetStockInfo:
     async def test_parallel_fetch_merges_keys(self):
         def fmp_handler(request: httpx.Request) -> httpx.Response:
             path = request.url.path
-            if "/quote/" in path:
+            if path.endswith("/quote"):
                 return httpx.Response(
                     200,
                     json=[{"symbol": "AAPL", "name": "Apple", "price": 195.5}],
                 )
-            if "/profile/" in path:
+            if path.endswith("/profile"):
                 return httpx.Response(
                     200,
                     json=[{"companyName": "Apple Inc.", "exchangeShortName": "NASDAQ"}],
                 )
-            if "/ratios-ttm/" in path:
+            if path.endswith("/ratios-ttm"):
                 return httpx.Response(200, json=[{"dividendYieldTTM": 0.005}])
-            if "price-target-consensus" in path:
+            if path.endswith("/price-target-consensus"):
                 return httpx.Response(200, json=[{"targetConsensus": 200}])
-            if "upgrades-downgrades-consensus" in path:
+            if path.endswith("/grades-consensus"):
                 return httpx.Response(200, json=[{"strongBuy": 12}])
             return httpx.Response(404)
 
@@ -290,6 +290,7 @@ class TestGetBatchQuotes:
 
         def fmp_handler(request: httpx.Request) -> httpx.Response:
             captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
             return httpx.Response(
                 200,
                 json=[{"symbol": "MSFT", "name": "Microsoft", "price": 410}],
@@ -303,7 +304,8 @@ class TestGetBatchQuotes:
         result = await service.get_batch_quotes(["AAPL", "MSFT"])
 
         # Only MSFT hit FMP.
-        assert captured["path"].endswith("/quote/MSFT")
+        assert captured["path"].endswith("/batch-quote")
+        assert captured["params"]["symbols"] == "MSFT"
         assert [q["symbol"] for q in result["quotes"]] == ["AAPL", "MSFT"]
         # Newly-fetched MSFT must be cached.
         assert any(c[0] == "market:quote:MSFT" for c in redis.set_calls)

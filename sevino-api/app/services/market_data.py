@@ -243,7 +243,7 @@ class MarketDataService:
         logger.info("market_data_cache_miss", key=cache_key)
         targets, ratings = await asyncio.gather(
             self._fmp.price_target_consensus(symbol),
-            self._fmp.upgrades_downgrades_consensus(symbol),
+            self._fmp.grades_consensus(symbol),
         )
         analyst = project_analyst(targets, ratings)
         await self._cache_set(cache_key, analyst, _FUNDAMENTALS_TTL)

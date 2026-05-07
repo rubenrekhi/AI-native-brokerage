@@ -55,7 +55,7 @@ class FmpClient:
     helpers to map them to our schema shape.
     """
 
-    DEFAULT_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/api"
+    DEFAULT_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/stable"
     BATCH_QUOTE_MAX_SYMBOLS: ClassVar[int] = 100
 
     def __init__(
@@ -119,7 +119,7 @@ class FmpClient:
         return resp.json()
 
     async def quote(self, symbol: str) -> dict[str, Any]:
-        data = await self._request(f"/v3/quote/{symbol}")
+        data = await self._request("/quote", {"symbol": symbol})
         if not data:
             raise MarketDataError(f"No quote data for {symbol}", symbol=symbol)
         return data[0]
@@ -127,42 +127,40 @@ class FmpClient:
     async def batch_quote(self, symbols: list[str]) -> list[dict[str, Any]]:
         """Fetch quotes for multiple symbols. Returns raw FMP dicts.
 
-        FMP's batch endpoint caps at ~100 symbols per call; oversized
-        requests are split into chunks. Symbols missing from the FMP
-        response are silently dropped from the result.
+        Requests larger than `BATCH_QUOTE_MAX_SYMBOLS` are split into
+        chunks. Symbols missing from the FMP response are silently
+        dropped from the result.
         """
         if not symbols:
             return []
         results: list[dict[str, Any]] = []
         for i in range(0, len(symbols), self.BATCH_QUOTE_MAX_SYMBOLS):
             chunk = symbols[i : i + self.BATCH_QUOTE_MAX_SYMBOLS]
-            data = await self._request(f"/v3/quote/{','.join(chunk)}")
+            data = await self._request("/batch-quote", {"symbols": ",".join(chunk)})
             if data:
                 results.extend(data)
         return results
 
     async def profile(self, symbol: str) -> dict[str, Any]:
-        data = await self._request(f"/v3/profile/{symbol}")
+        data = await self._request("/profile", {"symbol": symbol})
         if not data:
             raise MarketDataError(f"No profile data for {symbol}", symbol=symbol)
         return data[0]
 
     async def ratios_ttm(self, symbol: str) -> dict[str, Any]:
-        data = await self._request(f"/v3/ratios-ttm/{symbol}")
+        data = await self._request("/ratios-ttm", {"symbol": symbol})
         if not data:
             return {}
         return data[0] if isinstance(data, list) else data
 
     async def price_target_consensus(self, symbol: str) -> dict[str, Any]:
-        data = await self._request("/v4/price-target-consensus", {"symbol": symbol})
+        data = await self._request("/price-target-consensus", {"symbol": symbol})
         if not data:
             return {}
         return data[0] if isinstance(data, list) else data
 
-    async def upgrades_downgrades_consensus(self, symbol: str) -> dict[str, Any]:
-        data = await self._request(
-            "/v4/upgrades-downgrades-consensus", {"symbol": symbol}
-        )
+    async def grades_consensus(self, symbol: str) -> dict[str, Any]:
+        data = await self._request("/grades-consensus", {"symbol": symbol})
         if not data:
             return {}
         return data[0] if isinstance(data, list) else data
@@ -174,7 +172,7 @@ def project_quote(raw: dict[str, Any]) -> dict[str, Any]:
         "name": raw.get("name", ""),
         "price": str(raw.get("price", 0)),
         "change": str(raw.get("change", 0)),
-        "change_percent": str(raw.get("changesPercentage", 0)),
+        "change_percent": str(raw.get("changePercentage", 0)),
         "open": str(raw.get("open", 0)),
         "day_high": str(raw.get("dayHigh", 0)),
         "day_low": str(raw.get("dayLow", 0)),

@@ -45,11 +45,11 @@ class TestRequest:
             return httpx.Response(200, json=[])
 
         client = _make_client(handler)
-        await client._request("/v3/quote/AAPL")
+        await client._request("/quote", {"symbol": "AAPL"})
 
         assert "apikey=test-api-key" in captured["url"]
         assert captured["url"].startswith(
-            "https://financialmodelingprep.com/api/v3/quote/AAPL"
+            "https://financialmodelingprep.com/stable/quote"
         )
 
     async def test_merges_extra_params_with_apikey(self):
@@ -60,7 +60,7 @@ class TestRequest:
             return httpx.Response(200, json=[])
 
         client = _make_client(handler)
-        await client._request("/v4/price-target-consensus", {"symbol": "AAPL"})
+        await client._request("/price-target-consensus", {"symbol": "AAPL"})
 
         assert captured["params"] == {"apikey": "test-api-key", "symbol": "AAPL"}
 
@@ -70,7 +70,7 @@ class TestRequest:
 
         client = _make_client(handler)
         with pytest.raises(MarketDataUnavailableError) as info:
-            await client._request("/v3/quote/AAPL")
+            await client._request("/quote", {"symbol": "AAPL"})
 
         # Underlying error must not leak into the exception message.
         assert "connection refused" not in info.value.message
@@ -82,7 +82,7 @@ class TestRequest:
 
         client = _make_client(handler)
         with pytest.raises(MarketDataUpstreamError) as info:
-            await client._request("/v3/quote/AAPL")
+            await client._request("/quote", {"symbol": "AAPL"})
 
         assert info.value.status_code == 429
         # Body must not leak into the exception message.
@@ -115,12 +115,14 @@ class TestQuote:
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
             return httpx.Response(200, json=[{"symbol": "AAPL"}])
 
         client = _make_client(handler)
         await client.quote("AAPL")
 
-        assert captured["path"] == "/api/v3/quote/AAPL"
+        assert captured["path"] == "/stable/quote"
+        assert captured["params"]["symbol"] == "AAPL"
 
 
 class TestBatchQuote:
@@ -129,12 +131,14 @@ class TestBatchQuote:
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
             return httpx.Response(200, json=[])
 
         client = _make_client(handler)
         await client.batch_quote(["AAPL", "MSFT", "GOOG"])
 
-        assert captured["path"] == "/api/v3/quote/AAPL,MSFT,GOOG"
+        assert captured["path"] == "/stable/batch-quote"
+        assert captured["params"]["symbols"] == "AAPL,MSFT,GOOG"
 
     async def test_returns_raw_dicts(self):
         def handler(request: httpx.Request) -> httpx.Response:
@@ -180,10 +184,10 @@ class TestBatchQuote:
         assert result == []
 
     async def test_chunks_oversized_request_into_max_sized_calls(self):
-        paths: list[str] = []
+        symbol_params: list[str] = []
 
         def handler(request: httpx.Request) -> httpx.Response:
-            paths.append(request.url.path)
+            symbol_params.append(request.url.params["symbols"])
             return httpx.Response(200, json=[{"symbol": "X"}])
 
         client = _make_client(handler)
@@ -191,10 +195,10 @@ class TestBatchQuote:
         result = await client.batch_quote(symbols)
 
         # 250 / 100 = 3 chunks (100 + 100 + 50).
-        assert len(paths) == 3
-        assert paths[0].count(",") == 99
-        assert paths[1].count(",") == 99
-        assert paths[2].count(",") == 49
+        assert len(symbol_params) == 3
+        assert symbol_params[0].count(",") == 99
+        assert symbol_params[1].count(",") == 99
+        assert symbol_params[2].count(",") == 49
         assert len(result) == 3
 
 
@@ -260,7 +264,7 @@ class TestPriceTargetConsensus:
         client = _make_client(handler)
         result = await client.price_target_consensus("AAPL")
 
-        assert captured["path"] == "/api/v4/price-target-consensus"
+        assert captured["path"] == "/stable/price-target-consensus"
         assert captured["params"]["symbol"] == "AAPL"
         assert result == {"targetConsensus": 200}
 
@@ -274,7 +278,7 @@ class TestPriceTargetConsensus:
         assert result == {}
 
 
-class TestUpgradesDowngradesConsensus:
+class TestGradesConsensus:
     async def test_passes_symbol_query_param(self):
         captured: dict = {}
 
@@ -284,9 +288,9 @@ class TestUpgradesDowngradesConsensus:
             return httpx.Response(200, json=[{"strongBuy": 10}])
 
         client = _make_client(handler)
-        result = await client.upgrades_downgrades_consensus("AAPL")
+        result = await client.grades_consensus("AAPL")
 
-        assert captured["path"] == "/api/v4/upgrades-downgrades-consensus"
+        assert captured["path"] == "/stable/grades-consensus"
         assert captured["params"]["symbol"] == "AAPL"
         assert result == {"strongBuy": 10}
 
@@ -295,7 +299,7 @@ class TestUpgradesDowngradesConsensus:
             return httpx.Response(200, json=[])
 
         client = _make_client(handler)
-        result = await client.upgrades_downgrades_consensus("AAPL")
+        result = await client.grades_consensus("AAPL")
 
         assert result == {}
 
@@ -307,7 +311,7 @@ class TestProjectQuote:
             "name": "Apple Inc.",
             "price": 195.5,
             "change": 2.3,
-            "changesPercentage": 1.18,
+            "changePercentage": 1.18,
             "open": 193.2,
             "dayHigh": 196.1,
             "dayLow": 192.8,
@@ -635,11 +639,11 @@ class TestSentryCapture:
 
         client = _make_client(handler)
         with pytest.raises(MarketDataUpstreamError):
-            await client._request("/v3/quote/AAPL")
+            await client._request("/quote", {"symbol": "AAPL"})
 
         assert captured["message"] == "fmp_api_error"
         assert captured["level"] == "warning"
-        assert scope.tags["fmp_path"] == "/v3/quote/AAPL"
+        assert scope.tags["fmp_path"] == "/quote"
         assert scope.tags["fmp_status"] == "429"
         assert scope.contexts["fmp_request"]["status_code"] == 429
 
@@ -678,10 +682,10 @@ class TestSentryCapture:
 
         client = _make_client(handler)
         with pytest.raises(MarketDataUnavailableError):
-            await client._request("/v3/quote/AAPL")
+            await client._request("/quote", {"symbol": "AAPL"})
 
         assert isinstance(captured["exc"], httpx.HTTPError)
-        assert scope.tags["fmp_path"] == "/v3/quote/AAPL"
+        assert scope.tags["fmp_path"] == "/quote"
         assert "fmp_request" in scope.contexts
 
 
@@ -706,7 +710,7 @@ class TestApiKeyRedaction:
             client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),
         )
         with pytest.raises(MarketDataUpstreamError):
-            await client._request("/v3/quote/AAPL")
+            await client._request("/quote", {"symbol": "AAPL"})
 
         assert api_key not in logged["kwargs"]["body"]
         assert "***" in logged["kwargs"]["body"]
