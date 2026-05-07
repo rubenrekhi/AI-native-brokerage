@@ -9,6 +9,7 @@ from app.exceptions import (
     MarketDataUnavailableError,
     MarketDataUpstreamError,
 )
+from app.services._http import BODY_LOG_LIMIT
 
 logger = structlog.get_logger(__name__)
 
@@ -36,9 +37,6 @@ def int_or_zero(value: Any) -> int:
     if value is None:
         return 0
     return int(value)
-
-
-_BODY_LOG_LIMIT = 500
 
 
 def _redact(text: str, secret: str) -> str:
@@ -98,7 +96,7 @@ class FmpClient:
             raise MarketDataUnavailableError() from exc
 
         if resp.status_code != 200:
-            safe_body = _redact(resp.text[:_BODY_LOG_LIMIT], self._api_key)
+            safe_body = _redact(resp.text[:BODY_LOG_LIMIT], self._api_key)
             logger.warning(
                 "fmp_api_error",
                 status_code=resp.status_code,

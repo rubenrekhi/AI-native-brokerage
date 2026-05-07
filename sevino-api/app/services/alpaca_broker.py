@@ -58,19 +58,32 @@ class AlpacaBrokerService:
     async def close(self) -> None:
         await self._client.aclose()
 
+    async def access_token(self) -> str:
+        """Return a valid OAuth2 bearer token, refreshing if expired.
+
+        Public alias of `_get_token` for callers that need to share this
+        service's token cache (e.g. `MarketDataService` reusing the same
+        OAuth2 client-credentials flow against a different Alpaca host).
+        """
+        return await self._get_token()
+
     async def _get_token(self) -> str:
         if self._access_token and time.time() < (self._token_expires_at - 60):
             return self._access_token
 
-        response = await self._client.post(
-            f"{self._auth_url}/v1/oauth2/token",
-            data={
-                "grant_type": "client_credentials",
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        try:
+            response = await self._client.post(
+                f"{self._auth_url}/v1/oauth2/token",
+                data={
+                    "grant_type": "client_credentials",
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
+        except httpx.HTTPError as exc:
+            logger.error("alpaca_token_connection_failed", error=str(exc))
+            raise AlpacaBrokerUnavailableError(str(exc)) from exc
 
         if response.status_code != 200:
             logger.error(

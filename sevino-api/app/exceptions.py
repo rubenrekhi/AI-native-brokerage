@@ -79,6 +79,15 @@ class MarketDataError(Exception):
         super().__init__(message)
 
 
+class MarketDataInvalidInputError(Exception):
+    """Caller-supplied input failed validation (bad symbol, bad timeframe)."""
+
+    def __init__(self, message: str, *, symbol: str | None = None):
+        self.message = message
+        self.symbol = symbol
+        super().__init__(message)
+
+
 class MarketDataUpstreamError(Exception):
     """Market-data provider returned a non-2xx response."""
 
@@ -263,6 +272,18 @@ async def market_data_error_handler(
     return error_response(404, exc.message, "MARKET_DATA_NOT_FOUND", detail)
 
 
+async def market_data_invalid_input_handler(
+    request: Request, exc: MarketDataInvalidInputError
+) -> JSONResponse:
+    logger.warning(
+        "market_data_invalid_input", message=exc.message, symbol=exc.symbol
+    )
+    detail = {"symbol": exc.symbol} if exc.symbol else None
+    return error_response(
+        422, exc.message, "MARKET_DATA_INVALID_INPUT", detail
+    )
+
+
 async def market_data_upstream_handler(
     request: Request, exc: MarketDataUpstreamError
 ) -> JSONResponse:
@@ -405,6 +426,9 @@ def register_exception_handlers(app: FastAPI) -> None:
         PhoneVerificationUnavailableError, phone_verification_unavailable_handler
     )
     app.add_exception_handler(MarketDataError, market_data_error_handler)
+    app.add_exception_handler(
+        MarketDataInvalidInputError, market_data_invalid_input_handler
+    )
     app.add_exception_handler(MarketDataUpstreamError, market_data_upstream_handler)
     app.add_exception_handler(
         MarketDataUnavailableError, market_data_unavailable_handler

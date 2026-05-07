@@ -2,7 +2,11 @@ import httpx
 import pytest
 
 from app.exceptions import NotFoundError
-from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerService
+from app.services.alpaca_broker import (
+    AlpacaBrokerError,
+    AlpacaBrokerService,
+    AlpacaBrokerUnavailableError,
+)
 
 
 def _response(status_code: int, body: dict | None = None) -> httpx.Response:
@@ -79,3 +83,35 @@ async def test_list_orders_no_params_passes_none(mocker):
         "/v1/trading/accounts/alpaca_acc_42/orders",
         params=None,
     )
+
+
+async def test_get_token_transport_error_raises_unavailable():
+    service = _service()
+    service._client_id = "id"
+    service._client_secret = "secret"
+    service._auth_url = "https://authx.sandbox.alpaca.markets"
+    service._access_token = None
+    service._token_expires_at = 0.0
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("token endpoint refused")
+
+    service._client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+
+    with pytest.raises(AlpacaBrokerUnavailableError):
+        await service._get_token()
+
+
+async def test_access_token_is_thin_alias_for_get_token(mocker):
+    service = _service()
+    get_token = mocker.patch.object(
+        AlpacaBrokerService,
+        "_get_token",
+        autospec=True,
+        return_value="tok-xyz",
+    )
+
+    result = await service.access_token()
+
+    assert result == "tok-xyz"
+    get_token.assert_awaited_once_with(service)
