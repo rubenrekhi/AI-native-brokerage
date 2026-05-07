@@ -33,7 +33,9 @@ import uuid
 from typing import Any
 
 from anthropic import AsyncAnthropic
+from langfuse import propagate_attributes
 
+from app.ai.observability.langfuse import LangfuseClient
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import CapBreach, HardCaps, check_caps
 from app.ai.runtime.cost import cost_usd_micros
@@ -101,6 +103,8 @@ async def run_agent_turn(
     system_prompt: SystemPrompt,
     model_config: ModelConfig,
     hard_caps: HardCaps,
+    langfuse: LangfuseClient,
+    environment: str,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
@@ -118,6 +122,15 @@ async def run_agent_turn(
     greater than the thinking budget — Anthropic 400s on every call when
     ``budget_tokens >= max_tokens``. Fails fast before any DB writes so a
     misconfigured cap can't leave half-written audit rows.
+
+    Langfuse instrumentation (A3.2): the entire turn is wrapped in an
+    ``agent`` observation whose trace_id is ``agent_turn.id.hex`` so the
+    Postgres ``agent_turns`` row and the Langfuse trace cross-reference
+    on the bare turn UUID. Trace-level tags (``user_id``,
+    ``conversation_id``, ``turn_id``, ``prompt_hash``, ``environment``,
+    ``model_id``) are set via ``propagate_attributes`` so they apply to
+    every child observation in the trace. Each Anthropic call is its own
+    ``generation`` observation with input/output captured verbatim.
     """
     if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
         raise ValueError(
@@ -181,163 +194,245 @@ async def run_agent_turn(
         }
     ]
 
-    try:
-        while True:
-            breach = check_caps(state, hard_caps)
-            if breach is not None:
-                terminal_state = breach.value
-                error_code = _BREACH_TO_ERROR_CODE[breach]
-                break
+    # turn_id is a v4 UUID; .hex is the 32-char lowercase form Langfuse (W3C
+    # trace context) requires. Using it verbatim means a Langfuse trace can
+    # be looked up directly with the ``agent_turns.id`` value (no separate
+    # langfuse_trace_id column needed).
+    trace_context = {"trace_id": turn_id.hex}
 
-            iteration_index = state.iterations
-
-            create_kwargs: dict[str, Any] = {
-                "model": model_config.model_id,
-                "system": request_system,
-                "messages": messages,
-                "max_tokens": hard_caps.max_output_tokens,
-                "thinking": {
-                    "type": "enabled",
-                    "budget_tokens": _THINKING_BUDGET_TOKENS,
-                },
-            }
-            # Anthropic 400s on an empty tools array, so omit the key
-            # entirely when no tools are registered (the v0 case). Per A1.8:
-            # mark the last tool with cache_control so the entire tools array
-            # is cached together with the system prompt.
-            if not tool_registry.is_empty:
-                tools_spec = list(tool_registry.to_anthropic_spec())
-                tools_spec[-1] = {
-                    **tools_spec[-1],
-                    "cache_control": {"type": "ephemeral"},
-                }
-                create_kwargs["tools"] = tools_spec
-
-            iter_started = time.monotonic()
+    with langfuse.start_as_current_observation(
+        as_type="agent",
+        name="agent_turn",
+        trace_context=trace_context,
+        input={"user_message": user_message},
+    ) as turn_span:
+        # propagate_attributes must be entered AFTER the outer span so the
+        # span is the active OTel span when attributes are set; otherwise the
+        # tags don't reach the trace. Per the SDK docstring this is the
+        # canonical path for trace-level user_id/session_id/tags/metadata.
+        with propagate_attributes(
+            user_id=str(user_id),
+            session_id=str(conversation_id),
+            tags=[
+                f"environment:{environment}",
+                f"model:{model_config.model_id}",
+                f"prompt_hash:{system_prompt.hash}",
+            ],
+            metadata={
+                "turn_id": str(turn_id),
+                "prompt_hash": system_prompt.hash,
+                "environment": environment,
+                "model_id": model_config.model_id,
+            },
+        ):
             try:
-                response = await anthropic_client.messages.create(**create_kwargs)
-            except Exception as exc:
-                error_code = to_error_code(exc)
-                terminal_state = "error"
-                break
-            latency_ms = int((time.monotonic() - iter_started) * 1000)
+                while True:
+                    breach = check_caps(state, hard_caps)
+                    if breach is not None:
+                        terminal_state = breach.value
+                        error_code = _BREACH_TO_ERROR_CODE[breach]
+                        break
 
-            cost = cost_usd_micros(response.usage, model_config.model_id)
+                    iteration_index = state.iterations
 
-            # Verbatim Anthropic content for the next iteration's request and
-            # for the model_invocations.response_content audit column. The
-            # JSONB column is the source of truth that A1.7's thinking
-            # signature roundtripping reads from.
-            response_content = [
-                block.model_dump(mode="json") for block in response.content
-            ]
-            iter_thinking_tokens = _estimate_thinking_tokens(response_content)
+                    create_kwargs: dict[str, Any] = {
+                        "model": model_config.model_id,
+                        "system": request_system,
+                        "messages": messages,
+                        "max_tokens": hard_caps.max_output_tokens,
+                        "thinking": {
+                            "type": "enabled",
+                            "budget_tokens": _THINKING_BUDGET_TOKENS,
+                        },
+                    }
+                    # Anthropic 400s on an empty tools array, so omit the key
+                    # entirely when no tools are registered (the v0 case). Per
+                    # A1.8: mark the last tool with cache_control so the
+                    # entire tools array is cached together with the system
+                    # prompt.
+                    if not tool_registry.is_empty:
+                        tools_spec = list(tool_registry.to_anthropic_spec())
+                        tools_spec[-1] = {
+                            **tools_spec[-1],
+                            "cache_control": {"type": "ephemeral"},
+                        }
+                        create_kwargs["tools"] = tools_spec
 
-            async with db_factory() as db:
-                await ConversationRepository.record_model_invocation(
-                    db,
-                    agent_turn_id=turn_id,
-                    iteration_index=iteration_index,
-                    model_id=model_config.model_id,
-                    request_system=request_system,
-                    request_messages=messages,
-                    response_content=response_content,
-                    stop_reason=response.stop_reason,
-                    input_tokens=response.usage.input_tokens,
-                    output_tokens=response.usage.output_tokens,
-                    cache_read_input_tokens=(
-                        response.usage.cache_read_input_tokens or 0
-                    ),
-                    cache_creation_input_tokens=(
-                        response.usage.cache_creation_input_tokens or 0
-                    ),
-                    thinking_tokens=iter_thinking_tokens,
-                    cost_usd_micros=cost,
-                    latency_ms=latency_ms,
-                )
+                    # Pass a shallow copy of ``messages`` so the captured
+                    # input reflects the request as it was sent — the loop
+                    # appends the assistant response to ``messages`` after
+                    # the call, and Langfuse otherwise sees the mutated list.
+                    with langfuse.start_as_current_observation(
+                        as_type="generation",
+                        name="anthropic.messages.create",
+                        model=model_config.model_id,
+                        input={
+                            "system": request_system,
+                            "messages": list(messages),
+                        },
+                        metadata={"iteration_index": iteration_index},
+                    ) as gen:
+                        iter_started = time.monotonic()
+                        try:
+                            response = await anthropic_client.messages.create(
+                                **create_kwargs
+                            )
+                        except Exception as exc:
+                            error_code = to_error_code(exc)
+                            terminal_state = "error"
+                            # The exception is caught (loop never raises), so
+                            # the generation span would otherwise exit cleanly.
+                            # Tag it explicitly so Langfuse marks the gen as
+                            # failed.
+                            gen.update(
+                                level="ERROR",
+                                status_message=f"{type(exc).__name__}: {exc}",
+                            )
+                            break
+                        latency_ms = int((time.monotonic() - iter_started) * 1000)
 
-            state.iterations += 1
-            state.output_tokens += response.usage.output_tokens
-            totals["input"] += response.usage.input_tokens
-            totals["output"] += response.usage.output_tokens
-            totals["cache_read"] += response.usage.cache_read_input_tokens or 0
-            totals["cache_creation"] += (
-                response.usage.cache_creation_input_tokens or 0
-            )
-            totals["thinking"] += iter_thinking_tokens
-            totals["cost"] += cost
+                        # Verbatim Anthropic content for the next iteration's
+                        # request and for model_invocations.response_content.
+                        # The JSONB column is the source of truth that A1.7's
+                        # thinking signature roundtripping reads from.
+                        response_content = [
+                            block.model_dump(mode="json")
+                            for block in response.content
+                        ]
+                        gen.update(output=response_content)
 
-            messages.append({"role": "assistant", "content": response_content})
-
-            # User-facing blocks: only ``text`` blocks land in
-            # messages.content_blocks for v0. Thinking, tool_use, and future
-            # block types are excluded — A1.7 keeps thinking server-side and
-            # Phase 3 introduces the StatusBlock / StockCardBlock pipeline.
-            for block in response.content:
-                if block.type == "text":
-                    assistant_blocks.append(
-                        {"type": "text", "text": block.text}
+                    cost = cost_usd_micros(response.usage, model_config.model_id)
+                    iter_thinking_tokens = _estimate_thinking_tokens(
+                        response_content
                     )
 
-            if response.stop_reason == "end_turn":
-                terminal_state = "end_turn"
-                break
-            if response.stop_reason == "max_tokens":
-                terminal_state = "output_token_limit"
-                error_code = ErrorCode.OUTPUT_TOKEN_LIMIT
-                break
-            if response.stop_reason == "tool_use":
-                # Unreachable in v0 (no tools registered). If reached, the
-                # tool framework is misconfigured — treat as internal error.
-                terminal_state = "error"
-                error_code = ErrorCode.INTERNAL_ERROR
-                break
-            if response.stop_reason == "pause_turn":
-                # Anthropic paused a long-running turn (typically mid
-                # extended-thinking). Per the API contract we continue by
-                # passing the response content back as-is — already
-                # appended to ``messages`` above, so the next iteration's
-                # request will roundtrip the iteration-N thinking block
-                # with its signature intact (A1.7 requirement R1). The
-                # cap check at the top of the next iteration enforces
-                # wall-clock / iteration / output-token bounds.
-                continue
-            # Any other stop reason (refusal, stop_sequence, etc.) —
-            # record verbatim so the audit row carries the real signal.
-            terminal_state = response.stop_reason or "unknown"
-            break
-    finally:
-        # Defensive: every loop exit path above sets terminal_state. This
-        # guards against future refactors leaving an unexpected branch.
-        if terminal_state is None:
-            terminal_state = "error"
-            error_code = ErrorCode.INTERNAL_ERROR
+                    async with db_factory() as db:
+                        await ConversationRepository.record_model_invocation(
+                            db,
+                            agent_turn_id=turn_id,
+                            iteration_index=iteration_index,
+                            model_id=model_config.model_id,
+                            request_system=request_system,
+                            request_messages=messages,
+                            response_content=response_content,
+                            stop_reason=response.stop_reason,
+                            input_tokens=response.usage.input_tokens,
+                            output_tokens=response.usage.output_tokens,
+                            cache_read_input_tokens=(
+                                response.usage.cache_read_input_tokens or 0
+                            ),
+                            cache_creation_input_tokens=(
+                                response.usage.cache_creation_input_tokens or 0
+                            ),
+                            thinking_tokens=iter_thinking_tokens,
+                            cost_usd_micros=cost,
+                            latency_ms=latency_ms,
+                        )
 
-        assistant_message_id: uuid.UUID | None = None
-        if assistant_blocks:
-            async with db_factory() as db:
-                msg = await ConversationRepository.append_assistant_message(
-                    db,
-                    conversation_id=conversation_id,
-                    content_blocks=assistant_blocks,
+                    state.iterations += 1
+                    state.output_tokens += response.usage.output_tokens
+                    totals["input"] += response.usage.input_tokens
+                    totals["output"] += response.usage.output_tokens
+                    totals["cache_read"] += (
+                        response.usage.cache_read_input_tokens or 0
+                    )
+                    totals["cache_creation"] += (
+                        response.usage.cache_creation_input_tokens or 0
+                    )
+                    totals["thinking"] += iter_thinking_tokens
+                    totals["cost"] += cost
+
+                    messages.append(
+                        {"role": "assistant", "content": response_content}
+                    )
+
+                    # User-facing blocks: only ``text`` blocks land in
+                    # messages.content_blocks for v0. Thinking, tool_use, and
+                    # future block types are excluded — A1.7 keeps thinking
+                    # server-side and Phase 3 introduces the StatusBlock /
+                    # StockCardBlock pipeline.
+                    for block in response.content:
+                        if block.type == "text":
+                            assistant_blocks.append(
+                                {"type": "text", "text": block.text}
+                            )
+
+                    if response.stop_reason == "end_turn":
+                        terminal_state = "end_turn"
+                        break
+                    if response.stop_reason == "max_tokens":
+                        terminal_state = "output_token_limit"
+                        error_code = ErrorCode.OUTPUT_TOKEN_LIMIT
+                        break
+                    if response.stop_reason == "tool_use":
+                        # Unreachable in v0 (no tools registered). If reached,
+                        # the tool framework is misconfigured — treat as
+                        # internal error.
+                        terminal_state = "error"
+                        error_code = ErrorCode.INTERNAL_ERROR
+                        break
+                    if response.stop_reason == "pause_turn":
+                        # Anthropic paused a long-running turn (typically mid
+                        # extended-thinking). Per the API contract we continue
+                        # by passing the response content back as-is — already
+                        # appended to ``messages`` above, so the next
+                        # iteration's request will roundtrip the iteration-N
+                        # thinking block with its signature intact (A1.7
+                        # requirement R1). The cap check at the top of the
+                        # next iteration enforces wall-clock / iteration /
+                        # output-token bounds.
+                        continue
+                    # Any other stop reason (refusal, stop_sequence, etc.) —
+                    # record verbatim so the audit row carries the real signal.
+                    terminal_state = response.stop_reason or "unknown"
+                    break
+            finally:
+                # Defensive: every loop exit path above sets terminal_state.
+                # This guards against future refactors leaving an unexpected
+                # branch.
+                if terminal_state is None:
+                    terminal_state = "error"
+                    error_code = ErrorCode.INTERNAL_ERROR
+
+                assistant_message_id: uuid.UUID | None = None
+                if assistant_blocks:
+                    async with db_factory() as db:
+                        msg = await ConversationRepository.append_assistant_message(
+                            db,
+                            conversation_id=conversation_id,
+                            content_blocks=assistant_blocks,
+                        )
+                        assistant_message_id = msg.id
+
+                async with db_factory() as db:
+                    await ConversationRepository.complete_agent_turn(
+                        db,
+                        agent_turn_id=turn_id,
+                        terminal_state=terminal_state,
+                        assistant_message_id=assistant_message_id,
+                        error_code=(
+                            error_code.value if error_code is not None else None
+                        ),
+                        iterations_count=state.iterations,
+                        total_input_tokens=totals["input"],
+                        total_output_tokens=totals["output"],
+                        total_cache_read_tokens=totals["cache_read"],
+                        total_cache_creation_tokens=totals["cache_creation"],
+                        total_thinking_tokens=totals["thinking"],
+                        total_cost_usd_micros=totals["cost"],
+                    )
+
+                turn_span.update(
+                    output={
+                        "terminal_state": terminal_state,
+                        "iterations": state.iterations,
+                        "assistant_blocks": assistant_blocks,
+                    },
+                    level="ERROR" if error_code is not None else "DEFAULT",
+                    status_message=(
+                        error_code.value if error_code is not None else None
+                    ),
                 )
-                assistant_message_id = msg.id
-
-        async with db_factory() as db:
-            await ConversationRepository.complete_agent_turn(
-                db,
-                agent_turn_id=turn_id,
-                terminal_state=terminal_state,
-                assistant_message_id=assistant_message_id,
-                error_code=error_code.value if error_code is not None else None,
-                iterations_count=state.iterations,
-                total_input_tokens=totals["input"],
-                total_output_tokens=totals["output"],
-                total_cache_read_tokens=totals["cache_read"],
-                total_cache_creation_tokens=totals["cache_creation"],
-                total_thinking_tokens=totals["thinking"],
-                total_cost_usd_micros=totals["cost"],
-            )
 
     return AgentTurnResult(
         terminal_state=terminal_state,

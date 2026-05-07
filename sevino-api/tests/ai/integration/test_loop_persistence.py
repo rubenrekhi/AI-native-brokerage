@@ -25,6 +25,7 @@ from anthropic.types import Message, TextBlock, Usage
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
@@ -174,6 +175,8 @@ class TestHappyPathPersistence:
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
+            langfuse=_NoopLangfuse(),
+            environment="test",
         )
 
         assert result.terminal_state == "end_turn"
@@ -280,6 +283,8 @@ class TestMidTurnDurability:
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
+            langfuse=_NoopLangfuse(),
+            environment="test",
         )
 
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
@@ -319,6 +324,8 @@ class TestErrorPath:
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
+            langfuse=_NoopLangfuse(),
+            environment="test",
         )
 
         assert result.terminal_state == "error"
@@ -377,6 +384,8 @@ class TestCapBreachPersistence:
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(max_iterations=0),
+            langfuse=_NoopLangfuse(),
+            environment="test",
         )
 
         assert result.terminal_state == "iteration_limit"

@@ -75,6 +75,23 @@ class TestNoopBehavior:
         with stub.start_as_current_observation(name="x") as obs:
             assert obs is stub
 
+    def test_yielded_observation_has_update_method(self):
+        # ``run_agent_turn`` calls ``gen.update(output=..., level=...)`` on
+        # the yielded observation; the noop must accept the same shape so
+        # dev environments without Langfuse don't blow up.
+        stub = _NoopLangfuse()
+        with stub.start_as_current_observation(
+            as_type="generation", name="x"
+        ) as gen:
+            result = gen.update(
+                output=[{"type": "text", "text": "hi"}],
+                level="ERROR",
+                status_message="x",
+            )
+            # The real LangfuseSpan.update() returns the wrapper for chaining;
+            # mirror that here so call sites that rely on it don't break.
+            assert result is gen
+
     def test_update_methods_are_no_op(self):
         stub = _NoopLangfuse()
         stub.update_current_span(input="x", output="y")
