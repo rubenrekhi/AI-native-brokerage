@@ -1,0 +1,27 @@
+{
+  "quotes": [
+    {
+      "symbol": "AAPL",
+      "name": "Apple Inc.",
+      "price": "180.50",
+      "change": "1.25",
+      "change_percent": "0.70",
+      "open": "179.25",
+      "day_high": "181.00",
+      "day_low": "179.00",
+      "previous_close": "179.25",
+      "volume": 50000000,
+      "avg_volume": 60000000,
+      "market_cap": 2800000000000,
+      "pe_ratio": "28.5",
+      "eps": "6.30",
+      "year_high": "199.00",
+      "year_low": "164.00",
+      "price_avg_50": "175.00",
+      "price_avg_200": "170.00",
+      "shares_outstanding": 15500000000,
+      "earnings_announcement": null,
+      "timestamp": 1714320000
+    }
+  ]
+}
