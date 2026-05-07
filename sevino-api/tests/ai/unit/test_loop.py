@@ -24,6 +24,7 @@ from anthropic.types import Message, TextBlock, ThinkingBlock, Usage
 from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
+from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig, ToolRegistry
@@ -722,9 +723,53 @@ class TestLangfuseInstrumentation:
         await _run(client, repo_mocks, langfuse=recorder)
 
         gen_record = recorder.observations[1]
-        assert gen_record["updates"] == [
-            {"output": [{"citations": None, "text": "answer", "type": "text"}]}
+        assert len(gen_record["updates"]) == 1
+        update = gen_record["updates"][0]
+        assert update["output"] == [
+            {"citations": None, "text": "answer", "type": "text"}
         ]
+
+    async def test_generation_update_attaches_usage_and_cost(
+        self, repo_mocks
+    ):
+        # A3.3 acceptance: the Langfuse trace must show USD cost per turn and
+        # a usage breakdown. ``cost_details.total`` mirrors
+        # ``cost_usd_micros`` (in USD), and ``usage_details`` carries the
+        # per-bucket token split with an explicit ``total`` so thinking — which
+        # Anthropic already folds into ``output_tokens`` — doesn't double-count.
+        response = _make_response(
+            text="answer",
+            input_tokens=42,
+            output_tokens=11,
+            extra_blocks=[
+                ThinkingBlock(
+                    thinking="x" * 32,  # 32 chars / 4 = 8 thinking tokens
+                    signature="sig_a",
+                    type="thinking",
+                ),
+            ],
+        )
+        client = _make_client(response)
+        recorder = _RecordingLangfuse()
+
+        await _run(client, repo_mocks, langfuse=recorder)
+
+        update = recorder.observations[1]["updates"][0]
+        assert update["usage_details"] == {
+            "input": 42,
+            "output": 11,
+            "cache_read_input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "thinking": 8,
+            # ``total`` is ``input + output + cache_read + cache_creation``;
+            # ``thinking`` is omitted because it is already inside
+            # ``output_tokens``, so including it would double-count.
+            "total": 53,
+        }
+        expected_cost_usd = (
+            cost_usd_micros(response.usage, MODEL_ID) / 1_000_000
+        )
+        assert update["cost_details"] == {"total": expected_cost_usd}
 
     async def test_outer_observation_update_carries_terminal_state(
         self, repo_mocks
