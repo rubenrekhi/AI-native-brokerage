@@ -31,21 +31,21 @@ message if any are missing:
 
 ### CI (decision D10)
 
-Once B4.4 lands the workflow update (`.github/workflows/ci.yml`), the
-smoke harness will run when:
+The `smoke-ai` job in `.github/workflows/ci.yml` runs when:
 
 1. A PR touches any file under `sevino-api/app/ai/**` or
-   `sevino-api/tests/ai/**`, OR
+   `sevino-api/tests/ai/**` (detected via `dorny/paths-filter`), OR
 2. A PR has the label `run-ai-smoke` (force-run for cross-cutting
    changes that don't touch `app/ai/` but might break the AI flow —
    e.g. changes to `app/exceptions.py`, `app/middleware/logging.py`,
    `app/database.py`), OR
-3. A push lands on `main` (so a daily signal still arrives even when
-   no AI PRs land).
+3. A push lands on `main` (so a periodic signal still arrives even
+   when no AI PRs land).
 
-All paths are gated on the `RUN_AI_SMOKE` GitHub Actions secret being
-present — contributor forks without the secret are no-ops, not
-failures.
+The job sets `RUN_AI_SMOKE=1` and pulls a real `ANTHROPIC_API_KEY`
+from repo secrets. Fork PRs don't get repo secrets, so the variable
+resolves to `""` and `_smoke_prereqs` skips the suite cleanly — no
+spurious failures on contributor PRs.
 
 ## What's here
 
