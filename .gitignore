@@ -15,3 +15,6 @@ Thumbs.db
 
 # Claude Code Worktrees
 **/.claude/worktrees/
+
+# Claude Code runtime state (scheduled-task coordinator lock)
+**/.claude/scheduled_tasks.lock
