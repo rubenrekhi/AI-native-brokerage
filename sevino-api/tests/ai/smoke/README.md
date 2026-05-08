@@ -49,10 +49,15 @@ failures.
 
 ## What's here
 
-* `conftest.py` — server / DB / HTTP / SSE fixtures (B4.1).
-* (incoming) `test_hello.py` — smoke case: `"hello"` turn (B4.2).
-* (incoming) `test_iteration_cap.py` — smoke case: iteration cap
-  breach (B4.3).
+* `conftest.py` — server / DB / HTTP / SSE fixtures (B4.1). Pins the
+  endpoint to `MODELS.SMOKE` (Haiku) for the full session via a
+  session-scoped `get_default_model_config` override.
+* `test_hello.py` — smoke case: `"say hello"` turn (B4.2). Asserts the
+  full SSE envelope and that `agent_turns` records a positive cost.
+* `test_iteration_cap.py` — smoke case: iteration cap breach (B4.3).
+  Overrides `get_hard_caps` to `HardCaps(max_iterations=0)` so the
+  loop short-circuits with `terminal_state='iteration_limit'` before
+  any Anthropic call (so this case bills nothing).
 * (Phase 3) `test_get_stock_info.py` — AMD price query exercising
   `get_stock_info` (C5.3).
 

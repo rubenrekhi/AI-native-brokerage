@@ -4,15 +4,9 @@ Developer tooling. Not loaded by the app at runtime. Not run in CI.
 
 ## AI loop smoke
 
-`ai_loop_smoke.py` (`make ai-smoke`) runs `run_agent_turn` end-to-end against
-the real Anthropic API and verifies the persistence rows. Prereqs: `make
-infra` running and a real `ANTHROPIC_API_KEY` in `.env`. Uses the SMOKE model
-(Haiku) — runs cost <1¢. Cleans up the user + conversation it created in a
-`finally` block, so the DB is identical before and after a successful run.
-
-This exists because the chat-turn endpoint (A1.9 in `docs/ai-v0-plan.md`)
-does not exist yet — until it lands, this script is the only end-to-end
-proof that the loop talks to Anthropic correctly.
+Replaced by the pytest smoke harness at `tests/ai/smoke/` — see
+`tests/ai/smoke/README.md`. Run with
+`RUN_AI_SMOKE=1 uv run pytest tests/ai/smoke -v`.
 
 ## Funding smoke tests
 
