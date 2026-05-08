@@ -661,8 +661,9 @@ The endpoint flips from JSON to SSE.
 
 **B4.2 — Smoke case: `"hello"` turn**
 - New `tests/ai/smoke/test_hello.py`. Sends `"say hello"` to the endpoint via real Anthropic (Haiku), asserts response stream completes with `turn_completed` and at least one text delta, asserts cost > 0 in `agent_turns`.
+- **TODO:** Delete `scripts/ai_loop_smoke.py` in this PR. The script was a pre-A1.9 stopgap that called `run_agent_turn` directly to prove real-Anthropic worked before the endpoint existed; once `test_hello.py` lands, the same coverage runs through the endpoint inside CI and the script is redundant.
 - **Acceptance:** Test passes against real Anthropic Haiku within 10s; cost recorded.
-- **Files:** `tests/ai/smoke/test_hello.py`
+- **Files:** `tests/ai/smoke/test_hello.py`, `scripts/ai_loop_smoke.py` (deleted)
 - **Depends on:** B4.1, B2.4
 - **Estimate:** S
 
