@@ -9,6 +9,7 @@ extending the cap-check surface.
 from __future__ import annotations
 
 import time
+import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -40,9 +41,13 @@ class AgentTurnResult:
 
     Shape mandated by the AI v0 plan (A1.6). ``terminal_state`` mirrors the
     value persisted on ``agent_turns.terminal_state`` so callers can branch
-    without a second DB lookup.
+    without a second DB lookup. ``turn_id`` is the same UUID written to
+    ``agent_turns.id`` and surfaced on the SSE wire envelope — exposed on
+    the result so the chat-turn endpoint can key idempotency replay (B3.2)
+    off it without a second DB lookup.
     """
 
+    turn_id: uuid.UUID
     terminal_state: str
     assistant_message_blocks: list[dict[str, Any]]
     total_cost_usd_micros: int

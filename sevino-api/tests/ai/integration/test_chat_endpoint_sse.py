@@ -25,6 +25,7 @@ from anthropic.types import (
     TextDelta as AnthropicTextDelta,
     Usage,
 )
+from fakeredis.aioredis import FakeRedis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.anthropic_client import get_anthropic
 from app.ai.observability.langfuse import _NoopLangfuse, get_langfuse
 from app.ai.runtime.db import get_db_factory, make_session_factory
+from app.ai.transport.idempotency import get_idempotency_redis
 from app.ai.transport.events import (
     BlockEnd,
     BlockStart,
@@ -268,12 +270,16 @@ async def fixture(db_engine):
 @pytest.fixture
 async def chat_client(db_engine, fixture):
     """AsyncClient with: auth → fixture.user_id, db_factory → real engine,
-    anthropic → unset (each test installs its own stub)."""
+    anthropic → unset (each test installs its own stub), idempotency
+    redis → per-test fakeredis so B3.2 claim/replay state doesn't leak
+    across tests."""
     db_factory = make_session_factory(db_engine)
+    redis = FakeRedis()
 
     app.dependency_overrides[get_current_user] = lambda: str(fixture.user_id)
     app.dependency_overrides[get_db_factory] = lambda: db_factory
     app.dependency_overrides[get_langfuse] = lambda: _NoopLangfuse()
+    app.dependency_overrides[get_idempotency_redis] = lambda: redis
 
     async with AsyncClient(
         transport=ASGITransport(app=app),
@@ -282,10 +288,12 @@ async def chat_client(db_engine, fixture):
     ) as ac:
         yield ac
 
+    await redis.aclose()
     app.dependency_overrides.pop(get_current_user, None)
     app.dependency_overrides.pop(get_db_factory, None)
     app.dependency_overrides.pop(get_anthropic, None)
     app.dependency_overrides.pop(get_langfuse, None)
+    app.dependency_overrides.pop(get_idempotency_redis, None)
 
 
 def _install_anthropic(stub: AsyncMock) -> None:
