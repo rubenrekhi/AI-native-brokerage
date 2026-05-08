@@ -126,6 +126,35 @@ class ConversationRepository:
         )
 
     @staticmethod
+    async def load_assistant_message_for_turn(
+        db: AsyncSession,
+        *,
+        agent_turn_id: uuid.UUID,
+        conversation_id: uuid.UUID,
+    ) -> tuple[AgentTurn, Message] | None:
+        """Load the ``(turn, assistant_message)`` pair for an idempotent
+        replay (B3.2), scoped to ``conversation_id``.
+
+        Returns ``None`` if the turn doesn't exist, has no assistant
+        message, or belongs to a different conversation. The
+        ``conversation_id`` filter matters because idempotency slots are
+        keyed on ``(user_id, idempotency_key)`` only — without this check,
+        a user reusing the same key against conversation B would replay
+        conversation A's assistant message under B's URL, and the wire
+        envelope's ``TurnStarted`` would carry a mismatched
+        ``conversation_id``.
+        """
+        turn = await db.get(AgentTurn, agent_turn_id)
+        if turn is None or turn.assistant_message_id is None:
+            return None
+        if turn.conversation_id != conversation_id:
+            return None
+        message = await db.get(Message, turn.assistant_message_id)
+        if message is None:
+            return None
+        return turn, message
+
+    @staticmethod
     async def start_agent_turn(
         db: AsyncSession,
         *,

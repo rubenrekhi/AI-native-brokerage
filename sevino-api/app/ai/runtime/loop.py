@@ -647,6 +647,7 @@ async def run_agent_turn(
                         )
 
     return AgentTurnResult(
+        turn_id=turn_id,
         terminal_state=terminal_state,
         assistant_message_blocks=assistant_blocks,
         total_cost_usd_micros=totals["cost"],
