@@ -1,6 +1,7 @@
 """Integration tests for /v1/brokerage/* routes."""
 
 import uuid
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -9,6 +10,7 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.auth import get_current_user
+from app.config import settings
 from app.database import get_db
 from app.exceptions import register_exception_handlers
 from app.routes.brokerage import get_alpaca, router as brokerage_router
@@ -302,6 +304,215 @@ class TestListPositions:
         alpaca_mock.list_positions.side_effect = AlpacaBrokerUnavailableError("upstream down")
 
         response = await client.get("/v1/brokerage/positions")
+
+        assert response.status_code == 503
+        assert response.json()["code"] == "ALPACA_UNAVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# /v1/brokerage/cash-interest
+# ---------------------------------------------------------------------------
+
+
+CASH_ENROLLED_AT = datetime(2026, 1, 15, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def _make_cash_brokerage(
+    *,
+    sweep_status: str | None = "ACTIVE",
+    sweep_enrolled_at: datetime | None = CASH_ENROLLED_AT,
+    account_status: str = "ACTIVE",
+) -> SimpleNamespace:
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        alpaca_account_id="alpaca_acc_42",
+        account_status=account_status,
+        sweep_status=sweep_status,
+        sweep_enrolled_at=sweep_enrolled_at,
+    )
+
+
+@pytest.fixture
+def patch_cash_brokerage(mocker):
+    """Patch the gate used by CashInterestService and return a setter.
+
+    Tests call `patch_cash_brokerage(_make_cash_brokerage(...))` for the variant
+    they need rather than mutating a shared fixture in place.
+    """
+
+    def _set(brokerage):
+        return mocker.patch(
+            "app.services.brokerage.BrokerageAccountRepository.get_by_user_id",
+            new_callable=AsyncMock,
+            return_value=brokerage,
+        )
+
+    return _set
+
+
+@pytest.fixture
+def patch_apr_tier_name(monkeypatch):
+    """Match the APR tier name to what the mocked Alpaca response returns."""
+    monkeypatch.setattr(settings, "alpaca_apr_tier_name", "standard")
+
+
+class TestGetCashInterest:
+    async def test_active_sweep_populates_all_fields(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_apr_tier_name,
+        alpaca_mock,
+    ):
+        patch_cash_brokerage(_make_cash_brokerage())
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "2412.08",
+            "buying_power": "2412.08",
+            "pending_transfer_in": "100.00",
+        }
+        today = datetime.now(timezone.utc).date()
+        first_of_month = today.replace(day=1).isoformat()
+        alpaca_mock.get_eod_cash_interest.return_value = [
+            {"date": first_of_month, "account_accrued_interest": "1.50"},
+            {"date": first_of_month, "account_accrued_interest": "2.00"},
+            {"date": first_of_month, "account_accrued_interest": "2.93"},
+        ]
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
+        alpaca_mock.get_interest_activities.return_value = [
+            {"activity_sub_type": "SWP", "net_amount": "20.00", "qty": "20.00"},
+            {"activity_sub_type": "SWP", "net_amount": "15.44", "qty": "15.44"},
+        ]
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["balance"] == "2412.08"
+        assert body["buying_power"] == "2412.08"
+        assert body["pending_deposits"] == "100.00"
+        assert body["apy"] == "0.0425"
+        assert body["this_month_earned"] == "6.43"
+        assert body["days_accrued"] == 3
+        # Per spec: lifetime = realized SWP (35.44) + current month accrual (6.43).
+        assert body["lifetime_earned"] == "41.87"
+        assert body["lifetime_since"] == CASH_ENROLLED_AT.isoformat().replace("+00:00", "Z")
+        assert body["interest_paid_out"] == "monthly"
+        assert body["fdic_insured_limit"] == "2500000"
+        assert body["sweep_status"] == "ACTIVE"
+
+    async def test_no_sweep_returns_zeros(
+        self, client, patch_cash_brokerage, alpaca_mock
+    ):
+        patch_cash_brokerage(
+            _make_cash_brokerage(sweep_status=None, sweep_enrolled_at=None)
+        )
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "150.00",
+            "buying_power": "150.00",
+            "pending_transfer_in": "0",
+        }
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["balance"] == "150.00"
+        assert body["buying_power"] == "150.00"
+        assert body["this_month_earned"] == "0.00"
+        assert body["days_accrued"] == 0
+        assert body["lifetime_earned"] == "0.00"
+        assert body["apy"] == "0.0000"
+        assert body["lifetime_since"] is None
+        assert body["sweep_status"] is None
+        # Interest endpoints must not be hit when there's no enrollment.
+        alpaca_mock.get_eod_cash_interest.assert_not_called()
+        alpaca_mock.get_apr_tiers.assert_not_called()
+        alpaca_mock.get_interest_activities.assert_not_called()
+
+    async def test_no_brokerage_returns_404(self, client, patch_cash_brokerage):
+        patch_cash_brokerage(None)
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+
+    async def test_closed_brokerage_returns_404(
+        self, client, patch_cash_brokerage
+    ):
+        patch_cash_brokerage(_make_cash_brokerage(account_status="ACCOUNT_CLOSED"))
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+
+    async def test_pending_brokerage_no_sweep_returns_zero_shape(
+        self, client, patch_cash_brokerage, alpaca_mock
+    ):
+        # Freshly-onboarded user: account row exists but isn't ACTIVE yet and
+        # sweep is not enrolled. Read-only views should still surface balance.
+        patch_cash_brokerage(
+            _make_cash_brokerage(
+                account_status="SUBMITTED", sweep_status=None, sweep_enrolled_at=None
+            )
+        )
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "0", "buying_power": "0", "pending_transfer_in": "0",
+        }
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["sweep_status"] is None
+        assert body["lifetime_earned"] == "0.00"
+        alpaca_mock.get_eod_cash_interest.assert_not_called()
+
+    async def test_eod_failure_degrades_gracefully(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_apr_tier_name,
+        alpaca_mock,
+    ):
+        patch_cash_brokerage(_make_cash_brokerage())
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "500.00",
+            "buying_power": "500.00",
+            "pending_transfer_in": "0",
+        }
+        alpaca_mock.get_eod_cash_interest.side_effect = AlpacaBrokerError(
+            status_code=500, message="reporting offline"
+        )
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
+        alpaca_mock.get_interest_activities.return_value = []
+
+        response = await client.get("/v1/brokerage/cash-interest")
+
+        assert response.status_code == 200
+        body = response.json()
+        # Balance/APY survive even though EOD reporting is down.
+        assert body["balance"] == "500.00"
+        assert body["apy"] == "0.0425"
+        assert body["this_month_earned"] == "0.00"
+        assert body["days_accrued"] == 0
+        # No realized SWP and no EOD → lifetime degrades to 0.
+        assert body["lifetime_earned"] == "0.00"
+
+    async def test_trading_account_unavailable_returns_503(
+        self, client, patch_cash_brokerage, alpaca_mock
+    ):
+        patch_cash_brokerage(_make_cash_brokerage())
+        alpaca_mock.get_trading_account.side_effect = AlpacaBrokerUnavailableError(
+            "upstream down"
+        )
+
+        response = await client.get("/v1/brokerage/cash-interest")
 
         assert response.status_code == 503
         assert response.json()["code"] == "ALPACA_UNAVAILABLE"

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
@@ -40,6 +41,32 @@ class ConversationRepository:
         )
         db.add(conversation)
         await db.flush()
+        return conversation
+
+    @staticmethod
+    async def ensure_owned_conversation(
+        db: AsyncSession,
+        *,
+        conversation_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> Conversation:
+        """Idempotent insert (decision D6): create the conversation row if
+        it doesn't exist, otherwise verify ``user_id`` owns the existing
+        row. Raises :class:`NotFoundError` on ownership mismatch — the
+        same response shape as a missing row, so the endpoint never leaks
+        the existence of another user's conversation under that UUID."""
+        stmt = (
+            pg_insert(Conversation)
+            .values(id=conversation_id, user_id=user_id)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await db.execute(stmt)
+        await db.flush()
+        conversation = await db.get(Conversation, conversation_id)
+        if conversation is None or conversation.user_id != user_id:
+            raise NotFoundError(
+                "Conversation not found", resource="conversation"
+            )
         return conversation
 
     @staticmethod

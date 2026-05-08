@@ -55,14 +55,15 @@ class BrokerageAccountRepository:
     async def update_status(
         db: AsyncSession,
         account_id: uuid.UUID,
-        status: str,
+        status: str | None = None,
         **fields,
     ) -> BrokerageAccount:
         result = await db.execute(
             select(BrokerageAccount).where(BrokerageAccount.id == account_id)
         )
         account = result.scalar_one()
-        account.account_status = status
+        if status is not None:
+            account.account_status = status
         for key, value in fields.items():
             if hasattr(account, key):
                 setattr(account, key, value)

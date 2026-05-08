@@ -75,7 +75,9 @@ struct FundingMorphingView: View {
         ))
         .task(id: isExpanded) {
             if isExpanded {
+                viewModel.clearErrors()
                 await viewModel.loadRelationships()
+                await viewModel.loadCashInterest()
             }
         }
         .sheet(isPresented: $plaidLink.showPlaidLink) {

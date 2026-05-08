@@ -14,18 +14,16 @@ final class FundingViewModel {
     var localError: String?
     let plaidLink: PlaidLinkCoordinator
 
-    // MARK: - Cash display (mock) state
+    // MARK: - Cash display state
 
-    private(set) var cashBalance: Decimal = 2412.08
-    private(set) var cashApy: Decimal = 0.032
-    private(set) var cashThisMonthEarned: Decimal = 6.43
-    private(set) var cashDaysAccrued: Int = 22
-    private(set) var cashLifetimeEarned: Decimal = 41.87
-    private(set) var cashLifetimeSince: Date = DateComponents(
-        calendar: .current, year: 2025, month: 10, day: 1
-    ).date ?? Date()
-    private(set) var cashBuyingPower: Decimal = 2412.08
-    private(set) var cashPendingDeposits: Decimal = 100.50
+    private(set) var cashBalance: Decimal = 0
+    private(set) var cashApy: Decimal = 0
+    private(set) var cashThisMonthEarned: Decimal = 0
+    private(set) var cashDaysAccrued: Int = 0
+    private(set) var cashLifetimeEarned: Decimal = 0
+    private(set) var cashLifetimeSince: Date?
+    private(set) var cashBuyingPower: Decimal = 0
+    private(set) var cashPendingDeposits: Decimal = 0
     private(set) var cashInterestPaidOut: PaidOutCadence = .monthly
     private(set) var cashFdicInsuredLimit: Decimal = 2_500_000
 
@@ -65,6 +63,28 @@ final class FundingViewModel {
         defer { isLoading = false }
         do {
             relationships = try await service.listAchRelationships()
+        } catch let apiError as APIError {
+            serverError = apiError
+        } catch {
+            localError = L10n.Home.fundingGenericError
+        }
+    }
+
+    func loadCashInterest() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let response = try await service.getCashInterest()
+            cashBalance = Decimal(string: response.balance) ?? 0
+            cashApy = Decimal(string: response.apy) ?? 0
+            cashThisMonthEarned = Decimal(string: response.thisMonthEarned) ?? 0
+            cashDaysAccrued = response.daysAccrued
+            cashLifetimeEarned = Decimal(string: response.lifetimeEarned) ?? 0
+            cashBuyingPower = Decimal(string: response.buyingPower) ?? 0
+            cashPendingDeposits = Decimal(string: response.pendingDeposits) ?? 0
+            cashFdicInsuredLimit = Decimal(string: response.fdicInsuredLimit) ?? 2_500_000
+            cashLifetimeSince = response.lifetimeSinceDate
+            cashInterestPaidOut = PaidOutCadence(rawValue: response.interestPaidOut) ?? .monthly
         } catch let apiError as APIError {
             serverError = apiError
         } catch {

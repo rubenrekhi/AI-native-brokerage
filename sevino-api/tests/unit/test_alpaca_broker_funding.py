@@ -1,5 +1,4 @@
 import json
-import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -7,10 +6,7 @@ import httpx
 import pytest
 
 from app.exceptions import NotFoundError
-from app.services.alpaca_broker import (
-    AlpacaBrokerError,
-    AlpacaBrokerService,
-)
+from app.services.alpaca_broker import AlpacaBrokerError
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "mock_responses"
 
@@ -23,20 +19,8 @@ def _load(name: str) -> dict:
         return json.load(f)
 
 
-def _make_service(handler) -> AlpacaBrokerService:
-    """Build an AlpacaBrokerService whose AsyncClient uses MockTransport with `handler`.
-
-    Pre-seeds an access token so the OAuth2 path isn't exercised.
-    """
-    service = AlpacaBrokerService()
-    service._access_token = "fake-access-token"
-    service._token_expires_at = time.time() + 3600
-    service._client = httpx.AsyncClient(transport=httpx.MockTransport(handler), timeout=30.0)
-    return service
-
-
 class TestCreateAchRelationship:
-    async def test_posts_processor_token(self):
+    async def test_posts_processor_token(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -45,7 +29,7 @@ class TestCreateAchRelationship:
             captured["body"] = json.loads(request.content)
             return httpx.Response(200, json=_load("alpaca_ach_relationship.json"))
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.create_ach_relationship(
             ACCOUNT_ID, processor_token="processor-sandbox-xyz"
         )
@@ -55,11 +39,11 @@ class TestCreateAchRelationship:
         assert captured["body"] == {"processor_token": "processor-sandbox-xyz"}
         assert result["id"] == REL_ID
 
-    async def test_409_raises_alpaca_broker_error(self):
+    async def test_409_raises_alpaca_broker_error(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(409, json={"message": "relationship already exists"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(AlpacaBrokerError) as info:
             await service.create_ach_relationship(ACCOUNT_ID, processor_token="p")
 
@@ -68,7 +52,7 @@ class TestCreateAchRelationship:
 
 
 class TestListAchRelationships:
-    async def test_gets_relationships(self):
+    async def test_gets_relationships(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -76,7 +60,7 @@ class TestListAchRelationships:
             captured["url"] = str(request.url)
             return httpx.Response(200, json=[_load("alpaca_ach_relationship.json")])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.list_ach_relationships(ACCOUNT_ID)
 
         assert captured["method"] == "GET"
@@ -86,7 +70,7 @@ class TestListAchRelationships:
 
 
 class TestDeleteAchRelationship:
-    async def test_204_returns_cleanly(self):
+    async def test_204_returns_cleanly(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -94,7 +78,7 @@ class TestDeleteAchRelationship:
             captured["url"] = str(request.url)
             return httpx.Response(204)
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.delete_ach_relationship(ACCOUNT_ID, REL_ID)
 
         assert result is None
@@ -103,17 +87,17 @@ class TestDeleteAchRelationship:
             f"/v1/accounts/{ACCOUNT_ID}/ach_relationships/{REL_ID}"
         )
 
-    async def test_404_raises_not_found(self):
+    async def test_404_raises_not_found(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404, json={"message": "not found"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(NotFoundError):
             await service.delete_ach_relationship(ACCOUNT_ID, REL_ID)
 
 
 class TestCreateTransfer:
-    async def test_body_includes_ach_and_immediate(self):
+    async def test_body_includes_ach_and_immediate(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -121,7 +105,7 @@ class TestCreateTransfer:
             captured["url"] = str(request.url)
             return httpx.Response(200, json=_load("alpaca_transfer.json"))
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.create_transfer(
             ACCOUNT_ID,
             relationship_id=REL_ID,
@@ -140,33 +124,33 @@ class TestCreateTransfer:
 
 
 class TestListTransfers:
-    async def test_query_string_contains_filters(self):
+    async def test_query_string_contains_filters(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["query"] = parse_qs(urlparse(str(request.url)).query)
             return httpx.Response(200, json=[_load("alpaca_transfer.json")])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_transfers(ACCOUNT_ID, direction="INCOMING", limit=25)
 
         assert captured["query"] == {"direction": ["INCOMING"], "limit": ["25"]}
 
-    async def test_no_params_sends_no_query(self):
+    async def test_no_params_sends_no_query(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["query"] = urlparse(str(request.url)).query
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_transfers(ACCOUNT_ID)
 
         assert captured["query"] == ""
 
 
 class TestGetTradingAccount:
-    async def test_gets_trading_account(self):
+    async def test_gets_trading_account(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -183,7 +167,7 @@ class TestGetTradingAccount:
                 },
             )
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.get_trading_account(ACCOUNT_ID)
 
         assert captured["method"] == "GET"
@@ -193,17 +177,17 @@ class TestGetTradingAccount:
         assert result["equity"] == "10234.56"
         assert result["cash"] == "1234.56"
 
-    async def test_404_raises_not_found(self):
+    async def test_404_raises_not_found(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404, json={"message": "account not found"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(NotFoundError):
             await service.get_trading_account(ACCOUNT_ID)
 
 
 class TestListPositions:
-    async def test_gets_positions(self):
+    async def test_gets_positions(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -214,7 +198,7 @@ class TestListPositions:
                 json=[{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}],
             )
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.list_positions(ACCOUNT_ID)
 
         assert captured["method"] == "GET"
@@ -223,16 +207,16 @@ class TestListPositions:
         )
         assert result == [{"asset_id": "a1", "symbol": "AAPL", "qty": "5"}]
 
-    async def test_empty_list(self):
+    async def test_empty_list(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         assert await service.list_positions(ACCOUNT_ID) == []
 
 
 class TestListDocuments:
-    async def test_returns_documents(self):
+    async def test_returns_documents(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -250,7 +234,7 @@ class TestListDocuments:
                 ],
             )
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.list_documents(ACCOUNT_ID)
 
         assert captured["method"] == "GET"
@@ -258,14 +242,14 @@ class TestListDocuments:
         assert len(result) == 1
         assert result[0]["id"] == "doc-1"
 
-    async def test_applies_type_start_end_filters(self):
+    async def test_applies_type_start_end_filters(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["query"] = parse_qs(urlparse(str(request.url)).query)
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_documents(
             ACCOUNT_ID,
             document_type="account_statement",
@@ -279,21 +263,21 @@ class TestListDocuments:
             "end": ["2026-03-31"],
         }
 
-    async def test_omits_none_filters(self):
+    async def test_omits_none_filters(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["query"] = urlparse(str(request.url)).query
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_documents(ACCOUNT_ID)
 
         assert captured["query"] == ""
 
 
 class TestStreamDocument:
-    async def test_yields_body_chunks(self):
+    async def test_yields_body_chunks(self, make_alpaca_service):
         captured: dict = {}
         pdf_bytes = b"%PDF-1.4\nfake"
 
@@ -302,7 +286,7 @@ class TestStreamDocument:
             captured["url"] = str(request.url)
             return httpx.Response(200, content=pdf_bytes)
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         iterator = await service.stream_document(ACCOUNT_ID, "doc-1")
         chunks = [c async for c in iterator]
 
@@ -312,7 +296,7 @@ class TestStreamDocument:
         )
         assert b"".join(chunks) == pdf_bytes
 
-    async def test_follows_redirect_to_s3(self):
+    async def test_follows_redirect_to_s3(self, make_alpaca_service):
         pdf_bytes = b"%PDF-1.4\nfollowed"
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -322,38 +306,38 @@ class TestStreamDocument:
                 )
             return httpx.Response(200, content=pdf_bytes)
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         iterator = await service.stream_document(ACCOUNT_ID, "doc-1")
         chunks = [c async for c in iterator]
 
         assert b"".join(chunks) == pdf_bytes
 
-    async def test_404_raises_not_found_before_iteration(self):
+    async def test_404_raises_not_found_before_iteration(self, make_alpaca_service):
         """A 404 must raise eagerly from `await stream_document(...)` so the
         route can return a proper 404 status, not a truncated 200 stream."""
 
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404, json={"message": "document not found"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(NotFoundError):
             await service.stream_document(ACCOUNT_ID, "doc-1")
 
 
 class TestErrorMapping:
-    async def test_404_from_list_raises_not_found(self):
+    async def test_404_from_list_raises_not_found(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404, json={"message": "account missing"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(NotFoundError):
             await service.list_ach_relationships(ACCOUNT_ID)
 
-    async def test_422_from_create_transfer_raises(self):
+    async def test_422_from_create_transfer_raises(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(422, json={"message": "amount below minimum"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(AlpacaBrokerError) as info:
             await service.create_transfer(
                 ACCOUNT_ID,

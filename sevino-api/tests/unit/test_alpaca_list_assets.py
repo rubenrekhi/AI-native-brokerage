@@ -1,5 +1,4 @@
 import json
-import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -8,7 +7,6 @@ import pytest
 
 from app.services.alpaca_broker import (
     AlpacaBrokerError,
-    AlpacaBrokerService,
     AlpacaBrokerUnavailableError,
 )
 
@@ -20,30 +18,20 @@ def _load(name: str) -> list[dict]:
         return json.load(f)
 
 
-def _make_service(handler) -> AlpacaBrokerService:
-    service = AlpacaBrokerService()
-    service._access_token = "fake-access-token"
-    service._token_expires_at = time.time() + 3600
-    service._client = httpx.AsyncClient(
-        transport=httpx.MockTransport(handler), timeout=30.0
-    )
-    return service
-
-
 class TestListAssets:
-    async def test_returns_asset_list_from_alpaca(self):
+    async def test_returns_asset_list_from_alpaca(self, make_alpaca_service):
         assets = _load("alpaca_assets.json")
 
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, json=assets)
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         result = await service.list_assets()
 
         assert result == assets
         assert result[0]["symbol"] == "AAPL"
 
-    async def test_sends_default_query_params(self):
+    async def test_sends_default_query_params(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -52,7 +40,7 @@ class TestListAssets:
             captured["query"] = parse_qs(urlparse(str(request.url)).query)
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_assets()
 
         assert captured["method"] == "GET"
@@ -62,14 +50,14 @@ class TestListAssets:
             "asset_class": ["us_equity"],
         }
 
-    async def test_passes_explicit_query_params(self):
+    async def test_passes_explicit_query_params(self, make_alpaca_service):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
             captured["query"] = parse_qs(urlparse(str(request.url)).query)
             return httpx.Response(200, json=[])
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         await service.list_assets(status="inactive", asset_class="crypto")
 
         assert captured["query"] == {
@@ -77,21 +65,21 @@ class TestListAssets:
             "asset_class": ["crypto"],
         }
 
-    async def test_500_raises_alpaca_broker_error(self):
+    async def test_500_raises_alpaca_broker_error(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(500, json={"message": "internal server error"})
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(AlpacaBrokerError) as info:
             await service.list_assets()
 
         assert info.value.status_code == 500
         assert "internal server error" in info.value.message
 
-    async def test_connection_failure_raises_unavailable(self):
+    async def test_connection_failure_raises_unavailable(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectTimeout("connection timed out")
 
-        service = _make_service(handler)
+        service = make_alpaca_service(handler)
         with pytest.raises(AlpacaBrokerUnavailableError):
             await service.list_assets()

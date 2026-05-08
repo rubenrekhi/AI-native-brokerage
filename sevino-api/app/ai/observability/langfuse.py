@@ -37,6 +37,12 @@ class _NoopLangfuse:
     ) -> Iterator["_NoopLangfuse"]:
         yield self
 
+    def update(self, *args: Any, **kwargs: Any) -> "_NoopLangfuse":
+        # The real LangfuseSpan/Generation `.update()` returns the wrapper
+        # for chaining; mirror that so call sites that rely on the return
+        # value don't break in noop mode.
+        return self
+
     def update_current_span(self, *args: Any, **kwargs: Any) -> None:
         pass
 

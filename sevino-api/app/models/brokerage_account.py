@@ -36,6 +36,10 @@ class BrokerageAccount(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     kyc_results: Mapped[Optional[dict[str, Any]]] = mapped_column(
         JSONB, nullable=True
     )
+    sweep_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sweep_enrolled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     user: Mapped[UserProfile] = relationship(back_populates="brokerage_account")
     ach_relationships: Mapped[list["AchRelationship"]] = relationship(
