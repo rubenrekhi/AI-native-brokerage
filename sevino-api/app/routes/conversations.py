@@ -233,20 +233,38 @@ async def post_turn(
             # so a retry that races against close still observes the
             # complete record (and therefore replays) rather than a
             # half-cleared in_flight slot.
+            #
+            # Wrapped in ``asyncio.shield`` so the Redis write survives
+            # parent cancellation. Without shield, sse-starlette's task-
+            # group teardown on client disconnect can re-cancel the
+            # parent before this await commits, leaving the slot stuck at
+            # ``in_flight`` until the 2-minute TTL self-heals — observed
+            # symptom: retries with the same key 409 IDEMPOTENCY_IN_FLIGHT
+            # for an extended window after the original disconnect.
             try:
                 if replayable and result_turn_id is not None:
-                    await mark_complete(
-                        redis,
-                        user_id=user_uuid,
-                        idempotency_key=body.idempotency_key,
-                        turn_id=result_turn_id,
+                    await asyncio.shield(
+                        mark_complete(
+                            redis,
+                            user_id=user_uuid,
+                            idempotency_key=body.idempotency_key,
+                            turn_id=result_turn_id,
+                        )
                     )
                 else:
-                    await mark_failed(
-                        redis,
-                        user_id=user_uuid,
-                        idempotency_key=body.idempotency_key,
+                    await asyncio.shield(
+                        mark_failed(
+                            redis,
+                            user_id=user_uuid,
+                            idempotency_key=body.idempotency_key,
+                        )
                     )
+            except asyncio.CancelledError:
+                # Parent was cancelled while waiting on shield — the
+                # Redis write is now running in a detached child task
+                # and will complete on the event loop independently.
+                # Re-raise so the cancellation continues to propagate.
+                raise
             except Exception:
                 # Never let a Redis hiccup mask the original turn outcome —
                 # the assistant message is already persisted in Postgres,

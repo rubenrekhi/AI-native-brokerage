@@ -156,6 +156,72 @@ def _estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:
     return total
 
 
+async def _finalize_agent_turn_row(
+    db_factory: DbSessionFactory,
+    *,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
+    terminal_state: str,
+    error_code: ErrorCode | None,
+    iterations_count: int,
+    totals: dict[str, int],
+    assistant_blocks: list[dict[str, Any]],
+) -> None:
+    """Persist the terminal state of an agent turn — assistant message
+    plus ``complete_agent_turn`` write. Designed to be run via
+    :func:`asyncio.shield` from ``run_agent_turn``'s outer ``finally``
+    so the DB writes survive even when the parent task is being
+    cancelled.
+
+    On Railway under sse-starlette's task-group cancellation cascade we
+    observed agent_turn rows getting stuck in non-terminal state — the
+    parent task's ``await`` inside the ``finally`` was being interrupted
+    by additional cancellation signals before the COMMIT landed. Routing
+    the writes through ``asyncio.shield(...)`` puts them in a child task
+    whose own cancel scope is independent of the parent: when the parent
+    is cancelled, ``shield`` raises ``CancelledError`` to the parent but
+    the child task continues to run on the event loop until the writes
+    finish. Errors are caught and logged here rather than surfaced to
+    the caller, since by the time we're finalising there's nothing the
+    caller could do — the row is the audit-trail and we'd rather have a
+    log than nothing.
+    """
+    try:
+        assistant_message_id: uuid.UUID | None = None
+        if assistant_blocks:
+            async with db_factory() as db:
+                msg = await ConversationRepository.append_assistant_message(
+                    db,
+                    conversation_id=conversation_id,
+                    content_blocks=assistant_blocks,
+                )
+                assistant_message_id = msg.id
+
+        async with db_factory() as db:
+            await ConversationRepository.complete_agent_turn(
+                db,
+                agent_turn_id=turn_id,
+                terminal_state=terminal_state,
+                assistant_message_id=assistant_message_id,
+                error_code=(
+                    error_code.value if error_code is not None else None
+                ),
+                iterations_count=iterations_count,
+                total_input_tokens=totals["input"],
+                total_output_tokens=totals["output"],
+                total_cache_read_tokens=totals["cache_read"],
+                total_cache_creation_tokens=totals["cache_creation"],
+                total_thinking_tokens=totals["thinking"],
+                total_cost_usd_micros=totals["cost"],
+            )
+    except Exception:
+        logger.exception(
+            "agent_turn_finalize_failed",
+            turn_id=str(turn_id),
+            terminal_state=terminal_state,
+        )
+
+
 async def run_agent_turn(
     *,
     user_id: uuid.UUID,
@@ -729,34 +795,29 @@ async def run_agent_turn(
         # If ``start_agent_turn`` never ran (cancellation/error during
         # user-message persist or history load), there is no agent_turn
         # row to finalise — the user_message row is durable on its own.
+        #
+        # Route the writes through ``asyncio.shield`` so they survive even
+        # when the parent task is cancelled mid-finally (observed under
+        # sse-starlette's task-group teardown on client disconnect: the
+        # raw await inside the finally was getting re-cancelled before
+        # COMMIT). ``shield`` runs the helper in a child task whose
+        # cancel scope is independent of the parent — when the parent
+        # gets a CancelledError while waiting on shield, the parent
+        # propagates but the child keeps running on the event loop and
+        # writes the row.
         if turn_id is not None:
-            assistant_message_id: uuid.UUID | None = None
-            if assistant_blocks:
-                async with db_factory() as db:
-                    msg = await ConversationRepository.append_assistant_message(
-                        db,
-                        conversation_id=conversation_id,
-                        content_blocks=assistant_blocks,
-                    )
-                    assistant_message_id = msg.id
-
-            async with db_factory() as db:
-                await ConversationRepository.complete_agent_turn(
-                    db,
-                    agent_turn_id=turn_id,
+            await asyncio.shield(
+                _finalize_agent_turn_row(
+                    db_factory,
+                    conversation_id=conversation_id,
+                    turn_id=turn_id,
                     terminal_state=terminal_state,
-                    assistant_message_id=assistant_message_id,
-                    error_code=(
-                        error_code.value if error_code is not None else None
-                    ),
+                    error_code=error_code,
                     iterations_count=state.iterations,
-                    total_input_tokens=totals["input"],
-                    total_output_tokens=totals["output"],
-                    total_cache_read_tokens=totals["cache_read"],
-                    total_cache_creation_tokens=totals["cache_creation"],
-                    total_thinking_tokens=totals["thinking"],
-                    total_cost_usd_micros=totals["cost"],
+                    totals=totals,
+                    assistant_blocks=assistant_blocks,
                 )
+            )
 
         # Terminal SSE frame: only when the loop exited via its own
         # break paths. If an unhandled exception is propagating, the
