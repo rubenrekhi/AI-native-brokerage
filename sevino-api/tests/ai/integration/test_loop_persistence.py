@@ -21,16 +21,26 @@ from unittest.mock import AsyncMock
 import anthropic
 import httpx
 import pytest
-from anthropic.types import Message, TextBlock, Usage
+from anthropic.types import (
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    TextBlock,
+    TextDelta as AnthropicTextDelta,
+    Usage,
+)
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.blocks import BlockListAdapter, TextBlock as SevinoTextBlock
 from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.transport.emitter import SSEEmitter
 from app.models.agent_turn import AgentTurn
 from app.models.message import Message as MessageRow
 from app.models.model_invocation import ModelInvocation
@@ -64,12 +74,93 @@ def _stub_response(
     )
 
 
-def _stub_client(response_or_exc: Any) -> AsyncMock:
+class _FakeStream:
+    """Async iterable + ``get_final_message()`` mimicking ``AsyncMessageStream``."""
+
+    def __init__(self, events: list[Any], final_message: Message) -> None:
+        self._events = events
+        self._index = 0
+        self._final = final_message
+
+    def __aiter__(self) -> "_FakeStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._index >= len(self._events):
+            raise StopAsyncIteration
+        event = self._events[self._index]
+        self._index += 1
+        return event
+
+    async def get_final_message(self) -> Message:
+        return self._final
+
+    async def close(self) -> None:
+        return None
+
+
+class _FakeStreamManager:
+    def __init__(self, stream: _FakeStream) -> None:
+        self._stream = stream
+
+    async def __aenter__(self) -> _FakeStream:
+        return self._stream
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self._stream.close()
+
+
+class _RaisingStreamManager:
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    async def __aenter__(self) -> Any:
+        raise self._exc
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None
+
+
+def _events_for_text(text_value: str) -> list[Any]:
+    """Generate the minimal raw event sequence for a single text block."""
+    return [
+        RawContentBlockStartEvent(
+            content_block=TextBlock(text="", type="text"),
+            index=0,
+            type="content_block_start",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=AnthropicTextDelta(text=text_value, type="text_delta"),
+            index=0,
+            type="content_block_delta",
+        ),
+        RawContentBlockStopEvent(index=0, type="content_block_stop"),
+    ]
+
+
+def _stub_client(response_or_exc: Any) -> Any:
+    """Build a fake ``AsyncAnthropic`` whose ``messages.stream`` produces
+    a context manager streaming events that accumulate to ``response_or_exc``
+    (or raises in ``__aenter__`` if it's a ``BaseException``).
+
+    ``messages.stream`` is replaced with a sync ``MagicMock`` (the SDK
+    method is sync — only the manager it returns is awaitable) so tests
+    can use ``.assert_not_called()`` / call-count assertions.
+    """
+    from unittest.mock import MagicMock
+
     client = AsyncMock(spec=anthropic.AsyncAnthropic)
     if isinstance(response_or_exc, BaseException):
-        client.messages.create = AsyncMock(side_effect=response_or_exc)
+        client.messages.stream = MagicMock(
+            return_value=_RaisingStreamManager(response_or_exc)
+        )
     else:
-        client.messages.create = AsyncMock(return_value=response_or_exc)
+        events = _events_for_text(response_or_exc.content[0].text)
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(
+                _FakeStream(events, response_or_exc)
+            )
+        )
     return client
 
 
@@ -177,13 +268,23 @@ class TestHappyPathPersistence:
             hard_caps=HardCaps(),
             langfuse=_NoopLangfuse(),
             environment="test",
+            sse_emitter=SSEEmitter(),
         )
 
         assert result.terminal_state == "end_turn"
         assert result.iterations_count == 1
-        assert result.assistant_message_blocks == [
-            {"type": "text", "text": "hello world"}
-        ]
+        # B2.4: persisted assistant blocks include the server-assigned
+        # block_id from the SSE wire envelope. Validate via the canonical
+        # ``BlockListAdapter`` so any drift between the loop's persistence
+        # shape and the ``Block`` discriminated union surfaces here.
+        restored = BlockListAdapter.validate_python(
+            result.assistant_message_blocks
+        )
+        assert len(restored) == 1
+        assert isinstance(restored[0], SevinoTextBlock)
+        assert restored[0].text == "hello world"
+        persisted_block_id = restored[0].block_id
+        assert persisted_block_id
 
         # Verify via a fresh session that everything was committed.
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
@@ -200,7 +301,11 @@ class TestHappyPathPersistence:
             ]
             assert msgs[1].role == "assistant"
             assert msgs[1].content_blocks == [
-                {"type": "text", "text": "hello world"}
+                {
+                    "type": "text",
+                    "block_id": persisted_block_id,
+                    "text": "hello world",
+                }
             ]
 
             turns_q = await v.execute(
@@ -285,6 +390,7 @@ class TestMidTurnDurability:
             hard_caps=HardCaps(),
             langfuse=_NoopLangfuse(),
             environment="test",
+            sse_emitter=SSEEmitter(),
         )
 
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
@@ -326,6 +432,7 @@ class TestErrorPath:
             hard_caps=HardCaps(),
             langfuse=_NoopLangfuse(),
             environment="test",
+            sse_emitter=SSEEmitter(),
         )
 
         assert result.terminal_state == "error"
@@ -386,10 +493,11 @@ class TestCapBreachPersistence:
             hard_caps=HardCaps(max_iterations=0),
             langfuse=_NoopLangfuse(),
             environment="test",
+            sse_emitter=SSEEmitter(),
         )
 
         assert result.terminal_state == "iteration_limit"
-        client.messages.create.assert_not_awaited()
+        client.messages.stream.assert_not_called()
 
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
             turn = (

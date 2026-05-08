@@ -22,8 +22,13 @@ import anthropic
 import pytest
 from anthropic.types import (
     Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
     TextBlock,
+    TextDelta as AnthropicTextDelta,
     ThinkingBlock,
+    ThinkingDelta,
     ToolUseBlock,
     Usage,
 )
@@ -36,6 +41,7 @@ from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.transport.emitter import SSEEmitter
 from app.models.agent_turn import AgentTurn
 from app.models.model_invocation import ModelInvocation
 from app.repositories.conversation import ConversationRepository
@@ -50,9 +56,102 @@ MODEL_ID = "claude-sonnet-4-6"
 SYSTEM_PROMPT = SystemPrompt(text="you are sevino", hash="hash-thinking")
 
 
+class _FakeStream:
+    def __init__(self, events: list[Any], final: Message) -> None:
+        self._events = events
+        self._index = 0
+        self._final = final
+
+    def __aiter__(self) -> "_FakeStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._index >= len(self._events):
+            raise StopAsyncIteration
+        event = self._events[self._index]
+        self._index += 1
+        return event
+
+    async def get_final_message(self) -> Message:
+        return self._final
+
+    async def close(self) -> None:
+        return None
+
+
+class _FakeStreamManager:
+    def __init__(self, stream: _FakeStream) -> None:
+        self._stream = stream
+
+    async def __aenter__(self) -> _FakeStream:
+        return self._stream
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self._stream.close()
+
+
+def _events_for(message: Message) -> list[Any]:
+    """Generate a raw event sequence accumulating to ``message``.
+
+    Mirrors the SDK's bracket pattern (``content_block_start`` →
+    body deltas → ``content_block_stop``) for text and thinking blocks;
+    other block types pass through with the start/stop bracket only.
+    """
+    events: list[Any] = []
+    for index, block in enumerate(message.content):
+        if block.type == "text":
+            start_block = TextBlock(text="", type="text", citations=None)
+        elif block.type == "thinking":
+            start_block = ThinkingBlock(
+                thinking="", signature="", type="thinking"
+            )
+        else:
+            start_block = block
+        events.append(
+            RawContentBlockStartEvent(
+                content_block=start_block,
+                index=index,
+                type="content_block_start",
+            )
+        )
+        if block.type == "text" and block.text:
+            events.append(
+                RawContentBlockDeltaEvent(
+                    delta=AnthropicTextDelta(
+                        text=block.text, type="text_delta"
+                    ),
+                    index=index,
+                    type="content_block_delta",
+                )
+            )
+        elif block.type == "thinking" and block.thinking:
+            events.append(
+                RawContentBlockDeltaEvent(
+                    delta=ThinkingDelta(
+                        thinking=block.thinking, type="thinking_delta"
+                    ),
+                    index=index,
+                    type="content_block_delta",
+                )
+            )
+        events.append(
+            RawContentBlockStopEvent(
+                index=index, type="content_block_stop"
+            )
+        )
+    return events
+
+
 def _stub_client(responses: list[Message]) -> AsyncMock:
+    """Fake ``AsyncAnthropic`` whose ``messages.stream`` cycles through
+    each entry in ``responses``, yielding one stream-manager per call."""
+    from unittest.mock import MagicMock
+
     client = AsyncMock(spec=anthropic.AsyncAnthropic)
-    client.messages.create = AsyncMock(side_effect=responses)
+    managers = [
+        _FakeStreamManager(_FakeStream(_events_for(r), r)) for r in responses
+    ]
+    client.messages.stream = MagicMock(side_effect=managers)
     return client
 
 
@@ -162,14 +261,15 @@ async def test_iteration_two_request_messages_contain_iteration_one_signature(
             hard_caps=HardCaps(),
             langfuse=_NoopLangfuse(),
             environment="test",
+            sse_emitter=SSEEmitter(),
         )
 
         assert result.terminal_state == "end_turn"
         assert result.iterations_count == 2
-        assert client.messages.create.await_count == 2
+        assert client.messages.stream.call_count == 2
 
-        # Both create() calls must carry the thinking config (A1.7).
-        for call in client.messages.create.await_args_list:
+        # Both stream() calls must carry the thinking config (A1.7).
+        for call in client.messages.stream.call_args_list:
             assert call.kwargs["thinking"] == {
                 "type": "enabled",
                 "budget_tokens": 1024,

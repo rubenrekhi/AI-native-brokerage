@@ -16,7 +16,15 @@ from unittest.mock import AsyncMock
 
 import anthropic
 import pytest
-from anthropic.types import Message, TextBlock, Usage
+from anthropic.types import (
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    TextBlock,
+    TextDelta as AnthropicTextDelta,
+    Usage,
+)
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,12 +75,80 @@ def _stub_response(
     )
 
 
+class _FakeStream:
+    def __init__(self, events: list[Any], final: Message) -> None:
+        self._events = events
+        self._index = 0
+        self._final = final
+
+    def __aiter__(self) -> "_FakeStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._index >= len(self._events):
+            raise StopAsyncIteration
+        event = self._events[self._index]
+        self._index += 1
+        return event
+
+    async def get_final_message(self) -> Message:
+        return self._final
+
+    async def close(self) -> None:
+        return None
+
+
+class _FakeStreamManager:
+    def __init__(self, stream: _FakeStream) -> None:
+        self._stream = stream
+
+    async def __aenter__(self) -> _FakeStream:
+        return self._stream
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self._stream.close()
+
+
+def _events_for(message: Message) -> list[Any]:
+    """Stream of raw events that accumulate to ``message``. Mirrors what
+    Anthropic emits for a single text-block response."""
+    block = message.content[0]
+    return [
+        RawContentBlockStartEvent(
+            content_block=TextBlock(text="", type="text"),
+            index=0,
+            type="content_block_start",
+        ),
+        RawContentBlockDeltaEvent(
+            delta=AnthropicTextDelta(text=block.text, type="text_delta"),
+            index=0,
+            type="content_block_delta",
+        ),
+        RawContentBlockStopEvent(index=0, type="content_block_stop"),
+    ]
+
+
 def _stub_client(response_or_exc: Any) -> AsyncMock:
+    """Fake ``AsyncAnthropic`` whose ``messages.stream`` returns a context
+    manager that streams events for ``response_or_exc`` (or that raises in
+    ``__aenter__`` if a ``BaseException`` is passed)."""
+    from unittest.mock import MagicMock
+
     client = AsyncMock(spec=anthropic.AsyncAnthropic)
     if isinstance(response_or_exc, BaseException):
-        client.messages.create = AsyncMock(side_effect=response_or_exc)
+        class _RaisingManager:
+            async def __aenter__(self) -> Any:
+                raise response_or_exc
+
+            async def __aexit__(self, *exc: Any) -> None:
+                return None
+
+        client.messages.stream = MagicMock(return_value=_RaisingManager())
     else:
-        client.messages.create = AsyncMock(return_value=response_or_exc)
+        events = _events_for(response_or_exc)
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(_FakeStream(events, response_or_exc))
+        )
     return client
 
 
@@ -295,8 +371,11 @@ class TestHappyPath:
             assert msgs[0].content_blocks == [
                 {"type": "text", "text": "how is AMD"}
             ]
+            # B2.4: persisted assistant blocks carry the same block_id the
+            # ``block_start`` frame announced, so iOS can correlate the
+            # streamed envelope with the durable row.
             assert msgs[1].content_blocks == [
-                {"type": "text", "text": "hello world"}
+                {"type": "text", "block_id": block_id, "text": "hello world"}
             ]
 
             turn = (
@@ -306,6 +385,10 @@ class TestHappyPath:
                     )
                 )
             ).scalar_one()
+            # B2.4 plumbs the loop's ``agent_turns.id`` through ``turn_started``
+            # / ``turn_completed`` so the wire envelope and the DB row share
+            # the same UUID.
+            assert turn.id == started.turn_id
             assert turn.terminal_state == "end_turn"
             assert turn.user_id == fixture.user_id
             assert turn.iterations_count == 1
