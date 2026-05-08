@@ -18,7 +18,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Awaitable, Callable
 from unittest.mock import AsyncMock, MagicMock
 
 import anthropic
@@ -1298,3 +1298,268 @@ class TestLangfuseInstrumentation:
         assert outer_updates[0]["status_message"] == (
             ErrorCode.TURN_ITERATION_LIMIT.value
         )
+
+
+# ---------- B3.3: cancellation ----------
+
+
+class TestCancellation:
+    """B3.3: ``disconnect_check`` propagates client disconnect into the loop
+    as :class:`asyncio.CancelledError`. The ``except`` clause sets
+    ``terminal_state='cancelled'`` and ``error_code=CANCELLED``, the
+    ``finally`` block persists those onto the agent_turn row, and the
+    CancelledError re-propagates to the caller. No terminal SSE frame is
+    emitted because the connection that would consume it is gone.
+    """
+
+    @staticmethod
+    async def _run_until_cancelled(
+        client: Any,
+        repo_mocks: dict[str, Any],
+        *,
+        disconnect_check: Callable[[], Awaitable[bool]],
+        hard_caps: HardCaps | None = None,
+        emitter: SSEEmitter | None = None,
+    ) -> list[Event]:
+        """Drive the loop expecting a CancelledError; return drained events.
+
+        Mirrors the ``_run`` helper but expects cancellation. The drain task
+        is awaited on the cleanup path so pytest doesn't flag it as a leaked
+        coroutine.
+        """
+        em = emitter or SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=uuid.uuid4(),
+                    conversation_id=uuid.uuid4(),
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=_make_db_factory(),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=hard_caps or HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=em,
+                    disconnect_check=disconnect_check,
+                )
+        finally:
+            await em.close()
+        return await drain_task
+
+    async def test_iteration_boundary_disconnect_raises_cancelled_error(
+        self, repo_mocks
+    ):
+        # disconnect_check returns True on the first call (iteration-boundary
+        # poll). The loop self-raises CancelledError before any Anthropic
+        # call is made.
+        client = _make_client(_make_response())
+        check_calls = 0
+
+        async def disconnect() -> bool:
+            nonlocal check_calls
+            check_calls += 1
+            return True
+
+        events = await self._run_until_cancelled(
+            client, repo_mocks, disconnect_check=disconnect
+        )
+
+        # Polled exactly once at the iteration boundary, then raised — the
+        # streaming poll path was never reached.
+        assert check_calls == 1
+        client.messages.stream.assert_not_called()
+
+        # turn_started fires before the iteration begins (the row is
+        # already open); no terminal frame follows because the client is
+        # gone.
+        assert [type(e) for e in events] == [TurnStarted]
+
+        # Audit row reflects the cancellation. assistant_message_id is
+        # None because no blocks were assembled.
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "cancelled"
+        assert kwargs["error_code"] == ErrorCode.CANCELLED.value
+        assert kwargs["assistant_message_id"] is None
+        repo_mocks["append_assistant_message"].assert_not_awaited()
+        # No Anthropic call → no model_invocation row.
+        repo_mocks["record_model_invocation"].assert_not_awaited()
+
+    async def test_mid_stream_disconnect_raises_cancelled_error(
+        self, repo_mocks
+    ):
+        # disconnect_check returns False at the iteration boundary, then
+        # True from the first mid-stream poll (after the Nth text delta).
+        # The loop is mid-Anthropic-stream when it self-raises; the
+        # streaming context's __aexit__ closes the upstream connection.
+        N = 16  # _DISCONNECT_CHECK_DELTA_INTERVAL in app.ai.runtime.loop
+        text_chunks = ["c"] * (N + 4)
+        full_text = "".join(text_chunks)
+        final = _make_response(text=full_text)
+        events_list: list[Any] = [
+            RawContentBlockStartEvent(
+                content_block=TextBlock(text="", type="text"),
+                index=0,
+                type="content_block_start",
+            ),
+            *[
+                RawContentBlockDeltaEvent(
+                    delta=AnthropicTextDelta(text=c, type="text_delta"),
+                    index=0,
+                    type="content_block_delta",
+                )
+                for c in text_chunks
+            ],
+            RawContentBlockStopEvent(index=0, type="content_block_stop"),
+        ]
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(_FakeStream(events_list, final))
+        )
+
+        check_calls = 0
+
+        async def disconnect() -> bool:
+            nonlocal check_calls
+            check_calls += 1
+            # First call is the iteration-boundary poll; subsequent calls
+            # are the mid-stream cadence.
+            return check_calls > 1
+
+        wire_events = await self._run_until_cancelled(
+            client, repo_mocks, disconnect_check=disconnect
+        )
+
+        # The stream WAS opened (one Anthropic call). The mid-stream poll
+        # fired only after the cadence interval; the loop emitted exactly
+        # N text_deltas and then cancelled — the remaining 4 deltas the
+        # fake stream would have produced never made it onto the wire.
+        client.messages.stream.assert_called_once()
+        text_deltas = [e for e in wire_events if isinstance(e, TextDelta)]
+        assert len(text_deltas) == N
+
+        # Open envelope only (turn_started + block_start + N deltas); no
+        # block_end, no terminal frame.
+        assert [type(e) for e in wire_events] == [
+            TurnStarted,
+            BlockStart,
+            *([TextDelta] * N),
+        ]
+
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "cancelled"
+        assert kwargs["error_code"] == ErrorCode.CANCELLED.value
+        # Mid-stream cancellation: the post-stream block-emission path
+        # never ran, so no assistant message persists. (B3.4 will extend
+        # this to persist the partial text block.)
+        assert kwargs["assistant_message_id"] is None
+        repo_mocks["append_assistant_message"].assert_not_awaited()
+        # The Anthropic call kicked off but never completed
+        # ``get_final_message()``, so no model_invocation row is recorded.
+        repo_mocks["record_model_invocation"].assert_not_awaited()
+
+    async def test_disconnect_check_returning_false_completes_normally(
+        self, repo_mocks
+    ):
+        # When the client stays connected throughout, the loop runs to
+        # ``end_turn`` and emits ``turn_completed`` — no cancellation
+        # path is exercised.
+        client = _make_client(_make_response(text="hi"))
+        check_calls = 0
+
+        async def disconnect() -> bool:
+            nonlocal check_calls
+            check_calls += 1
+            return False
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+        try:
+            result = await run_agent_turn(
+                user_id=uuid.uuid4(),
+                conversation_id=uuid.uuid4(),
+                user_message="hello",
+                anthropic_client=client,
+                db_factory=_make_db_factory(),
+                tool_registry=EMPTY_REGISTRY,
+                system_prompt=SYSTEM_PROMPT,
+                model_config=ModelConfig(model_id=MODEL_ID),
+                hard_caps=HardCaps(),
+                langfuse=_NoopLangfuse(),
+                environment="test",
+                sse_emitter=em,
+                disconnect_check=disconnect,
+            )
+        finally:
+            await em.close()
+        events = await drain_task
+
+        assert result.terminal_state == "end_turn"
+        # At least one poll happens (the iteration-boundary check); no
+        # mid-stream poll because the response only had one delta.
+        assert check_calls >= 1
+        terminals = [
+            e for e in events if isinstance(e, (TurnCompleted, Error))
+        ]
+        assert len(terminals) == 1
+        assert isinstance(terminals[0], TurnCompleted)
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "end_turn"
+        assert kwargs["error_code"] is None
+
+    async def test_external_task_cancel_lands_as_cancelled_terminal_state(
+        self, repo_mocks
+    ):
+        # External-cancellation path: the framework cancels the driver
+        # task while the loop is inside the try/except (e.g. when the SSE
+        # asyncgen is closed by FastAPI before our poll fires). The same
+        # ``except asyncio.CancelledError`` branch must set
+        # ``terminal_state='cancelled'`` so the audit row is consistent
+        # regardless of which side detected the disconnect first.
+        #
+        # Park the runner at an await *inside* the try block by using a
+        # ``queue_size=1`` emitter and not draining it: ``turn_started``
+        # is emitted before the try block (filling the queue), then
+        # ``block_start`` — emitted from inside the chunk loop — blocks
+        # forever on ``queue.put``. ``task.cancel()`` lands at that await,
+        # which is inside the try/except.
+        client = _make_client(_make_response(text="hi"))
+        em = SSEEmitter(queue_size=1)
+
+        async def runner() -> None:
+            await run_agent_turn(
+                user_id=uuid.uuid4(),
+                conversation_id=uuid.uuid4(),
+                user_message="hello",
+                anthropic_client=client,
+                db_factory=_make_db_factory(),
+                tool_registry=EMPTY_REGISTRY,
+                system_prompt=SYSTEM_PROMPT,
+                model_config=ModelConfig(model_id=MODEL_ID),
+                hard_caps=HardCaps(),
+                langfuse=_NoopLangfuse(),
+                environment="test",
+                sse_emitter=em,
+            )
+
+        task = asyncio.create_task(runner())
+        # ``AsyncMock`` and ``asyncio.Queue.put`` on a non-full queue both
+        # complete without yielding, so the task only suspends when the
+        # queue fills. One yield is enough for the runner to sprint to the
+        # second emit (block_start) and park there.
+        await asyncio.sleep(0)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # Drain on cleanup so the queued turn_started doesn't leak.
+        drain_task = asyncio.create_task(_drain(em))
+        await em.close()
+        await drain_task
+
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "cancelled"
+        assert kwargs["error_code"] == ErrorCode.CANCELLED.value

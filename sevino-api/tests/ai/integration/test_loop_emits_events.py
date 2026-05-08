@@ -439,3 +439,160 @@ class TestAnthropicExceptionEmitsError:
         assert isinstance(err, Error)
         assert err.code == ErrorCode.MODEL_RATE_LIMIT
         assert result.terminal_state == "error"
+
+
+# ---------- B3.3: cancellation ----------
+
+
+class TestCancellationPersistsTerminalState:
+    """B3.3 acceptance: when ``disconnect_check`` returns True the loop
+    raises ``asyncio.CancelledError`` and the agent_turn row is durably
+    updated with ``terminal_state='cancelled'`` and
+    ``error_code='cancelled'``. Verified against real Postgres so the
+    finally-block writes survive the CancelledError unwinding."""
+
+    async def test_iteration_boundary_cancellation_persists_cancelled_state(
+        self, db_engine, fixture
+    ):
+        # Stub stream is provided in case a regression failed to short-
+        # circuit at the iteration-boundary poll; the assert_not_called
+        # below catches the regression itself.
+        events, final = _stream_events(["unused"])
+        client = _stub_streaming_client(events, final)
+
+        async def disconnect() -> bool:
+            return True
+
+        emitter = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(emitter))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=fixture.user_id,
+                    conversation_id=fixture.conversation_id,
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=make_session_factory(db_engine),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=emitter,
+                    disconnect_check=disconnect,
+                )
+        finally:
+            await emitter.close()
+        wire_events = await drain_task
+
+        client.messages.stream.assert_not_called()
+        # turn_started fires once the agent_turn row is open; no terminal
+        # frame because the client is gone.
+        assert [type(e) for e in wire_events] == [TurnStarted]
+
+        async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
+            from app.models.agent_turn import AgentTurn
+
+            turn = (
+                await v.execute(
+                    select(AgentTurn).where(
+                        AgentTurn.conversation_id == fixture.conversation_id
+                    )
+                )
+            ).scalar_one()
+            assert turn.terminal_state == "cancelled"
+            assert turn.error_code == "cancelled"
+            assert turn.assistant_message_id is None
+            assert turn.iterations_count == 0
+
+            # Only the user message persisted; no assistant message because
+            # the loop never produced any blocks.
+            roles = list(
+                (
+                    await v.execute(
+                        select(MessageRow.role).where(
+                            MessageRow.conversation_id
+                            == fixture.conversation_id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert roles == ["user"]
+
+    async def test_mid_stream_cancellation_persists_cancelled_state(
+        self, db_engine, fixture
+    ):
+        # Stream emits 16+ deltas; ``disconnect_check`` returns True only
+        # after the iteration-boundary poll, so the cancellation lands on
+        # the first mid-stream cadence (after the 16th delta).
+        N = 16  # _DISCONNECT_CHECK_DELTA_INTERVAL in app.ai.runtime.loop
+        events_list, final = _stream_events(["c"] * (N + 4))
+        client = _stub_streaming_client(events_list, final)
+
+        check_calls = 0
+
+        async def disconnect() -> bool:
+            nonlocal check_calls
+            check_calls += 1
+            return check_calls > 1
+
+        emitter = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(emitter))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=fixture.user_id,
+                    conversation_id=fixture.conversation_id,
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=make_session_factory(db_engine),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=emitter,
+                    disconnect_check=disconnect,
+                )
+        finally:
+            await emitter.close()
+        wire_events = await drain_task
+
+        client.messages.stream.assert_called_once()
+        text_deltas = [e for e in wire_events if isinstance(e, TextDelta)]
+        assert len(text_deltas) == N
+
+        async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
+            from app.models.agent_turn import AgentTurn
+
+            turn = (
+                await v.execute(
+                    select(AgentTurn).where(
+                        AgentTurn.conversation_id == fixture.conversation_id
+                    )
+                )
+            ).scalar_one()
+            assert turn.terminal_state == "cancelled"
+            assert turn.error_code == "cancelled"
+            # Mid-stream cancellation: no assistant message is persisted
+            # for B3.3 (B3.4 will extend this to persist the partial text
+            # block before completing the row).
+            assert turn.assistant_message_id is None
+
+            roles = list(
+                (
+                    await v.execute(
+                        select(MessageRow.role).where(
+                            MessageRow.conversation_id
+                            == fixture.conversation_id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert roles == ["user"]

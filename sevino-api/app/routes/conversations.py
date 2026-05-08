@@ -170,6 +170,12 @@ async def post_turn(
                 langfuse=langfuse,
                 environment=settings.environment,
                 sse_emitter=emitter,
+                # B3.3: poll FastAPI's disconnect signal so a client (iOS)
+                # closing the SSE connection mid-turn cancels the loop
+                # server-side, persisting ``terminal_state='cancelled'``
+                # on the agent_turn row instead of running the full
+                # response and dropping the result on the floor.
+                disconnect_check=request.is_disconnected,
             )
             result_turn_id = result.turn_id
             # Only ``end_turn`` with persisted blocks is replayable. Cap

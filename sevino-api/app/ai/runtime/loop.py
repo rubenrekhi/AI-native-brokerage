@@ -38,9 +38,10 @@ are durable mid-turn rather than batched at the end.
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 import structlog
 from anthropic import AsyncAnthropic
@@ -97,6 +98,13 @@ _THINKING_BUDGET_TOKENS = 1024
 # contribute zero — the audit row will undercount when redacted thinking
 # fires, which is acceptable for v0 observability.
 _CHARS_PER_TOKEN = 4
+
+# B3.3: how often to poll ``disconnect_check`` mid-stream. Polled after
+# every Nth ``text_delta`` so an iOS disconnect lands a CancelledError
+# inside the loop within a few hundred milliseconds (Anthropic typically
+# streams ~50 deltas/s on Sonnet). Lower = faster cancel but more
+# is_disconnected() ASGI-receive polls; higher = cheaper but laggier.
+_DISCONNECT_CHECK_DELTA_INTERVAL = 16
 
 
 def _to_anthropic_content(
@@ -162,6 +170,7 @@ async def run_agent_turn(
     langfuse: LangfuseClient,
     environment: str,
     sse_emitter: SSEEmitter,
+    disconnect_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
@@ -209,6 +218,22 @@ async def run_agent_turn(
     counts including the thinking estimate) and ``cost_details`` (total
     USD from :func:`cost_usd_micros`), so Langfuse Cloud aggregates cost
     per turn and shows the token breakdown.
+
+    Cancellation (B3.3): when ``disconnect_check`` is provided, the loop
+    polls it at every iteration boundary and after every Nth text_delta
+    inside the stream. If the check returns ``True`` the loop raises
+    :class:`asyncio.CancelledError`; the ``except`` clause sets
+    ``terminal_state='cancelled'`` and ``error_code=CANCELLED``, the
+    ``finally`` block persists the agent_turn row with that state, and
+    the CancelledError re-propagates to the caller. The endpoint passes
+    ``request.is_disconnected`` so an iOS disconnect tears the turn down
+    server-side within a second instead of running to completion. The
+    same handling catches CancelledError that arrives via external
+    ``task.cancel()`` (e.g. when the SSE asyncgen is cancelled by the
+    framework before our poll fires), so cancellation lands as
+    ``terminal_state='cancelled'`` regardless of which side detected the
+    disconnect first. No terminal SSE frame is emitted on cancellation
+    since the client connection that would consume it is gone.
     """
     if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
         raise ValueError(
@@ -319,6 +344,16 @@ async def run_agent_turn(
         ):
             try:
                 while True:
+                    # B3.3: poll for client disconnect at the iteration
+                    # boundary before doing any further work. Self-raising
+                    # CancelledError (rather than awaiting an external
+                    # ``task.cancel()``) lets the ``except`` clause below
+                    # set ``terminal_state='cancelled'`` deterministically
+                    # — the audit row distinguishes a client disconnect
+                    # from any other CancelledError.
+                    if disconnect_check is not None and await disconnect_check():
+                        raise asyncio.CancelledError
+
                     breach = check_caps(state, hard_caps)
                     if breach is not None:
                         terminal_state = breach.value
@@ -371,6 +406,11 @@ async def run_agent_turn(
                         # are not user-facing in v0 so they don't get
                         # ``block_start`` / ``block_end`` events.
                         open_text_blocks: dict[int, str] = {}
+                        # B3.3: counts text_deltas seen this iteration so
+                        # ``disconnect_check`` polls on a fixed cadence
+                        # rather than once per chunk (every chunk would be
+                        # a hot-path ASGI-receive call).
+                        text_deltas_seen = 0
                         try:
                             async with anthropic_client.messages.stream(
                                 **create_kwargs
@@ -404,6 +444,26 @@ async def run_agent_turn(
                                                     text=chunk.delta.text,
                                                 )
                                             )
+                                            text_deltas_seen += 1
+                                            # B3.3: poll for disconnect on
+                                            # the cadence so a mid-response
+                                            # iOS close cancels the in-flight
+                                            # stream within a few hundred ms
+                                            # rather than running to
+                                            # completion. CancelledError
+                                            # raised here unwinds through
+                                            # the stream's ``async with``
+                                            # (closing the upstream HTTP
+                                            # connection) and lands in the
+                                            # outer ``except`` below.
+                                            if (
+                                                disconnect_check is not None
+                                                and text_deltas_seen
+                                                % _DISCONNECT_CHECK_DELTA_INTERVAL
+                                                == 0
+                                                and await disconnect_check()
+                                            ):
+                                                raise asyncio.CancelledError
                                     elif chunk.type == "content_block_stop":
                                         block_id = open_text_blocks.get(
                                             chunk.index
@@ -576,6 +636,20 @@ async def run_agent_turn(
                 # Reached only via a normal break — used below to gate the
                 # terminal SSE frame.
                 completed_normally = True
+            except asyncio.CancelledError:
+                # B3.3: client disconnected — either our own
+                # ``disconnect_check`` poll raised this CancelledError or
+                # the framework cancelled our task externally. Either way,
+                # surface it as ``terminal_state='cancelled'`` on the
+                # agent_turn row before letting the cancellation
+                # propagate to the caller. The ``finally`` below still
+                # runs the audit-row writes; subsequent awaits proceed
+                # normally because cancellation has been delivered (the
+                # task's _must_cancel flag was cleared on injection) and
+                # we are not awaiting another cancel.
+                terminal_state = "cancelled"
+                error_code = ErrorCode.CANCELLED
+                raise
             finally:
                 # Defensive: every loop exit path above sets terminal_state.
                 # This guards against future refactors leaving an unexpected
