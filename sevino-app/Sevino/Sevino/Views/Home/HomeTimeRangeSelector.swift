@@ -77,6 +77,7 @@ struct HomeTimeRangeSelector: View {
         .animation(.spring(duration: 0.35, bounce: 0.2), value: indicatorOffsetX)
         .animation(.spring(duration: 0.25, bounce: 0.2), value: isPressing)
         .animation(.easeOut(duration: 0.2), value: activeRange)
+        .sensoryFeedback(.selection, trigger: activeRange)
     }
 
     private func rangeAt(x: CGFloat) -> TimeRange? {
