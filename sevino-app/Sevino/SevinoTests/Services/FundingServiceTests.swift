@@ -146,6 +146,64 @@ final class FundingServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - getCashInterest
+
+    func test_getCashInterest_getsExpectedPathAndDecodesResponse() async throws {
+        let responseBody = Data(#"""
+        {
+          "balance": "2412.08",
+          "apy": "0.0425",
+          "this_month_earned": "6.43",
+          "days_accrued": 22,
+          "lifetime_earned": "41.87",
+          "lifetime_since": "2025-10-01T00:00:00+00:00",
+          "buying_power": "2412.08",
+          "pending_deposits": "100.50",
+          "interest_paid_out": "monthly",
+          "fdic_insured_limit": "2500000",
+          "sweep_status": "ACTIVE"
+        }
+        """#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/brokerage/cash-interest",
+            response: .success(status: 200, body: responseBody)
+        )
+
+        let service = makeService()
+        let response = try await service.getCashInterest()
+
+        XCTAssertEqual(StubURLProtocol.lastRequest()?.httpMethod, "GET")
+        XCTAssertEqual(response.balance, "2412.08")
+        XCTAssertEqual(response.apy, "0.0425")
+        XCTAssertEqual(response.thisMonthEarned, "6.43")
+        XCTAssertEqual(response.daysAccrued, 22)
+        XCTAssertEqual(response.lifetimeEarned, "41.87")
+        XCTAssertEqual(response.lifetimeSince, "2025-10-01T00:00:00+00:00")
+        XCTAssertEqual(response.interestPaidOut, "monthly")
+        XCTAssertEqual(response.sweepStatus, "ACTIVE")
+        XCTAssertNotNil(response.lifetimeSinceDate)
+    }
+
+    func test_getCashInterest_propagatesAPIError() async {
+        let errorBody = Data(#"{"error":"Alpaca down","code":"ALPACA_UNAVAILABLE"}"#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/brokerage/cash-interest",
+            response: .success(status: 503, body: errorBody)
+        )
+
+        let service = makeService()
+        do {
+            _ = try await service.getCashInterest()
+            XCTFail("expected APIError")
+        } catch let error as APIError {
+            XCTAssertEqual(error.code, "ALPACA_UNAVAILABLE")
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
     // MARK: - TransferResponse helpers
 
     func test_amountValue_parsesDecimalString() {

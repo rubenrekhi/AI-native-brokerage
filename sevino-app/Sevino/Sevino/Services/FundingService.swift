@@ -12,6 +12,7 @@ protocol FundingServiceProtocol {
         direction: TransferDirection
     ) async throws -> TransferResponse
     func listTransfers() async throws -> [TransferResponse]
+    func getCashInterest() async throws -> CashInterestResponse
 }
 
 /// Handles backend communication for the Plaid + ACH funding flows.
@@ -74,6 +75,10 @@ final class FundingService: FundingServiceProtocol {
     func listTransfers() async throws -> [TransferResponse] {
         let response: TransferListResponse = try await api.get("/v1/funding/transfers")
         return response.transfers
+    }
+
+    func getCashInterest() async throws -> CashInterestResponse {
+        try await api.get("/v1/brokerage/cash-interest")
     }
 }
 

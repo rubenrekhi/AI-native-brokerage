@@ -10,6 +10,21 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     var deleteAchRelationshipResult: Result<Void, Error> = .success(())
     var createTransferResult: Result<TransferResponse, Error>?
     var listTransfersResult: Result<[TransferResponse], Error> = .success([])
+    var getCashInterestResult: Result<CashInterestResponse, Error> = .success(
+        CashInterestResponse(
+            balance: "0",
+            apy: "0",
+            thisMonthEarned: "0",
+            daysAccrued: 0,
+            lifetimeEarned: "0",
+            lifetimeSince: nil,
+            buyingPower: "0",
+            pendingDeposits: "0",
+            interestPaidOut: "monthly",
+            fdicInsuredLimit: "2500000",
+            sweepStatus: nil
+        )
+    )
 
     // Call tracking
     private(set) var createLinkTokenCalls = 0
@@ -18,6 +33,7 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     private(set) var deleteAchRelationshipCalls: [UUID] = []
     private(set) var createTransferCalls: [(relationshipId: String, amount: Decimal, direction: TransferDirection)] = []
     private(set) var listTransfersCalls = 0
+    private(set) var getCashInterestCalls = 0
 
     func createLinkToken() async throws -> String {
         createLinkTokenCalls += 1
@@ -57,5 +73,10 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     func listTransfers() async throws -> [TransferResponse] {
         listTransfersCalls += 1
         return try listTransfersResult.get()
+    }
+
+    func getCashInterest() async throws -> CashInterestResponse {
+        getCashInterestCalls += 1
+        return try getCashInterestResult.get()
     }
 }

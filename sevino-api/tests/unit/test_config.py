@@ -17,6 +17,8 @@ def _make_settings(**overrides) -> Settings:
         "plaid_client_id": "x",
         "plaid_secret": "x",
         "plaid_env": "sandbox",
+        "fmp_api_key": "fmp_test",
+        "alpaca_apr_tier_name": "standard",
     }
     defaults.update(overrides)
     return Settings(**defaults)
@@ -60,6 +62,40 @@ class TestSupabaseServiceRoleKey:
     def test_required_outside_dev(self, env):
         with pytest.raises(ValidationError, match="SUPABASE_SERVICE_ROLE_KEY"):
             _make_settings(environment=env, supabase_service_role_key="")
+
+
+class TestFmpApiKey:
+    def test_loads_from_input(self):
+        s = _make_settings(fmp_api_key="fmp_abc")
+        assert s.fmp_api_key == "fmp_abc"
+
+    def test_required(self):
+        with pytest.raises(ValidationError):
+            _make_settings(fmp_api_key=None)
+
+
+class TestAlpacaAprTierName:
+    def test_loads_from_input(self):
+        s = _make_settings(alpaca_apr_tier_name="premium")
+        assert s.alpaca_apr_tier_name == "premium"
+
+    def test_required(self):
+        with pytest.raises(ValidationError):
+            _make_settings(alpaca_apr_tier_name=None)
+
+
+class TestAlpacaDataBaseUrl:
+    def test_dev_uses_sandbox(self):
+        s = _make_settings(environment="dev")
+        assert s.alpaca_data_base_url == "https://data.sandbox.alpaca.markets"
+
+    def test_staging_uses_sandbox(self):
+        s = _make_settings(environment="staging")
+        assert s.alpaca_data_base_url == "https://data.sandbox.alpaca.markets"
+
+    def test_prod_uses_live(self):
+        s = _make_settings(environment="prod")
+        assert s.alpaca_data_base_url == "https://data.alpaca.markets"
 
 
 class TestSentryEnvironment:

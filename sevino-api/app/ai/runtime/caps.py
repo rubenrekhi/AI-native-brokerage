@@ -1,6 +1,10 @@
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
+
+from app.ai.runtime.types import LoopState
+
+__all__ = ["CapBreach", "HardCaps", "LoopState", "check_caps"]
 
 
 class CapBreach(str, Enum):
@@ -18,22 +22,6 @@ class HardCaps:
     max_tool_calls: int = 20
     max_wall_clock_s: float = 60.0
     max_output_tokens: int = 2048
-
-
-@dataclass(slots=True)
-class LoopState:
-    """Minimal counters `check_caps` reads to evaluate hard caps.
-
-    Lives here for A1.4 so the cap helper is testable in isolation. When A1.6
-    lands `app/ai/runtime/types.py`, move `LoopState` there and have the loop's
-    turn state compose around it rather than extend it in place — keep
-    `caps.py` focused on cap checks.
-    """
-
-    iterations: int = 0
-    tool_calls: int = 0
-    output_tokens: int = 0
-    started_at_monotonic: float = field(default_factory=time.monotonic)
 
 
 def check_caps(

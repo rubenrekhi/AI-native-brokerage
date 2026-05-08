@@ -20,9 +20,13 @@ struct HomeView: View {
     @State private var showHoldingsFilter = false
     @State private var showRadar = false
     @State private var showSidebar = false
+    @State private var sidebarDragOffset: CGFloat = 0
     @State private var showQuickCommands = false
     @State private var webSearchEnabled = false
     @State private var bottomSafeArea: CGFloat = 0
+
+    private var sidebarWidth: CGFloat { 300 * scale }
+    private var sidebarOffset: CGFloat { (showSidebar ? sidebarWidth : 0) + sidebarDragOffset }
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
@@ -226,6 +230,15 @@ struct HomeView: View {
                 }
             }
         }
+        .overlay(alignment: .leading) {
+            Color.clear
+                .frame(width: 44 * scale)
+                .contentShape(.rect)
+                .gesture(sidebarDragGesture)
+                .padding(.top, 60 * scale)
+                .allowsHitTesting(!showSidebar)
+                .accessibilityHidden(true)
+        }
         .mask {
             RoundedRectangle(cornerRadius: showSidebar ? 28 * scale : 0)
                 .ignoresSafeArea()
@@ -237,11 +250,12 @@ struct HomeView: View {
                     .ignoresSafeArea()
             }
             .buttonStyle(.plain)
+            .highPriorityGesture(sidebarDragGesture)
             .accessibilityLabel(L10n.Home.sidebarDismissAccessibility)
             .accessibilityHidden(!showSidebar)
             .allowsHitTesting(showSidebar)
         }
-        .offset(x: showSidebar ? 300 * scale : 0)
+        .offset(x: sidebarOffset)
         .background {
             SidebarPanelView(
                 scale: scale,
@@ -428,6 +442,33 @@ struct HomeView: View {
     private func toggleSidebar() {
         withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
             showSidebar.toggle()
+            sidebarDragOffset = 0
+        }
+    }
+
+    private var sidebarDragGesture: some Gesture {
+        DragGesture(minimumDistance: 10)
+            .onChanged(handleSidebarDragChanged)
+            .onEnded(handleSidebarDragEnded)
+    }
+
+    private func handleSidebarDragChanged(_ value: DragGesture.Value) {
+        let translation = value.translation.width
+        sidebarDragOffset = showSidebar
+            ? max(-sidebarWidth, min(0, translation))
+            : max(0, min(sidebarWidth, translation))
+    }
+
+    private func handleSidebarDragEnded(_ value: DragGesture.Value) {
+        let predicted = value.predictedEndTranslation.width
+        let threshold = sidebarWidth * 0.3
+        withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
+            if showSidebar, predicted < -threshold {
+                showSidebar = false
+            } else if !showSidebar, predicted > threshold {
+                showSidebar = true
+            }
+            sidebarDragOffset = 0
         }
     }
 

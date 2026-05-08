@@ -25,8 +25,8 @@ struct CashDetailCard: View {
         signedCurrency(data.lifetimeEarned)
     }
 
-    private var lifetimeSinceText: String {
-        data.lifetimeSince.formatted(.dateTime.month(.abbreviated).year())
+    private var lifetimeSinceText: String? {
+        data.lifetimeSince?.formatted(.dateTime.month(.abbreviated).year())
     }
 
     private var buyingPowerText: String {
@@ -102,12 +102,12 @@ struct CashDetailCard: View {
             statCard(
                 title: L10n.Home.lifetimeEarned,
                 value: lifetimeEarnedText,
-                subtitle: L10n.Home.sinceLabel(lifetimeSinceText)
+                subtitle: lifetimeSinceText.map(L10n.Home.sinceLabel)
             )
         }
     }
 
-    private func statCard(title: String, value: String, subtitle: String) -> some View {
+    private func statCard(title: String, value: String, subtitle: String?) -> some View {
         VStack(alignment: .leading, spacing: 4 * scale) {
             Text(title)
                 .font(.system(size: 12 * scale, weight: .medium))
@@ -115,9 +115,11 @@ struct CashDetailCard: View {
             Text(value)
                 .font(.system(size: 22 * scale, weight: .bold))
                 .foregroundStyle(Color.sevinoPositive)
-            Text(subtitle)
-                .font(.system(size: 11 * scale))
-                .foregroundStyle(Color.sevinoGreyContrast)
+            if let subtitle {
+                Text(subtitle)
+                    .font(.system(size: 11 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12 * scale)

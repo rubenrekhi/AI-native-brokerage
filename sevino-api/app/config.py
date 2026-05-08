@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     api_key: str = ""
     alpaca_api_key: str
     alpaca_secret_key: str
+    alpaca_apr_tier_name: str
+    cash_sweep_fdic_insured_limit: str = "2500000"
+    cash_sweep_payout_cadence: str = "monthly"
     plaid_client_id: str
     plaid_secret: str
     plaid_env: str
@@ -60,6 +63,7 @@ class Settings(BaseSettings):
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://us.cloud.langfuse.com"
+    fmp_api_key: str
 
     @property
     def plaid_fernet_keys(self) -> list[str]:
@@ -93,6 +97,12 @@ class Settings(BaseSettings):
         if self.environment == "prod":
             return "https://broker-api.alpaca.markets"
         return "https://broker-api.sandbox.alpaca.markets"
+
+    @property
+    def alpaca_data_base_url(self) -> str:
+        if self.environment == "prod":
+            return "https://data.alpaca.markets"
+        return "https://data.sandbox.alpaca.markets"
 
     @property
     def alpaca_auth_url(self) -> str:
@@ -131,6 +141,7 @@ class Settings(BaseSettings):
                 "SUPABASE_SERVICE_ROLE_KEY is required outside of dev"
             )
         return self
+
 
 
 settings = Settings()

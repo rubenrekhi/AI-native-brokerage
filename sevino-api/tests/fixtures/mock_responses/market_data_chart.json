@@ -1,0 +1,16 @@
+{
+  "symbol": "AAPL",
+  "timeframe": "1M",
+  "bars": [
+    {
+      "timestamp": "2026-04-01T00:00:00Z",
+      "open": "175.00",
+      "high": "180.00",
+      "low": "174.00",
+      "close": "179.00",
+      "volume": 50000000,
+      "vwap": "177.50",
+      "trade_count": 250000
+    }
+  ]
+}
