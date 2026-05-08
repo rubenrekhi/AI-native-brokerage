@@ -15,10 +15,20 @@ including ``thinking`` blocks **with their signatures** — is appended to
 the iteration-N signature byte-for-byte. ``model_invocations.response_content``
 is the source of truth (decision R1 in the plan).
 
+B2.4 wires the loop to the SSE transport. The caller passes an
+:class:`SSEEmitter`; the loop emits ``turn_started`` once
+``agent_turns.id`` is known, then ``block_start`` / ``text_delta`` /
+``block_end`` per text block as Anthropic streams, and finally
+``turn_completed`` (or ``error`` on cap breach / Anthropic failure) when
+the turn finalises. Block IDs are server-assigned ULIDs that round-trip
+through ``messages.content_blocks`` so iOS can correlate streamed
+deltas with the final persisted message.
+
 **No FastAPI imports.** All collaborators (Anthropic client, DB factory,
-tool registry, system prompt, model config, hard caps) are passed in by
-the caller (typically the chat-turn endpoint added in A1.9) so the same
-function is reusable by sub-agents and trivially testable in isolation.
+tool registry, system prompt, model config, hard caps, SSE emitter) are
+passed in by the caller (typically the chat-turn endpoint added in A1.9
+and converted to SSE in B2.3) so the same function is reusable by
+sub-agents and trivially testable in isolation.
 
 Persistence pattern (decision D12): the loop opens a fresh ``AsyncSession``
 via ``db_factory`` for every write — user message, agent_turn start,
@@ -32,8 +42,10 @@ import time
 import uuid
 from typing import Any
 
+import structlog
 from anthropic import AsyncAnthropic
 from langfuse import propagate_attributes
+from ulid import ULID
 
 from app.ai.observability.langfuse import LangfuseClient
 from app.ai.prompts import SystemPrompt
@@ -47,13 +59,23 @@ from app.ai.runtime.types import (
     ModelConfig,
     ToolRegistry,
 )
+from app.ai.transport.emitter import SSEEmitter
+from app.ai.transport.events import (
+    BlockEnd,
+    BlockStart,
+    Error,
+    TextDelta,
+    TurnCompleted,
+    TurnStarted,
+)
 from app.repositories.conversation import ConversationRepository
 
-# CapBreach values map onto ErrorCode values surfaced in the SSE error event
-# (Phase 2). TIMEOUT has no clean counterpart — ErrorCode lacks a TURN_TIMEOUT
-# variant — so it folds into INTERNAL_ERROR for now. Adding TURN_TIMEOUT is a
-# one-line follow-up that should land alongside Phase 2's SSE error event so
-# the new code is actually surfaced to clients.
+logger = structlog.get_logger(__name__)
+
+# CapBreach values map onto ErrorCode values surfaced in the SSE error event.
+# TIMEOUT has no clean counterpart — ErrorCode lacks a TURN_TIMEOUT variant —
+# so it folds into INTERNAL_ERROR for now. Adding TURN_TIMEOUT is a one-line
+# follow-up.
 _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
     CapBreach.ITERATION_LIMIT: ErrorCode.TURN_ITERATION_LIMIT,
     CapBreach.TOOL_CALL_LIMIT: ErrorCode.TOOL_CALL_LIMIT,
@@ -105,6 +127,7 @@ async def run_agent_turn(
     hard_caps: HardCaps,
     langfuse: LangfuseClient,
     environment: str,
+    sse_emitter: SSEEmitter,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
@@ -120,8 +143,25 @@ async def run_agent_turn(
 
     Raises ``ValueError`` if ``hard_caps.max_output_tokens`` is not strictly
     greater than the thinking budget — Anthropic 400s on every call when
-    ``budget_tokens >= max_tokens``. Fails fast before any DB writes so a
-    misconfigured cap can't leave half-written audit rows.
+    ``budget_tokens >= max_tokens``. Fails fast before any DB writes (and
+    before any SSE event is emitted) so a misconfigured cap can't leave
+    half-written audit rows or a stranded ``turn_started`` frame.
+
+    SSE wire (B2.4): once ``agent_turns.id`` is known the loop emits
+    ``turn_started`` on ``sse_emitter``. Each text block streamed by
+    Anthropic produces ``block_start`` (with a server-assigned ULID
+    ``block_id``) → one ``text_delta`` per chunk → ``block_end``. Thinking
+    and tool-use blocks stay server-side. The loop closes with
+    ``turn_completed`` on success, or ``error`` on cap breach / Anthropic
+    failure. **The loop only guarantees a terminal frame for normal exit
+    paths** (cap breach, Anthropic error trapped in the inner ``except
+    Exception``, or any of the ``stop_reason`` branches). Anything
+    escaping as an unhandled ``Exception`` or ``BaseException`` reaches
+    the caller without a terminal frame — the chat-turn endpoint's
+    ``_drive_turn`` catches non-``CancelledError`` exceptions and emits
+    its own ``error`` so iOS isn't left hanging; ``CancelledError``
+    means the client already disconnected so the missing terminal
+    frame is never observed.
 
     Langfuse instrumentation (A3.2): the entire turn is wrapped in an
     ``agent`` observation whose trace_id is ``agent_turn.id.hex`` so the
@@ -174,6 +214,13 @@ async def run_agent_turn(
         )
         turn_id = turn.id
 
+    # 4. SSE: announce the turn now that the row is durable. ``turn_id``
+    #    here is the same UUID iOS sees on subsequent ``turn_completed`` /
+    #    ``error`` frames and the same value persisted on ``agent_turns.id``.
+    await sse_emitter.emit(
+        TurnStarted(turn_id=turn_id, conversation_id=conversation_id)
+    )
+
     state = LoopState(started_at_monotonic=time.monotonic())
     assistant_blocks: list[dict[str, Any]] = []
     totals = {
@@ -186,6 +233,10 @@ async def run_agent_turn(
     }
     terminal_state: str | None = None
     error_code: ErrorCode | None = None
+    # ``True`` only after the while loop exits via a ``break`` (not an
+    # exception). Used in the finally block to gate the terminal SSE frame
+    # — unexpected exceptions reach the caller, which surfaces them.
+    completed_normally = False
 
     # Per A1.8: mark the system block as a cache breakpoint. Anthropic caches
     # everything up to the marker, so the system prompt is reused across turns
@@ -277,10 +328,54 @@ async def run_agent_turn(
                         metadata={"iteration_index": iteration_index},
                     ) as gen:
                         iter_started = time.monotonic()
+                        # Maps Anthropic's ``index`` for an in-flight TEXT
+                        # block to the server-assigned wire-level block_id.
+                        # Only text blocks land here — thinking / tool_use
+                        # are not user-facing in v0 so they don't get
+                        # ``block_start`` / ``block_end`` events.
+                        open_text_blocks: dict[int, str] = {}
                         try:
-                            response = await anthropic_client.messages.create(
+                            async with anthropic_client.messages.stream(
                                 **create_kwargs
-                            )
+                            ) as stream:
+                                async for chunk in stream:
+                                    if chunk.type == "content_block_start":
+                                        if chunk.content_block.type == "text":
+                                            block_id = str(ULID())
+                                            open_text_blocks[chunk.index] = (
+                                                block_id
+                                            )
+                                            await sse_emitter.emit(
+                                                BlockStart(
+                                                    block={
+                                                        "type": "text",
+                                                        "block_id": block_id,
+                                                        "text": "",
+                                                    }
+                                                )
+                                            )
+                                    elif chunk.type == "content_block_delta":
+                                        if (
+                                            chunk.delta.type == "text_delta"
+                                            and chunk.index in open_text_blocks
+                                        ):
+                                            await sse_emitter.emit(
+                                                TextDelta(
+                                                    block_id=open_text_blocks[
+                                                        chunk.index
+                                                    ],
+                                                    text=chunk.delta.text,
+                                                )
+                                            )
+                                    elif chunk.type == "content_block_stop":
+                                        block_id = open_text_blocks.get(
+                                            chunk.index
+                                        )
+                                        if block_id is not None:
+                                            await sse_emitter.emit(
+                                                BlockEnd(block_id=block_id)
+                                            )
+                                response = await stream.get_final_message()
                         except Exception as exc:
                             error_code = to_error_code(exc)
                             terminal_state = "error"
@@ -382,11 +477,34 @@ async def run_agent_turn(
                     # messages.content_blocks for v0. Thinking, tool_use, and
                     # future block types are excluded — A1.7 keeps thinking
                     # server-side and Phase 3 introduces the StatusBlock /
-                    # StockCardBlock pipeline.
-                    for block in response.content:
+                    # StockCardBlock pipeline. The block_id reuses the ULID
+                    # already emitted on ``block_start`` so iOS can correlate
+                    # the persisted block back to the streamed events.
+                    for index, block in enumerate(response.content):
                         if block.type == "text":
+                            block_id = open_text_blocks.get(index)
+                            if block_id is None:
+                                # Fallback: mint a fresh ULID so the JSONB
+                                # schema stays valid. The persisted block_id
+                                # won't match any streamed ``block_start``,
+                                # so iOS correlation breaks — log loudly so
+                                # the desync surfaces in observability.
+                                block_id = str(ULID())
+                                logger.warning(
+                                    "loop_text_block_id_fallback",
+                                    turn_id=str(turn_id),
+                                    iteration_index=iteration_index,
+                                    response_index=index,
+                                    streamed_indices=sorted(
+                                        open_text_blocks.keys()
+                                    ),
+                                )
                             assistant_blocks.append(
-                                {"type": "text", "text": block.text}
+                                {
+                                    "type": "text",
+                                    "block_id": block_id,
+                                    "text": block.text,
+                                }
                             )
 
                     if response.stop_reason == "end_turn":
@@ -418,6 +536,9 @@ async def run_agent_turn(
                     # record verbatim so the audit row carries the real signal.
                     terminal_state = response.stop_reason or "unknown"
                     break
+                # Reached only via a normal break — used below to gate the
+                # terminal SSE frame.
+                completed_normally = True
             finally:
                 # Defensive: every loop exit path above sets terminal_state.
                 # This guards against future refactors leaving an unexpected
@@ -465,6 +586,28 @@ async def run_agent_turn(
                         error_code.value if error_code is not None else None
                     ),
                 )
+
+                # Terminal SSE frame: only when the loop exited via its own
+                # break paths. If an unhandled exception is propagating, the
+                # caller surfaces it as ``error`` — emitting here would race
+                # with that and produce two terminal frames on the wire.
+                if completed_normally:
+                    if error_code is not None:
+                        await sse_emitter.emit(
+                            Error(
+                                code=error_code,
+                                message=f"terminal_state={terminal_state}",
+                            )
+                        )
+                    else:
+                        await sse_emitter.emit(
+                            TurnCompleted(
+                                turn_id=turn_id,
+                                terminal_state=terminal_state,
+                                total_cost_usd_micros=totals["cost"],
+                                iterations_count=state.iterations,
+                            )
+                        )
 
     return AgentTurnResult(
         terminal_state=terminal_state,
