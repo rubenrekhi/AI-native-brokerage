@@ -49,7 +49,11 @@ def range_to_alpaca_params(
         case PortfolioRange.ONE_DAY:
             return {"period": "1D", "timeframe": "5Min"}
         case PortfolioRange.ONE_WEEK:
-            return {"period": "1W", "timeframe": "30Min"}
+            # Alpaca rejects "30Min" — valid intraday timeframes are
+            # {1Min, 5Min, 15Min, 1H, 1D}. "1H" yields ~45 bars over a
+            # week of regular sessions, a clean curve density for the
+            # iOS chart.
+            return {"period": "1W", "timeframe": "1H"}
         case PortfolioRange.ONE_MONTH:
             return {"period": "1M", "timeframe": "1D"}
         case PortfolioRange.THREE_MONTHS:

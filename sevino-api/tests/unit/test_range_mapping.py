@@ -13,9 +13,11 @@ class TestFixedRanges:
         }
 
     def test_one_week(self):
+        # Alpaca rejects "30Min"; valid intraday values are
+        # {1Min, 5Min, 15Min, 1H, 1D}. We use "1H" (~45 bars/week).
         assert range_to_alpaca_params(PortfolioRange.ONE_WEEK) == {
             "period": "1W",
-            "timeframe": "30Min",
+            "timeframe": "1H",
         }
 
     def test_one_month(self):

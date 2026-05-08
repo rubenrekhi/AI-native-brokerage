@@ -371,7 +371,7 @@ Query parameter `range` is the iOS-facing enum; the service maps it to Alpaca's 
 | iOS `range` | Alpaca `period` | Alpaca `timeframe` | Alpaca `start` |
 |---|---|---|---|
 | `1D` | `1D` | `5Min` | — |
-| `1W` | `1W` | `30Min` | — |
+| `1W` | `1W` | `1H` | — |
 | `1M` | `1M` | `1D` | — |
 | `3M` | `3M` | `1D` | — |
 | `6M` | `6M` | `1D` | — |
@@ -393,6 +393,25 @@ Domain exceptions bubble up to the registered handlers in `app/exceptions.py`:
 | `AlpacaBrokerUnavailableError` | 503 | `ALPACA_UNAVAILABLE` | sets `Retry-After: 30` |
 
 Routes never `try/except` — handlers map exceptions to the structured `error_response()` shape.
+
+### Sandbox quirks (broker-api.sandbox.alpaca.markets)
+
+Alpaca's broker sandbox is *approximately* the same as production but has documented and observed inconsistencies. None of these reproduce in production; do not add fallbacks for them.
+
+| Quirk | What you'll see | Why |
+|---|---|---|
+| `last_equity = 0` on `GET /v1/trading/accounts/{id}/account` | iOS card shows `+$<full_equity> (+0.00%) today` for 1D — giant dollar amount, 0% — even when daily history clearly has yesterday's close | Sandbox skips the nightly EOD job that writes `last_equity` onto the trading-account record. The portfolio-history pipeline runs (so daily bars are present), but the snapshot pipeline doesn't see the previous close. |
+| `account_funded_at = null` despite real equity + open positions | Same account can have `equity = $50K`, real positions, and `account_funded_at = null` | Same root cause — separate ledger pipeline that doesn't run in sandbox. |
+| Sub-dollar drift between live `equity` and the last 5-min portfolio-history bar at close | `account.equity` ≠ history's last bar by a few cents, *frozen post-close* | Documented Alpaca pricing rule: bars use last-trade between 04:00–22:00 ET, then re-stamp to official close after 22:00 ET. Sandbox synthetic feeds for last-trade vs official-close don't reconcile. Industry-normal drift; even Robinhood/IBKR have it. |
+| `current_price` on positions equals `lastday_price` even after intraday history clearly moved | iOS holdings modal shows `change_today = $0.00` while the 1D chart shows real movement | Sandbox's position-pricing pipeline is a separate simulator from the portfolio-history pipeline. |
+
+For the smoke-test test user (`+15551234567` linked via `scripts/seed_portfolio_e2e.py`), the 1D card will always look weird because `last_equity = 0`. Use the 1M+ ranges to validate the gain UX; production accounts will look correct on 1D.
+
+Sources:
+- [Alpaca: Portfolio History reference](https://docs.alpaca.markets/reference/getaccountportfoliohistory-1)
+- [Alpaca blog: portfolio-history pricing rules](https://alpaca.markets/learn/introducing-the-new-portfolio-history-endpoint-at-alpaca)
+- [Forum: Historic P/L data does not match current Equity](https://forum.alpaca.markets/t/historic-p-l-data-does-not-match-current-equity/2394)
+- [Forum: Inconsistent equity data from get_portfolio_history](https://forum.alpaca.markets/t/inconsistent-equity-data-from-tradingclient-get-portfolio-history/18644)
 
 ---
 
