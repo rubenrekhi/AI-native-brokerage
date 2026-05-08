@@ -596,3 +596,86 @@ class TestCancellationPersistsTerminalState:
                 .all()
             )
             assert roles == ["user"]
+
+    async def test_cancel_after_start_agent_turn_persists_cancelled_state(
+        self, db_engine, fixture
+    ):
+        # B3.3 Part B regression: cancellation lands AFTER ``start_agent_turn``
+        # (so the agent_turn row exists in Postgres) but BEFORE the loop's
+        # inner try block. Pre-fix, this left the row stuck in non-terminal
+        # state forever — the framework's external ``task.cancel()`` arrived
+        # at the ``turn_started`` SSE emit, propagated out of
+        # ``run_agent_turn`` without hitting the loop's try/except/finally,
+        # and the row was orphaned.
+        #
+        # Post-fix, the outer ``try / except CancelledError / finally`` covers
+        # the early DB writes too. We force the cancellation by patching the
+        # emitter's ``emit`` to raise on the first call (the ``turn_started``
+        # frame). The agent_turn row must land at ``terminal_state='cancelled'``.
+        events_list, final = _stream_events(["unused"])
+        client = _stub_streaming_client(events_list, final)
+
+        emitter = SSEEmitter()
+        emit_calls = 0
+
+        async def cancelling_emit(event):
+            nonlocal emit_calls
+            emit_calls += 1
+            if emit_calls == 1:
+                raise asyncio.CancelledError
+            await SSEEmitter.emit(emitter, event)
+
+        emitter.emit = cancelling_emit  # type: ignore[method-assign]
+
+        drain_task = asyncio.create_task(_drain(emitter))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=fixture.user_id,
+                    conversation_id=fixture.conversation_id,
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=make_session_factory(db_engine),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=emitter,
+                )
+        finally:
+            await emitter.close()
+        await drain_task
+
+        client.messages.stream.assert_not_called()
+
+        async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
+            from app.models.agent_turn import AgentTurn
+
+            turn = (
+                await v.execute(
+                    select(AgentTurn).where(
+                        AgentTurn.conversation_id == fixture.conversation_id
+                    )
+                )
+            ).scalar_one()
+            assert turn.terminal_state == "cancelled"
+            assert turn.error_code == "cancelled"
+            assert turn.assistant_message_id is None
+            assert turn.iterations_count == 0
+            # No model_invocations row — the loop body never entered.
+            from app.models.model_invocation import ModelInvocation
+
+            invs = list(
+                (
+                    await v.execute(
+                        select(ModelInvocation).where(
+                            ModelInvocation.agent_turn_id == turn.id
+                        )
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            assert invs == []

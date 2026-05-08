@@ -1563,3 +1563,165 @@ class TestCancellation:
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
         assert kwargs["terminal_state"] == "cancelled"
         assert kwargs["error_code"] == ErrorCode.CANCELLED.value
+
+
+# ---------- B3.3 (Part B): outer try/finally covers early DB writes ----------
+
+
+class TestOuterCancellation:
+    """Cancellation can land at *any* await — including the early DB writes
+    that run before the loop's main while True. The outer
+    ``try / except CancelledError / finally`` in ``run_agent_turn``
+    guarantees:
+
+    * If ``start_agent_turn`` succeeded → the agent_turn row is finalised
+      with ``terminal_state='cancelled'`` no matter where the cancel
+      landed (between the row open and the loop, inside the loop's
+      pre-Anthropic setup, etc.).
+    * If ``start_agent_turn`` never ran → no orphan row to finalise; the
+      user_message row (if it persisted) remains durable on its own.
+
+    Without this widened envelope, framework-driven cancellation (e.g.
+    sse-starlette closing the asyncgen on client disconnect) would leave
+    rows stuck in non-terminal state forever — observed in CLOUD testing
+    and the regression this change fixes.
+    """
+
+    async def test_cancel_after_start_agent_turn_persists_cancelled_state(
+        self, repo_mocks
+    ):
+        # Cancellation lands AFTER ``start_agent_turn`` (so ``turn_id`` is
+        # set) but BEFORE the loop's inner try block. The most realistic
+        # await for this is the ``turn_started`` SSE emit. We force a
+        # CancelledError there by patching the emitter.
+        client = _make_client(_make_response())
+
+        em = SSEEmitter()
+        original_emit = em.emit
+        emit_calls = 0
+
+        async def cancelling_emit(event):
+            nonlocal emit_calls
+            emit_calls += 1
+            # First emit (TurnStarted) is the one fired before the loop
+            # enters its inner try. Cancel exactly there.
+            if emit_calls == 1:
+                raise asyncio.CancelledError
+            await original_emit(event)
+
+        em.emit = cancelling_emit  # type: ignore[method-assign]
+
+        with pytest.raises(asyncio.CancelledError):
+            await run_agent_turn(
+                user_id=uuid.uuid4(),
+                conversation_id=uuid.uuid4(),
+                user_message="hello",
+                anthropic_client=client,
+                db_factory=_make_db_factory(),
+                tool_registry=EMPTY_REGISTRY,
+                system_prompt=SYSTEM_PROMPT,
+                model_config=ModelConfig(model_id=MODEL_ID),
+                hard_caps=HardCaps(),
+                langfuse=_NoopLangfuse(),
+                environment="test",
+                sse_emitter=em,
+            )
+
+        # Anthropic was never called (loop body never entered).
+        client.messages.stream.assert_not_called()
+        # But the agent_turn row IS finalised with 'cancelled' — the new
+        # outer finally writes the row even though the cancellation
+        # landed before the inner try.
+        repo_mocks["complete_agent_turn"].assert_awaited_once()
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "cancelled"
+        assert kwargs["error_code"] == ErrorCode.CANCELLED.value
+        assert kwargs["assistant_message_id"] is None
+        assert kwargs["iterations_count"] == 0
+        repo_mocks["append_assistant_message"].assert_not_awaited()
+        repo_mocks["record_model_invocation"].assert_not_awaited()
+
+    async def test_cancel_during_user_message_persist_skips_row_finalize(
+        self, repo_mocks
+    ):
+        # Cancellation lands BEFORE ``start_agent_turn`` runs — there is
+        # no agent_turn row to finalise, so ``complete_agent_turn`` must
+        # not be called. The CancelledError still propagates to the
+        # caller.
+        client = _make_client(_make_response())
+
+        async def cancelling_append(*args, **kwargs):
+            raise asyncio.CancelledError
+
+        repo_mocks["append_user_message"].side_effect = cancelling_append
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=uuid.uuid4(),
+                    conversation_id=uuid.uuid4(),
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=_make_db_factory(),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=em,
+                )
+        finally:
+            await em.close()
+        await drain_task
+
+        # No agent_turn row ever opened, so no completion row to write.
+        repo_mocks["start_agent_turn"].assert_not_awaited()
+        repo_mocks["complete_agent_turn"].assert_not_awaited()
+        repo_mocks["append_assistant_message"].assert_not_awaited()
+        client.messages.stream.assert_not_called()
+
+    async def test_non_cancel_exception_during_early_db_write_marks_error(
+        self, repo_mocks
+    ):
+        # A non-CancelledError exception during early DB writes (e.g. a
+        # transient asyncpg error during ``start_agent_turn``) should
+        # still propagate to the caller. The outer finally's defensive
+        # guard handles ``terminal_state=None`` — but with no agent_turn
+        # row, there is nothing to finalise. The exception bubbles up.
+        client = _make_client(_make_response())
+
+        async def failing_start(*args, **kwargs):
+            raise RuntimeError("transient db failure")
+
+        repo_mocks["start_agent_turn"].side_effect = failing_start
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+        try:
+            with pytest.raises(RuntimeError, match="transient db failure"):
+                await run_agent_turn(
+                    user_id=uuid.uuid4(),
+                    conversation_id=uuid.uuid4(),
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=_make_db_factory(),
+                    tool_registry=EMPTY_REGISTRY,
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=em,
+                )
+        finally:
+            await em.close()
+        await drain_task
+
+        # User message was persisted (the await before start_agent_turn
+        # completed). The row that failed to open isn't there to
+        # finalise, so complete_agent_turn isn't called.
+        repo_mocks["append_user_message"].assert_awaited_once()
+        repo_mocks["complete_agent_turn"].assert_not_awaited()

@@ -157,6 +157,24 @@ async def post_turn(
         result_turn_id: uuid.UUID | None = None
         replayable = False
         try:
+            # B3.3: ``disconnect_check`` deliberately not wired to
+            # ``request.is_disconnected`` — this codebase's middleware
+            # chain (``APIKeyMiddleware``, ``RequestLoggingMiddleware``,
+            # ``CorrelationIDMiddleware``, ``SlowAPIMiddleware``) extends
+            # ``BaseHTTPMiddleware``, which consumes the ASGI receive
+            # channel upstream of the route. The route's
+            # ``request.is_disconnected`` therefore never observes the
+            # ``http.disconnect`` message and would always return False
+            # in production. Cancellation is instead driven by the
+            # framework's external ``task.cancel()`` when the SSE
+            # asyncgen is closed by ``EventSourceResponse`` (which uses
+            # raw ASGI receive in its own task group); the resulting
+            # CancelledError is caught by the outer ``except`` in
+            # ``run_agent_turn`` and persisted as
+            # ``terminal_state='cancelled'``. The poll hook is kept on
+            # the loop signature for unit-test ergonomics and so future
+            # work can wire it to a working signal (e.g.
+            # ``EventSourceResponse``'s ``client_close_handler_callable``).
             result = await run_agent_turn(
                 user_id=user_uuid,
                 conversation_id=conversation_id,
@@ -170,12 +188,6 @@ async def post_turn(
                 langfuse=langfuse,
                 environment=settings.environment,
                 sse_emitter=emitter,
-                # B3.3: poll FastAPI's disconnect signal so a client (iOS)
-                # closing the SSE connection mid-turn cancels the loop
-                # server-side, persisting ``terminal_state='cancelled'``
-                # on the agent_turn row instead of running the full
-                # response and dropping the result on the floor.
-                disconnect_check=request.is_disconnected,
             )
             result_turn_id = result.turn_id
             # Only ``end_turn`` with persisted blocks is replayable. Cap
