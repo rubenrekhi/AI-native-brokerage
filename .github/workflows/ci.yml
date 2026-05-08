@@ -2,6 +2,11 @@ name: CI
 
 on:
   pull_request:
+    # Adding `labeled` / `unlabeled` so toggling the `run-ai-smoke` label
+    # re-triggers the workflow. The unit/integration suite skips itself
+    # on label-only events via the per-job `if:` below so this doesn't
+    # cost a redundant test run.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
     paths:
       - "sevino-api/**"
       - ".github/workflows/ci.yml"
@@ -19,6 +24,13 @@ defaults:
 jobs:
   backend-tests:
     name: Sevino API Tests
+    # Skip the unit/integration suite when only a label changed — that
+    # event exists to re-trigger smoke-ai, not to re-run the whole
+    # suite. All other PR events (opened/synchronize/reopened) and any
+    # push event run as before.
+    if: |
+      github.event_name != 'pull_request' ||
+      (github.event.action != 'labeled' && github.event.action != 'unlabeled')
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
@@ -129,3 +141,138 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  detect-ai-changes:
+    name: Detect AI module changes
+    # Runs only on PRs (push to main always triggers smoke-ai regardless,
+    # so the path filter is irrelevant there). The smoke-ai job uses
+    # `if: always() && (...)` so it can still evaluate when this job is
+    # skipped on push events.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    # `dorny/paths-filter` calls the `pulls/{pr}/files` API on
+    # pull_request events. The repo's default GITHUB_TOKEN scope is
+    # `contents: read` only, so we explicitly grant the read scope it
+    # needs — without this the action 403s with "Resource not
+    # accessible by integration".
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      ai-changed: ${{ steps.filter.outputs.ai }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            ai:
+              - 'sevino-api/app/ai/**'
+              - 'sevino-api/tests/ai/**'
+
+  smoke-ai:
+    name: Sevino API AI Smoke
+    # Decision D10: smoke runs on (a) PR touching app/ai/ or tests/ai/,
+    # (b) PR labeled `run-ai-smoke`, or (c) push to main. `always()`
+    # forces evaluation even when `detect-ai-changes` is skipped on
+    # push (a needed-job skip would otherwise auto-skip this one).
+    needs: detect-ai-changes
+    if: |
+      always() &&
+      (github.event_name == 'push' ||
+       contains(github.event.pull_request.labels.*.name, 'run-ai-smoke') ||
+       needs.detect-ai-changes.outputs.ai-changed == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 54322:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      ENVIRONMENT: dev
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:54322/postgres
+      DATABASE_URL_DIRECT: postgresql+asyncpg://postgres:postgres@localhost:54322/postgres
+      REDIS_URL: redis://localhost:6379
+      SUPABASE_URL: http://127.0.0.1:54321
+      SUPABASE_ANON_KEY: ci-anon-key
+      SUPABASE_SERVICE_ROLE_KEY: ci-service-role-key
+      API_KEY: ""
+      ALPACA_API_KEY: ci-alpaca-key
+      ALPACA_SECRET_KEY: ci-alpaca-secret
+      ALPACA_APR_TIER_NAME: ci-tier
+      FMP_API_KEY: ci-fmp-key
+      PLAID_CLIENT_ID: ci-plaid-id
+      PLAID_SECRET: ci-plaid-secret
+      PLAID_ENV: sandbox
+      PLAID_FERNET_KEY: uQU2G7e5Dud8WN7MwCywdmFDrBxE9uo_S0XIgtLhQnw=
+      # Real Anthropic key from repo secrets. Forks don't get repo secrets,
+      # so this resolves to "" and `tests/ai/smoke/conftest.py:_smoke_prereqs`
+      # skips the suite cleanly — no spurious failures on contributor PRs.
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      RUN_AI_SMOKE: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: "sevino-api/uv.lock"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Bootstrap Supabase auth schema
+        run: |
+          PGPASSWORD=postgres psql -h localhost -p 54322 -U postgres -d postgres <<'SQL'
+          CREATE ROLE supabase_auth_admin NOLOGIN;
+          CREATE SCHEMA auth;
+          CREATE TABLE auth.users (
+              id UUID PRIMARY KEY,
+              instance_id UUID,
+              email VARCHAR(255),
+              encrypted_password VARCHAR(255),
+              aud VARCHAR(255),
+              role VARCHAR(255),
+              raw_app_meta_data JSONB,
+              raw_user_meta_data JSONB,
+              created_at TIMESTAMPTZ,
+              updated_at TIMESTAMPTZ,
+              confirmation_token VARCHAR(255) DEFAULT '',
+              email_change VARCHAR(255) DEFAULT '',
+              email_change_token_new VARCHAR(255) DEFAULT '',
+              recovery_token VARCHAR(255) DEFAULT '',
+              phone VARCHAR(255),
+              phone_change VARCHAR(255) DEFAULT '',
+              phone_confirmed_at TIMESTAMPTZ
+          );
+          SQL
+
+      - name: Apply migrations
+        run: make migrate
+
+      - name: Run AI smoke tests
+        run: uv run pytest tests/ai/smoke -v

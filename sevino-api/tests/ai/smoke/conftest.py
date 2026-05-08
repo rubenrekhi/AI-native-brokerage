@@ -43,6 +43,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.pool import NullPool
 
+from app.ai.models import MODELS, get_default_model_config
+from app.ai.runtime.types import ModelConfig
 from app.ai.transport.events import Event, parse_wire_frame
 from app.auth import get_current_user
 from app.config import settings
@@ -86,6 +88,25 @@ def _free_tcp_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
         return sock.getsockname()[1]
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _smoke_model_override() -> Iterator[None]:
+    """Pin the smoke harness to ``MODELS.SMOKE`` (Haiku) for the full session.
+
+    Per AI v0 plan B4.2: smoke tests bill real Anthropic, and the plan
+    pins this harness to the cheap Haiku tier (decision D9) regardless
+    of what ``ANTHROPIC_MODEL_MAIN`` is set to in production. Installing
+    the override here keeps the test files focused on the case under
+    assertion rather than the model wiring.
+    """
+    app.dependency_overrides[get_default_model_config] = (
+        lambda: ModelConfig(model_id=MODELS.SMOKE)
+    )
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_default_model_config, None)
 
 
 @pytest.fixture(scope="session")

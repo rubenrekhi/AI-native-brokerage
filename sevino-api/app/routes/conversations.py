@@ -30,10 +30,10 @@ from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
 
 from app.ai.anthropic_client import get_anthropic
-from app.ai.models import MODELS
+from app.ai.models import get_default_model_config
 from app.ai.observability.langfuse import LangfuseClient, get_langfuse
 from app.ai.prompts import SYSTEM_PROMPT_V1
-from app.ai.runtime.caps import HardCaps
+from app.ai.runtime.caps import HardCaps, get_hard_caps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
 from app.ai.runtime.errors import to_error_code
 from app.ai.runtime.loop import run_agent_turn
@@ -61,6 +61,8 @@ async def post_turn(
     db_factory: DbSessionFactory = Depends(get_db_factory),
     anthropic_client: AsyncAnthropic = Depends(get_anthropic),
     langfuse: LangfuseClient = Depends(get_langfuse),
+    model_config: ModelConfig = Depends(get_default_model_config),
+    hard_caps: HardCaps = Depends(get_hard_caps),
 ) -> EventSourceResponse:
     """Run one agent turn and stream the resulting events as SSE.
 
@@ -91,8 +93,8 @@ async def post_turn(
                 db_factory=db_factory,
                 tool_registry=EMPTY_REGISTRY,
                 system_prompt=SYSTEM_PROMPT_V1,
-                model_config=ModelConfig(model_id=MODELS.MAIN),
-                hard_caps=HardCaps(),
+                model_config=model_config,
+                hard_caps=hard_caps,
                 langfuse=langfuse,
                 environment=settings.environment,
                 sse_emitter=emitter,

@@ -4,7 +4,13 @@ from enum import Enum
 
 from app.ai.runtime.types import LoopState
 
-__all__ = ["CapBreach", "HardCaps", "LoopState", "check_caps"]
+__all__ = [
+    "CapBreach",
+    "HardCaps",
+    "LoopState",
+    "check_caps",
+    "get_hard_caps",
+]
 
 
 class CapBreach(str, Enum):
@@ -40,3 +46,14 @@ def check_caps(
     if state.output_tokens >= caps.max_output_tokens:
         return CapBreach.OUTPUT_TOKEN_LIMIT
     return None
+
+
+def get_hard_caps() -> HardCaps:
+    """FastAPI dependency that returns the per-turn hard caps.
+
+    Defaults to the production caps. Tests override via
+    ``app.dependency_overrides[get_hard_caps]`` — the smoke iteration-cap
+    case (B4.3) installs ``HardCaps(max_iterations=0)`` to exercise the
+    cap-breach path through the SSE endpoint without billing Anthropic.
+    """
+    return HardCaps()
