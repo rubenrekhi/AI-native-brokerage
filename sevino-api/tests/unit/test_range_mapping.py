@@ -55,9 +55,12 @@ class TestFixedRanges:
 class TestYTD:
     def test_ytd_uses_jan_1_of_injected_year(self):
         now = datetime(2026, 4, 23, 12, 30, tzinfo=timezone.utc)
+        # Must include `end` — Alpaca caps the response at ~1 month from
+        # `start` otherwise, returning an empty chart in May.
         assert range_to_alpaca_params(PortfolioRange.YTD, now=now) == {
             "timeframe": "1D",
             "start": "2026-01-01T00:00:00Z",
+            "end": "2026-04-23T12:30:00Z",
         }
 
     def test_ytd_on_jan_1_still_returns_same_year_jan_1(self):
@@ -65,13 +68,16 @@ class TestYTD:
         assert range_to_alpaca_params(PortfolioRange.YTD, now=now) == {
             "timeframe": "1D",
             "start": "2026-01-01T00:00:00Z",
+            "end": "2026-01-01T00:00:00Z",
         }
 
     def test_ytd_defaults_now_to_utc(self):
-        # Without an injected now, YTD should still produce a valid start.
+        # Without an injected now, YTD should still produce a valid start + end.
         params = range_to_alpaca_params(PortfolioRange.YTD)
         assert params["timeframe"] == "1D"
         assert params["start"].endswith("-01-01T00:00:00Z")
+        assert params["end"].endswith("Z")
+        assert "T" in params["end"]
 
 
 class TestEnumCoercion:

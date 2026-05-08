@@ -61,8 +61,13 @@ def range_to_alpaca_params(
         case PortfolioRange.SIX_MONTHS:
             return {"period": "6M", "timeframe": "1D"}
         case PortfolioRange.YTD:
+            # Alpaca silently caps the response at ~1 month from `start`
+            # when `end` is omitted, so a Jan 1 query in May would only
+            # return Jan 1–31 — yielding an empty chart for accounts
+            # opened mid-year. Always pass an explicit `end`.
             start = f"{now.year}-01-01T00:00:00Z"
-            return {"timeframe": "1D", "start": start}
+            end = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+            return {"timeframe": "1D", "start": start, "end": end}
         case PortfolioRange.ONE_YEAR:
             return {"period": "1A", "timeframe": "1D"}
         case PortfolioRange.ALL:

@@ -160,13 +160,16 @@ class TestHistoryRangeParam:
         )
 
         assert response.status_code == 200
-        # YTD computes the start of the current UTC year at request time.
+        # YTD computes the start of the current UTC year + an explicit
+        # `end` (now). Both are required: Alpaca caps the response at
+        # ~1 month from `start` when `end` is omitted.
         year = datetime.now(tz=timezone.utc).year
-        alpaca_mock.get_portfolio_history.assert_awaited_once_with(
-            test_brokerage_account["alpaca_account_id"],
-            timeframe="1D",
-            start=f"{year}-01-01T00:00:00Z",
-        )
+        alpaca_mock.get_portfolio_history.assert_awaited_once()
+        kwargs = alpaca_mock.get_portfolio_history.call_args.kwargs
+        assert kwargs["timeframe"] == "1D"
+        assert kwargs["start"] == f"{year}-01-01T00:00:00Z"
+        assert kwargs["end"].endswith("Z")
+        assert "T" in kwargs["end"]
 
     async def test_one_day_uses_intraday_timeframe(
         self,

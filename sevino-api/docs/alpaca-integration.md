@@ -368,16 +368,18 @@ Rationale for gating in the dependency rather than calling Alpaca: the broker's 
 
 Query parameter `range` is the iOS-facing enum; the service maps it to Alpaca's `period` / `timeframe` / `start`. Anything outside this set returns 422.
 
-| iOS `range` | Alpaca `period` | Alpaca `timeframe` | Alpaca `start` |
-|---|---|---|---|
-| `1D` | `1D` | `5Min` | — |
-| `1W` | `1W` | `1H` | — |
-| `1M` | `1M` | `1D` | — |
-| `3M` | `3M` | `1D` | — |
-| `6M` | `6M` | `1D` | — |
-| `YTD` | (omit) | `1D` | `YYYY-01-01T00:00:00Z` (computed) |
-| `1Y` | `1A` | `1D` | — |
-| `ALL` | `all` | `1W` | — |
+| iOS `range` | Alpaca `period` | Alpaca `timeframe` | Alpaca `start` | Alpaca `end` |
+|---|---|---|---|---|
+| `1D` | `1D` | `5Min` | — | — |
+| `1W` | `1W` | `1H` | — | — |
+| `1M` | `1M` | `1D` | — | — |
+| `3M` | `3M` | `1D` | — | — |
+| `6M` | `6M` | `1D` | — | — |
+| `YTD` | (omit) | `1D` | `YYYY-01-01T00:00:00Z` (computed) | `now` (computed) |
+| `1Y` | `1A` | `1D` | — | — |
+| `ALL` | `all` | `1W` | — | — |
+
+YTD must pass an explicit `end` — when only `start` is sent, Alpaca silently caps the response at ~1 month from `start`, which produces an empty chart for accounts opened any time mid-year. All other ranges use `period`, which defines the window from now backwards and doesn't have this issue.
 
 Source of truth: `range_to_alpaca_params()` in `app/services/portfolio.py`.
 
