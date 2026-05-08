@@ -99,6 +99,40 @@ _THINKING_BUDGET_TOKENS = 1024
 _CHARS_PER_TOKEN = 4
 
 
+def _to_anthropic_content(
+    content_blocks: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Strip Sevino-only fields from persisted blocks before re-sending.
+
+    ``messages.content_blocks`` JSONB carries a server-assigned ``block_id``
+    on text blocks (B2.4) so iOS can correlate the persisted row with the
+    SSE wire envelope. Anthropic's content-block schema doesn't accept
+    that field, and a follow-up turn that loads history verbatim would
+    400 on the unknown property — silently caught by the loop's inner
+    ``except Exception`` and reported as ``INTERNAL_ERROR``.
+
+    This is the boundary that translates *persisted* blocks back to the
+    *request* shape Anthropic expects. Within a single turn we never go
+    through here — the assistant content appended on each iteration is
+    the verbatim ``response_content`` from ``model_invocations``, which
+    is already in the Anthropic shape (and carries the thinking
+    signatures A1.7's R1 contract requires).
+    """
+    converted: list[dict[str, Any]] = []
+    for block in content_blocks:
+        if block.get("type") == "text":
+            converted.append(
+                {"type": "text", "text": block.get("text", "")}
+            )
+        else:
+            # Non-text blocks are reserved for future variants (StatusBlock,
+            # StockCardBlock). When those land they may need their own
+            # filtering — pass through for now so the discriminator catches
+            # any premature use during development.
+            converted.append(block)
+    return converted
+
+
 def _estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:
     """Approximate thinking tokens from the visible ``thinking`` block text.
 
@@ -194,11 +228,14 @@ async def run_agent_turn(
         user_message_id = user_msg.id
 
     # 2. Load full history (includes the just-persisted user message) and
-    #    transform into the Anthropic messages array shape.
+    #    transform into the Anthropic messages array shape. Persisted blocks
+    #    pass through ``_to_anthropic_content`` to drop Sevino-only fields
+    #    (``block_id`` on text blocks) before they re-enter the API.
     async with db_factory() as db:
         history = await ConversationRepository.load_history(db, conversation_id)
     messages: list[dict[str, Any]] = [
-        {"role": m.role, "content": m.content_blocks} for m in history
+        {"role": m.role, "content": _to_anthropic_content(m.content_blocks)}
+        for m in history
     ]
 
     # 3. Open the agent_turn row. From here, the finally block guarantees a

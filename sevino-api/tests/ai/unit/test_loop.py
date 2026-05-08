@@ -754,6 +754,88 @@ class TestRequestShape:
             }
         ]
 
+    async def test_history_assistant_text_blocks_strip_block_id(
+        self, repo_mocks
+    ):
+        # Regression: B2.4 persists assistant text blocks with a server-
+        # assigned ``block_id`` so iOS can correlate the row with the SSE
+        # wire. Anthropic's content-block schema doesn't accept that
+        # field, and a follow-up turn that loaded history verbatim was
+        # 400ing inside ``messages.stream()`` and surfacing as a generic
+        # ``INTERNAL_ERROR`` SSE frame. The transform must strip
+        # ``block_id`` before re-sending.
+        import copy
+
+        prior_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "first turn"}],
+            },
+        )()
+        prior_assistant = type(
+            "M",
+            (),
+            {
+                "role": "assistant",
+                "content_blocks": [
+                    {
+                        "type": "text",
+                        "block_id": "01KR2HBHWVQS5B5TK8QEPSQRKZ",
+                        "text": "first answer",
+                    }
+                ],
+            },
+        )()
+        new_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "follow-up"}],
+            },
+        )()
+        repo_mocks["load_history"] = AsyncMock(
+            return_value=[prior_user, prior_assistant, new_user]
+        )
+        import app.ai.runtime.loop as loop_module
+
+        loop_module.ConversationRepository.load_history = repo_mocks[
+            "load_history"
+        ]
+
+        # The loop reuses (and mutates) the ``messages`` list across
+        # iterations — capturing kwargs would show the post-mutation
+        # shape. Snapshot at call time via a side_effect instead.
+        captured: list[list[dict[str, Any]]] = []
+        final = _make_response(text="second answer")
+
+        def _stream_side_effect(**kwargs: Any) -> _FakeStreamManager:
+            captured.append(copy.deepcopy(kwargs["messages"]))
+            return _FakeStreamManager(_FakeStream(_events_for(final), final))
+
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(side_effect=_stream_side_effect)
+
+        await _run(client, repo_mocks, user_message="follow-up")
+
+        assert len(captured) == 1
+        sent_messages = captured[0]
+        assert [m["role"] for m in sent_messages] == [
+            "user",
+            "assistant",
+            "user",
+        ]
+        # Anthropic-shape only — no ``block_id``.
+        assert sent_messages[1]["content"] == [
+            {"type": "text", "text": "first answer"}
+        ]
+        # User blocks pass through unchanged — they never carry a block_id.
+        assert sent_messages[0]["content"] == [
+            {"type": "text", "text": "first turn"}
+        ]
+
 
 # ---------- cap breaches ----------
 
