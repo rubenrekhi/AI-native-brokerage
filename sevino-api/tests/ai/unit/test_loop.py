@@ -5,10 +5,15 @@ fake DB factory whose context manager yields a recording stub. Persistence
 side-effects are asserted against ``ConversationRepository`` call captures
 (the repository itself is integration-tested separately in
 ``tests/ai/integration/test_conversation_repo.py``).
+
+The loop drives the SSE wire envelope (``turn_started`` → per-block
+streams → terminal frame), so every test passes a real :class:`SSEEmitter`
+and the helper drains it after the loop returns.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -19,7 +24,17 @@ from unittest.mock import AsyncMock, MagicMock
 import anthropic
 import httpx
 import pytest
-from anthropic.types import Message, TextBlock, ThinkingBlock, Usage
+from anthropic.types import (
+    Message,
+    RawContentBlockDeltaEvent,
+    RawContentBlockStartEvent,
+    RawContentBlockStopEvent,
+    TextBlock,
+    TextDelta as AnthropicTextDelta,
+    ThinkingBlock,
+    ThinkingDelta,
+    Usage,
+)
 
 from app.ai.observability.langfuse import _NoopLangfuse
 from app.ai.prompts import SystemPrompt
@@ -28,6 +43,16 @@ from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig, ToolRegistry
+from app.ai.transport.emitter import SSEEmitter
+from app.ai.transport.events import (
+    BlockEnd,
+    BlockStart,
+    Error,
+    Event,
+    TextDelta,
+    TurnCompleted,
+    TurnStarted,
+)
 
 MODEL_ID = "claude-sonnet-4-6"
 SYSTEM_PROMPT = SystemPrompt(text="you are sevino", hash="hash-abc")
@@ -57,6 +82,124 @@ def _make_response(
         type="message",
         usage=Usage(input_tokens=input_tokens, output_tokens=output_tokens),
     )
+
+
+def _events_for(message: Message) -> list[Any]:
+    """Build a stream of raw Anthropic events that, when consumed, would
+    accumulate into ``message``.
+
+    The loop only branches on ``content_block_start`` / ``content_block_delta``
+    / ``content_block_stop`` for text blocks, so for thinking and other
+    blocks we still emit the start/stop bracket (so block-index tracking
+    is realistic) but no deltas — matching what the SDK does when the
+    final accumulated block is reconstructed in one piece.
+    """
+    events: list[Any] = []
+    for index, block in enumerate(message.content):
+        if block.type == "text":
+            # ``content_block_start`` for text always carries an empty
+            # text and no citations — the body arrives via deltas.
+            start_block = TextBlock(text="", type="text", citations=None)
+        elif block.type == "thinking":
+            start_block = ThinkingBlock(
+                thinking="", signature="", type="thinking"
+            )
+        else:
+            # Unknown block shape — pass through so the discriminator
+            # validates. Unused by current tests.
+            start_block = block
+
+        events.append(
+            RawContentBlockStartEvent(
+                content_block=start_block,
+                index=index,
+                type="content_block_start",
+            )
+        )
+        if block.type == "text" and block.text:
+            events.append(
+                RawContentBlockDeltaEvent(
+                    delta=AnthropicTextDelta(
+                        text=block.text, type="text_delta"
+                    ),
+                    index=index,
+                    type="content_block_delta",
+                )
+            )
+        elif block.type == "thinking" and block.thinking:
+            events.append(
+                RawContentBlockDeltaEvent(
+                    delta=ThinkingDelta(
+                        thinking=block.thinking, type="thinking_delta"
+                    ),
+                    index=index,
+                    type="content_block_delta",
+                )
+            )
+        events.append(
+            RawContentBlockStopEvent(
+                index=index, type="content_block_stop"
+            )
+        )
+    return events
+
+
+class _FakeStream:
+    """Minimal duck of :class:`anthropic.AsyncMessageStream` covering the
+    surface ``run_agent_turn`` consumes: async iteration over raw stream
+    events plus a final ``get_final_message()`` call. ``close()`` is a
+    no-op since the fake holds no real resources."""
+
+    def __init__(self, events: list[Any], final_message: Message) -> None:
+        self._events = events
+        self._index = 0
+        self._final = final_message
+
+    def __aiter__(self) -> "_FakeStream":
+        return self
+
+    async def __anext__(self) -> Any:
+        if self._index >= len(self._events):
+            raise StopAsyncIteration
+        event = self._events[self._index]
+        self._index += 1
+        return event
+
+    async def get_final_message(self) -> Message:
+        return self._final
+
+    async def close(self) -> None:
+        return None
+
+
+class _FakeStreamManager:
+    """Async context manager wrapping a :class:`_FakeStream`. Mirrors the
+    ``AsyncMessageStreamManager`` shape returned by
+    ``anthropic_client.messages.stream(...)``."""
+
+    def __init__(self, stream: _FakeStream) -> None:
+        self._stream = stream
+
+    async def __aenter__(self) -> _FakeStream:
+        return self._stream
+
+    async def __aexit__(self, *exc: Any) -> None:
+        await self._stream.close()
+
+
+class _RaisingStreamManager:
+    """Stream manager that raises in ``__aenter__`` — models an Anthropic
+    failure that surfaces before any wire events are received (the SDK
+    awaits the API request inside ``__aenter__``)."""
+
+    def __init__(self, exc: BaseException) -> None:
+        self._exc = exc
+
+    async def __aenter__(self) -> Any:
+        raise self._exc
+
+    async def __aexit__(self, *exc: Any) -> None:
+        return None
 
 
 @dataclass
@@ -122,23 +265,47 @@ def repo_mocks(monkeypatch):
     return mocks
 
 
-def _make_client(response_or_exc: Any) -> AsyncMock:
-    """Build a fake ``AsyncAnthropic`` whose ``messages.create`` returns
-    ``response_or_exc`` (or raises if it's an exception). When a list is
-    passed, each call yields the next item in order — used to exercise
+def _make_client(response_or_exc: Any) -> Any:
+    """Build a fake ``AsyncAnthropic`` whose ``messages.stream`` produces
+    a manager that streams events accumulating to ``response_or_exc``
+    (or raises if it's a ``BaseException``). When a list is passed, each
+    call yields a manager streaming the next item — used to exercise
     multi-iteration loops (A1.7)."""
-    client = AsyncMock(spec=anthropic.AsyncAnthropic)
-    if isinstance(response_or_exc, BaseException):
-        client.messages.create = AsyncMock(side_effect=response_or_exc)
-    elif isinstance(response_or_exc, list):
-        client.messages.create = AsyncMock(side_effect=response_or_exc)
+
+    client = MagicMock(spec=anthropic.AsyncAnthropic)
+
+    def _to_manager(item: Any) -> Any:
+        if isinstance(item, BaseException):
+            return _RaisingStreamManager(item)
+        events = _events_for(item)
+        return _FakeStreamManager(_FakeStream(events, item))
+
+    if isinstance(response_or_exc, list):
+        managers = [_to_manager(r) for r in response_or_exc]
+        client.messages.stream = MagicMock(side_effect=managers)
     else:
-        client.messages.create = AsyncMock(return_value=response_or_exc)
+        client.messages.stream = MagicMock(
+            return_value=_to_manager(response_or_exc)
+        )
     return client
 
 
+async def _drain(emitter: SSEEmitter) -> list[Event]:
+    """Collect every event the loop pushed onto ``emitter``.
+
+    The loop closes the emitter only when its own try/finally completes
+    successfully; for exception paths the iterator would block waiting
+    for the close sentinel. Tests close the emitter themselves after the
+    loop returns so iteration is guaranteed to drain.
+    """
+    events: list[Event] = []
+    async for event in emitter.iter_events():
+        events.append(event)
+    return events
+
+
 async def _run(
-    client: AsyncMock,
+    client: Any,
     repo_mocks: dict[str, Any],
     *,
     hard_caps: HardCaps | None = None,
@@ -147,20 +314,36 @@ async def _run(
     langfuse: Any = None,
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
-):
-    return await run_agent_turn(
-        user_id=user_id or uuid.uuid4(),
-        conversation_id=conversation_id or uuid.uuid4(),
-        user_message=user_message,
-        anthropic_client=client,
-        db_factory=_make_db_factory(),
-        tool_registry=tool_registry or EMPTY_REGISTRY,
-        system_prompt=SYSTEM_PROMPT,
-        model_config=ModelConfig(model_id=MODEL_ID),
-        hard_caps=hard_caps or HardCaps(),
-        langfuse=langfuse if langfuse is not None else _NoopLangfuse(),
-        environment="test",
-    )
+    emitter: SSEEmitter | None = None,
+) -> tuple[Any, list[Event]]:
+    """Run the loop and return ``(result, events)``.
+
+    Drives the emitter's iterator concurrently so a fast-emitting loop
+    can't fill the queue and deadlock on ``emit``. ``emitter`` defaults
+    to a fresh :class:`SSEEmitter`.
+    """
+    em = emitter or SSEEmitter()
+    drain_task = asyncio.create_task(_drain(em))
+
+    try:
+        result = await run_agent_turn(
+            user_id=user_id or uuid.uuid4(),
+            conversation_id=conversation_id or uuid.uuid4(),
+            user_message=user_message,
+            anthropic_client=client,
+            db_factory=_make_db_factory(),
+            tool_registry=tool_registry or EMPTY_REGISTRY,
+            system_prompt=SYSTEM_PROMPT,
+            model_config=ModelConfig(model_id=MODEL_ID),
+            hard_caps=hard_caps or HardCaps(),
+            langfuse=langfuse if langfuse is not None else _NoopLangfuse(),
+            environment="test",
+            sse_emitter=em,
+        )
+    finally:
+        await em.close()
+    events = await drain_task
+    return result, events
 
 
 # ---------- happy path ----------
@@ -170,15 +353,19 @@ class TestHappyPath:
     async def test_single_iteration_returns_expected_result(self, repo_mocks):
         client = _make_client(_make_response(text="hi there"))
 
-        result = await _run(client, repo_mocks)
+        result, _events = await _run(client, repo_mocks)
 
         assert result.terminal_state == "end_turn"
         assert result.iterations_count == 1
-        assert result.assistant_message_blocks == [
-            {"type": "text", "text": "hi there"}
-        ]
+        # Persisted blocks include the server-assigned block_id; assert on
+        # the user-visible fields and shape independently of the ULID.
+        assert len(result.assistant_message_blocks) == 1
+        block = result.assistant_message_blocks[0]
+        assert block["type"] == "text"
+        assert block["text"] == "hi there"
+        assert isinstance(block["block_id"], str) and block["block_id"]
         assert result.total_cost_usd_micros > 0
-        client.messages.create.assert_awaited_once()
+        client.messages.stream.assert_called_once()
 
     async def test_persists_user_message_with_text_block(self, repo_mocks):
         client = _make_client(_make_response())
@@ -280,9 +467,201 @@ class TestHappyPath:
         await _run(client, repo_mocks)
 
         kwargs = repo_mocks["append_assistant_message"].call_args.kwargs
-        assert kwargs["content_blocks"] == [
-            {"type": "text", "text": "visible answer"}
+        assert len(kwargs["content_blocks"]) == 1
+        block = kwargs["content_blocks"][0]
+        assert block["type"] == "text"
+        assert block["text"] == "visible answer"
+        assert isinstance(block["block_id"], str) and block["block_id"]
+
+
+# ---------- SSE wire envelope (B2.4) ----------
+
+
+class TestSSEWireEnvelope:
+    """The loop owns the wire envelope after B2.4. ``turn_started`` fires
+    once ``agent_turns.id`` is known; per-block ``block_start`` /
+    ``text_delta`` / ``block_end`` cover every text block; the turn
+    closes with ``turn_completed`` (success) or ``error`` (cap breach /
+    Anthropic failure)."""
+
+    async def test_happy_path_emits_full_envelope(self, repo_mocks):
+        client = _make_client(_make_response(text="hello world"))
+
+        result, events = await _run(client, repo_mocks)
+
+        # Frame ordering: turn_started → block_start → text_delta → block_end → turn_completed
+        types = [type(e) for e in events]
+        assert types == [
+            TurnStarted,
+            BlockStart,
+            TextDelta,
+            BlockEnd,
+            TurnCompleted,
         ]
+
+        started = events[0]
+        assert isinstance(started, TurnStarted)
+        # ``turn_id`` on the wire matches the agent_turn UUID — the
+        # endpoint relies on this so iOS can join the SSE stream back to
+        # the durable row.
+        assert started.turn_id == repo_mocks["_ids"]["turn_id"]
+
+        block_start = events[1]
+        assert isinstance(block_start, BlockStart)
+        assert block_start.block["type"] == "text"
+        assert block_start.block["text"] == ""
+        block_id = block_start.block["block_id"]
+
+        delta = events[2]
+        assert isinstance(delta, TextDelta)
+        assert delta.block_id == block_id
+        assert delta.text == "hello world"
+
+        end = events[3]
+        assert isinstance(end, BlockEnd)
+        assert end.block_id == block_id
+
+        completed = events[4]
+        assert isinstance(completed, TurnCompleted)
+        assert completed.turn_id == repo_mocks["_ids"]["turn_id"]
+        assert completed.terminal_state == "end_turn"
+        assert completed.iterations_count == 1
+        assert completed.total_cost_usd_micros == result.total_cost_usd_micros
+
+    async def test_streamed_block_id_matches_persisted_block_id(
+        self, repo_mocks
+    ):
+        # The acceptance criterion in B2.4 is that ``messages.content_blocks``
+        # is populated with the streamed block — same ID end-to-end.
+        client = _make_client(_make_response(text="match me"))
+
+        result, events = await _run(client, repo_mocks)
+
+        block_start = next(e for e in events if isinstance(e, BlockStart))
+        wire_block_id = block_start.block["block_id"]
+
+        persisted_blocks = repo_mocks["append_assistant_message"].call_args.kwargs[
+            "content_blocks"
+        ]
+        assert persisted_blocks == [
+            {
+                "type": "text",
+                "block_id": wire_block_id,
+                "text": "match me",
+            }
+        ]
+        assert result.assistant_message_blocks == persisted_blocks
+
+    async def test_thinking_blocks_do_not_emit_user_facing_events(
+        self, repo_mocks
+    ):
+        # Thinking blocks ride on Anthropic's stream but stay server-side;
+        # only the text block produces wire events.
+        client = _make_client(
+            _make_response(
+                text="answer",
+                extra_blocks=[
+                    ThinkingBlock(
+                        thinking="hidden plan",
+                        signature="sig",
+                        type="thinking",
+                    ),
+                ],
+            )
+        )
+
+        _result, events = await _run(client, repo_mocks)
+
+        block_starts = [e for e in events if isinstance(e, BlockStart)]
+        block_ends = [e for e in events if isinstance(e, BlockEnd)]
+        # Exactly one text block round-trips on the wire; the thinking
+        # block doesn't.
+        assert len(block_starts) == 1
+        assert len(block_ends) == 1
+        assert block_starts[0].block["type"] == "text"
+
+    async def test_iteration_cap_breach_emits_error_event(self, repo_mocks):
+        client = _make_client(_make_response())
+
+        _result, events = await _run(
+            client, repo_mocks, hard_caps=HardCaps(max_iterations=0)
+        )
+
+        # turn_started fires before the cap check (the row is already open),
+        # then the loop short-circuits straight to error.
+        assert [type(e) for e in events] == [TurnStarted, Error]
+        err = events[1]
+        assert isinstance(err, Error)
+        assert err.code == ErrorCode.TURN_ITERATION_LIMIT
+        assert err.message == "terminal_state=iteration_limit"
+
+    async def test_anthropic_error_emits_error_event(self, repo_mocks):
+        request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
+        response = httpx.Response(429, request=request)
+        exc = anthropic.RateLimitError(
+            "rate limited", response=response, body=None
+        )
+        client = _make_client(exc)
+
+        _result, events = await _run(client, repo_mocks)
+
+        assert [type(e) for e in events] == [TurnStarted, Error]
+        err = events[1]
+        assert isinstance(err, Error)
+        assert err.code == ErrorCode.MODEL_RATE_LIMIT
+
+    async def test_max_tokens_stop_reason_emits_error_event(self, repo_mocks):
+        # Anthropic-side cap (different from our HardCaps): the model
+        # itself stops at ``max_tokens``. Loop maps to OUTPUT_TOKEN_LIMIT
+        # so iOS surfaces the same code as a wall-side breach.
+        client = _make_client(_make_response(stop_reason="max_tokens"))
+
+        _result, events = await _run(client, repo_mocks)
+
+        terminals = [
+            e for e in events if isinstance(e, (TurnCompleted, Error))
+        ]
+        assert len(terminals) == 1
+        err = terminals[0]
+        assert isinstance(err, Error)
+        assert err.code == ErrorCode.OUTPUT_TOKEN_LIMIT
+
+    async def test_text_deltas_arrive_in_emit_order(self, repo_mocks):
+        # Build a response with two text chunks (simulated by hand-crafting
+        # the stream rather than going through ``_events_for``) and verify
+        # the loop forwards them in arrival order to the emitter.
+        final = _make_response(text="ab")
+        events: list[Any] = [
+            RawContentBlockStartEvent(
+                content_block=TextBlock(text="", type="text"),
+                index=0,
+                type="content_block_start",
+            ),
+            RawContentBlockDeltaEvent(
+                delta=AnthropicTextDelta(text="a", type="text_delta"),
+                index=0,
+                type="content_block_delta",
+            ),
+            RawContentBlockDeltaEvent(
+                delta=AnthropicTextDelta(text="b", type="text_delta"),
+                index=0,
+                type="content_block_delta",
+            ),
+            RawContentBlockStopEvent(index=0, type="content_block_stop"),
+        ]
+
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(_FakeStream(events, final))
+        )
+
+        _result, wire_events = await _run(client, repo_mocks)
+
+        deltas = [e for e in wire_events if isinstance(e, TextDelta)]
+        assert [d.text for d in deltas] == ["a", "b"]
+        # All deltas reference the block_id minted in the first ``block_start``.
+        block_start = next(e for e in wire_events if isinstance(e, BlockStart))
+        assert all(d.block_id == block_start.block["block_id"] for d in deltas)
 
 
 # ---------- request shape ----------
@@ -294,7 +673,7 @@ class TestRequestShape:
 
         await _run(client, repo_mocks)
 
-        create_kwargs = client.messages.create.call_args.kwargs
+        create_kwargs = client.messages.stream.call_args.kwargs
         assert "tools" not in create_kwargs
         assert create_kwargs["model"] == MODEL_ID
         assert create_kwargs["system"] == [
@@ -314,7 +693,7 @@ class TestRequestShape:
 
         await _run(client, repo_mocks)
 
-        create_kwargs = client.messages.create.call_args.kwargs
+        create_kwargs = client.messages.stream.call_args.kwargs
         assert create_kwargs["thinking"] == {
             "type": "enabled",
             "budget_tokens": 1024,
@@ -344,7 +723,7 @@ class TestRequestShape:
 
         await _run(client, repo_mocks, tool_registry=_Reg())
 
-        create_kwargs = client.messages.create.call_args.kwargs
+        create_kwargs = client.messages.stream.call_args.kwargs
         # Only the last tool gets cache_control; earlier tools are unchanged.
         assert create_kwargs["tools"] == [
             {"name": "get_stock_info", "description": "...", "input_schema": {}},
@@ -366,13 +745,95 @@ class TestRequestShape:
 
         await _run(client, repo_mocks)
 
-        create_kwargs = client.messages.create.call_args.kwargs
+        create_kwargs = client.messages.stream.call_args.kwargs
         assert create_kwargs["system"] == [
             {
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
             }
+        ]
+
+    async def test_history_assistant_text_blocks_strip_block_id(
+        self, repo_mocks
+    ):
+        # Regression: B2.4 persists assistant text blocks with a server-
+        # assigned ``block_id`` so iOS can correlate the row with the SSE
+        # wire. Anthropic's content-block schema doesn't accept that
+        # field, and a follow-up turn that loaded history verbatim was
+        # 400ing inside ``messages.stream()`` and surfacing as a generic
+        # ``INTERNAL_ERROR`` SSE frame. The transform must strip
+        # ``block_id`` before re-sending.
+        import copy
+
+        prior_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "first turn"}],
+            },
+        )()
+        prior_assistant = type(
+            "M",
+            (),
+            {
+                "role": "assistant",
+                "content_blocks": [
+                    {
+                        "type": "text",
+                        "block_id": "01KR2HBHWVQS5B5TK8QEPSQRKZ",
+                        "text": "first answer",
+                    }
+                ],
+            },
+        )()
+        new_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "follow-up"}],
+            },
+        )()
+        repo_mocks["load_history"] = AsyncMock(
+            return_value=[prior_user, prior_assistant, new_user]
+        )
+        import app.ai.runtime.loop as loop_module
+
+        loop_module.ConversationRepository.load_history = repo_mocks[
+            "load_history"
+        ]
+
+        # The loop reuses (and mutates) the ``messages`` list across
+        # iterations — capturing kwargs would show the post-mutation
+        # shape. Snapshot at call time via a side_effect instead.
+        captured: list[list[dict[str, Any]]] = []
+        final = _make_response(text="second answer")
+
+        def _stream_side_effect(**kwargs: Any) -> _FakeStreamManager:
+            captured.append(copy.deepcopy(kwargs["messages"]))
+            return _FakeStreamManager(_FakeStream(_events_for(final), final))
+
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(side_effect=_stream_side_effect)
+
+        await _run(client, repo_mocks, user_message="follow-up")
+
+        assert len(captured) == 1
+        sent_messages = captured[0]
+        assert [m["role"] for m in sent_messages] == [
+            "user",
+            "assistant",
+            "user",
+        ]
+        # Anthropic-shape only — no ``block_id``.
+        assert sent_messages[1]["content"] == [
+            {"type": "text", "text": "first answer"}
+        ]
+        # User blocks pass through unchanged — they never carry a block_id.
+        assert sent_messages[0]["content"] == [
+            {"type": "text", "text": "first turn"}
         ]
 
 
@@ -383,14 +844,14 @@ class TestCapBreaches:
     async def test_iteration_cap_breach_skips_anthropic_call(self, repo_mocks):
         client = _make_client(_make_response())
 
-        result = await _run(
+        result, _events = await _run(
             client, repo_mocks, hard_caps=HardCaps(max_iterations=0)
         )
 
         assert result.terminal_state == "iteration_limit"
         assert result.iterations_count == 0
         assert result.assistant_message_blocks == []
-        client.messages.create.assert_not_awaited()
+        client.messages.stream.assert_not_called()
         # No model_invocation rows; assistant message not persisted.
         repo_mocks["record_model_invocation"].assert_not_awaited()
         repo_mocks["append_assistant_message"].assert_not_awaited()
@@ -415,12 +876,12 @@ class TestCapBreaches:
         monkeypatch.setattr("app.ai.runtime.loop.time.monotonic", fake_monotonic)
         client = _make_client(_make_response())
 
-        result = await _run(
+        result, _events = await _run(
             client, repo_mocks, hard_caps=HardCaps(max_wall_clock_s=10.0)
         )
 
         assert result.terminal_state == "timeout"
-        client.messages.create.assert_not_awaited()
+        client.messages.stream.assert_not_called()
 
     async def test_output_token_cap_breach_after_first_iteration(
         self, repo_mocks
@@ -439,7 +900,7 @@ class TestCapBreaches:
             )
         )
 
-        result = await _run(
+        result, _events = await _run(
             client, repo_mocks, hard_caps=HardCaps(max_output_tokens=1100)
         )
 
@@ -447,8 +908,8 @@ class TestCapBreaches:
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
         assert kwargs["error_code"] == ErrorCode.OUTPUT_TOKEN_LIMIT.value
         # Only one Anthropic call: iteration 2's cap check fires before
-        # the second create() would have been issued.
-        client.messages.create.assert_awaited_once()
+        # the second stream() would have been issued.
+        client.messages.stream.assert_called_once()
 
     async def test_max_output_tokens_at_or_below_thinking_budget_raises(
         self, repo_mocks
@@ -465,7 +926,7 @@ class TestCapBreaches:
         # No persistence side-effects from the rejected call.
         repo_mocks["append_user_message"].assert_not_awaited()
         repo_mocks["start_agent_turn"].assert_not_awaited()
-        client.messages.create.assert_not_awaited()
+        client.messages.stream.assert_not_called()
 
 
 # ---------- A1.7: extended thinking + signature roundtripping ----------
@@ -483,11 +944,11 @@ class TestThinkingRoundtrip:
             ]
         )
 
-        result = await _run(client, repo_mocks)
+        result, _events = await _run(client, repo_mocks)
 
         assert result.terminal_state == "end_turn"
         assert result.iterations_count == 2
-        assert client.messages.create.await_count == 2
+        assert client.messages.stream.call_count == 2
 
     async def test_iteration_two_request_includes_iteration_one_thinking(
         self, repo_mocks
@@ -498,7 +959,7 @@ class TestThinkingRoundtrip:
         # signature) survives the roundtrip byte-for-byte.
         #
         # The loop reuses (and mutates) one ``messages`` list across
-        # iterations, so AsyncMock's call-args recording — which holds the
+        # iterations, so MagicMock's call-args recording — which holds the
         # list by reference — would show the post-mutation state and miss
         # what was actually sent. Snapshot in a side_effect instead.
         import copy
@@ -518,12 +979,13 @@ class TestThinkingRoundtrip:
         ]
         captured_messages: list[list[dict[str, Any]]] = []
 
-        async def _side_effect(**kwargs: Any) -> Message:
+        def _stream_side_effect(**kwargs: Any) -> _FakeStreamManager:
             captured_messages.append(copy.deepcopy(kwargs["messages"]))
-            return responses[len(captured_messages) - 1]
+            response = responses[len(captured_messages) - 1]
+            return _FakeStreamManager(_FakeStream(_events_for(response), response))
 
-        client = AsyncMock(spec=anthropic.AsyncAnthropic)
-        client.messages.create = AsyncMock(side_effect=_side_effect)
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(side_effect=_stream_side_effect)
 
         await _run(client, repo_mocks)
 
@@ -597,7 +1059,7 @@ class TestExceptions:
         exc = anthropic.RateLimitError("rate limited", response=response, body=None)
         client = _make_client(exc)
 
-        result = await _run(client, repo_mocks)
+        result, _events = await _run(client, repo_mocks)
 
         assert result.terminal_state == "error"
         assert result.iterations_count == 0
@@ -614,7 +1076,7 @@ class TestExceptions:
     ):
         client = _make_client(_make_response(stop_reason="max_tokens"))
 
-        result = await _run(client, repo_mocks)
+        result, _events = await _run(client, repo_mocks)
 
         assert result.terminal_state == "output_token_limit"
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
@@ -627,7 +1089,7 @@ class TestExceptions:
         # treat as misconfiguration.
         client = _make_client(_make_response(stop_reason="tool_use"))
 
-        result = await _run(client, repo_mocks)
+        result, _events = await _run(client, repo_mocks)
 
         assert result.terminal_state == "error"
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs

@@ -1,18 +1,19 @@
 """Chat-turn endpoint.
 
-Per AI v0 plan B2.3 (sevino-api/docs/ai-v0-plan.md): ``POST
+Per AI v0 plan B2.3 / B2.4 (sevino-api/docs/ai-v0-plan.md): ``POST
 /v1/conversations/{id}/turns`` returns ``text/event-stream``. The endpoint
-creates an :class:`SSEEmitter`, spawns a task that runs the agent loop and
-pushes wire events into the emitter, and yields those events to the
+creates an :class:`SSEEmitter`, spawns a task that runs the agent loop with
+that emitter, and yields events from the emitter to the
 ``EventSourceResponse``. URL and request body are unchanged from the
 A1.9 JSON shape — only the response transport flips.
 
-The driver task synthesises the wire envelope (``turn_started`` →
-per-block ``block_start`` / ``text_delta`` / ``block_end`` →
-``turn_completed``) from the eventual :class:`AgentTurnResult`. B2.4 will
-move these emit calls inside ``run_agent_turn`` and add real per-token
-streaming; the wire format is settled here so iOS (C3.1) can bind to it
-without waiting on the loop change.
+After B2.4 the loop owns the wire envelope: it emits ``turn_started``,
+per-block ``block_start`` / ``text_delta`` / ``block_end``, and the
+terminal ``turn_completed`` / ``error`` frame. The driver's only
+emission responsibility is to surface unexpected exceptions that escape
+the loop's own error trapping (e.g. a misconfigured-caps ``ValueError``
+or any defect in the loop's try/finally), since the detached driver
+task is not visible to FastAPI's global exception handler.
 """
 
 from __future__ import annotations
@@ -34,18 +35,11 @@ from app.ai.observability.langfuse import LangfuseClient, get_langfuse
 from app.ai.prompts import SYSTEM_PROMPT_V1
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
-from app.ai.runtime.errors import ErrorCode, to_error_code
+from app.ai.runtime.errors import to_error_code
 from app.ai.runtime.loop import run_agent_turn
-from app.ai.runtime.types import EMPTY_REGISTRY, AgentTurnResult, ModelConfig
+from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
 from app.ai.transport.emitter import SSEEmitter
-from app.ai.transport.events import (
-    BlockEnd,
-    BlockStart,
-    Error,
-    TextDelta,
-    TurnCompleted,
-    TurnStarted,
-)
+from app.ai.transport.events import Error
 from app.auth import get_current_user
 from app.config import settings
 from app.rate_limit import limiter
@@ -87,16 +81,8 @@ async def post_turn(
 
     emitter = SSEEmitter()
 
-    # TODO(SEV-484): replace with the loop's own turn_id once B2.4 surfaces
-    # it through the emitter. Today this UUID has no relation to
-    # ``agent_turns.id``, so clients cannot correlate it with DB rows.
-    turn_id = uuid.uuid4()
-
     async def _drive_turn() -> None:
         try:
-            await emitter.emit(
-                TurnStarted(turn_id=turn_id, conversation_id=conversation_id)
-            )
             result = await run_agent_turn(
                 user_id=user_uuid,
                 conversation_id=conversation_id,
@@ -109,13 +95,12 @@ async def post_turn(
                 hard_caps=HardCaps(),
                 langfuse=langfuse,
                 environment=settings.environment,
+                sse_emitter=emitter,
             )
-            await _emit_result(emitter, turn_id=turn_id, result=result)
             logger.info(
                 "chat_turn_completed",
                 conversation_id=str(conversation_id),
                 user_id=str(user_uuid),
-                turn_id=str(turn_id),
                 terminal_state=result.terminal_state,
                 iterations_count=result.iterations_count,
             )
@@ -124,14 +109,16 @@ async def post_turn(
             raise
         except Exception as exc:
             # ``run_agent_turn`` traps Anthropic / cap-breach failures and
-            # surfaces them via ``terminal_state``; reaching this branch
-            # means something outside the loop raised. The driver runs as
-            # a detached task, so FastAPI's global handler never sees the
-            # exception — escalate to Sentry explicitly.
+            # emits the matching ``error`` frame itself; reaching this branch
+            # means something outside the loop's normal exit paths raised
+            # (e.g. a ``ValueError`` from misconfigured caps, or a defect
+            # that escapes the loop's try/finally). The driver runs as a
+            # detached task, so FastAPI's global handler never sees the
+            # exception — escalate to Sentry explicitly and surface a
+            # wire-level Error so the client doesn't hang.
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("conversation_id", str(conversation_id))
                 scope.set_tag("user_id", str(user_uuid))
-                scope.set_tag("turn_id", str(turn_id))
                 sentry_sdk.capture_exception(exc)
             logger.exception(
                 "chat_turn_driver_failed",
@@ -169,62 +156,3 @@ async def post_turn(
                 pass
 
     return EventSourceResponse(_stream())
-
-
-# Mirrors ``_BREACH_TO_ERROR_CODE`` in ``app.ai.runtime.loop`` — the loop
-# writes these strings to ``agent_turns.terminal_state`` when a cap ends
-# the turn, and we surface the matching ErrorCode on the wire so iOS can
-# branch on the failure mode. ``error`` and unknown states fall through
-# to ``INTERNAL_ERROR``; B2.4 will plumb the loop's real ErrorCode
-# through ``AgentTurnResult`` and replace this table.
-_TERMINAL_STATE_TO_ERROR_CODE: dict[str, ErrorCode] = {
-    "iteration_limit": ErrorCode.TURN_ITERATION_LIMIT,
-    "tool_call_limit": ErrorCode.TOOL_CALL_LIMIT,
-    "output_token_limit": ErrorCode.OUTPUT_TOKEN_LIMIT,
-}
-
-
-async def _emit_result(
-    emitter: SSEEmitter, *, turn_id: uuid.UUID, result: AgentTurnResult
-) -> None:
-    """Translate an :class:`AgentTurnResult` into wire events.
-
-    For each ``text`` block in ``assistant_message_blocks`` we emit the
-    full block-lifecycle (start / single delta / end) so the wire format
-    matches what B2.4's streaming will produce per-token. Non-``end_turn``
-    terminal states surface as an ``error`` event mapped via
-    :data:`_TERMINAL_STATE_TO_ERROR_CODE`.
-    """
-    for index, block in enumerate(result.assistant_message_blocks):
-        if block.get("type") != "text":
-            continue
-        block_id = f"b{index}"
-        await emitter.emit(
-            BlockStart(
-                block={"type": "text", "block_id": block_id, "text": ""}
-            )
-        )
-        await emitter.emit(
-            TextDelta(block_id=block_id, text=block.get("text", ""))
-        )
-        await emitter.emit(BlockEnd(block_id=block_id))
-
-    if result.terminal_state == "end_turn":
-        await emitter.emit(
-            TurnCompleted(
-                turn_id=turn_id,
-                terminal_state=result.terminal_state,
-                total_cost_usd_micros=result.total_cost_usd_micros,
-                iterations_count=result.iterations_count,
-            )
-        )
-    else:
-        code = _TERMINAL_STATE_TO_ERROR_CODE.get(
-            result.terminal_state, ErrorCode.INTERNAL_ERROR
-        )
-        await emitter.emit(
-            Error(
-                code=code,
-                message=f"terminal_state={result.terminal_state}",
-            )
-        )
