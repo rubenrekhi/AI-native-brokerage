@@ -16,21 +16,69 @@ struct HoldingsCardContent: View {
     var scale: CGFloat = 1
     var onFilterTapped: (() -> Void)?
 
+    /// At most one row's detail panel is open at a time.
+    @State private var expandedTicker: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
             if data.holdings.isEmpty {
                 emptyState
+            } else if data.holdings.count > scrollThreshold {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12 * scale) {
+                            ForEach(data.holdings) { holding in
+                                row(for: holding, proxy: proxy)
+                            }
+                        }
+                        .padding(.trailing, 16 * scale)
+                    }
+                    .frame(maxHeight: scrollMaxHeight)
+                }
             } else {
-                LazyVStack(spacing: 12 * scale) {
+                VStack(spacing: 12 * scale) {
                     ForEach(data.holdings) { holding in
-                        HoldingRow(holding: holding, scale: scale)
+                        row(for: holding, proxy: nil)
                     }
                 }
             }
         }
     }
+
+    private func toggle(_ ticker: String, proxy: ScrollViewProxy?) {
+        let willExpand = expandedTicker != ticker
+        // iOS 17's `withAnimation(_:_:completion:)` waits for the layout
+        // pass for the new state, which is the only point at which
+        // `scrollTo` sees the post-expansion frame. Runloop-tick deferrals
+        // (`DispatchQueue.main.async`, `Task`, `RunLoop.main.perform`) race
+        // the layout pass and break the bottom-edge first-tap case.
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            expandedTicker = willExpand ? ticker : nil
+        } completion: {
+            guard willExpand, let proxy else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo("\(ticker)-end", anchor: nil)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(for holding: Holding, proxy: ScrollViewProxy?) -> some View {
+        HoldingRow(
+            holding: holding,
+            scale: scale,
+            isExpanded: expandedTicker == holding.id,
+            onToggle: { toggle(holding.id, proxy: proxy) }
+        )
+        .id(holding.id)
+    }
+
+    /// Includes the synthetic CASH row — at 6 total rows the modal is at
+    /// the edge of a typical phone screen before any panel expands.
+    private var scrollThreshold: Int { 6 }
+    private var scrollMaxHeight: CGFloat { 500 }
 
     private var headerRow: some View {
         HStack {

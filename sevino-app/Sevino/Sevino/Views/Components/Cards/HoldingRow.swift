@@ -3,22 +3,29 @@ import SwiftUI
 struct HoldingRow: View {
     let holding: Holding
     let scale: CGFloat
-    @State private var isDetailExpanded = false
+    let isExpanded: Bool
+    let onToggle: () -> Void
 
     private var hasDetails: Bool { !holding.isCash }
 
     var body: some View {
         VStack(spacing: 0) {
             mainRow
-            if isDetailExpanded, hasDetails {
+            if isExpanded, hasDetails {
                 detailSection
             }
+            // Auto-scroll target. VStack realizes a zero-height view, so
+            // the id is queryable for `scrollTo` even before the panel
+            // expands.
+            Color.clear
+                .frame(height: 0)
+                .id("\(holding.ticker)-end")
         }
         .clipped()
     }
 
     private var mainRow: some View {
-        Button(action: toggleDetails) {
+        Button(action: onToggle) {
             HStack(spacing: 10 * scale) {
                 holdingIcon
                 tickerInfo
@@ -29,7 +36,7 @@ struct HoldingRow: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoGreyContrast)
-                        .rotationEffect(.degrees(isDetailExpanded ? -180 : 0))
+                        .rotationEffect(.degrees(isExpanded ? -180 : 0))
                         .accessibilityHidden(true)
                 }
             }
@@ -138,9 +145,4 @@ struct HoldingRow: View {
         .padding(.vertical, 6 * scale)
     }
 
-    private func toggleDetails() {
-        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-            isDetailExpanded.toggle()
-        }
-    }
 }
