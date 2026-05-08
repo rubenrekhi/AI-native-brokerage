@@ -70,7 +70,7 @@ private func shareFormatter(locale: Locale) -> NumberFormatter {
     f.numberStyle = .decimal
     f.locale = locale
     f.minimumFractionDigits = 0
-    f.maximumFractionDigits = 9
+    f.maximumFractionDigits = 4
     f.usesGroupingSeparator = true
     _cache.setObject(f, forKey: key)
     return f

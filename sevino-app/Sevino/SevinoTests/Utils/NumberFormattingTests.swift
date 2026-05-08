@@ -56,6 +56,16 @@ final class NumberFormattingTests: XCTestCase {
         XCTAssertEqual(value.asShareCount(locale: deLocale), "0,125")
     }
 
+    func testAsShareCount_truncatesPrecisionPastFourDecimals() {
+        // Backend keeps full Alpaca precision (up to 9 dp); the UI rounds to
+        // 4 dp so the user doesn't see "0.011801359 shares" in the holdings
+        // modal. If a future surface needs full precision (e.g. trade
+        // confirmation), it should add a separate formatter rather than
+        // change this one.
+        let value = Decimal(string: "0.011801359")!
+        XCTAssertEqual(value.asShareCount(), "0.0118")
+    }
+
     // MARK: - Locale override
 
     func testAsCurrency_gbLocale_stillUsesDollarForUSD() {
