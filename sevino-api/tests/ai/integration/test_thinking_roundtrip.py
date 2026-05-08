@@ -41,6 +41,7 @@ from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.models.agent_turn import AgentTurn
 from app.models.model_invocation import ModelInvocation
@@ -256,6 +257,7 @@ async def test_iteration_two_request_messages_contain_iteration_one_signature(
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),

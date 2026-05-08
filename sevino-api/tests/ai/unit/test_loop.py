@@ -33,6 +33,7 @@ from anthropic.types import (
     TextDelta as AnthropicTextDelta,
     ThinkingBlock,
     ThinkingDelta,
+    ToolUseBlock,
     Usage,
 )
 
@@ -43,6 +44,7 @@ from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig, ToolRegistry
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
     BlockEnd,
@@ -238,17 +240,22 @@ def repo_mocks(monkeypatch):
     turn = type("T", (), {"id": turn_id})()
     assistant_msg = type("M", (), {"id": assistant_msg_id})()
 
+    invocation_id = uuid.uuid4()
+    invocation_row = type("Inv", (), {"id": invocation_id})()
+
     mocks = {
         "append_user_message": AsyncMock(return_value=user_msg),
         "load_history": AsyncMock(return_value=[]),
         "start_agent_turn": AsyncMock(return_value=turn),
-        "record_model_invocation": AsyncMock(),
+        "record_model_invocation": AsyncMock(return_value=invocation_row),
+        "record_tool_execution": AsyncMock(),
         "append_assistant_message": AsyncMock(return_value=assistant_msg),
         "complete_agent_turn": AsyncMock(),
         "_ids": {
             "user_msg_id": user_msg_id,
             "turn_id": turn_id,
             "assistant_msg_id": assistant_msg_id,
+            "invocation_id": invocation_id,
         },
     }
     for name in (
@@ -256,6 +263,7 @@ def repo_mocks(monkeypatch):
         "load_history",
         "start_agent_turn",
         "record_model_invocation",
+        "record_tool_execution",
         "append_assistant_message",
         "complete_agent_turn",
     ):
@@ -333,6 +341,7 @@ async def _run(
             anthropic_client=client,
             db_factory=_make_db_factory(),
             tool_registry=tool_registry or EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=hard_caps or HardCaps(),
@@ -1082,12 +1091,31 @@ class TestExceptions:
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
         assert kwargs["error_code"] == ErrorCode.OUTPUT_TOKEN_LIMIT.value
 
-    async def test_unexpected_tool_use_in_v0_marks_internal_error(
+    async def test_tool_use_with_no_registered_tool_marks_internal_error(
         self, repo_mocks
     ):
-        # No tools are registered, but Anthropic returned tool_use anyway —
-        # treat as misconfiguration.
-        client = _make_client(_make_response(stop_reason="tool_use"))
+        # Empty registry advertises no tools, but Anthropic emitted a
+        # tool_use block anyway — i.e. a misconfiguration. C1.2 funnels
+        # the resulting ``KeyError`` from ``ToolRegistry.get`` into
+        # ``INTERNAL_ERROR`` rather than ``TOOL_ERROR`` (the latter is
+        # reserved for tools that fail during ``execute``).
+        response = Message(
+            id="msg_unknown_tool",
+            content=[
+                ToolUseBlock(
+                    id="toolu_unknown",
+                    name="not_registered",
+                    input={"x": 1},
+                    type="tool_use",
+                )
+            ],
+            model=MODEL_ID,
+            role="assistant",
+            stop_reason="tool_use",
+            type="message",
+            usage=Usage(input_tokens=10, output_tokens=4),
+        )
+        client = _make_client(response)
 
         result, _events = await _run(client, repo_mocks)
 
@@ -1338,6 +1366,7 @@ class TestCancellation:
                     anthropic_client=client,
                     db_factory=_make_db_factory(),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=hard_caps or HardCaps(),
@@ -1502,6 +1531,7 @@ class TestCancellation:
                 anthropic_client=client,
                 db_factory=_make_db_factory(),
                 tool_registry=EMPTY_REGISTRY,
+                http_clients=ToolHttpClients(),
                 system_prompt=SYSTEM_PROMPT,
                 model_config=ModelConfig(model_id=MODEL_ID),
                 hard_caps=HardCaps(),
@@ -1554,6 +1584,7 @@ class TestCancellation:
                 anthropic_client=client,
                 db_factory=_make_db_factory(),
                 tool_registry=EMPTY_REGISTRY,
+                http_clients=ToolHttpClients(),
                 system_prompt=SYSTEM_PROMPT,
                 model_config=ModelConfig(model_id=MODEL_ID),
                 hard_caps=HardCaps(),
@@ -1636,6 +1667,7 @@ class TestOuterCancellation:
                 anthropic_client=client,
                 db_factory=_make_db_factory(),
                 tool_registry=EMPTY_REGISTRY,
+                http_clients=ToolHttpClients(),
                 system_prompt=SYSTEM_PROMPT,
                 model_config=ModelConfig(model_id=MODEL_ID),
                 hard_caps=HardCaps(),
@@ -1683,6 +1715,7 @@ class TestOuterCancellation:
                     anthropic_client=client,
                     db_factory=_make_db_factory(),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=HardCaps(),
@@ -1726,6 +1759,7 @@ class TestOuterCancellation:
                     anthropic_client=client,
                     db_factory=_make_db_factory(),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=HardCaps(),

@@ -44,6 +44,7 @@ from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
     BlockEnd,
@@ -280,6 +281,7 @@ async def _run_with_emitter(
             anthropic_client=client,
             db_factory=make_session_factory(db_engine),
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=hard_caps or HardCaps(),
@@ -474,6 +476,7 @@ class TestCancellationPersistsTerminalState:
                     anthropic_client=client,
                     db_factory=make_session_factory(db_engine),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=HardCaps(),
@@ -550,6 +553,7 @@ class TestCancellationPersistsTerminalState:
                     anthropic_client=client,
                     db_factory=make_session_factory(db_engine),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=HardCaps(),
@@ -657,6 +661,7 @@ class TestCancellationPersistsTerminalState:
                     anthropic_client=client,
                     db_factory=make_session_factory(db_engine),
                     tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
                     system_prompt=SYSTEM_PROMPT,
                     model_config=ModelConfig(model_id=MODEL_ID),
                     hard_caps=HardCaps(),

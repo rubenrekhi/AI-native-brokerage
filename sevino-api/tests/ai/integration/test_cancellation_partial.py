@@ -44,6 +44,7 @@ from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.models.agent_turn import AgentTurn
 from app.models.message import Message as MessageRow
@@ -240,6 +241,7 @@ async def _run_until_cancelled(
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),

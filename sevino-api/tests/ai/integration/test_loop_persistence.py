@@ -40,6 +40,7 @@ from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.models.agent_turn import AgentTurn
 from app.models.message import Message as MessageRow
@@ -263,6 +264,7 @@ class TestHappyPathPersistence:
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
@@ -385,6 +387,7 @@ class TestMidTurnDurability:
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
@@ -427,6 +430,7 @@ class TestErrorPath:
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(),
@@ -488,6 +492,7 @@ class TestCapBreachPersistence:
             anthropic_client=client,
             db_factory=db_factory,
             tool_registry=EMPTY_REGISTRY,
+            http_clients=ToolHttpClients(),
             system_prompt=SYSTEM_PROMPT,
             model_config=ModelConfig(model_id=MODEL_ID),
             hard_caps=HardCaps(max_iterations=0),

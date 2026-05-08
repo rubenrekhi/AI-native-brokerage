@@ -11,7 +11,10 @@ from __future__ import annotations
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
+
+if TYPE_CHECKING:
+    from app.ai.tools.base import Tool
 
 
 @dataclass(slots=True)
@@ -57,16 +60,26 @@ class AgentTurnResult:
 class ToolRegistry(Protocol):
     """Minimum surface the loop needs to integrate tools.
 
-    The full ``Tool`` / ``ToolContext`` framework lands in Project C; v0
-    callers pass :data:`EMPTY_REGISTRY` and the loop skips the ``tools``
-    arg in the Anthropic request entirely (Anthropic 400s on an empty
-    tools array, so we send no key rather than an empty list).
+    Implemented by the concrete ``app.ai.tools.ToolRegistry`` (C1.1) and
+    by :class:`_EmptyRegistry` for the no-tools case. The Protocol stays
+    here in ``runtime.types`` so the loop never imports the tool
+    framework when no tools are registered, and so the chat endpoint
+    can hand :data:`EMPTY_REGISTRY` without dragging in
+    ``app.ai.tools.base``.
+
+    ``get`` is invoked in C1.2's tool_use branch — the loop looks up the
+    tool by the ``name`` Claude returned in a ``tool_use`` block. The
+    empty-registry path raises ``KeyError`` here, which the loop maps to
+    ``ErrorCode.INTERNAL_ERROR`` (a registered model that calls a tool
+    we don't know about is a wiring bug, not a recoverable case).
     """
 
     @property
     def is_empty(self) -> bool: ...
 
     def to_anthropic_spec(self) -> list[dict[str, Any]] | None: ...
+
+    def get(self, name: str) -> "Tool[Any]": ...
 
 
 class _EmptyRegistry:
@@ -78,6 +91,13 @@ class _EmptyRegistry:
 
     def to_anthropic_spec(self) -> list[dict[str, Any]] | None:
         return None
+
+    def get(self, name: str) -> "Tool[Any]":
+        # Reachable only if the loop fails to gate on ``is_empty`` before
+        # routing a ``tool_use`` block. Fail loudly so the regression
+        # surfaces with the offending tool name instead of a confusing
+        # downstream error.
+        raise KeyError(f"Tool {name!r} is not registered (registry is empty)")
 
 
 EMPTY_REGISTRY: ToolRegistry = _EmptyRegistry()
