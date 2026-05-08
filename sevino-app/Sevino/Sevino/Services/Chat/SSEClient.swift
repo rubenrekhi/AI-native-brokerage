@@ -154,6 +154,13 @@ enum SSEClientError: Error, Equatable {
     case httpStatus(Int)
 }
 
+/// Public surface of `SSEClient`. Consumers (e.g. chat view models) depend
+/// on this protocol so tests and SwiftUI previews can substitute a fake
+/// that yields canned events without spinning up a real `URLSession`.
+protocol SSEClientProtocol: Sendable {
+    func stream(request: URLRequest) -> AsyncThrowingStream<RawSSEEvent, any Error>
+}
+
 /**
  Streams SSE events from an HTTP endpoint.
 
@@ -172,7 +179,7 @@ enum SSEClientError: Error, Equatable {
  stream tracking, retry budget, last-event-id store — can be added without
  changing the call site signature.
  */
-actor SSEClient {
+actor SSEClient: SSEClientProtocol {
     /// Provides the OAuth bearer token to attach to each opened stream.
     /// Returning `nil` skips the `Authorization` header — useful in tests
     /// and for pre-auth probes; unauthenticated calls to the chat endpoint
