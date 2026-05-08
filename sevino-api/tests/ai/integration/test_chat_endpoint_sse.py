@@ -1,11 +1,11 @@
-"""Integration tests for the Phase-1 JSON chat-turn endpoint (A1.9).
+"""Integration tests for the Phase-2 SSE chat-turn endpoint (B2.3).
 
-Pattern mirrors ``test_loop_persistence.py``: the endpoint runs the agent
-loop which commits via its own session-per-write factory, so the rolling
-``db_session`` fixture can't reach those rows. We seed a fresh user in a
-committing session, hit the endpoint with mocked Anthropic, query
-verification rows in a fresh session, then explicitly delete the turn
-graph at teardown.
+Replaces ``test_chat_endpoint_json.py``. Same DB-persistence assertions —
+the loop's session-per-write factory still commits user/assistant rows
+mid-turn, so the rolling ``db_session`` fixture can't reach those rows
+and we use the same fresh-session pattern. The new shape is the response
+itself: instead of a JSON body, the test parses the SSE event stream and
+asserts on the event sequence.
 """
 
 from __future__ import annotations
@@ -24,6 +24,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai.anthropic_client import get_anthropic
 from app.ai.observability.langfuse import _NoopLangfuse, get_langfuse
 from app.ai.runtime.db import get_db_factory, make_session_factory
+from app.ai.transport.events import (
+    BlockEnd,
+    BlockStart,
+    Event,
+    TextDelta,
+    TurnCompleted,
+    TurnStarted,
+    parse_wire_frame,
+)
 from app.auth import get_current_user
 from app.main import app
 from app.models.agent_turn import AgentTurn
@@ -67,9 +76,80 @@ def _stub_client(response_or_exc: Any) -> AsyncMock:
     return client
 
 
+async def _consume_sse(
+    client: AsyncClient, url: str, *, json: dict[str, Any]
+) -> list[Event]:
+    """POST and parse the full SSE stream into typed events.
+
+    Frames are separated by a blank line on the wire. ``parse_wire_frame``
+    re-validates the JSON ``data`` payload back into the
+    :class:`~app.ai.transport.events.Event` discriminated union and checks
+    that the ``id:`` / ``event:`` lines match the JSON ``id`` / ``type``
+    fields, so a desync between the two would fail the test loudly.
+    """
+    async with client.stream("POST", url, json=json) as response:
+        assert response.status_code == 200, await response.aread()
+        assert response.headers["content-type"].startswith("text/event-stream")
+        body = (await response.aread()).decode("utf-8")
+    # sse-starlette emits CRLF; normalise so a single split rule works.
+    normalised = body.replace("\r\n", "\n")
+    return [
+        parse_wire_frame(frame)
+        for frame in normalised.split("\n\n")
+        if frame.strip()
+    ]
+
+
+async def _delete_conversation_chain(
+    engine,
+    *,
+    conversation_id: uuid.UUID,
+    user_ids: list[uuid.UUID],
+) -> None:
+    """Tear down rows in FK-respecting order for a single conversation."""
+    async with AsyncSession(bind=engine, expire_on_commit=False) as cleanup:
+        await cleanup.execute(
+            text(
+                "DELETE FROM tool_executions WHERE model_invocation_id IN ("
+                "SELECT id FROM model_invocations WHERE agent_turn_id IN ("
+                "SELECT id FROM agent_turns WHERE conversation_id = :id))"
+            ),
+            {"id": conversation_id},
+        )
+        await cleanup.execute(
+            text(
+                "DELETE FROM model_invocations WHERE agent_turn_id IN ("
+                "SELECT id FROM agent_turns WHERE conversation_id = :id)"
+            ),
+            {"id": conversation_id},
+        )
+        await cleanup.execute(
+            text("DELETE FROM agent_turns WHERE conversation_id = :id"),
+            {"id": conversation_id},
+        )
+        await cleanup.execute(
+            text("DELETE FROM messages WHERE conversation_id = :id"),
+            {"id": conversation_id},
+        )
+        await cleanup.execute(
+            text("DELETE FROM conversations WHERE id = :id"),
+            {"id": conversation_id},
+        )
+        for uid in user_ids:
+            await cleanup.execute(
+                text("DELETE FROM user_profiles WHERE id = :id"),
+                {"id": uid},
+            )
+            await cleanup.execute(
+                text("DELETE FROM auth.users WHERE id = :id"),
+                {"id": uid},
+            )
+        await cleanup.commit()
+
+
 class _Fixture:
-    """Seeded user + endpoint client + cleanup handle. Conversation row is
-    NOT seeded — the endpoint creates it implicitly per D6."""
+    """Seeded user + cleanup handle. Conversation row is NOT seeded — the
+    endpoint creates it implicitly per D6."""
 
     def __init__(
         self,
@@ -83,45 +163,11 @@ class _Fixture:
         self.engine = engine
 
     async def cleanup(self) -> None:
-        async with AsyncSession(
-            bind=self.engine, expire_on_commit=False
-        ) as cleanup:
-            await cleanup.execute(
-                text(
-                    "DELETE FROM tool_executions WHERE model_invocation_id IN ("
-                    "SELECT id FROM model_invocations WHERE agent_turn_id IN ("
-                    "SELECT id FROM agent_turns WHERE conversation_id = :id))"
-                ),
-                {"id": self.conversation_id},
-            )
-            await cleanup.execute(
-                text(
-                    "DELETE FROM model_invocations WHERE agent_turn_id IN ("
-                    "SELECT id FROM agent_turns WHERE conversation_id = :id)"
-                ),
-                {"id": self.conversation_id},
-            )
-            await cleanup.execute(
-                text("DELETE FROM agent_turns WHERE conversation_id = :id"),
-                {"id": self.conversation_id},
-            )
-            await cleanup.execute(
-                text("DELETE FROM messages WHERE conversation_id = :id"),
-                {"id": self.conversation_id},
-            )
-            await cleanup.execute(
-                text("DELETE FROM conversations WHERE id = :id"),
-                {"id": self.conversation_id},
-            )
-            await cleanup.execute(
-                text("DELETE FROM user_profiles WHERE id = :id"),
-                {"id": self.user_id},
-            )
-            await cleanup.execute(
-                text("DELETE FROM auth.users WHERE id = :id"),
-                {"id": self.user_id},
-            )
-            await cleanup.commit()
+        await _delete_conversation_chain(
+            self.engine,
+            conversation_id=self.conversation_id,
+            user_ids=[self.user_id],
+        )
 
 
 @pytest.fixture
@@ -151,9 +197,6 @@ async def chat_client(db_engine, fixture):
 
     app.dependency_overrides[get_current_user] = lambda: str(fixture.user_id)
     app.dependency_overrides[get_db_factory] = lambda: db_factory
-    # No real Langfuse in tests — the noop stub satisfies the dependency
-    # without sending traces. The lifespan that normally wires
-    # ``app.state.langfuse`` doesn't run here.
     app.dependency_overrides[get_langfuse] = lambda: _NoopLangfuse()
 
     async with AsyncClient(
@@ -177,27 +220,57 @@ def _install_anthropic(stub: AsyncMock) -> None:
 
 
 class TestHappyPath:
-    async def test_returns_assistant_blocks_and_persists_full_turn(
+    async def test_streams_event_sequence_and_persists_full_turn(
         self, db_engine, fixture, chat_client
     ):
         _install_anthropic(_stub_client(_stub_response(text="hello world")))
 
-        response = await chat_client.post(
+        events = await _consume_sse(
+            chat_client,
             f"/v1/conversations/{fixture.conversation_id}/turns",
             json={"message": "how is AMD", "idempotency_key": "k1"},
         )
 
-        assert response.status_code == 200
-        body = response.json()
-        assert body == {
-            "terminal_state": "end_turn",
-            "assistant_message_blocks": [
-                {"type": "text", "text": "hello world"}
-            ],
-        }
+        # Wire envelope: turn_started → block_start/text_delta/block_end → turn_completed.
+        assert [type(e) for e in events] == [
+            TurnStarted,
+            BlockStart,
+            TextDelta,
+            BlockEnd,
+            TurnCompleted,
+        ]
 
+        started = events[0]
+        assert isinstance(started, TurnStarted)
+        assert started.conversation_id == fixture.conversation_id
+
+        block_start = events[1]
+        assert isinstance(block_start, BlockStart)
+        assert block_start.block["type"] == "text"
+        block_id = block_start.block["block_id"]
+
+        delta = events[2]
+        assert isinstance(delta, TextDelta)
+        assert delta.block_id == block_id
+        assert delta.text == "hello world"
+
+        block_end = events[3]
+        assert isinstance(block_end, BlockEnd)
+        assert block_end.block_id == block_id
+
+        completed = events[4]
+        assert isinstance(completed, TurnCompleted)
+        assert completed.terminal_state == "end_turn"
+        assert completed.iterations_count == 1
+        assert completed.turn_id == started.turn_id
+
+        # All events carry stable ULIDs and they're unique within the stream.
+        ids = [e.id for e in events]
+        assert len(set(ids)) == len(ids)
+        assert all(ids)
+
+        # DB rows produced by the loop persist regardless of transport.
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
-            # Conversation row created implicitly on first turn (D6).
             conv = await v.get(Conversation, fixture.conversation_id)
             assert conv is not None
             assert conv.user_id == fixture.user_id
@@ -258,6 +331,9 @@ class TestHappyPath:
 
 
 class TestRequestValidation:
+    """Validation runs before the SSE stream opens — failures come back
+    as the standard JSON error body, not as an SSE error frame."""
+
     async def test_missing_idempotency_key_rejected(
         self, fixture, chat_client
     ):
@@ -318,7 +394,6 @@ class TestOwnership:
             assert response.status_code == 404
             assert response.json()["code"] == "NOT_FOUND"
 
-            # No turn rows created against the other user's conversation.
             async with AsyncSession(
                 bind=db_engine, expire_on_commit=False
             ) as v:
@@ -336,21 +411,31 @@ class TestOwnership:
                 )
                 assert turns == []
         finally:
-            async with AsyncSession(
-                bind=db_engine, expire_on_commit=False
-            ) as cleanup:
-                await cleanup.execute(
-                    text(
-                        "DELETE FROM conversations WHERE id = :id"
-                    ),
-                    {"id": fixture.conversation_id},
-                )
-                await cleanup.execute(
-                    text("DELETE FROM user_profiles WHERE id = :id"),
-                    {"id": other_user_id},
-                )
-                await cleanup.execute(
-                    text("DELETE FROM auth.users WHERE id = :id"),
-                    {"id": other_user_id},
-                )
-                await cleanup.commit()
+            await _delete_conversation_chain(
+                db_engine,
+                conversation_id=fixture.conversation_id,
+                user_ids=[other_user_id],
+            )
+
+
+# ---------- auth ----------
+
+
+class TestAuth:
+    async def test_missing_bearer_returns_401(self, fixture):
+        # No auth override — exercise the real ``get_current_user``
+        # dependency which raises ``AuthenticationError`` when the
+        # ``Authorization`` header is missing. Acceptance criterion:
+        # JWT enforcement is unchanged from the JSON endpoint.
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+            headers={"X-API-Key": TEST_API_KEY},
+        ) as ac:
+            response = await ac.post(
+                f"/v1/conversations/{fixture.conversation_id}/turns",
+                json={"message": "hi", "idempotency_key": "k1"},
+            )
+
+        assert response.status_code == 401
+        assert response.json()["code"] == "AUTHENTICATION_ERROR"
