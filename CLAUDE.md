@@ -116,6 +116,12 @@ Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each 
 - SSL enabled for prod/staging, disabled for dev
 - Supabase local dev: Postgres on port 54322, Studio on 54323
 
+### AI wire format (Pydantic ↔ Swift)
+
+The discriminated unions in `sevino-api/app/ai/blocks.py` (`Block`) and `sevino-api/app/ai/transport/events.py` (`Event`) define the SSE wire format the chat-turn endpoint streams to iOS. iOS hand-mirrors them as Swift enums under `sevino-app/Sevino/Sevino/Models/Chat/` (e.g. `Block.swift`). There is no codegen and no CI check — drift silently breaks the iOS decoder at runtime.
+
+When you add/remove a variant or change a field on either `Block` or `Event`, update the matching Swift enum in the same PR. If the Swift mirror doesn't exist yet (early in Project C), flag it in the PR description so the iOS author picks it up.
+
 ### Worktree bootstrap
 
 New worktrees do not inherit gitignored files from the source worktree. The repo defines a root-level `.worktreeinclude` that lists the minimum set of ignored files (currently `sevino-api/.env`) required to run the backend. After `git worktree add`, run:

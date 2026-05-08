@@ -78,7 +78,7 @@ Items numbered to match the v0 component checklist (1–28). Status legend:
 
 | # | Item | Status | Current state | What's needed |
 |---|---|---|---|---|
-| 27 | Shared schema artifact | 🔴 | None. | Generate JSON schema from Pydantic discriminated union at build time → committed at `sevino-api/app/ai/schema/v1.json`. **Recommendation: hand-mirror Swift, CI-diff** (see decision §4). New `make ai-schema-export` target writes the JSON; new `tests/ai/test_schema_in_sync.py` fails if Pydantic exports diverge from the committed JSON; iOS `enum Block` is hand-maintained but a CI check (in iOS CI when it lands) compares variant names against the JSON keys. |
+| 27 | Shared schema artifact | 🔴 | None. | **Recommendation: hand-mirror Swift, doc-enforced** (see decision §4). Pydantic `Block`/`Event` unions are source of truth. iOS `enum Block` is hand-maintained. A root-level `CLAUDE.md` note tells contributors (and Claude) to update the Swift mirror in the same PR as any Pydantic union change. No codegen, no CI enforcement — startup-stage tradeoff; revisit at MVP scale or first drift incident. |
 
 ---
 
@@ -131,10 +131,10 @@ Each phase ends in a genuine end-to-end demo. Each phase derisks something disti
 - ✅ iOS: app sends "how is AMD doing", message list takes over home content area, status pill appears, text streams, real `StockCardBlock` renders matching the design (price, % change, sparkline, 1D/1W/1M/3M/6M/1Y/ALL pills).
 - ✅ Killing the iOS app mid-stream cancels the agent turn server-side within ~2s (`agent_turns.terminal_state = 'cancelled'`).
 - ✅ Force-quit + reopen + retry with same idempotency key → message replays from persisted blocks, no re-billing.
-- ✅ Generated JSON schema at `app/ai/schema/v1.json` matches Pydantic source; CI diff check passes.
+- ✅ Pydantic ↔ Swift wire format note exists in root `CLAUDE.md` so future PRs touching either side get the cross-reference (per D2; replaces the originally-scoped schema artifact + CI check).
 - ✅ All three smoke cases pass on `main`.
 
-**Rough size:** L (~4-5 days). Largest phase by line count, but **highly parallelisable** — tool framework + Alpaca Market Data integration on backend can run alongside SSE client + block models + UI on iOS as soon as the JSON schema is committed.
+**Rough size:** L (~4-5 days). Largest phase by line count, but **highly parallelisable** — tool framework + Alpaca Market Data integration on backend can run alongside SSE client + block models + UI on iOS as soon as the `Block` / `Event` Pydantic unions are committed (B1.1 / B1.2 in Phase 2).
 
 **Dependencies:** Phase 2 merged. Alpaca Market Data sandbox credentials provisioned. Markdown library decision made (§4 D5).
 
@@ -147,8 +147,8 @@ All twelve decisions are resolved. Recorded here as the canonical reference — 
 ### D1. Alpaca Market Data — auth + feed level → **(a) Sandbox + IEX (free)**
 v0 is dev-loop only; sandbox prices are good enough for proof-of-life. Production + SIP is an MVP-launch decision, not a v0 one (real cost item; belongs alongside legal disclaimers). New env vars: `ALPACA_DATA_API_KEY_ID`, `ALPACA_DATA_SECRET_KEY`. Acquire from the Alpaca sandbox dashboard (separate from the Broker OAuth credentials).
 
-### D2. Schema sharing between backend & iOS → **(b) Hand-mirror with CI diff check**
-Pydantic exports `app/ai/schema/v1.json` at build time; CI test compares iOS `enum Block` / `enum SSEEvent` variant names against it and fails on drift. v0's 3 block types + 8 event types are small enough that hand-maintaining is cheaper than picking and wiring a codegen tool, and Swift enums with associated values read more idiomatically than codegen output. Revisit at MVP scale (~12+ block types).
+### D2. Schema sharing between backend & iOS → **(b) Hand-mirror, doc-enforced (no CI check)**
+v0's 3 block types + 8 event types are small enough that hand-maintaining is cheaper than picking and wiring a codegen tool, and Swift enums with associated values read more idiomatically than codegen output. Drift is mitigated by a root-level `CLAUDE.md` note instructing future-Claude (and humans) to update the Swift `enum Block` in the same PR as any change to `Block` / `Event` Pydantic unions. The originally-scoped schema export + CI diff check (C5.1 / C5.2) was dropped as startup-stage overhead. Revisit at MVP scale (~12+ block types) or after the first drift incident.
 
 ### D3. Where the AI module lives in `sevino-api` → **(a) `app/ai/` top-level**
 Self-contained vertical, peer of `app/services/`, `app/routes/`. Contains runtime, prompts, tools, transport, observability, schema. Keeps the "swap orchestrator" exit hatch from architectural-decision-1 real (only `app/ai/runtime/` would change if we ever adopt LangGraph). Full layout in §5.
@@ -246,12 +246,12 @@ sevino-api/app/ai/
 │   ├── events.py             # SSE event Pydantic models + serializer
 │   ├── emitter.py            # SSEEmitter abstraction
 │   └── idempotency.py        # Redis-backed idempotency middleware
-├── observability/
-│   ├── __init__.py
-│   └── langfuse.py           # Langfuse singleton + span decorators
-└── schema/
-    └── v1.json               # Generated JSON schema, committed
+└── observability/
+    ├── __init__.py
+    └── langfuse.py           # Langfuse singleton + span decorators
 ```
+
+(Per D2, there is no `schema/` subdirectory — Pydantic `Block` / `Event` unions are the source of truth and the iOS Swift mirror is hand-maintained, with the root `CLAUDE.md` carrying the cross-reference.)
 
 Adjacent additions:
 
@@ -743,7 +743,7 @@ Wave 6:
 
 **C1.3 — `StockCardBlock` schema added to discriminated union**
 - Extend `app/ai/blocks.py` with `StockCardBlock` (type="stock_card") matching the design: `symbol, company_name, logo_url, price, change_abs, change_pct, color_state, bars: list[Bar], range: str, range_options: list[str]`. Update the `Block = Annotated[...]` union.
-- **Acceptance:** Block round-trips JSON; CI diff check (C5.2) catches if iOS doesn't get updated; integration with `messages.content_blocks` storage.
+- **Acceptance:** Block round-trips JSON; iOS `enum Block` updated in same PR (per D2); integration with `messages.content_blocks` storage.
 - **Files:** `app/ai/blocks.py` (extension), `tests/ai/unit/test_blocks.py` (extension)
 - **Depends on:** B1.1
 - **Estimate:** S
@@ -873,21 +873,18 @@ Wave 6:
 - **Depends on:** C3.4
 - **Estimate:** S
 
-#### Issues — `area:schema`, `area:ci` (schema sync + final smoke)
+#### Issues — `area:schema`, `area:ci` (wire format note + final smoke)
 
-**C5.1 — JSON schema export from Pydantic**
-- New `make ai-schema-export` target running a small Python script that imports the `Block` and `SSEEvent` discriminated unions and writes their `.model_json_schema()` to `app/ai/schema/v1.json`. Committed to the repo.
-- **Acceptance:** Running the make target produces a deterministic JSON file (sorted keys, stable ordering); pre-commit hook (or CI) fails if the committed file is stale.
-- **Files:** `Makefile`, `scripts/export_ai_schema.py`, `app/ai/schema/v1.json`
-- **Depends on:** C1.3
-- **Estimate:** M
+**C5.1 — Pydantic ↔ Swift wire format note in `CLAUDE.md`**
+- Add a paragraph to the root-level `CLAUDE.md` (under Conventions) pointing at `sevino-api/app/ai/blocks.py` (`Block`) and `sevino-api/app/ai/transport/events.py` (`Event`) as the SSE wire-format source of truth, with iOS `enum Block` (and the equivalent event enum) under `sevino-app/Sevino/Sevino/Models/Chat/` as the hand-maintained mirror. The note instructs contributors and Claude to update the Swift enum in the same PR as any change to either Pydantic union.
+- Replaces the originally-planned schema export script + checked-in JSON snapshot. Per D2 — startup-stage tradeoff: drift is rare at v0 scope, codegen and CI infrastructure are not worth the cost yet.
+- **Acceptance:** `CLAUDE.md` contains the note; both the Pydantic file paths and the Swift mirror location are referenced explicitly so a future Claude (or human) editing either side has the cross-reference one read away.
+- **Files:** `CLAUDE.md` (root, edit)
+- **Depends on:** —
+- **Estimate:** XS
 
-**C5.2 — CI diff check on schema sync**
-- Modify `.github/workflows/ci.yml`: new job `schema-check` runs `make ai-schema-export` and `git diff --exit-code app/ai/schema/v1.json` — fails if the export doesn't match the committed file. iOS variant-name check (compare against `Sevino/Sevino/Models/Chat/Block.swift` — extract `case` names via grep, compare to JSON variant names).
-- **Acceptance:** CI fails on a PR that changes Pydantic Block without updating committed JSON; CI fails on a PR that changes Pydantic Block + JSON without updating Swift enum variants; CI green on a coordinated change.
-- **Files:** `.github/workflows/ci.yml` (modified), `scripts/check_swift_block_sync.sh`
-- **Depends on:** C5.1, C3.3
-- **Estimate:** M
+**C5.2 — ~~CI diff check on schema sync~~ — CANCELED**
+- Originally: a CI job that ran `make ai-schema-export` + `git diff --exit-code` and grepped Swift `case` names. Canceled per D2; replaced by the `CLAUDE.md` note in C5.1.
 
 **C5.3 — Smoke case: AMD price query**
 - New `tests/ai/smoke/test_get_stock_info.py`. Sends "how is AMD doing" via real Anthropic + real Alpaca sandbox; asserts response stream contains a `block_start` for `stock_card`; asserts `tool_executions` row populated with `internal_trace`, `ui_blocks_emitted`, `upstream_api_calls`.
@@ -904,8 +901,7 @@ Wave 1 (start as soon as Project B's B2.3 ships — wire format stable):
   C1.3 (SEV-496) StockCardBlock schema       (after B1.1)
   C2.1 (SEV-498) Acquire Alpaca creds        (action item, day 1)
   C3.1 (SEV-503) iOS SSEClient
-  C5.1 (SEV-514) JSON schema export          (after C1.3)
-  C5.2 (SEV-515) CI diff check               (after C5.1, C3.3 — wave 2)
+  C5.1 (SEV-514) Wire format CLAUDE.md note  (no deps — XS, ship anytime)
 
 Wave 2 (after Wave 1):
   C1.2 (SEV-495) Wire ToolContext into loop  ← C1.1, A1.6
@@ -944,7 +940,7 @@ Wave 6 (after Wave 5):
 **For three engineers (1 backend, 1 iOS, 1 floater):**
 - **E1 (backend tools):** C1.1 (SEV-494) → C1.2 (SEV-495) → C1.4 (SEV-497) → C2.4 (SEV-501) → C2.5 (SEV-502) → C5.3 (SEV-516)
 - **E2 (iOS):** C3.1 (SEV-503) → C3.2 (SEV-504) → C3.3 (SEV-505) → C3.4 (SEV-506) → C4.4 (SEV-510) → C4.5 (SEV-511) → C4.6 (SEV-512)
-- **E3 (supporting):** C2.1 (SEV-498), C2.2 (SEV-499), C2.3 (SEV-500) (alpaca client) → C1.3 (SEV-496), C5.1 (SEV-514), C5.2 (SEV-515) (schema sync) → C4.1 (SEV-507), C4.2 (SEV-508), C4.3 (SEV-509) (block views, can hand off to E2)
+- **E3 (supporting):** C2.1 (SEV-498), C2.2 (SEV-499), C2.3 (SEV-500) (alpaca client) → C1.3 (SEV-496), C5.1 (SEV-514) (wire format note) → C4.1 (SEV-507), C4.2 (SEV-508), C4.3 (SEV-509) (block views, can hand off to E2)
 
 iOS engineer (E2) can start with C3.1 (SEV-503) (SSE parser — tested locally with a captured SSE stream from B2.3) on day 1 of Project C, before any backend tool work has shipped. The wire format is stable from B2.3.
 
