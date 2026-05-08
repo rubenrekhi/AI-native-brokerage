@@ -150,6 +150,14 @@ jobs:
     # skipped on push events.
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    # `dorny/paths-filter` calls the `pulls/{pr}/files` API on
+    # pull_request events. The repo's default GITHUB_TOKEN scope is
+    # `contents: read` only, so we explicitly grant the read scope it
+    # needs — without this the action 403s with "Resource not
+    # accessible by integration".
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       ai-changed: ${{ steps.filter.outputs.ai }}
     steps:
