@@ -494,6 +494,18 @@ enum L10n {
         static let stockStatMarginReq = String(localized: "home.stock_stat_margin_req")
     }
 
+    enum Chat {
+        static func statusActiveAccessibility(_ label: String) -> String {
+            String(format: String(localized: "chat.status_active_accessibility"), label)
+        }
+        static func statusCompleteAccessibility(_ label: String) -> String {
+            String(format: String(localized: "chat.status_complete_accessibility"), label)
+        }
+        static func statusFailedAccessibility(_ label: String) -> String {
+            String(format: String(localized: "chat.status_failed_accessibility"), label)
+        }
+    }
+
     enum Sidebar {
         static let accountPillFallback = String(localized: "sidebar.account_pill_fallback")
         static let chatAccessibility = String(localized: "sidebar.chat_accessibility")
