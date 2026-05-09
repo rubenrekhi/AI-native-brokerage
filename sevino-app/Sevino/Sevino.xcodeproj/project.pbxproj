@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = E14A3B022F73480000AABB02 /* Supabase */; };
 		C4ACE3252F96D5F100CC0FEF /* LinkKit in Frameworks */ = {isa = PBXBuildFile; productRef = C4ACE3242F96D5F100CC0FEF /* LinkKit */; };
+		C4DD000A2F00000000000003 /* MarkdownUI in Frameworks */ = {isa = PBXBuildFile; productRef = C4DD000A2F00000000000002 /* MarkdownUI */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +63,7 @@
 			files = (
 				C44DDAC22F74EBA40057C85A /* Supabase in Frameworks */,
 				C4ACE3252F96D5F100CC0FEF /* LinkKit in Frameworks */,
+				C4DD000A2F00000000000003 /* MarkdownUI in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -135,6 +137,7 @@
 			packageProductDependencies = (
 				E14A3B022F73480000AABB02 /* Supabase */,
 				C4ACE3242F96D5F100CC0FEF /* LinkKit */,
+				C4DD000A2F00000000000002 /* MarkdownUI */,
 			);
 			productName = Sevino;
 			productReference = 0B40D02C2F7346F400C0AB94 /* Sevino.app */;
@@ -221,6 +224,7 @@
 			packageReferences = (
 				E14A3B012F73480000AABB01 /* XCRemoteSwiftPackageReference "supabase-swift" */,
 				C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */,
+				C4DD000A2F00000000000001 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 0B40D02D2F7346F400C0AB94 /* Products */;
@@ -753,6 +757,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		C4DD000A2F00000000000001 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/gonzalezreal/swift-markdown-ui";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.4.0;
+			};
+		};
 		C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/plaid/plaid-link-ios";
@@ -776,6 +788,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = C4E361A42F7779AE0091BEA9 /* XCRemoteSwiftPackageReference "plaid-link-ios" */;
 			productName = LinkKit;
+		};
+		C4DD000A2F00000000000002 /* MarkdownUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C4DD000A2F00000000000001 /* XCRemoteSwiftPackageReference "swift-markdown-ui" */;
+			productName = MarkdownUI;
 		};
 		E14A3B022F73480000AABB02 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
