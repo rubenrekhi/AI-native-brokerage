@@ -1452,11 +1452,28 @@ class TestCancellation:
         kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
         assert kwargs["terminal_state"] == "cancelled"
         assert kwargs["error_code"] == ErrorCode.CANCELLED.value
-        # Mid-stream cancellation: the post-stream block-emission path
-        # never ran, so no assistant message persists. (B3.4 will extend
-        # this to persist the partial text block.)
-        assert kwargs["assistant_message_id"] is None
-        repo_mocks["append_assistant_message"].assert_not_awaited()
+        # B3.4: cancellation_reason populated so the audit trail
+        # distinguishes a client disconnect from any other failure.
+        assert kwargs["cancellation_reason"] is not None
+        # B3.4: the N text deltas that reached the wire before the
+        # cancellation are persisted as a partial assistant block — the
+        # agent_turn row points at that message.
+        assert kwargs["assistant_message_id"] is not None
+        repo_mocks["append_assistant_message"].assert_awaited_once()
+        persisted = repo_mocks["append_assistant_message"].call_args.kwargs[
+            "content_blocks"
+        ]
+        assert len(persisted) == 1
+        assert persisted[0]["type"] == "text"
+        # Each delta in the fake stream is "c"; N of them concatenate to
+        # an N-character "c" string. The remaining 4 deltas the fake
+        # stream would have produced never reached the wire and so never
+        # accumulated.
+        assert persisted[0]["text"] == "c" * N
+        assert isinstance(persisted[0]["block_id"], str)
+        # The block_id matches the one announced on ``block_start``.
+        block_starts = [e for e in wire_events if isinstance(e, BlockStart)]
+        assert persisted[0]["block_id"] == block_starts[0].block["block_id"]
         # The Anthropic call kicked off but never completed
         # ``get_final_message()``, so no model_invocation row is recorded.
         repo_mocks["record_model_invocation"].assert_not_awaited()
