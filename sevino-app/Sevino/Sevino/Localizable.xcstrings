@@ -494,6 +494,36 @@
         }
       }
     },
+    "chat.status_active_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, in progress"
+          }
+        }
+      }
+    },
+    "chat.status_complete_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, complete"
+          }
+        }
+      }
+    },
+    "chat.status_failed_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@, failed"
+          }
+        }
+      }
+    },
     "general.app_name" : {
       "localizations" : {
         "en" : {
