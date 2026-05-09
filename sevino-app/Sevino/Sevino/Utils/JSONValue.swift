@@ -18,7 +18,7 @@ import Foundation
  `JSONDecoder` succeeds at decoding `3` as both, but we prefer the narrower
  type when both work — round-trip compares are friendlier that way.
  */
-enum JSONValue: Decodable, Equatable, Sendable {
+enum JSONValue: Codable, Equatable, Sendable {
     case null
     case bool(Bool)
     case int(Int)
@@ -48,6 +48,19 @@ enum JSONValue: Decodable, Equatable, Sendable {
                 in: container,
                 debugDescription: "JSONValue could not decode the underlying JSON"
             )
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .null: try container.encodeNil()
+        case .bool(let v): try container.encode(v)
+        case .int(let v): try container.encode(v)
+        case .double(let v): try container.encode(v)
+        case .string(let v): try container.encode(v)
+        case .array(let v): try container.encode(v)
+        case .object(let v): try container.encode(v)
         }
     }
 }
