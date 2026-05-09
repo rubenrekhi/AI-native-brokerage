@@ -175,23 +175,48 @@ final class PortfolioChartViewScrubDateLabelTests: XCTestCase {
         XCTAssertEqual(result, expected)
     }
 
-    func test_scrubDateLabel_threeMonths_sixMonths_ytd_shareMonthDayFormat() {
+    func test_scrubDateLabel_oneMonth_threeMonths_shareNoYearFormat() {
+        // 1M and 3M are guaranteed same-year (max 90 days back), so the
+        // year is omitted to keep the label compact.
         let oneM = PortfolioChartView.scrubDateLabel(
             at: 0, dates: [marketOpenDate], expectedCount: 1, range: .oneMonth
         )
         let threeM = PortfolioChartView.scrubDateLabel(
             at: 0, dates: [marketOpenDate], expectedCount: 1, range: .threeMonths
         )
+
+        XCTAssertEqual(oneM, threeM)
+    }
+
+    func test_scrubDateLabel_sixMonths_ytd_oneYear_shareYearFormat() {
+        // 6M can cross Jan 1, YTD/1Y always could — all three include the
+        // 4-digit year for disambiguation.
         let sixM = PortfolioChartView.scrubDateLabel(
             at: 0, dates: [marketOpenDate], expectedCount: 1, range: .sixMonths
         )
         let ytd = PortfolioChartView.scrubDateLabel(
             at: 0, dates: [marketOpenDate], expectedCount: 1, range: .ytd
         )
+        let oneY = PortfolioChartView.scrubDateLabel(
+            at: 0, dates: [marketOpenDate], expectedCount: 1, range: .oneYear
+        )
 
-        XCTAssertEqual(oneM, threeM)
-        XCTAssertEqual(threeM, sixM)
         XCTAssertEqual(sixM, ytd)
+        XCTAssertEqual(ytd, oneY)
+    }
+
+    func test_scrubDateLabel_oneMonth_omitsYear_sixMonths_includesYear() {
+        // The 1M/3M vs 6M+ split is the load-bearing rule of this format
+        // table. Pin it explicitly so a future "let's just always show
+        // the year" tweak fails this test.
+        let oneM = PortfolioChartView.scrubDateLabel(
+            at: 0, dates: [marketOpenDate], expectedCount: 1, range: .oneMonth
+        )
+        let sixM = PortfolioChartView.scrubDateLabel(
+            at: 0, dates: [marketOpenDate], expectedCount: 1, range: .sixMonths
+        )
+
+        XCTAssertNotEqual(oneM, sixM)
     }
 
     func test_scrubDateLabel_oneYear_includesYear() {

@@ -177,14 +177,16 @@ struct PortfolioChartView: View {
 
     /// Returns the formatted timestamp at the dragged index, with a format
     /// that scales with the visible range:
-    /// - 1D     → "9:31 AM"
-    /// - 1W     → "Mon 10:00 AM"
-    /// - 1M..YTD→ "Mar 5"
-    /// - 1Y     → "Mar 5, 2026"
-    /// - ALL    → "Mar 2026"
-    /// Times are rendered in `America/New_York` so 1D/1W show market-clock
-    /// regardless of the user's device locale. Returns `nil` if `dates` is
-    /// missing or length-mismatched against the parallel arrays.
+    /// - 1D                → "9:31 AM"
+    /// - 1W                → "Mon 10:00 AM"
+    /// - 1M / 3M           → "Mar 5"
+    /// - 6M / YTD / 1Y     → "Mar 5, 2026"
+    /// - ALL               → "Mar 2026"
+    /// Year is included whenever dates could be ambiguous about which
+    /// year they fall in (6M can cross Jan 1; YTD/1Y always span the
+    /// year boundary visually). Times are rendered in `America/New_York`
+    /// so 1D/1W show market-clock regardless of device locale. Returns
+    /// `nil` if `dates` is missing or length-mismatched.
     static func scrubDateLabel(
         at idx: Int,
         dates: [Date],
@@ -208,13 +210,13 @@ struct PortfolioChartView: View {
                     .hour()
                     .minute()
             )
-        case .oneMonth, .threeMonths, .sixMonths, .ytd:
+        case .oneMonth, .threeMonths:
             return date.formatted(
                 Date.FormatStyle(timeZone: tz)
                     .month(.abbreviated)
                     .day()
             )
-        case .oneYear:
+        case .sixMonths, .ytd, .oneYear:
             return date.formatted(
                 Date.FormatStyle(timeZone: tz)
                     .month(.abbreviated)
