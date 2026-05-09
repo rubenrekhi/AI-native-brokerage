@@ -56,6 +56,7 @@ from app.ai.runtime.db import DbSessionFactory, get_db_factory
 from app.ai.runtime.errors import to_error_code
 from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
+from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
     BlockEnd,
@@ -182,6 +183,7 @@ async def post_turn(
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=EMPTY_REGISTRY,
+                http_clients=ToolHttpClients(),
                 system_prompt=SYSTEM_PROMPT_V1,
                 model_config=model_config,
                 hard_caps=hard_caps,

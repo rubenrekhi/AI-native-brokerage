@@ -39,10 +39,12 @@ are durable mid-turn rather than batched at the end.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from typing import Any, Awaitable, Callable
 
+import pydantic
 import structlog
 from anthropic import AsyncAnthropic
 from langfuse import propagate_attributes
@@ -60,11 +62,13 @@ from app.ai.runtime.types import (
     ModelConfig,
     ToolRegistry,
 )
+from app.ai.tools.base import ToolContext, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
     BlockEnd,
     BlockStart,
     Error,
+    Event,
     TextDelta,
     TurnCompleted,
     TurnStarted,
@@ -132,6 +136,12 @@ def _to_anthropic_content(
     the verbatim ``response_content`` from ``model_invocations``, which
     is already in the Anthropic shape (and carries the thinking
     signatures A1.7's R1 contract requires).
+
+    UI-only block variants (``status``, ``stock_card``, …) introduced in
+    Project C are dropped entirely — they never went to the model in
+    the first place, and Anthropic 400s on unknown ``type`` values.
+    Subsequent turns therefore lose tool-use context across turns; in
+    v0 the assistant text answer is sufficient continuity.
     """
     converted: list[dict[str, Any]] = []
     for block in content_blocks:
@@ -139,12 +149,9 @@ def _to_anthropic_content(
             converted.append(
                 {"type": "text", "text": block.get("text", "")}
             )
-        else:
-            # Non-text blocks are reserved for future variants (StatusBlock,
-            # StockCardBlock). When those land they may need their own
-            # filtering — pass through for now so the discriminator catches
-            # any premature use during development.
-            converted.append(block)
+        # Other block types are UI-only artefacts (StatusBlock,
+        # StockCardBlock, …) — silently skip rather than forwarding to
+        # Anthropic.
     return converted
 
 
@@ -231,6 +238,223 @@ async def _finalize_agent_turn_row(
         )
 
 
+class _RecordingEmitter:
+    """SSE emitter wrapper that records ``BlockStart`` ``block_id`` values.
+
+    Forwards every event to ``underlying`` unchanged. The set of seen
+    ``block_id`` values lets the loop's tool-result branch decide whether
+    a tool already announced a UI block (incremental streaming case —
+    C1.4) or whether the loop must emit ``block_start`` itself before
+    ``block_end`` (simple case where the tool only returned the final
+    block in :class:`ToolResult`).
+
+    The underlying type is the :class:`SSEEmitter` Protocol owned by
+    ``app.ai.tools.base`` — both :class:`app.ai.transport.emitter.SSEEmitter`
+    (the real producer queue) and test fakes implement it.
+    """
+
+    def __init__(self, underlying: Any) -> None:
+        self._underlying = underlying
+        self.started_block_ids: set[str] = set()
+
+    async def emit(self, event: Event) -> None:
+        if isinstance(event, BlockStart):
+            block_id = event.block.get("block_id")
+            if isinstance(block_id, str) and block_id:
+                self.started_block_ids.add(block_id)
+        await self._underlying.emit(event)
+
+
+class _ToolDispatchOutcome:
+    """Aggregated state of a single iteration's tool-use processing.
+
+    On a fully successful iteration ``terminal_error_code`` is ``None``
+    and the loop appends ``tool_result_blocks`` to its messages list and
+    continues. On any tool failure (lookup, validation, or
+    ``execute``-time exception) the iteration short-circuits — every
+    ``tool_use`` block before the failure has its ``tool_executions``
+    row written; the failing block writes an ``error`` row; later blocks
+    are not dispatched. The loop sets ``terminal_state='error'`` with
+    the returned ``ErrorCode`` and breaks out of the iteration.
+    """
+
+    __slots__ = (
+        "terminal_error_code",
+        "tool_result_blocks",
+        "ui_block_dicts",
+        "tool_call_count",
+    )
+
+    def __init__(self) -> None:
+        self.terminal_error_code: ErrorCode | None = None
+        self.tool_result_blocks: list[dict[str, Any]] = []
+        self.ui_block_dicts: list[dict[str, Any]] = []
+        self.tool_call_count: int = 0
+
+
+async def _dispatch_tool_uses(
+    *,
+    response_blocks: list[Any],
+    tool_registry: ToolRegistry,
+    user_id: uuid.UUID,
+    db_factory: DbSessionFactory,
+    sse_emitter: SSEEmitter,
+    http_clients: ToolHttpClients,
+    invocation_id: uuid.UUID,
+) -> _ToolDispatchOutcome:
+    """Process every ``tool_use`` block in an Anthropic response.
+
+    For each block: registry lookup → input validation → ``execute`` →
+    ``tool_executions`` persistence → wire-event emission for the
+    returned ``ui_block``. ``response_blocks`` is the live SDK iterable
+    whose ``.input`` / ``.id`` / ``.name`` accessors give us the values
+    to feed into the tool framework.
+    """
+    outcome = _ToolDispatchOutcome()
+
+    for block in response_blocks:
+        block_type = getattr(block, "type", None)
+        if block_type != "tool_use":
+            continue
+
+        tool_name = getattr(block, "name", "") or ""
+        tool_use_id = getattr(block, "id", "") or ""
+        raw_input = getattr(block, "input", None)
+        input_payload = (
+            raw_input if isinstance(raw_input, dict) else {}
+        )
+
+        # Registry lookup. ``KeyError`` here means Claude called a tool
+        # that wasn't registered — wiring bug, not user-facing fault.
+        try:
+            tool = tool_registry.get(tool_name)
+        except KeyError:
+            logger.warning(
+                "loop_tool_lookup_failed",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
+            async with db_factory() as db:
+                await ConversationRepository.record_tool_execution(
+                    db,
+                    model_invocation_id=invocation_id,
+                    tool_name=tool_name,
+                    tool_use_id=tool_use_id,
+                    input_payload=input_payload,
+                    status="error",
+                    error_message=f"unknown tool: {tool_name}",
+                )
+            outcome.terminal_error_code = ErrorCode.INTERNAL_ERROR
+            return outcome
+
+        # Input validation. Surface as terminal ``validation_error`` per
+        # SEV-495 acceptance criteria — the tool framework guarantees
+        # ``execute`` only ever sees a well-typed ``Input`` instance.
+        try:
+            validated_input = tool.Input.model_validate(raw_input)
+        except pydantic.ValidationError as exc:
+            async with db_factory() as db:
+                await ConversationRepository.record_tool_execution(
+                    db,
+                    model_invocation_id=invocation_id,
+                    tool_name=tool_name,
+                    tool_use_id=tool_use_id,
+                    input_payload=input_payload,
+                    status="error",
+                    error_message=str(exc),
+                )
+            outcome.terminal_error_code = ErrorCode.VALIDATION_ERROR
+            return outcome
+
+        # Wrap the wire emitter so we can detect whether the tool itself
+        # already announced its UI block via ``BlockStart`` (incremental
+        # streaming — C1.4) or whether the loop must do it (non-incremental
+        # case where the tool only returns the final block).
+        recording_emitter = _RecordingEmitter(sse_emitter)
+        ctx = ToolContext(
+            user_id=user_id,
+            db_factory=db_factory,
+            sse_emitter=recording_emitter,  # type: ignore[arg-type]
+            http_clients=http_clients,
+        )
+
+        tool_started = time.monotonic()
+        try:
+            tool_result = await tool.execute(validated_input, ctx)
+        except Exception as exc:
+            tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
+            logger.exception(
+                "loop_tool_execute_failed",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
+            async with db_factory() as db:
+                await ConversationRepository.record_tool_execution(
+                    db,
+                    model_invocation_id=invocation_id,
+                    tool_name=tool_name,
+                    tool_use_id=tool_use_id,
+                    input_payload=input_payload,
+                    status="error",
+                    error_message=f"{type(exc).__name__}: {exc}",
+                    latency_ms=tool_latency_ms,
+                )
+            # Tool-side failures are ``TOOL_ERROR`` regardless of the
+            # underlying exception type — that's the band of error
+            # codes reserved for "the tool itself raised". Anthropic-
+            # adjacent failures only surface when the loop calls
+            # Anthropic, not when a tool runs.
+            outcome.terminal_error_code = ErrorCode.TOOL_ERROR
+            return outcome
+        tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
+
+        # Drive the wire envelope for any UI block returned. The tool
+        # may have already emitted ``block_start`` (and ``block_data``
+        # patches) inline; if so we only emit ``block_end``. Otherwise
+        # we emit ``block_start`` with the final block + ``block_end``.
+        ui_blocks_emitted_for_row: list[dict[str, Any]] | None = None
+        if tool_result.ui_block is not None:
+            ui_block_dict = tool_result.ui_block.model_dump(mode="json")
+            block_id = ui_block_dict.get("block_id")
+            if isinstance(block_id, str) and block_id:
+                if block_id not in recording_emitter.started_block_ids:
+                    await sse_emitter.emit(BlockStart(block=ui_block_dict))
+                await sse_emitter.emit(BlockEnd(block_id=block_id))
+            outcome.ui_block_dicts.append(ui_block_dict)
+            ui_blocks_emitted_for_row = [ui_block_dict]
+
+        # Persist the audit row. Per the AI v0 plan, ``ui_blocks_emitted``
+        # is the merged final state — not a per-patch log.
+        async with db_factory() as db:
+            await ConversationRepository.record_tool_execution(
+                db,
+                model_invocation_id=invocation_id,
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                input_payload=input_payload,
+                status="success",
+                output_payload=tool_result.model_payload,
+                internal_trace=tool_result.internal_trace,
+                ui_blocks_emitted=ui_blocks_emitted_for_row,
+                latency_ms=tool_latency_ms,
+            )
+
+        outcome.tool_call_count += 1
+
+        # Anthropic's ``tool_result`` content can be a string or a list of
+        # text/image blocks. JSON-encode the model payload so any shape
+        # roundtrips cleanly without dropping the structure.
+        outcome.tool_result_blocks.append(
+            {
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": json.dumps(tool_result.model_payload),
+            }
+        )
+
+    return outcome
+
+
 async def run_agent_turn(
     *,
     user_id: uuid.UUID,
@@ -245,6 +469,7 @@ async def run_agent_turn(
     langfuse: LangfuseClient,
     environment: str,
     sse_emitter: SSEEmitter,
+    http_clients: ToolHttpClients,
     disconnect_check: Callable[[], Awaitable[bool]] | None = None,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
@@ -691,23 +916,26 @@ async def run_agent_turn(
                             )
 
                         async with db_factory() as db:
-                            await ConversationRepository.record_model_invocation(
-                                db,
-                                agent_turn_id=turn_id,
-                                iteration_index=iteration_index,
-                                model_id=model_config.model_id,
-                                request_system=request_system,
-                                request_messages=messages,
-                                response_content=response_content,
-                                stop_reason=response.stop_reason,
-                                input_tokens=response.usage.input_tokens,
-                                output_tokens=response.usage.output_tokens,
-                                cache_read_input_tokens=cache_read,
-                                cache_creation_input_tokens=cache_create,
-                                thinking_tokens=iter_thinking_tokens,
-                                cost_usd_micros=cost,
-                                latency_ms=latency_ms,
+                            invocation = (
+                                await ConversationRepository.record_model_invocation(
+                                    db,
+                                    agent_turn_id=turn_id,
+                                    iteration_index=iteration_index,
+                                    model_id=model_config.model_id,
+                                    request_system=request_system,
+                                    request_messages=messages,
+                                    response_content=response_content,
+                                    stop_reason=response.stop_reason,
+                                    input_tokens=response.usage.input_tokens,
+                                    output_tokens=response.usage.output_tokens,
+                                    cache_read_input_tokens=cache_read,
+                                    cache_creation_input_tokens=cache_create,
+                                    thinking_tokens=iter_thinking_tokens,
+                                    cost_usd_micros=cost,
+                                    latency_ms=latency_ms,
+                                )
                             )
+                            invocation_id = invocation.id
 
                         state.iterations += 1
                         state.output_tokens += response.usage.output_tokens
@@ -764,12 +992,58 @@ async def run_agent_turn(
                             error_code = ErrorCode.OUTPUT_TOKEN_LIMIT
                             break
                         if response.stop_reason == "tool_use":
-                            # Unreachable in v0 (no tools registered). If reached,
-                            # the tool framework is misconfigured — treat as
-                            # internal error.
-                            terminal_state = "error"
-                            error_code = ErrorCode.INTERNAL_ERROR
-                            break
+                            # C1.2 / C1.4: dispatch tools. Each ``tool_use``
+                            # block in the assistant response triggers a
+                            # registry lookup, input validation, and an
+                            # ``execute`` call. The tool may stream
+                            # ``block_data`` patches via its own
+                            # ``ctx.sse_emitter`` while running; we wrap the
+                            # wire emitter per call so the loop can tell
+                            # whether the tool already announced its UI
+                            # block (via ``block_start``) or whether the
+                            # loop must emit it itself before ``block_end``.
+                            tool_outcomes = await _dispatch_tool_uses(
+                                response_blocks=response.content,
+                                tool_registry=tool_registry,
+                                user_id=user_id,
+                                db_factory=db_factory,
+                                sse_emitter=sse_emitter,
+                                http_clients=http_clients,
+                                invocation_id=invocation_id,
+                            )
+                            if tool_outcomes.terminal_error_code is not None:
+                                terminal_state = "error"
+                                error_code = tool_outcomes.terminal_error_code
+                                assistant_blocks.extend(
+                                    tool_outcomes.ui_block_dicts
+                                )
+                                break
+                            # Defensive: ``stop_reason == "tool_use"`` with
+                            # no ``tool_use`` blocks in the response is an
+                            # Anthropic contract violation we never expect
+                            # to see. Treat as ``INTERNAL_ERROR`` rather
+                            # than looping forever appending an empty user
+                            # message.
+                            if tool_outcomes.tool_call_count == 0:
+                                terminal_state = "error"
+                                error_code = ErrorCode.INTERNAL_ERROR
+                                break
+                            assistant_blocks.extend(
+                                tool_outcomes.ui_block_dicts
+                            )
+                            state.tool_calls += tool_outcomes.tool_call_count
+                            # Anthropic expects the tool_result blocks to
+                            # ride on a follow-up ``user`` message —
+                            # stop_reason on the next iteration drives
+                            # whether Claude needs another tool round or
+                            # finally returns text.
+                            messages.append(
+                                {
+                                    "role": "user",
+                                    "content": tool_outcomes.tool_result_blocks,
+                                }
+                            )
+                            continue
                         if response.stop_reason == "pause_turn":
                             # Anthropic paused a long-running turn (typically mid
                             # extended-thinking). Per the API contract we continue
