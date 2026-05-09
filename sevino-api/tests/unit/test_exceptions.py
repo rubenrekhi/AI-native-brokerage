@@ -17,6 +17,7 @@ from app.exceptions import (
     NotFoundError,
     _extract_column,
     alpaca_error_handler,
+    alpaca_unavailable_handler,
     authentication_error_handler,
     authorization_error_handler,
     conflict_error_handler,
@@ -32,7 +33,7 @@ from app.exceptions import (
     programming_error_handler,
     validation_error_handler,
 )
-from app.services.alpaca_broker import AlpacaBrokerError
+from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
 from app.services.plaid import PlaidServiceError
 
 request = MagicMock()
@@ -356,6 +357,25 @@ async def test_alpaca_error_handler_does_not_prefix_non_kyc_messages():
 
     assert body["error"] == "account is closed"
     assert "KYC" not in body["error"]
+
+
+async def test_alpaca_error_handler_maps_upstream_5xx_to_502():
+    # Upstream 5xx is not a validation error — it's a broker outage masquerading
+    # as one. Surface as 502 so clients can distinguish it from user-fixable 4xx.
+    exc = AlpacaBrokerError(status_code=500, message="internal alpaca error")
+    resp = await alpaca_error_handler(request, exc)
+
+    assert resp.status_code == 502
+    assert _body(resp)["code"] == "ALPACA_ERROR"
+
+
+async def test_alpaca_unavailable_handler_includes_retry_after_header():
+    # Per RFC 9110, 503 responses should hint at when to retry. Without this
+    # header, well-behaved clients (and CDNs) have no signal to back off.
+    resp = await alpaca_unavailable_handler(request, AlpacaBrokerUnavailableError())
+
+    assert resp.status_code == 503
+    assert resp.headers.get("retry-after") == "30"
 
 
 # ---------------------------------------------------------------------------

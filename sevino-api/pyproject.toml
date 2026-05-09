@@ -16,6 +16,7 @@ dependencies = [
     "alpaca-py",
     "plaid-python",
     "arq==0.27.0",
+    "redis>=5.0,<6",
     "httpx",
     "structlog>=25.5.0",
     "slowapi>=0.1.9",

@@ -53,8 +53,13 @@ make migrate                           # apply pending migrations (alembic upgra
 - `services/` — business logic / external API wrappers
 - `services/alpaca_broker.py` — `AlpacaBrokerService` (OAuth2 client credentials via `authx.sandbox.alpaca.markets`); defines `AlpacaBrokerError` and `AlpacaBrokerUnavailableError`
 - `services/onboarding.py` — `OnboardingService` for incremental step saves and KYC submission
-- `repositories/` — data access layer (`UserProfileRepository`, `FinancialProfileRepository`, `BrokerageAccountRepository`)
-- `schemas/onboarding.py` — Pydantic request/response models for the onboarding API
+- `services/portfolio.py` — `PortfolioService` (snapshot / holdings / history), `range_to_alpaca_params` mapper, Redis-cached responses (TTL 30/30/60s)
+- `dependencies/portfolio.py` — `get_alpaca_account_context` gates non-`ACTIVE` accounts with `ConflictError("ACCOUNT_NOT_ACTIVE")` (409)
+- `cache.py` — `cache_get_or_set(client, key, ttl, fetcher)` helper used by all portfolio reads
+- `repositories/` — data access layer (`UserProfileRepository`, `FinancialProfileRepository`, `BrokerageAccountRepository`, `AssetRepository`)
+- `schemas/_types.py` — `MoneyStr` / `QtyStr` / `PctStr` Pydantic aliases. Money/qty/pct fields serialize as JSON **strings** (not numbers) so iOS and Python share `Decimal` semantics across the wire. Never use plain `Decimal` on a portfolio response schema.
+- `schemas/onboarding.py`, `schemas/portfolio.py` — Pydantic request/response models
+- `routes/portfolio.py` — `GET /v1/portfolio/snapshot|holdings|history?range=...`
 - `tasks/` — ARQ background job functions
 
 **Migrations** (`migrations/`): Alembic with async support. `env.py` uses `database_url_direct` (not pooled). New model imports must be added to `env.py` for autogenerate to detect them.

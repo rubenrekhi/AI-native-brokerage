@@ -16,21 +16,69 @@ struct HoldingsCardContent: View {
     var scale: CGFloat = 1
     var onFilterTapped: (() -> Void)?
 
+    /// At most one row's detail panel is open at a time.
+    @State private var expandedTicker: String?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             headerRow
 
             if data.holdings.isEmpty {
                 emptyState
+            } else if data.holdings.count > scrollThreshold {
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 12 * scale) {
+                            ForEach(data.holdings) { holding in
+                                row(for: holding, proxy: proxy)
+                            }
+                        }
+                        .padding(.trailing, 16 * scale)
+                    }
+                    .frame(maxHeight: scrollMaxHeight)
+                }
             } else {
-                LazyVStack(spacing: 12 * scale) {
+                VStack(spacing: 12 * scale) {
                     ForEach(data.holdings) { holding in
-                        HoldingRow(holding: holding, scale: scale)
+                        row(for: holding, proxy: nil)
                     }
                 }
             }
         }
     }
+
+    private func toggle(_ ticker: String, proxy: ScrollViewProxy?) {
+        let willExpand = expandedTicker != ticker
+        // iOS 17's `withAnimation(_:_:completion:)` waits for the layout
+        // pass for the new state, which is the only point at which
+        // `scrollTo` sees the post-expansion frame. Runloop-tick deferrals
+        // (`DispatchQueue.main.async`, `Task`, `RunLoop.main.perform`) race
+        // the layout pass and break the bottom-edge first-tap case.
+        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+            expandedTicker = willExpand ? ticker : nil
+        } completion: {
+            guard willExpand, let proxy else { return }
+            withAnimation(.easeInOut(duration: 0.2)) {
+                proxy.scrollTo("\(ticker)-end", anchor: nil)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func row(for holding: Holding, proxy: ScrollViewProxy?) -> some View {
+        HoldingRow(
+            holding: holding,
+            scale: scale,
+            isExpanded: expandedTicker == holding.id,
+            onToggle: { toggle(holding.id, proxy: proxy) }
+        )
+        .id(holding.id)
+    }
+
+    /// Includes the synthetic CASH row — at 6 total rows the modal is at
+    /// the edge of a typical phone screen before any panel expands.
+    private var scrollThreshold: Int { 6 }
+    private var scrollMaxHeight: CGFloat { 500 * scale }
 
     private var headerRow: some View {
         HStack {
@@ -93,28 +141,24 @@ private struct HoldingsCardPreview: View {
                                 Holding(
                                     ticker: "AAPL",
                                     isCash: false,
-                                    shares: "10",
-                                    value: "$1,820.50",
-                                    gainLossText: "+$120.50 (7.08%)",
-                                    isPositive: true,
-                                    daysGain: "+$12.30",
-                                    daysGainPercent: "0.68%",
-                                    totalGain: "+$120.50",
-                                    totalGainPercent: "7.08%",
-                                    averageCost: "$170.00"
+                                    qty: Decimal(10),
+                                    marketValue: Decimal(string: "1820.50")!,
+                                    unrealizedPl: Decimal(string: "120.50")!,
+                                    unrealizedPlpc: Decimal(string: "0.0708")!,
+                                    changeToday: Decimal(string: "12.30")!,
+                                    changeTodayPercent: Decimal(string: "0.0068")!,
+                                    avgEntryPrice: Decimal(string: "170.00")!
                                 ),
                                 Holding(
-                                    ticker: "Cash",
+                                    ticker: "CASH",
                                     isCash: true,
-                                    shares: nil,
-                                    value: "$250.00",
-                                    gainLossText: nil,
-                                    isPositive: nil,
-                                    daysGain: nil,
-                                    daysGainPercent: nil,
-                                    totalGain: nil,
-                                    totalGainPercent: nil,
-                                    averageCost: nil
+                                    qty: nil,
+                                    marketValue: Decimal(string: "250.00")!,
+                                    unrealizedPl: nil,
+                                    unrealizedPlpc: nil,
+                                    changeToday: nil,
+                                    changeTodayPercent: nil,
+                                    avgEntryPrice: nil
                                 )
                             ],
                             displayOption: "Total Value"

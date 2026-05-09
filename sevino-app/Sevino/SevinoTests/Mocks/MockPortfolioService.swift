@@ -4,10 +4,17 @@ import Foundation
 final class MockPortfolioService: PortfolioServiceProtocol {
     var fetchPortfolioError: Error?
     var snapshot = PortfolioSnapshot(
-        displayValue: "$1,000.00",
-        isDown: false,
-        gainText: "+$10.00 (+1.00%)",
-        chartPoints: [0.1, 0.2, 0.3]
+        equity: Decimal(string: "1000.00")!,
+        currency: "USD",
+        gainAbs: Decimal(string: "10.00")!,
+        gainPct: Decimal(string: "0.01")!,
+        chartPoints: [0.1, 0.2, 0.3],
+        chartValues: [Decimal(800), Decimal(900), Decimal(1000)],
+        chartDates: [
+            Date(timeIntervalSince1970: 1700000000),
+            Date(timeIntervalSince1970: 1700001000),
+            Date(timeIntervalSince1970: 1700002000)
+        ]
     )
 
     private(set) var fetchPortfolioCallCount = 0

@@ -3,22 +3,29 @@ import SwiftUI
 struct HoldingRow: View {
     let holding: Holding
     let scale: CGFloat
-    @State private var isDetailExpanded = false
+    let isExpanded: Bool
+    let onToggle: () -> Void
 
-    private var hasDetails: Bool { holding.daysGain != nil }
+    private var hasDetails: Bool { !holding.isCash }
 
     var body: some View {
         VStack(spacing: 0) {
             mainRow
-            if isDetailExpanded, hasDetails {
+            if isExpanded, hasDetails {
                 detailSection
             }
+            // Auto-scroll target. VStack realizes a zero-height view, so
+            // the id is queryable for `scrollTo` even before the panel
+            // expands.
+            Color.clear
+                .frame(height: 0)
+                .id("\(holding.ticker)-end")
         }
         .clipped()
     }
 
     private var mainRow: some View {
-        Button(action: toggleDetails) {
+        Button(action: onToggle) {
             HStack(spacing: 10 * scale) {
                 holdingIcon
                 tickerInfo
@@ -29,7 +36,7 @@ struct HoldingRow: View {
                     Image(systemName: "chevron.down")
                         .font(.system(size: 12 * scale, weight: .medium))
                         .foregroundStyle(Color.sevinoGreyContrast)
-                        .rotationEffect(.degrees(isDetailExpanded ? -180 : 0))
+                        .rotationEffect(.degrees(isExpanded ? -180 : 0))
                         .accessibilityHidden(true)
                 }
             }
@@ -59,8 +66,8 @@ struct HoldingRow: View {
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if let shares = holding.shares {
-                Text(L10n.Home.holdingsShares(shares))
+            if let qty = holding.qty {
+                Text(L10n.Home.holdingsShares(qty.asShareCount()))
                     .font(.system(size: 12 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
@@ -69,14 +76,14 @@ struct HoldingRow: View {
 
     private var valueInfo: some View {
         VStack(alignment: .trailing, spacing: 2 * scale) {
-            Text(holding.value)
+            Text(holding.marketValue.asCurrency())
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if let gainLoss = holding.gainLossText, let isPositive = holding.isPositive {
-                Text(gainLoss)
+            if let pl = holding.unrealizedPl, let plpc = holding.unrealizedPlpc {
+                Text("\(pl.asSignedCurrency()) (\(plpc.asSignedPercent()))")
                     .font(.system(size: 11 * scale))
-                    .foregroundStyle(isPositive ? Color.sevinoPositive : Color.sevinoNegative)
+                    .foregroundStyle(pl >= 0 ? Color.sevinoPositive : Color.sevinoNegative)
             }
         }
     }
@@ -89,28 +96,29 @@ struct HoldingRow: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.bottom, 8 * scale)
 
-            if let daysGain = holding.daysGain, let daysPercent = holding.daysGainPercent {
+            if let changeToday = holding.changeToday,
+               let changeTodayPct = holding.changeTodayPercent {
                 detailRow(
                     label: L10n.Home.holdingsDaysGain,
-                    value: "\(daysGain) (\(daysPercent))",
-                    isPositive: holding.isPositive
+                    value: "\(changeToday.asSignedCurrency()) (\(changeTodayPct.asSignedPercent()))",
+                    isPositive: changeToday >= 0
                 )
             }
 
-            if let totalGain = holding.totalGain, let totalPercent = holding.totalGainPercent {
+            if let pl = holding.unrealizedPl, let plpc = holding.unrealizedPlpc {
                 detailRow(
                     label: L10n.Home.holdingsTotalGain,
-                    value: "\(totalGain) (\(totalPercent))",
-                    isPositive: holding.isPositive
+                    value: "\(pl.asSignedCurrency()) (\(plpc.asSignedPercent()))",
+                    isPositive: pl >= 0
                 )
             }
 
-            if let avgCost = holding.averageCost {
+            if let avgCost = holding.avgEntryPrice {
                 VStack(alignment: .leading, spacing: 4 * scale) {
                     Text(L10n.Home.holdingsAverageCost)
                         .font(.system(size: 13 * scale))
                         .foregroundStyle(Color.sevinoGreyContrast)
-                    Text(avgCost)
+                    Text(avgCost.asCurrency())
                         .font(.system(size: 18 * scale, weight: .bold))
                         .foregroundStyle(Color.sevinoSecondary)
                 }
@@ -124,7 +132,7 @@ struct HoldingRow: View {
         .transition(.opacity)
     }
 
-    private func detailRow(label: String, value: String, isPositive: Bool?) -> some View {
+    private func detailRow(label: String, value: String, isPositive: Bool) -> some View {
         HStack {
             Text(label)
                 .font(.system(size: 13 * scale))
@@ -132,14 +140,9 @@ struct HoldingRow: View {
             Spacer()
             Text(value)
                 .font(.system(size: 13 * scale, weight: .medium))
-                .foregroundStyle(isPositive == true ? Color.sevinoPositive : Color.sevinoNegative)
+                .foregroundStyle(isPositive ? Color.sevinoPositive : Color.sevinoNegative)
         }
         .padding(.vertical, 6 * scale)
     }
 
-    private func toggleDetails() {
-        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-            isDetailExpanded.toggle()
-        }
-    }
 }

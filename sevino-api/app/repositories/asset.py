@@ -52,6 +52,23 @@ class AssetRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def get_names_by_symbols(
+        db: AsyncSession, symbols: list[str]
+    ) -> dict[str, str]:
+        """Return ``{symbol: name}`` for every symbol that exists in the table.
+
+        Used by the holdings endpoint to attach human-readable names to
+        Alpaca position rows, which only carry tickers. Missing symbols are
+        simply absent from the result — callers decide how to default.
+        """
+        if not symbols:
+            return {}
+        result = await db.execute(
+            select(Asset.symbol, Asset.name).where(Asset.symbol.in_(symbols))
+        )
+        return {row.symbol: row.name for row in result}
+
+    @staticmethod
     async def get_by_symbol(db: AsyncSession, symbol: str) -> Asset | None:
         result = await db.execute(
             select(Asset).where(

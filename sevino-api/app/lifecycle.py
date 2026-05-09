@@ -4,6 +4,7 @@ from urllib.parse import urlparse, urlunparse
 from arq.connections import create_pool
 from fastapi import FastAPI
 from redis.asyncio import Redis
+
 from app.ai.anthropic_client import create_anthropic_client
 from app.ai.observability.langfuse import create_langfuse_client
 from app.ai.runtime.db import make_session_factory
@@ -31,6 +32,17 @@ def _swap_redis_db(url: str, db: int) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.arq = await create_pool(get_redis_settings())
+    app.state.redis = Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        encoding="utf-8",
+    )
+    try:
+        await app.state.redis.ping()
+    except Exception:
+        await app.state.redis.aclose()
+        await app.state.arq.aclose()
+        raise
     app.state.alpaca = AlpacaBrokerService()
     app.state.plaid = PlaidService()
     app.state.phone_verification = PhoneVerificationService()
@@ -67,4 +79,5 @@ async def lifespan(app: FastAPI):
     await app.state.phone_verification.close()
     app.state.plaid.close()
     await app.state.alpaca.close()
+    await app.state.redis.aclose()
     await app.state.arq.aclose()

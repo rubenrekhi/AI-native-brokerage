@@ -546,7 +546,7 @@ The settings screen is accessible via the Settings button at the bottom of the c
 ### 8.2 Key Architectural Decisions
 
 - **No direct mobile-to-Alpaca calls.** All brokerage API calls route through the backend using firm-level API keys.
-- **Market data fetched on-demand via REST.** Single background job refreshes portfolio value for status bar. Market Data WebSocket deferred to future.
+- **Market data fetched on-demand via REST.** Status-bar portfolio value is refreshed by the iOS app itself, hitting `GET /v1/portfolio/snapshot` — never by a backend polling loop. Market Data WebSocket deferred to future.
 - **AI Radar stores only ticker references** and batch-fetches prices via Alpaca's snapshot endpoint.
 - **Instant Funding via Journaling** moved to backlog.
 - **US-only launch.** Canadian expansion (CIRO, FINTRAC/AML, FX) deferred.

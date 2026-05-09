@@ -5,35 +5,55 @@ protocol HoldingsServiceProtocol {
     func fetchHoldings() async throws -> [Holding]
 }
 
-/// Placeholder implementation that returns canned holdings. This is the default
-/// service used by `HoldingsViewModel` until the backend endpoint exists — it is
-/// not a test double.
-final class PlaceholderHoldingsService: HoldingsServiceProtocol {
-    static let shared = PlaceholderHoldingsService()
+/// Hits `GET /v1/portfolio/holdings`, decodes the `HoldingsDTO`, and runs
+/// `mapHoldings` to produce the pre-formatted `[Holding]` the UI consumes.
+final class APIHoldingsService: HoldingsServiceProtocol {
+    static let shared = APIHoldingsService()
+
+    private let api: any APIClientProtocol
+
+    init(api: any APIClientProtocol = APIClient.shared) {
+        self.api = api
+    }
 
     func fetchHoldings() async throws -> [Holding] {
-        [
-            Holding(
-                ticker: "CASH", isCash: true,
-                shares: nil, value: "$40,291.92", gainLossText: nil, isPositive: nil,
-                daysGain: nil, daysGainPercent: nil, totalGain: nil, totalGainPercent: nil, averageCost: nil
-            ),
-            Holding(
-                ticker: "TSLA", isCash: false,
-                shares: "57", value: "$21,748.18",
-                gainLossText: "+$7,418.90 (+51.74%)", isPositive: true,
-                daysGain: "+734.73", daysGainPercent: "+3.50%",
-                totalGain: "+$7,418.90", totalGainPercent: "+51.74%",
-                averageCost: "$248.91"
-            ),
-            Holding(
-                ticker: "AMD", isCash: false,
-                shares: "37", value: "$11,465.19",
-                gainLossText: "-$1,049.32 (-8.38%)", isPositive: false,
-                daysGain: "-89.21", daysGainPercent: "-0.77%",
-                totalGain: "-$1,049.32", totalGainPercent: "-8.38%",
-                averageCost: "$338.23"
-            ),
-        ]
+        let dto: HoldingsDTO = try await api.get("/v1/portfolio/holdings")
+        return mapHoldings(dto)
     }
+}
+
+/// Convert the wire-shape `HoldingsDTO` into the UI-shape `[Holding]`.
+///
+/// Pure passthrough of Decimals — no formatting. The view formats at
+/// render time using `NumberFormatting`, which keeps sort/filter logic
+/// (PR #4) trivial: the VM compares `Decimal`s directly, never strings.
+/// The synthetic CASH row is always at index 0.
+func mapHoldings(_ dto: HoldingsDTO) -> [Holding] {
+    let cashRow = Holding(
+        ticker: "CASH",
+        isCash: true,
+        qty: nil,
+        marketValue: dto.cash,
+        unrealizedPl: nil,
+        unrealizedPlpc: nil,
+        changeToday: nil,
+        changeTodayPercent: nil,
+        avgEntryPrice: nil
+    )
+
+    let positionRows = dto.positions.map { p in
+        Holding(
+            ticker: p.symbol,
+            isCash: false,
+            qty: p.qty,
+            marketValue: p.marketValue,
+            unrealizedPl: p.unrealizedPl,
+            unrealizedPlpc: p.unrealizedPlpc,
+            changeToday: p.changeToday,
+            changeTodayPercent: p.changeTodayPercent,
+            avgEntryPrice: p.avgEntryPrice
+        )
+    }
+
+    return [cashRow] + positionRows
 }

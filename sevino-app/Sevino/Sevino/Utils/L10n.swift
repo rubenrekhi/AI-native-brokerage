@@ -387,6 +387,13 @@ enum L10n {
         static let watchlistAccessibility = String(localized: "home.watchlist_accessibility")
         static let menuAccessibility = String(localized: "home.menu_accessibility")
         static let portfolioCurrency = String(localized: "home.portfolio_currency")
+        static let portfolioChartAccessibilityLabel = String(localized: "home.portfolio_chart_accessibility_label")
+        static func portfolioChartAccessibilityValue(_ equity: String, _ period: String) -> String {
+            String(format: String(localized: "home.portfolio_chart_accessibility_value"), equity, period)
+        }
+        static func portfolioGainText(_ amount: String, _ percent: String, _ period: String) -> String {
+            String(format: String(localized: "home.portfolio_gain_text"), amount, percent, period)
+        }
         static let portfolioDistributionAmount = String(localized: "home.portfolio_distribution_amount")
         static func portfolioDistributionSegmentAccessibility(_ label: String, _ percentage: String, _ amount: String) -> String {
             String(format: String(localized: "home.portfolio_distribution_segment_accessibility"), label, percentage, amount)

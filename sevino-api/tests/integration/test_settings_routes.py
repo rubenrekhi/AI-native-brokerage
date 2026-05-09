@@ -132,7 +132,7 @@ class TestGetAccountValue:
 
         response = await client.get("/v1/settings/account-value")
 
-        assert response.status_code == 422
+        assert response.status_code == 502
         body = response.json()
         assert body["code"] == "ALPACA_ERROR"
         assert set(body["detail"]["missing"]) == {
@@ -1020,7 +1020,7 @@ class TestCloseBrokerageAccount:
 
         response = await client.delete("/v1/settings/brokerage-account")
 
-        assert response.status_code == 422
+        assert response.status_code == 502
         assert response.json()["code"] == "ALPACA_ERROR"
         alpaca_mock.close_account.assert_not_called()
         patch_update_status.assert_not_called()
@@ -1032,7 +1032,7 @@ class TestCloseBrokerageAccount:
 
         response = await client.delete("/v1/settings/brokerage-account")
 
-        assert response.status_code == 422
+        assert response.status_code == 502
         assert response.json()["code"] == "ALPACA_ERROR"
         alpaca_mock.close_account.assert_not_called()
         patch_update_status.assert_not_called()

@@ -2,11 +2,26 @@ import SwiftUI
 
 struct PortfolioChartView: View {
     let points: [Double]
+    /// Raw equity values parallel to `points`, used by the scrub label so
+    /// it reflects the actual price at the dragged index. If empty or
+    /// length-mismatched, the scrub label falls back to no value.
+    var values: [Decimal] = []
+    /// Bar timestamps parallel to `points`, formatted into the secondary
+    /// scrub label (e.g. "9:31 AM" for 1D, "Mar 5" for 1M+). Same length
+    /// rule as `values`.
+    var dates: [Date] = []
+    var currency: String = "USD"
+    var range: TimeRange = .oneMonth
     let scale: CGFloat
     @Binding var scrubValue: String?
 
     @State private var scrubIndex: Int?
+    @State private var scrubDate: String?
     @State private var displayPoints: [Double] = []
+    @State private var fadeOpacity: Double = 1
+    @State private var pendingRangeSwap = false
+
+    private static let chartLabelTimeZone = TimeZone(identifier: "America/New_York") ?? .current
 
     var body: some View {
         GeometryReader { geo in
@@ -14,7 +29,7 @@ struct PortfolioChartView: View {
             let height = geo.size.height
 
             ZStack(alignment: .bottom) {
-                AnimatableChartFill(points: displayPoints, size: geo.size)
+                ChartFill(points: displayPoints, size: geo.size)
                     .fill(
                         LinearGradient(
                             colors: [Color.sevinoPositive.opacity(0.3), Color.sevinoPositive.opacity(0.02)],
@@ -23,14 +38,15 @@ struct PortfolioChartView: View {
                         )
                     )
 
-                AnimatableChartLine(points: displayPoints, size: geo.size)
+                ChartLine(points: displayPoints, size: geo.size)
                     .stroke(Color.sevinoPositive, lineWidth: 2 * scale)
 
                 if let idx = scrubIndex, idx < displayPoints.count, let label = scrubValue {
                     let step = width / CGFloat(displayPoints.count - 1)
                     let x = CGFloat(idx) * step
                     let y = height - (CGFloat(displayPoints[idx]) * height)
-                    let labelX = min(max(x, 40 * scale), width - 40 * scale)
+                    let labelOffset: CGFloat = scrubDate == nil ? 40 : 50
+                    let labelX = min(max(x, labelOffset * scale), width - labelOffset * scale)
 
                     Rectangle()
                         .fill(Color.sevinoGreyContrast.opacity(0.5))
@@ -44,13 +60,21 @@ struct PortfolioChartView: View {
                         .position(x: x, y: y)
                         .accessibilityHidden(true)
 
-                    Text(label)
-                        .font(.system(size: 12 * scale, weight: .semibold))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .padding(.horizontal, 8 * scale)
-                        .padding(.vertical, 4 * scale)
-                        .modifier(SevinoGlass.nav)
-                        .position(x: labelX, y: y - 20 * scale)
+                    VStack(spacing: 1 * scale) {
+                        Text(label)
+                            .font(.system(size: 12 * scale, weight: .semibold))
+                            .foregroundStyle(Color.sevinoSecondary)
+                        if let date = scrubDate {
+                            Text(date)
+                                .font(.system(size: 10 * scale, weight: .regular))
+                                .foregroundStyle(Color.sevinoGreyContrast)
+                        }
+                    }
+                    .padding(.horizontal, 8 * scale)
+                    .padding(.vertical, 4 * scale)
+                    .modifier(SevinoGlass.nav)
+                    .position(x: labelX, y: y - (scrubDate == nil ? 20 : 28) * scale)
+                    .accessibilityHidden(true)
                 }
             }
             .contentShape(.rect)
@@ -62,15 +86,57 @@ struct PortfolioChartView: View {
                     .onEnded { _ in
                         scrubIndex = nil
                         scrubValue = nil
+                        scrubDate = nil
                     }
             )
         }
+        .opacity(fadeOpacity)
         .onChange(of: points) { _, newValue in
-            withAnimation(.easeInOut(duration: 0.4)) {
+            if pendingRangeSwap {
+                // New data arrived during the fade-out budget — fade in
+                // early. The `.task(id: range)` fallback will see
+                // `pendingRangeSwap == false` and skip its fade-in.
+                displayPoints = newValue
+                pendingRangeSwap = false
+                withAnimation(.easeIn(duration: 0.25)) {
+                    fadeOpacity = 1
+                }
+            } else {
+                // Same-range refresh — snap. Animating tick-level
+                // differences reads as the chart "wobbling" without a
+                // gesture motivating it.
                 displayPoints = newValue
             }
         }
-        .task { displayPoints = points }
+        .task(id: range) {
+            // Fires on first appearance and on every range change.
+            // Auto-cancels on view disappear or on the next range change.
+            if displayPoints.isEmpty {
+                displayPoints = points
+                return
+            }
+
+            // Range switch: fade out, wait for the new data (or a fixed
+            // budget — on a young account several long ranges return the
+            // same daily bars, so `.onChange(of: points)` won't fire and
+            // the fade-in needs to trigger anyway), then fade back in.
+            //
+            // 200ms matches measured Alpaca round-trip via the local
+            // backend (~70–230ms parallel snapshot+history) and lands
+            // right after the 180ms fade-out completes.
+            pendingRangeSwap = true
+            withAnimation(.easeOut(duration: 0.18)) {
+                fadeOpacity = 0
+            }
+
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled, pendingRangeSwap else { return }
+            displayPoints = points
+            pendingRangeSwap = false
+            withAnimation(.easeIn(duration: 0.25)) {
+                fadeOpacity = 1
+            }
+        }
     }
 
     private func updateScrub(at x: CGFloat, width: CGFloat) {
@@ -78,58 +144,98 @@ struct PortfolioChartView: View {
         let step = width / CGFloat(displayPoints.count - 1)
         let idx = min(max(Int((x / step).rounded()), 0), displayPoints.count - 1)
         scrubIndex = idx
-        let dollarValue = 400 + displayPoints[idx] * 800
-        scrubValue = dollarValue.formatted(.currency(code: "USD"))
+        scrubValue = Self.scrubLabel(
+            at: idx,
+            values: values,
+            expectedCount: points.count,
+            currency: currency
+        )
+        scrubDate = Self.scrubDateLabel(
+            at: idx,
+            dates: dates,
+            expectedCount: points.count,
+            range: range
+        )
+    }
+
+    /// Returns the formatted equity at the dragged index, or `nil` when
+    /// `values` is missing or length-mismatched against `points` (only
+    /// possible if a caller passes a non-parallel `values` array — the
+    /// production wiring in `PortfolioService` always emits parallel
+    /// arrays). Pure helper so the fallback branch is unit-testable.
+    static func scrubLabel(
+        at idx: Int,
+        values: [Decimal],
+        expectedCount: Int,
+        currency: String
+    ) -> String? {
+        guard values.count == expectedCount, idx >= 0, idx < values.count else {
+            return nil
+        }
+        return values[idx].asCurrency(currencyCode: currency)
+    }
+
+    /// Returns the formatted timestamp at the dragged index, with a format
+    /// that scales with the visible range:
+    /// - 1D                → "9:31 AM"
+    /// - 1W                → "Mon 10:00 AM"
+    /// - 1M / 3M           → "Mar 5"
+    /// - 6M / YTD / 1Y     → "Mar 5, 2026"
+    /// - ALL               → "Mar 2026"
+    /// Year is included whenever dates could be ambiguous about which
+    /// year they fall in (6M can cross Jan 1; YTD/1Y always span the
+    /// year boundary visually). Times are rendered in `America/New_York`
+    /// so 1D/1W show market-clock regardless of device locale. Returns
+    /// `nil` if `dates` is missing or length-mismatched.
+    static func scrubDateLabel(
+        at idx: Int,
+        dates: [Date],
+        expectedCount: Int,
+        range: TimeRange
+    ) -> String? {
+        guard dates.count == expectedCount, idx >= 0, idx < dates.count else {
+            return nil
+        }
+        let date = dates[idx]
+        let tz = Self.chartLabelTimeZone
+        switch range {
+        case .oneDay:
+            return date.formatted(
+                Date.FormatStyle(timeZone: tz).hour().minute()
+            )
+        case .oneWeek:
+            return date.formatted(
+                Date.FormatStyle(timeZone: tz)
+                    .weekday(.abbreviated)
+                    .hour()
+                    .minute()
+            )
+        case .oneMonth, .threeMonths:
+            return date.formatted(
+                Date.FormatStyle(timeZone: tz)
+                    .month(.abbreviated)
+                    .day()
+            )
+        case .sixMonths, .ytd, .oneYear:
+            return date.formatted(
+                Date.FormatStyle(timeZone: tz)
+                    .month(.abbreviated)
+                    .day()
+                    .year()
+            )
+        case .all:
+            return date.formatted(
+                Date.FormatStyle(timeZone: tz)
+                    .month(.abbreviated)
+                    .year()
+            )
+        }
     }
 }
 
-/// A vector type that SwiftUI can interpolate for chart animation.
-private struct AnimatableVector: VectorArithmetic {
-    var values: [Double]
-
-    static var zero: AnimatableVector { AnimatableVector(values: []) }
-
-    static func + (lhs: AnimatableVector, rhs: AnimatableVector) -> AnimatableVector {
-        let count = max(lhs.values.count, rhs.values.count)
-        var result = [Double](repeating: 0, count: count)
-        for i in 0..<count {
-            let l = i < lhs.values.count ? lhs.values[i] : 0
-            let r = i < rhs.values.count ? rhs.values[i] : 0
-            result[i] = l + r
-        }
-        return AnimatableVector(values: result)
-    }
-
-    static func - (lhs: AnimatableVector, rhs: AnimatableVector) -> AnimatableVector {
-        let count = max(lhs.values.count, rhs.values.count)
-        var result = [Double](repeating: 0, count: count)
-        for i in 0..<count {
-            let l = i < lhs.values.count ? lhs.values[i] : 0
-            let r = i < rhs.values.count ? rhs.values[i] : 0
-            result[i] = l - r
-        }
-        return AnimatableVector(values: result)
-    }
-
-    mutating func scale(by rhs: Double) {
-        for i in values.indices {
-            values[i] *= rhs
-        }
-    }
-
-    var magnitudeSquared: Double {
-        values.reduce(0) { $0 + $1 * $1 }
-    }
-}
-
-private struct AnimatableChartLine: Shape {
-    var points: [Double]
-    var size: CGSize
-
-    var animatableData: AnimatableVector {
-        get { AnimatableVector(values: points) }
-        set { points = newValue.values }
-    }
+private struct ChartLine: Shape {
+    let points: [Double]
+    let size: CGSize
 
     func path(in rect: CGRect) -> Path {
         guard points.count > 1 else { return Path() }
@@ -149,14 +255,9 @@ private struct AnimatableChartLine: Shape {
     }
 }
 
-private struct AnimatableChartFill: Shape {
-    var points: [Double]
-    var size: CGSize
-
-    var animatableData: AnimatableVector {
-        get { AnimatableVector(values: points) }
-        set { points = newValue.values }
-    }
+private struct ChartFill: Shape {
+    let points: [Double]
+    let size: CGSize
 
     func path(in rect: CGRect) -> Path {
         guard points.count > 1 else { return Path() }

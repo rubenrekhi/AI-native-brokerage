@@ -241,3 +241,56 @@ class TestSearchWildcardEscaping:
         results = await AssetRepository.search(db_session, "100%", limit=10)
 
         assert [a.symbol for a in results] == ["PCT"]
+
+
+class TestGetNamesBySymbols:
+    async def test_returns_names_for_found_symbols_only(
+        self, db_session: AsyncSession
+    ):
+        await _seed(
+            db_session,
+            [
+                {"symbol": "AAPL", "name": "Apple Inc"},
+                {"symbol": "TSLA", "name": "Tesla Inc"},
+                {"symbol": "AMD", "name": "Advanced Micro Devices"},
+            ],
+        )
+
+        names = await AssetRepository.get_names_by_symbols(
+            db_session, ["AAPL", "TSLA", "XYZ"]
+        )
+
+        assert names == {"AAPL": "Apple Inc", "TSLA": "Tesla Inc"}
+
+    async def test_empty_input_returns_empty_dict(
+        self, db_session: AsyncSession
+    ):
+        names = await AssetRepository.get_names_by_symbols(db_session, [])
+        assert names == {}
+
+    async def test_all_missing_returns_empty_dict(
+        self, db_session: AsyncSession
+    ):
+        await _seed(db_session, [{"symbol": "AAPL", "name": "Apple Inc"}])
+
+        names = await AssetRepository.get_names_by_symbols(
+            db_session, ["NONE", "NOPE"]
+        )
+
+        assert names == {}
+
+    async def test_returns_untradeable_symbols_too(
+        self, db_session: AsyncSession
+    ):
+        # Holdings need the name regardless of tradeability — a user may
+        # still hold a delisted/frozen asset.
+        await _seed(
+            db_session,
+            [{"symbol": "OLD", "name": "Delisted Co", "tradeable": False}],
+        )
+
+        names = await AssetRepository.get_names_by_symbols(
+            db_session, ["OLD"]
+        )
+
+        assert names == {"OLD": "Delisted Co"}

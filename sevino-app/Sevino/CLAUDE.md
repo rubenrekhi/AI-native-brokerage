@@ -59,6 +59,10 @@ SevinoUITests/    # UI tests (XCUITest)
 
 The project enables `SWIFT_APPROACHABLE_CONCURRENCY` and sets `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`. All types are `@MainActor` by default — use `nonisolated` explicitly when needed for background work.
 
+### Decimal-on-the-wire convention
+
+The backend serializes money / quantity / percent fields as JSON **strings** (not numbers) so `Decimal` precision survives the wire. iOS DTOs decode them via `@DecimalString` (`Sevino/Utils/DecimalString.swift`) — the property wrapper handles the string→`Decimal` conversion. Use it on every money/qty/pct field on response DTOs (`PortfolioSnapshotDTO`, `PortfolioHistoryDTO`, `HoldingsDTO`, etc.). Formatting back to display strings happens at the view layer via `Decimal` extensions in `Sevino/Utils/NumberFormatting.swift` (`asCurrency`, `asSignedCurrency`, `asSignedPercent`, `asShareCount`). Never let a `Double` mediate a money value.
+
 ## Conventions
 
 ### Commits & PRs

@@ -28,28 +28,42 @@ struct PortfolioMorphingView: View {
 
     private var cardData: PortfolioCardData {
         PortfolioCardData(
-            displayValue: viewModel.displayValue,
-            isDown: viewModel.isDown,
-            gainText: viewModel.gainText,
-            periodLabel: viewModel.periodLabel,
+            equity: viewModel.equity,
+            currency: viewModel.currency,
+            gainAbs: viewModel.gainAbs,
+            gainPct: viewModel.gainPct,
             chartPoints: viewModel.chartPoints,
-            selectedTimeRange: viewModel.selectedTimeRange
+            chartValues: viewModel.chartValues,
+            chartDates: viewModel.chartDates,
+            selectedTimeRange: viewModel.selectedTimeRange,
+            hasLoaded: viewModel.hasLoaded
         )
     }
 
     private var pillButton: some View {
         Button(action: onTap) {
             HStack(spacing: 6 * scale) {
-                Text(viewModel.displayValue)
-                    .font(.system(size: 13 * scale, weight: .semibold))
-                    .foregroundStyle(Color.sevinoSecondary)
+                Group {
+                    if viewModel.hasLoaded {
+                        Text(viewModel.equity.asCurrency(currencyCode: viewModel.currency))
+                    } else {
+                        Text(verbatim: "—")
+                    }
+                }
+                .font(.system(size: 13 * scale, weight: .semibold))
+                .foregroundStyle(Color.sevinoSecondary)
 
                 VStack(spacing: -2 * scale) {
-                    Image(systemName: "chevron.down")
-                    Image(systemName: "chevron.down")
+                    // Direction tracks the sign of the currently-loaded
+                    // range's gain (defaults to 1M). Pointing up = green,
+                    // down = red — must agree, otherwise the icon
+                    // contradicts the color.
+                    let chevron = viewModel.gainAbs < 0 ? "chevron.down" : "chevron.up"
+                    Image(systemName: chevron)
+                    Image(systemName: chevron)
                 }
                 .font(.system(size: 8 * scale, weight: .bold))
-                .foregroundStyle(viewModel.isDown ? Color.sevinoNegative : Color.sevinoPositive)
+                .foregroundStyle(viewModel.gainAbs < 0 ? Color.sevinoNegative : Color.sevinoPositive)
                 .accessibilityHidden(true)
             }
             .padding(.horizontal, 12 * scale)
