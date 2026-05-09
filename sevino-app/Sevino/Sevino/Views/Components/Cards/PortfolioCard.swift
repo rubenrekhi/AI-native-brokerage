@@ -11,9 +11,15 @@ struct PortfolioCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16 * scale) {
             HStack(spacing: 8 * scale) {
-                Text(data.displayValue)
-                    .font(.system(size: 36 * scale, weight: .bold))
-                    .foregroundStyle(Color.sevinoSecondary)
+                Group {
+                    if data.hasLoaded {
+                        Text(data.equity.asCurrency(currencyCode: data.currency))
+                    } else {
+                        Text(verbatim: "—")
+                    }
+                }
+                .font(.system(size: 36 * scale, weight: .bold))
+                .foregroundStyle(Color.sevinoSecondary)
 
                 Text(L10n.Home.portfolioCurrency)
                     .font(.system(size: 18 * scale, weight: .medium))
@@ -21,12 +27,26 @@ struct PortfolioCard: View {
             }
 
             VStack(alignment: .leading, spacing: 16 * scale) {
-                Text("\(data.gainText) \(data.periodLabel)")
+                Text(data.hasLoaded
+                     ? L10n.Home.portfolioGainText(
+                         data.gainAbs.asSignedCurrency(currencyCode: data.currency),
+                         data.gainPct.asSignedPercent(),
+                         data.selectedTimeRange.periodLabel
+                       )
+                     : "")
                     .font(.system(size: 15 * scale, weight: .medium))
-                    .foregroundStyle(data.isDown ? Color.sevinoNegative : Color.sevinoPositive)
+                    .foregroundStyle(data.gainAbs < 0 ? Color.sevinoNegative : Color.sevinoPositive)
 
-                PortfolioChartView(points: data.chartPoints, scale: scale, scrubValue: $scrubValue)
-                    .frame(height: 160 * scale)
+                PortfolioChartView(
+                    points: data.chartPoints,
+                    values: data.chartValues,
+                    dates: data.chartDates,
+                    currency: data.currency,
+                    range: data.selectedTimeRange,
+                    scale: scale,
+                    scrubValue: $scrubValue
+                )
+                .frame(height: 160 * scale)
 
                 if isInteractive {
                     HomeTimeRangeSelector(
@@ -46,14 +66,18 @@ struct PortfolioCard: View {
 }
 
 #Preview("Interactive") {
+    let now = Date()
     PortfolioCard(
         data: PortfolioCardData(
-            displayValue: "$12,345.67",
-            isDown: false,
-            gainText: "+$234.56",
-            periodLabel: "Past 30 Days",
+            equity: Decimal(string: "12345.67")!,
+            currency: "USD",
+            gainAbs: Decimal(string: "234.56")!,
+            gainPct: Decimal(string: "0.0193")!,
             chartPoints: (0..<40).map { _ in Double.random(in: 0.1...0.9) },
-            selectedTimeRange: .oneMonth
+            chartValues: (0..<40).map { _ in Decimal(Double.random(in: 11000...13000)) },
+            chartDates: (0..<40).map { now.addingTimeInterval(TimeInterval(-($0 * 86400))) }.reversed(),
+            selectedTimeRange: .oneMonth,
+            hasLoaded: true
         ),
         scale: 1,
         isInteractive: true,
@@ -64,14 +88,18 @@ struct PortfolioCard: View {
 }
 
 #Preview("Read-only") {
+    let now = Date()
     PortfolioCard(
         data: PortfolioCardData(
-            displayValue: "$8,420.10",
-            isDown: true,
-            gainText: "-$120.44",
-            periodLabel: "Past 7 Days",
+            equity: Decimal(string: "8420.10")!,
+            currency: "USD",
+            gainAbs: Decimal(string: "-120.44")!,
+            gainPct: Decimal(string: "-0.0140")!,
             chartPoints: (0..<40).map { _ in Double.random(in: 0.1...0.9) },
-            selectedTimeRange: .oneWeek
+            chartValues: (0..<40).map { _ in Decimal(Double.random(in: 8000...8800)) },
+            chartDates: (0..<40).map { now.addingTimeInterval(TimeInterval(-($0 * 3600))) }.reversed(),
+            selectedTimeRange: .oneWeek,
+            hasLoaded: true
         ),
         scale: 1,
         isInteractive: false

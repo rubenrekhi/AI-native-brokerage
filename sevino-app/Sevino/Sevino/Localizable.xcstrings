@@ -1334,6 +1334,16 @@
         }
       }
     },
+    "home.portfolio_gain_text" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ (%2$@) %3$@"
+          }
+        }
+      }
+    },
     "home.portfolio_load_error_dismiss" : {
       "localizations" : {
         "en" : {

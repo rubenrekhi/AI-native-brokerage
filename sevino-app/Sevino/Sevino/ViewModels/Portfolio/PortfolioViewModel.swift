@@ -4,16 +4,20 @@ import Foundation
 final class PortfolioViewModel {
     private let service: any PortfolioServiceProtocol
 
-    private(set) var displayValue = "—"
-    private(set) var isDown = false
-    private(set) var gainText = ""
+    private(set) var equity: Decimal = 0
+    private(set) var currency: String = "USD"
+    private(set) var gainAbs: Decimal = 0
+    private(set) var gainPct: Decimal = 0
     private(set) var chartPoints: [Double] = []
+    private(set) var chartValues: [Decimal] = []
+    private(set) var chartDates: [Date] = []
     private(set) var selectedTimeRange: TimeRange = .oneMonth
+    private(set) var hasLoaded: Bool = false
 
     private(set) var isLoading = false
     private(set) var error: String?
 
-    init(service: any PortfolioServiceProtocol = PlaceholderPortfolioService.shared) {
+    init(service: any PortfolioServiceProtocol = PortfolioService.shared) {
         self.service = service
     }
 
@@ -32,12 +36,17 @@ final class PortfolioViewModel {
         defer { isLoading = false }
         do {
             let snapshot = try await service.fetchPortfolio(for: selectedTimeRange)
-            displayValue = snapshot.displayValue
-            isDown = snapshot.isDown
-            gainText = snapshot.gainText
+            equity = snapshot.equity
+            currency = snapshot.currency
+            gainAbs = snapshot.gainAbs
+            gainPct = snapshot.gainPct
             chartPoints = snapshot.chartPoints
+            chartValues = snapshot.chartValues
+            chartDates = snapshot.chartDates
+            hasLoaded = true
         } catch let caughtError {
             error = caughtError.localizedDescription
+            // hasLoaded stays whatever it was — last-good data stays visible behind alert.
         }
     }
 
