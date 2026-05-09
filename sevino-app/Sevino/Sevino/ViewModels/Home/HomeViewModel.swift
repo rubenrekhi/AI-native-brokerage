@@ -3,7 +3,7 @@ import Foundation
 @Observable
 final class HomeViewModel {
     private let userProfileService: any UserProfileServiceProtocol
-    private let chatService: any ChatServiceProtocol
+    private let chatService: any RecentChatsServiceProtocol
 
     private(set) var greeting = ""
     private(set) var preferredName: String?
@@ -14,7 +14,7 @@ final class HomeViewModel {
 
     init(
         userProfileService: any UserProfileServiceProtocol = UserProfileService.shared,
-        chatService: any ChatServiceProtocol = PlaceholderChatService.shared
+        chatService: any RecentChatsServiceProtocol = PlaceholderRecentChatsService.shared
     ) {
         self.userProfileService = userProfileService
         self.chatService = chatService

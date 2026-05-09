@@ -1,7 +1,7 @@
 import Foundation
 @testable import Sevino
 
-final class MockChatService: ChatServiceProtocol {
+final class MockRecentChatsService: RecentChatsServiceProtocol {
     var fetchRecentChatsError: Error?
     var chats: [ChatItem] = []
 
