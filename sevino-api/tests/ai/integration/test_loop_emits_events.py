@@ -578,10 +578,30 @@ class TestCancellationPersistsTerminalState:
             ).scalar_one()
             assert turn.terminal_state == "cancelled"
             assert turn.error_code == "cancelled"
-            # Mid-stream cancellation: no assistant message is persisted
-            # for B3.3 (B3.4 will extend this to persist the partial text
-            # block before completing the row).
-            assert turn.assistant_message_id is None
+            # B3.4: cancellation_reason populated so the audit trail
+            # distinguishes a client disconnect from any other failure.
+            assert turn.cancellation_reason is not None
+            # B3.4: the N text deltas that reached the wire before the
+            # cancellation are persisted as a partial assistant block —
+            # the agent_turn row points at that message.
+            assert turn.assistant_message_id is not None
+
+            assistant = (
+                await v.execute(
+                    select(MessageRow).where(
+                        MessageRow.conversation_id == fixture.conversation_id,
+                        MessageRow.role == "assistant",
+                    )
+                )
+            ).scalar_one()
+            assert assistant.id == turn.assistant_message_id
+            assert len(assistant.content_blocks) == 1
+            block = assistant.content_blocks[0]
+            assert block["type"] == "text"
+            # Each delta in the fake stream is "c"; N of them concatenate
+            # to a string of N "c"s.
+            assert block["text"] == "c" * N
+            assert isinstance(block["block_id"], str) and block["block_id"]
 
             roles = list(
                 (
@@ -595,7 +615,7 @@ class TestCancellationPersistsTerminalState:
                 .scalars()
                 .all()
             )
-            assert roles == ["user"]
+            assert sorted(roles) == ["assistant", "user"]
 
     async def test_cancel_after_start_agent_turn_persists_cancelled_state(
         self, db_engine, fixture

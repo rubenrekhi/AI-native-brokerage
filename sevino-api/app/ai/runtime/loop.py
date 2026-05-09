@@ -106,6 +106,13 @@ _CHARS_PER_TOKEN = 4
 # is_disconnected() ASGI-receive polls; higher = cheaper but laggier.
 _DISCONNECT_CHECK_DELTA_INTERVAL = 16
 
+# B3.4: default ``cancellation_reason`` persisted on the ``agent_turns``
+# row when the loop is cancelled. v0 has only one cancellation source
+# (the framework cancels the driver task on client disconnect), so a
+# constant is fine; later phases can plumb through an explicit reason
+# (e.g. ``"server_shutdown"``, ``"timeout"``).
+_DEFAULT_CANCELLATION_REASON = "client_disconnect"
+
 
 def _to_anthropic_content(
     content_blocks: list[dict[str, Any]],
@@ -163,6 +170,7 @@ async def _finalize_agent_turn_row(
     turn_id: uuid.UUID,
     terminal_state: str,
     error_code: ErrorCode | None,
+    cancellation_reason: str | None,
     iterations_count: int,
     totals: dict[str, int],
     assistant_blocks: list[dict[str, Any]],
@@ -203,6 +211,7 @@ async def _finalize_agent_turn_row(
                 agent_turn_id=turn_id,
                 terminal_state=terminal_state,
                 assistant_message_id=assistant_message_id,
+                cancellation_reason=cancellation_reason,
                 error_code=(
                     error_code.value if error_code is not None else None
                 ),
@@ -245,7 +254,13 @@ async def run_agent_turn(
     function does not raise on Anthropic errors — those are caught,
     mapped to an :class:`ErrorCode` and persisted on ``agent_turns`` with
     ``terminal_state='error'``. ``asyncio.CancelledError`` propagates after
-    the in-progress audit rows are flushed.
+    the in-progress audit rows are flushed. B3.4 layers partial-state
+    persistence on top of that contract: when cancellation lands while a
+    text block is mid-stream, the loop closes the upstream connection,
+    captures whatever text accumulated, and writes it to
+    ``messages.content_blocks`` alongside ``agent_turns.terminal_state =
+    'cancelled'`` / ``cancellation_reason``. The ``CancelledError`` is
+    always re-raised after persistence.
 
     The conversation row at ``conversation_id`` must already exist (the
     endpoint creates it on first turn per decision D6).
@@ -338,6 +353,10 @@ async def run_agent_turn(
     }
     terminal_state: str | None = None
     error_code: ErrorCode | None = None
+    # B3.4: populated when the loop catches ``CancelledError``. Persisted
+    # on ``agent_turns.cancellation_reason`` so the audit row distinguishes
+    # client disconnects from internal errors.
+    cancellation_reason: str | None = None
     # ``True`` only after the while loop exits via a ``break`` (not an
     # exception). Used in the finally block to gate the terminal SSE frame
     # — unexpected exceptions reach the caller, which surfaces them.
@@ -499,68 +518,113 @@ async def run_agent_turn(
                             # rather than once per chunk (every chunk would be
                             # a hot-path ASGI-receive call).
                             text_deltas_seen = 0
+                            # B3.4: parallel map of accumulated delta text per
+                            # in-flight text block. On mid-stream cancellation
+                            # this is the only record of what reached the wire,
+                            # since ``stream.get_final_message()`` never
+                            # returns — the iteration's ``response.content``
+                            # path that normally populates ``assistant_blocks``
+                            # is unreachable.
+                            accumulated_text: dict[int, str] = {}
                             try:
                                 async with anthropic_client.messages.stream(
                                     **create_kwargs
                                 ) as stream:
-                                    async for chunk in stream:
-                                        if chunk.type == "content_block_start":
-                                            if chunk.content_block.type == "text":
-                                                block_id = str(ULID())
-                                                open_text_blocks[chunk.index] = (
-                                                    block_id
-                                                )
-                                                await sse_emitter.emit(
-                                                    BlockStart(
-                                                        block={
-                                                            "type": "text",
-                                                            "block_id": block_id,
-                                                            "text": "",
-                                                        }
+                                    try:
+                                        async for chunk in stream:
+                                            if chunk.type == "content_block_start":
+                                                if chunk.content_block.type == "text":
+                                                    block_id = str(ULID())
+                                                    open_text_blocks[chunk.index] = (
+                                                        block_id
                                                     )
-                                                )
-                                        elif chunk.type == "content_block_delta":
-                                            if (
-                                                chunk.delta.type == "text_delta"
-                                                and chunk.index in open_text_blocks
-                                            ):
-                                                await sse_emitter.emit(
-                                                    TextDelta(
-                                                        block_id=open_text_blocks[
-                                                            chunk.index
-                                                        ],
-                                                        text=chunk.delta.text,
+                                                    accumulated_text[chunk.index] = ""
+                                                    await sse_emitter.emit(
+                                                        BlockStart(
+                                                            block={
+                                                                "type": "text",
+                                                                "block_id": block_id,
+                                                                "text": "",
+                                                            }
+                                                        )
                                                     )
-                                                )
-                                                text_deltas_seen += 1
-                                                # B3.3: poll for disconnect on
-                                                # the cadence so a mid-response
-                                                # iOS close cancels the in-flight
-                                                # stream within a few hundred ms
-                                                # rather than running to
-                                                # completion. CancelledError
-                                                # raised here unwinds through
-                                                # the stream's ``async with``
-                                                # (closing the upstream HTTP
-                                                # connection) and lands in the
-                                                # outer ``except`` below.
+                                            elif chunk.type == "content_block_delta":
                                                 if (
-                                                    disconnect_check is not None
-                                                    and text_deltas_seen
-                                                    % _DISCONNECT_CHECK_DELTA_INTERVAL
-                                                    == 0
-                                                    and await disconnect_check()
+                                                    chunk.delta.type == "text_delta"
+                                                    and chunk.index in open_text_blocks
                                                 ):
-                                                    raise asyncio.CancelledError
-                                        elif chunk.type == "content_block_stop":
-                                            block_id = open_text_blocks.get(
-                                                chunk.index
-                                            )
-                                            if block_id is not None:
-                                                await sse_emitter.emit(
-                                                    BlockEnd(block_id=block_id)
+                                                    accumulated_text[chunk.index] += (
+                                                        chunk.delta.text
+                                                    )
+                                                    await sse_emitter.emit(
+                                                        TextDelta(
+                                                            block_id=open_text_blocks[
+                                                                chunk.index
+                                                            ],
+                                                            text=chunk.delta.text,
+                                                        )
+                                                    )
+                                                    text_deltas_seen += 1
+                                                    # B3.3: poll for disconnect on
+                                                    # the cadence so a mid-response
+                                                    # iOS close cancels the in-flight
+                                                    # stream within a few hundred ms
+                                                    # rather than running to
+                                                    # completion. CancelledError
+                                                    # raised here unwinds through
+                                                    # the stream's ``async with``
+                                                    # (closing the upstream HTTP
+                                                    # connection) and lands in the
+                                                    # inner ``except`` below, which
+                                                    # captures partials per B3.4.
+                                                    if (
+                                                        disconnect_check is not None
+                                                        and text_deltas_seen
+                                                        % _DISCONNECT_CHECK_DELTA_INTERVAL
+                                                        == 0
+                                                        and await disconnect_check()
+                                                    ):
+                                                        raise asyncio.CancelledError
+                                            elif chunk.type == "content_block_stop":
+                                                block_id = open_text_blocks.get(
+                                                    chunk.index
                                                 )
-                                    response = await stream.get_final_message()
+                                                if block_id is not None:
+                                                    await sse_emitter.emit(
+                                                        BlockEnd(block_id=block_id)
+                                                    )
+                                        response = await stream.get_final_message()
+                                    except asyncio.CancelledError:
+                                        # B3.4: mid-stream cancellation. Close
+                                        # the upstream connection eagerly (the
+                                        # ``async with`` would also call close
+                                        # on exit, but doing it here keeps the
+                                        # semantics explicit: the upstream
+                                        # request is released BEFORE we touch
+                                        # any DB writes in the outer finally).
+                                        # Then capture each open text block's
+                                        # accumulated text into ``assistant_blocks``
+                                        # so ``messages.content_blocks`` records
+                                        # what iOS already saw on the wire.
+                                        # Empty blocks are skipped — a
+                                        # ``BlockStart`` with no deltas yields
+                                        # no user-visible text.
+                                        await stream.close()
+                                        for index, block_id in open_text_blocks.items():
+                                            partial = accumulated_text.get(index, "")
+                                            if partial:
+                                                assistant_blocks.append(
+                                                    {
+                                                        "type": "text",
+                                                        "block_id": block_id,
+                                                        "text": partial,
+                                                    }
+                                                )
+                                        gen.update(
+                                            level="WARNING",
+                                            status_message="cancelled",
+                                        )
+                                        raise
                             except Exception as exc:
                                 error_code = to_error_code(exc)
                                 terminal_state = "error"
@@ -725,15 +789,18 @@ async def run_agent_turn(
                     # terminal SSE frame.
                     completed_normally = True
                 except asyncio.CancelledError:
-                    # B3.3: cancellation landed inside the loop (either our
-                    # ``disconnect_check`` poll raised it or the framework
-                    # cancelled the task externally and the CancelledError
-                    # arrived at one of the awaits in the loop body). Set
-                    # ``terminal_state='cancelled'`` so the inner finally
-                    # tags the langfuse span and the outer finally persists
-                    # the audit row.
+                    # B3.3 / B3.4: cancellation landed inside the loop.
+                    # Either our ``disconnect_check`` poll raised it, the
+                    # innermost streaming handler re-raised after
+                    # capturing partial text (B3.4), or the framework
+                    # cancelled the task externally. Set
+                    # ``terminal_state='cancelled'`` plus
+                    # ``cancellation_reason`` so the inner finally tags
+                    # the langfuse span and the outer finally persists
+                    # the audit row with both fields populated.
                     terminal_state = "cancelled"
                     error_code = ErrorCode.CANCELLED
+                    cancellation_reason = _DEFAULT_CANCELLATION_REASON
                     raise
                 finally:
                     # Inner finally: just update the langfuse turn span — the
@@ -783,6 +850,11 @@ async def run_agent_turn(
         if terminal_state is None:
             terminal_state = "cancelled"
             error_code = ErrorCode.CANCELLED
+        # B3.4: populate the reason regardless of which handler set the
+        # terminal state — the inner streaming handler raises through
+        # this clause too.
+        if cancellation_reason is None:
+            cancellation_reason = _DEFAULT_CANCELLATION_REASON
         raise
     finally:
         # Defensive: a non-CancelledError exception escaped without setting
@@ -813,6 +885,7 @@ async def run_agent_turn(
                     turn_id=turn_id,
                     terminal_state=terminal_state,
                     error_code=error_code,
+                    cancellation_reason=cancellation_reason,
                     iterations_count=state.iterations,
                     totals=totals,
                     assistant_blocks=assistant_blocks,
