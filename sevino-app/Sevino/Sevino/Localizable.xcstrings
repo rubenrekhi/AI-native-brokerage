@@ -1304,6 +1304,26 @@
         }
       }
     },
+    "home.portfolio_chart_accessibility_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Portfolio performance chart"
+          }
+        }
+      }
+    },
+    "home.portfolio_chart_accessibility_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
     "home.portfolio_currency" : {
       "localizations" : {
         "en" : {

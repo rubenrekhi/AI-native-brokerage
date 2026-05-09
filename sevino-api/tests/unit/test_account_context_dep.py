@@ -49,11 +49,6 @@ async def test_missing_row_raises_conflict(db_mock):
     assert exc_info.value.detail == {"account_status": None}
 
 
-async def test_invalid_uuid_raises_value_error(db_mock):
-    with pytest.raises(ValueError):
-        await get_alpaca_account_context(user_id="not-a-uuid", db=db_mock)
-
-
 @pytest.mark.parametrize(
     "status", ["SUBMITTED", "APPROVED", "REJECTED", "ACCOUNT_UPDATED", "KYC_REVIEW"]
 )

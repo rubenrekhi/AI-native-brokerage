@@ -47,6 +47,14 @@ struct PortfolioCard: View {
                     scrubValue: $scrubValue
                 )
                 .frame(height: 160 * scale)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(L10n.Home.portfolioChartAccessibilityLabel)
+                .accessibilityValue(
+                    L10n.Home.portfolioChartAccessibilityValue(
+                        data.equity.asCurrency(currencyCode: data.currency),
+                        data.selectedTimeRange.periodLabel
+                    )
+                )
 
                 if isInteractive {
                     HomeTimeRangeSelector(

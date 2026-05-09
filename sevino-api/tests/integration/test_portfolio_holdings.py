@@ -204,16 +204,18 @@ class TestHoldingsHappyPath:
         test_brokerage_account,
         portfolio_deps,
     ):
-        # No `seed_assets` fixture — the symbol has no row in `assets`.
+        # The symbol must not exist in `assets`. Picking a real ticker
+        # (XYZ = Block, Inc.) would silently let the join return a name
+        # and pass for the wrong reason.
         alpaca_mock, _ = portfolio_deps
-        alpaca_mock.list_positions.return_value = [_position("XYZ", "50.00")]
+        alpaca_mock.list_positions.return_value = [_position("__NOT_A_REAL_TICKER__", "50.00")]
 
         response = await authenticated_db_client.get("/v1/portfolio/holdings")
 
         assert response.status_code == 200
         body = response.json()
-        assert body["positions"][0]["symbol"] == "XYZ"
-        assert body["positions"][0]["name"] == "XYZ"
+        assert body["positions"][0]["symbol"] == "__NOT_A_REAL_TICKER__"
+        assert body["positions"][0]["name"] == "__NOT_A_REAL_TICKER__"
 
 
 class TestHoldingsEmpty:

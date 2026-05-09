@@ -936,7 +936,7 @@ All portfolio and market data follows the same pattern: user action → API chec
 1. `GET /v2/stocks/snapshots?symbols=VTI,AAPL,MSFT,...` — single batch call for multiple symbols.
 
 **Status Bar Background Refresh:**
-The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. As of F4.6, this fires on view-appear and on time-range change; periodic 5-minute refresh, scene-phase resume, and pull-to-refresh are wired in F4.9 (in flight). All refresh is frontend-initiated — the backend never polls. The 30s server-side TTL means most refresh ticks are cache hits.
+The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. Triggers: view appearance, time-range change, scene-phase resume to active (5-minute staleness check), and pull-to-refresh. All refresh is frontend-initiated — the backend never polls. The 30s server-side Redis TTL means most refresh ticks are cache hits.
 
 **Key decisions:**
 

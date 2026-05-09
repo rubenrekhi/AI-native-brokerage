@@ -78,7 +78,7 @@ struct HoldingsCardContent: View {
     /// Includes the synthetic CASH row — at 6 total rows the modal is at
     /// the edge of a typical phone screen before any panel expands.
     private var scrollThreshold: Int { 6 }
-    private var scrollMaxHeight: CGFloat { 500 }
+    private var scrollMaxHeight: CGFloat { 500 * scale }
 
     private var headerRow: some View {
         HStack {
