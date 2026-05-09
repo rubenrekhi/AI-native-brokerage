@@ -199,9 +199,12 @@ final class PortfolioChartViewScrubDateLabelTests: XCTestCase {
             at: 0, dates: [marketOpenDate], expectedCount: 1, range: .oneYear
         )
 
+        // 4-digit year for consistency with ALL ("Mar 2026"). 1Y is rare
+        // enough that the extra two characters aren't worth the
+        // visual inconsistency of "Mar 5, '26" vs "Mar 2026".
         let expected = marketOpenDate.formatted(
             Date.FormatStyle(timeZone: marketTZ)
-                .month(.abbreviated).day().year(.twoDigits)
+                .month(.abbreviated).day().year()
         )
         XCTAssertEqual(result, expected)
     }

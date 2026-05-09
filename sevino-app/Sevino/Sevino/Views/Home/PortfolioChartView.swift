@@ -176,12 +176,12 @@ struct PortfolioChartView: View {
     }
 
     /// Returns the formatted timestamp at the dragged index, with a format
-    /// that scales with the visible range — Apple Stocks pattern:
+    /// that scales with the visible range:
     /// - 1D     → "9:31 AM"
     /// - 1W     → "Mon 10:00 AM"
     /// - 1M..YTD→ "Mar 5"
-    /// - 1Y     → "Mar 5, '25"
-    /// - ALL    → "Mar 2023"
+    /// - 1Y     → "Mar 5, 2026"
+    /// - ALL    → "Mar 2026"
     /// Times are rendered in `America/New_York` so 1D/1W show market-clock
     /// regardless of the user's device locale. Returns `nil` if `dates` is
     /// missing or length-mismatched against the parallel arrays.
@@ -219,7 +219,7 @@ struct PortfolioChartView: View {
                 Date.FormatStyle(timeZone: tz)
                     .month(.abbreviated)
                     .day()
-                    .year(.twoDigits)
+                    .year()
             )
         case .all:
             return date.formatted(
