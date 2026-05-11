@@ -87,7 +87,13 @@ final class HomeViewModelTests: XCTestCase {
 
     func testLoadWhenNameFetchFailsUsesGenericGreetingAndStillLoadsChats() async {
         mockProfile.fetchPreferredNameError = NSError(domain: "test", code: 0)
-        mockChat.chats = [ChatItem(title: "Chat 1")]
+        mockChat.chats = [
+            ChatItem(
+                conversationId: UUID(),
+                title: "Chat 1",
+                lastMessageAt: .now
+            )
+        ]
 
         await viewModel.load()
 

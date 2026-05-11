@@ -288,7 +288,10 @@ struct HomeView: View {
                 userName: viewModel.preferredName,
                 founderPhoneURL: viewModel.founderPhoneURL(),
                 founderTextURL: viewModel.founderTextURL(),
-                contactEmailURL: viewModel.contactEmailURL()
+                contactEmailURL: viewModel.contactEmailURL(),
+                onSelectChat: { conversationId in
+                    Task { await resumeConversation(conversationId) }
+                }
             )
         }
         .task { await viewModel.load() }
@@ -328,6 +331,7 @@ struct HomeView: View {
         } message: { message in
             Text(message)
         }
+        .modifier(ResumeErrorAlert(viewModel: viewModel))
         .modifier(TransferSheetPresenter(
             transferViewModel: transferViewModel,
             fundingViewModel: fundingViewModel,
@@ -492,6 +496,19 @@ struct HomeView: View {
         }
     }
 
+    /// Tap-to-resume handler for sidebar rows. Closes the sidebar
+    /// optimistically (the chat surface overlay reads `messages` from the
+    /// new store) and then calls `HomeViewModel.resume(conversationId:)`,
+    /// which loads the persisted transcript and parks any failure on
+    /// `viewModel.resumeError` for the alert below to surface.
+    private func resumeConversation(_ conversationId: UUID) async {
+        withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
+            showSidebar = false
+            sidebarDragOffset = 0
+        }
+        await viewModel.resume(conversationId: conversationId)
+    }
+
     private var sidebarDragGesture: some Gesture {
         DragGesture(minimumDistance: 10)
             .onChanged(handleSidebarDragChanged)
@@ -564,12 +581,44 @@ struct HomeView: View {
 
 }
 
+/// Extracts the resume-failure alert from `HomeView` so the parent body
+/// type-checks within the compiler's budget — the surrounding view already
+/// stacks half a dozen modal alerts and was breaching the threshold.
+private struct ResumeErrorAlert: ViewModifier {
+    @Bindable var viewModel: HomeViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Sidebar.resumeErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.resumeError != nil },
+                set: { if !$0 { viewModel.clearResumeError() } }
+            ),
+            presenting: viewModel.resumeError
+        ) { _ in
+            Button(L10n.Sidebar.resumeErrorDismiss, role: .cancel) {
+                viewModel.clearResumeError()
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
 #Preview("Dark") {
-    HomeView()
-        .preferredColorScheme(.dark)
+    HomeView(
+        viewModel: HomeViewModel(
+            chatService: PlaceholderRecentChatsService.shared
+        )
+    )
+    .preferredColorScheme(.dark)
 }
 
 #Preview("Light") {
-    HomeView()
-        .preferredColorScheme(.light)
+    HomeView(
+        viewModel: HomeViewModel(
+            chatService: PlaceholderRecentChatsService.shared
+        )
+    )
+    .preferredColorScheme(.light)
 }

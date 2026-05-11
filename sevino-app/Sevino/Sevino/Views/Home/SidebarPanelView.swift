@@ -10,6 +10,10 @@ struct SidebarPanelView: View {
     let founderPhoneURL: URL?
     let founderTextURL: URL?
     let contactEmailURL: URL?
+    /// Invoked when the user taps a sidebar row. Owner (`HomeView`) is
+    /// responsible for calling `HomeViewModel.resume(conversationId:)` and
+    /// dismissing the sidebar; this view just emits the intent.
+    var onSelectChat: ((UUID) -> Void)? = nil
 
     @State private var searchText = ""
     @State private var showContactOptions = false
@@ -59,7 +63,7 @@ struct SidebarPanelView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(chats) { chat in
-                            Button(action: {}) {
+                            Button(action: { onSelectChat?(chat.conversationId) }) {
                                 Text(chat.title)
                                     .font(.system(size: 16 * scale))
                                     .foregroundStyle(Color.sevinoSecondary)
@@ -74,7 +78,7 @@ struct SidebarPanelView: View {
                                         in: .rect(cornerRadius: 8 * scale)
                                     )
                             }
-                            .disabled(true)
+                            .disabled(onSelectChat == nil)
                         }
                     }
                 }
