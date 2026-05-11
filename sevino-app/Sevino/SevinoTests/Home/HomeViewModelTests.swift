@@ -5,12 +5,12 @@ import XCTest
 final class HomeViewModelTests: XCTestCase {
 
     private var mockProfile: MockUserProfileService!
-    private var mockChat: MockChatService!
+    private var mockChat: MockRecentChatsService!
     private var viewModel: HomeViewModel!
 
     override func setUp() {
         mockProfile = MockUserProfileService()
-        mockChat = MockChatService()
+        mockChat = MockRecentChatsService()
         viewModel = HomeViewModel(
             userProfileService: mockProfile,
             chatService: mockChat
