@@ -504,6 +504,9 @@ enum L10n {
         static func statusFailedAccessibility(_ label: String) -> String {
             String(format: String(localized: "chat.status_failed_accessibility"), label)
         }
+        static func stockCardPlaceholder(_ symbol: String) -> String {
+            String(format: String(localized: "chat.stock_card_placeholder"), symbol)
+        }
     }
 
     enum Sidebar {

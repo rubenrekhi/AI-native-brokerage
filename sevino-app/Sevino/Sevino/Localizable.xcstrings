@@ -524,6 +524,16 @@
         }
       }
     },
+    "chat.stock_card_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stock card: %@"
+          }
+        }
+      }
+    },
     "general.app_name" : {
       "localizations" : {
         "en" : {
