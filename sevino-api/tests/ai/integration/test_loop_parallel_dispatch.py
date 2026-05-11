@@ -389,7 +389,7 @@ class TestParallelDispatchConcurrency:
         self, db_engine, fixture
     ):
         """Two ~0.2s tools in one response: execution windows overlap
-        and dispatch wall-clock < ``2 * sleep`` even with overhead.
+        and the dispatch envelope itself fits the SEV-565 ``< 0.3s`` bound.
 
         Two backstops together rather than relying on wall-clock alone:
 
@@ -397,11 +397,14 @@ class TestParallelDispatchConcurrency:
           the per-tool execution intervals intersect. A fast machine
           can't fake this; if the loop were still serial, ``alpha.end <
           beta.start`` (or vice versa) and the overlap check fails.
-        * **Wall-clock** is a coarser smoke test sized for SEV-565's
-          acceptance number. Sequential dispatch of two 0.2s sleeps is
-          ~0.4s + cold-start overhead (~0.55s on a typical dev box);
-          parallel lands ~0.2s + overhead (~0.35s). 0.4s splits the two
-          regimes cleanly without flaking on event-loop jitter.
+        * **Dispatch envelope** is the wall-clock from the earliest
+          ``tool.execute`` start to the latest ``tool.execute`` end,
+          captured via the per-tool tracker. This isolates the actual
+          dispatch latency from DB / Anthropic-mock / event-loop
+          overhead in ``run_agent_turn`` — measuring whole-turn time
+          conflates ~0.3s of CI overhead with the ~0.2s of true
+          dispatch. The ticket's ``< 0.3s`` acceptance number applies
+          to dispatch only.
         """
         tracker = _OverlapTracker()
         sleep_seconds = 0.2
@@ -430,20 +433,18 @@ class TestParallelDispatchConcurrency:
         iter_2 = _text_response(text_value="done both")
         client = _stub_client([iter_1, iter_2])
 
-        wall_start = time.monotonic()
         result, _events = await _run(
             db_engine=db_engine,
             fixture=fixture,
             client=client,
             tool_registry=registry,
         )
-        wall_elapsed = time.monotonic() - wall_start
 
         assert result.terminal_state == "end_turn"
         assert result.iterations_count == 2
 
         # Deterministic concurrency proof: both tools' execution windows
-        # must intersect. Asserted first so the wall-clock failure mode
+        # must intersect. Asserted first so the dispatch-envelope failure
         # below can be diagnosed without ambiguity.
         assert tracker.overlaps("alpha", "beta"), (
             f"Tool execution windows did not overlap: "
@@ -453,12 +454,19 @@ class TestParallelDispatchConcurrency:
             f"{tracker.ends['beta']:.3f}]"
         )
 
-        # Sequential dispatch would be ≥ 2 * sleep + overhead (≈ 0.55s
-        # on a dev box); parallel lands near sleep + overhead (≈ 0.35s).
-        # 0.4s splits the two regimes with margin for jitter.
-        assert wall_elapsed < 0.4, (
-            f"Expected parallel dispatch (~{sleep_seconds}s + overhead) "
-            f"but turn took {wall_elapsed:.3f}s."
+        # Dispatch envelope = first start → last end. Captures only the
+        # ``tool.execute`` window, not DB writes / Anthropic mock /
+        # event-loop overhead in ``run_agent_turn``. Sequential
+        # dispatch would be ≥ ``2 * sleep`` here (≈ 0.4s); parallel
+        # lands near ``sleep`` (≈ 0.2s). 0.3s matches the ticket's
+        # acceptance number with a clean margin on both sides.
+        dispatch_envelope = max(tracker.ends.values()) - min(
+            tracker.starts.values()
+        )
+        assert dispatch_envelope < 0.3, (
+            f"Expected parallel dispatch envelope (~{sleep_seconds}s) "
+            f"but tools spanned {dispatch_envelope:.3f}s. Sequential "
+            f"dispatch would be ~{2 * sleep_seconds}s."
         )
 
         # Both tools wrote their audit rows.
