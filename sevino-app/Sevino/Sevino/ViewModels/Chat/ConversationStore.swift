@@ -77,7 +77,9 @@ final class ConversationStore {
 
     init(
         conversationId: UUID = UUID(),
-        sseClient: any SSEClientProtocol = SSEClient(),
+        sseClient: any SSEClientProtocol = SSEClient(
+            tokenProvider: { await (AuthService.shared as AuthServiceProtocol).accessToken }
+        ),
         baseURL: String = AppConfig.apiBaseURL,
         idempotencyKeyFactory: @escaping @Sendable () -> String = { UUID().uuidString }
     ) {
