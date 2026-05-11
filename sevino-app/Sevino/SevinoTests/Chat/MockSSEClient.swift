@@ -1,14 +1,19 @@
 import Foundation
+@testable import Sevino
 
 /**
  Test-only `SSEClientProtocol` implementation that yields a scripted timeline
  of events.
 
- Lives in the production target (alongside `SSEClient`) — not in
- `SevinoTests/` — so SwiftUI previews and integration scaffolding can also
- substitute it without crossing the production / test-target boundary. The
- type is `@unchecked Sendable` and uses an internal lock to record captured
- requests; all other state is immutable after construction.
+ Lives in the test target. If a SwiftUI preview ever needs a fake SSE stream
+ (likely when SEV-510 / SEV-511 wires the message list into HomeView), add a
+ small preview-only factory in the production target — guarded with
+ `#if DEBUG` — at that point rather than promoting this mock. Keeping the
+ test mock test-only avoids shipping any test scaffolding in the release
+ binary.
+
+ The type is `@unchecked Sendable` and uses an internal lock to record
+ captured requests; all other state is immutable after construction.
 
  Usage:
  ```swift
