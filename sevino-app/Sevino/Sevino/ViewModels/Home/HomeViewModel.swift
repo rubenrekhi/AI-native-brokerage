@@ -4,6 +4,10 @@ import Foundation
 final class HomeViewModel {
     private let userProfileService: any UserProfileServiceProtocol
     private let chatService: any RecentChatsServiceProtocol
+    private let conversationStore: ConversationStore
+
+    var messages: [Message] { conversationStore.messages }
+    var isConversationActive: Bool { !conversationStore.messages.isEmpty }
 
     private(set) var greeting = ""
     private(set) var preferredName: String?
@@ -12,12 +16,24 @@ final class HomeViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
 
+    // `conversationStore` is an Optional with a nil default rather than
+    // `= ConversationStore()` because the latter triggers a "call to
+    // main actor-isolated initializer in a synchronous nonisolated context"
+    // error — Swift evaluates init default args without inheriting the
+    // enclosing actor isolation. Tests pass an explicit store; production
+    // gets the lazy MainActor-isolated default below.
     init(
         userProfileService: any UserProfileServiceProtocol = UserProfileService.shared,
-        chatService: any RecentChatsServiceProtocol = PlaceholderRecentChatsService.shared
+        chatService: any RecentChatsServiceProtocol = PlaceholderRecentChatsService.shared,
+        conversationStore: ConversationStore? = nil
     ) {
         self.userProfileService = userProfileService
         self.chatService = chatService
+        self.conversationStore = conversationStore ?? ConversationStore()
+    }
+
+    func send(text: String) async throws {
+        try await conversationStore.send(text: text)
     }
 
     // MARK: - Contact URLs
