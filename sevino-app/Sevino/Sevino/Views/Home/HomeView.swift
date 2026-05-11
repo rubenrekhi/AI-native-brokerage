@@ -31,6 +31,11 @@ struct HomeView: View {
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
 
+    /// Top inset for `MessageListView` that clears the nav row (44pt button + 4pt top
+    /// padding, plus a small breathing gap). Mirrors the y-positioning of the morphing
+    /// portfolio/funding cards above.
+    private static let conversationListTopInset: CGFloat = 60
+
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
         return colorScheme == .light ? -0.3 : -0.2
@@ -55,17 +60,19 @@ struct HomeView: View {
     var body: some View {
         SevinoGlassContainer {
             ZStack {
-                HomeGreetingSection(
-                    scale: scale,
-                    greeting: viewModel.greeting,
-                    showExplore: $showExplore,
-                    isHidden: anyModalOpen
-                )
-                .offset(y: -60 * scale)
-                .allowsHitTesting(!anyModalOpen)
-                .accessibilityHidden(anyModalOpen)
-                .blur(radius: anyModalOpen ? 10 : 0)
-                .brightness(modalDimBrightness(when: anyModalOpen))
+                if !viewModel.isConversationActive {
+                    HomeGreetingSection(
+                        scale: scale,
+                        greeting: viewModel.greeting,
+                        showExplore: $showExplore,
+                        isHidden: anyModalOpen
+                    )
+                    .offset(y: -60 * scale)
+                    .allowsHitTesting(!anyModalOpen)
+                    .accessibilityHidden(anyModalOpen)
+                    .blur(radius: anyModalOpen ? 10 : 0)
+                    .brightness(modalDimBrightness(when: anyModalOpen))
+                }
 
                 VStack(spacing: 0) {
                     HStack(spacing: 8 * scale) {
@@ -163,20 +170,38 @@ struct HomeView: View {
                 tickerPopupDismissButton
 
                 VStack(spacing: 0) {
-                    Spacer()
+                    // Wrapped in Group so the VStack sees exactly two children
+                    // (active-area, input-bar) in both branches — keeps the
+                    // input bar's SwiftUI identity stable across the empty ↔
+                    // conversation transition (preserves `@FocusState` and the
+                    // `chatInputHeight` geometry reading).
+                    Group {
+                        if viewModel.isConversationActive {
+                            MessageListView(messages: viewModel.messages, scale: scale)
+                                .padding(.top, Self.conversationListTopInset * scale)
+                                .blur(radius: anyModalOpen ? 10 : 0)
+                                .brightness(modalDimBrightness(when: anyModalOpen))
+                                .allowsHitTesting(!anyModalOpen)
+                                .accessibilityHidden(anyModalOpen)
+                        } else {
+                            VStack(spacing: 0) {
+                                Spacer()
 
-                    HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
-                        .padding(.bottom, 20 * scale)
-                        .padding(.horizontal, 16 * scale)
-                        .blur(radius: anyModalOpen ? 10 : 0)
-                        .brightness(modalDimBrightness(when: anyModalOpen))
-                        .allowsHitTesting(!anyModalOpen)
+                                HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
+                                    .padding(.bottom, 20 * scale)
+                                    .padding(.horizontal, 16 * scale)
+                                    .blur(radius: anyModalOpen ? 10 : 0)
+                                    .brightness(modalDimBrightness(when: anyModalOpen))
+                                    .allowsHitTesting(!anyModalOpen)
+                            }
+                        }
+                    }
 
                     HomeChatInputBar(
                         viewModel: tickerMentionViewModel,
                         scale: scale,
                         isDimmed: anyModalOpen,
-                        onSend: { _ in },
+                        onSend: sendMessage,
                         onQuickCommands: openQuickCommands
                     )
                     .padding(.horizontal, 16 * scale)
