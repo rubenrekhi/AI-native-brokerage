@@ -369,6 +369,27 @@ struct HomeView: View {
         }
     }
 
+    // TODO(SEV-567): replace this string collapse with structured ticker
+    // mentions in the wire payload so the backend doesn't have to re-parse.
+    private func sendMessage(segments: [MessageSegment]) {
+        let text = segments.map { segment -> String in
+            switch segment {
+            case .text(let value): return value
+            case .ticker(let symbol): return "$\(symbol)"
+            }
+        }.joined()
+        guard !text.isEmpty else { return }
+        tickerMentionViewModel.clear()
+        Task {
+            do {
+                try await viewModel.send(text: text)
+            } catch {
+                // Failure is already reflected in the conversation store's
+                // turn state; user-facing surfacing of send errors is post-v0.
+            }
+        }
+    }
+
     private func dismissTopLayer() {
         if showQuickCommands {
             dismissQuickCommands()
