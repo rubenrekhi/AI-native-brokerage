@@ -107,6 +107,14 @@ final class AuthServiceIntegrationTests: XCTestCase {
         // email-not-confirmed check before ever reaching the password check.
         try await signUpAndConfirm()
 
+        // Supabase Swift now emits `.initialSession` after `signUp(...)` with
+        // the unconfirmed session, which flips `isAuthenticated = true`. Sign
+        // out so the assertion below measures the failed sign-in's effect, not
+        // residue from signUp. See SEV-568 / supabase-swift#822.
+        try await authService.signOut()
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(authService.isAuthenticated)
+
         do {
             try await authService.signIn(email: testEmail, password: "wrongpassword")
             XCTFail("Expected sign in to throw")
