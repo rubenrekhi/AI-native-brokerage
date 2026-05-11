@@ -42,6 +42,7 @@ import asyncio
 import json
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 import pydantic
@@ -271,11 +272,13 @@ class _ToolDispatchOutcome:
     On a fully successful iteration ``terminal_error_code`` is ``None``
     and the loop appends ``tool_result_blocks`` to its messages list and
     continues. On any tool failure (lookup, validation, or
-    ``execute``-time exception) the iteration short-circuits — every
-    ``tool_use`` block before the failure has its ``tool_executions``
-    row written; the failing block writes an ``error`` row; later blocks
-    are not dispatched. The loop sets ``terminal_state='error'`` with
-    the returned ``ErrorCode`` and breaks out of the iteration.
+    ``execute``-time exception) ``terminal_error_code`` is set to the
+    error from the *first* failing block (in tool_use input order) and
+    the loop sets ``terminal_state='error'`` and breaks out. SEV-565:
+    every ``tool_use`` block in the response still gets its
+    ``tool_executions`` row written before the loop aborts — the parallel
+    dispatcher does not short-circuit sibling tools on a single failure.
+    Order is preserved (matches Anthropic's assistant content order).
     """
 
     __slots__ = (
@@ -292,6 +295,198 @@ class _ToolDispatchOutcome:
         self.tool_call_count: int = 0
 
 
+@dataclass(slots=True)
+class _PerToolResult:
+    """Outcome of dispatching one ``tool_use`` block.
+
+    Populated by :func:`_dispatch_one_tool_use` and aggregated in input
+    order by :func:`_dispatch_tool_uses`. The per-block coroutine catches
+    its own lookup / validation / execute exceptions and surfaces them
+    via ``error_code``; only programming bugs (e.g. a DB write failure
+    inside :meth:`ConversationRepository.record_tool_execution`) raise
+    out, which is the contract :func:`asyncio.gather` expects so the
+    outer loop's ``except Exception`` can map them to ``INTERNAL_ERROR``.
+    """
+
+    tool_result_block: dict[str, Any] | None
+    ui_block_dict: dict[str, Any] | None
+    counted: bool
+    error_code: ErrorCode | None
+
+
+async def _dispatch_one_tool_use(
+    *,
+    block: Any,
+    tool_registry: ToolRegistry,
+    user_id: uuid.UUID,
+    db_factory: DbSessionFactory,
+    sse_emitter: SSEEmitter,
+    http_clients: ToolHttpClients,
+    invocation_id: uuid.UUID,
+) -> _PerToolResult:
+    """Process a single ``tool_use`` block end-to-end.
+
+    Registry lookup → input validation → ``execute`` → ``tool_executions``
+    persistence → wire-event emission for the returned ``ui_block``.
+    Every exit path writes exactly one ``tool_executions`` row so the
+    audit trail is complete regardless of which step failed.
+
+    Returns a :class:`_PerToolResult`. Lookup / validation / execute
+    failures are reported via ``error_code`` so :func:`asyncio.gather`
+    can collect every sibling's outcome rather than cancelling on the
+    first raise.
+    """
+    tool_name = getattr(block, "name", "") or ""
+    tool_use_id = getattr(block, "id", "") or ""
+    raw_input = getattr(block, "input", None)
+    input_payload = raw_input if isinstance(raw_input, dict) else {}
+
+    # Registry lookup. ``KeyError`` here means Claude called a tool
+    # that wasn't registered — wiring bug, not user-facing fault.
+    try:
+        tool = tool_registry.get(tool_name)
+    except KeyError:
+        logger.warning(
+            "loop_tool_lookup_failed",
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+        )
+        async with db_factory() as db:
+            await ConversationRepository.record_tool_execution(
+                db,
+                model_invocation_id=invocation_id,
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                input_payload=input_payload,
+                status="error",
+                error_message=f"unknown tool: {tool_name}",
+            )
+        return _PerToolResult(
+            tool_result_block=None,
+            ui_block_dict=None,
+            counted=False,
+            error_code=ErrorCode.INTERNAL_ERROR,
+        )
+
+    # Input validation. Surface as terminal ``validation_error`` per
+    # SEV-495 acceptance criteria — the tool framework guarantees
+    # ``execute`` only ever sees a well-typed ``Input`` instance.
+    try:
+        validated_input = tool.Input.model_validate(raw_input)
+    except pydantic.ValidationError as exc:
+        async with db_factory() as db:
+            await ConversationRepository.record_tool_execution(
+                db,
+                model_invocation_id=invocation_id,
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                input_payload=input_payload,
+                status="error",
+                error_message=str(exc),
+            )
+        return _PerToolResult(
+            tool_result_block=None,
+            ui_block_dict=None,
+            counted=False,
+            error_code=ErrorCode.VALIDATION_ERROR,
+        )
+
+    # Wrap the wire emitter so we can detect whether the tool itself
+    # already announced its UI block via ``BlockStart`` (incremental
+    # streaming — C1.4) or whether the loop must do it (non-incremental
+    # case where the tool only returns the final block). Each per-tool
+    # coroutine owns its own ``_RecordingEmitter``: the recording is
+    # local to this tool, while the underlying ``sse_emitter`` is shared
+    # — sibling tools' events interleave on the wire (block IDs are
+    # independent so iOS still correlates).
+    recording_emitter = _RecordingEmitter(sse_emitter)
+    ctx = ToolContext(
+        user_id=user_id,
+        db_factory=db_factory,
+        sse_emitter=recording_emitter,  # type: ignore[arg-type]
+        http_clients=http_clients,
+    )
+
+    tool_started = time.monotonic()
+    try:
+        tool_result = await tool.execute(validated_input, ctx)
+    except Exception as exc:
+        tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
+        logger.exception(
+            "loop_tool_execute_failed",
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+        )
+        async with db_factory() as db:
+            await ConversationRepository.record_tool_execution(
+                db,
+                model_invocation_id=invocation_id,
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                input_payload=input_payload,
+                status="error",
+                error_message=f"{type(exc).__name__}: {exc}",
+                latency_ms=tool_latency_ms,
+            )
+        # Tool-side failures are ``TOOL_ERROR`` regardless of the
+        # underlying exception type — that's the band of error
+        # codes reserved for "the tool itself raised". Anthropic-
+        # adjacent failures only surface when the loop calls
+        # Anthropic, not when a tool runs.
+        return _PerToolResult(
+            tool_result_block=None,
+            ui_block_dict=None,
+            counted=False,
+            error_code=ErrorCode.TOOL_ERROR,
+        )
+    tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
+
+    # Drive the wire envelope for any UI block returned. The tool
+    # may have already emitted ``block_start`` (and ``block_data``
+    # patches) inline; if so we only emit ``block_end``. Otherwise
+    # we emit ``block_start`` with the final block + ``block_end``.
+    ui_block_dict: dict[str, Any] | None = None
+    ui_blocks_emitted_for_row: list[dict[str, Any]] | None = None
+    if tool_result.ui_block is not None:
+        ui_block_dict = tool_result.ui_block.model_dump(mode="json")
+        block_id = ui_block_dict.get("block_id")
+        if isinstance(block_id, str) and block_id:
+            if block_id not in recording_emitter.started_block_ids:
+                await sse_emitter.emit(BlockStart(block=ui_block_dict))
+            await sse_emitter.emit(BlockEnd(block_id=block_id))
+        ui_blocks_emitted_for_row = [ui_block_dict]
+
+    # Persist the audit row. Per the AI v0 plan, ``ui_blocks_emitted``
+    # is the merged final state — not a per-patch log.
+    async with db_factory() as db:
+        await ConversationRepository.record_tool_execution(
+            db,
+            model_invocation_id=invocation_id,
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+            input_payload=input_payload,
+            status="success",
+            output_payload=tool_result.model_payload,
+            internal_trace=tool_result.internal_trace,
+            ui_blocks_emitted=ui_blocks_emitted_for_row,
+            latency_ms=tool_latency_ms,
+        )
+
+    # Anthropic's ``tool_result`` content can be a string or a list of
+    # text/image blocks. JSON-encode the model payload so any shape
+    # roundtrips cleanly without dropping the structure.
+    return _PerToolResult(
+        tool_result_block={
+            "type": "tool_result",
+            "tool_use_id": tool_use_id,
+            "content": json.dumps(tool_result.model_payload),
+        },
+        ui_block_dict=ui_block_dict,
+        counted=True,
+        error_code=None,
+    )
+
+
 async def _dispatch_tool_uses(
     *,
     response_blocks: list[Any],
@@ -302,155 +497,70 @@ async def _dispatch_tool_uses(
     http_clients: ToolHttpClients,
     invocation_id: uuid.UUID,
 ) -> _ToolDispatchOutcome:
-    """Process every ``tool_use`` block in an Anthropic response.
+    """Process every ``tool_use`` block in an Anthropic response **in parallel**.
 
-    For each block: registry lookup → input validation → ``execute`` →
-    ``tool_executions`` persistence → wire-event emission for the
-    returned ``ui_block``. ``response_blocks`` is the live SDK iterable
-    whose ``.input`` / ``.id`` / ``.name`` accessors give us the values
-    to feed into the tool framework.
+    Anthropic emits multiple ``tool_use`` blocks in one response when the
+    model judges the calls independent (e.g. ``get_stock_info("AAPL")``
+    plus ``get_stock_info("MSFT")``). SEV-565: dispatch them concurrently
+    via :func:`asyncio.gather` so wall-clock latency is ``max(t_i)`` rather
+    than ``sum(t_i)``.
+
+    Ordering: results are aggregated in tool_use input order, so
+    ``tool_result_blocks`` and ``ui_block_dicts`` match the order Anthropic
+    emitted (and the order persisted on ``model_invocations.response_content``).
+    Wire-level ``BlockStart`` / ``BlockEnd`` events for sibling tools may
+    interleave — block IDs are independent so iOS correlates per-block
+    ``text_delta`` / ``block_data`` patches by ID, not arrival order
+    (see ``ConversationStore.handle`` on the iOS side). The iOS block
+    *array* order on streaming follows ``BlockStart`` arrival, while
+    the persisted ``messages.content_blocks`` array is in tool_use input
+    order — a divergence that is only observable across a reload of an
+    incomplete render and acceptable for v0.
+
+    Error semantics: every ``tool_use`` block writes its ``tool_executions``
+    row regardless of which sibling succeeded or failed (audit-row
+    completeness wins over early termination). After ``gather`` returns
+    the aggregator picks the **first** error in input order as the
+    iteration's ``terminal_error_code``.
     """
     outcome = _ToolDispatchOutcome()
 
-    for block in response_blocks:
-        block_type = getattr(block, "type", None)
-        if block_type != "tool_use":
-            continue
+    tool_use_blocks = [
+        block
+        for block in response_blocks
+        if getattr(block, "type", None) == "tool_use"
+    ]
+    if not tool_use_blocks:
+        return outcome
 
-        tool_name = getattr(block, "name", "") or ""
-        tool_use_id = getattr(block, "id", "") or ""
-        raw_input = getattr(block, "input", None)
-        input_payload = (
-            raw_input if isinstance(raw_input, dict) else {}
-        )
-
-        # Registry lookup. ``KeyError`` here means Claude called a tool
-        # that wasn't registered — wiring bug, not user-facing fault.
-        try:
-            tool = tool_registry.get(tool_name)
-        except KeyError:
-            logger.warning(
-                "loop_tool_lookup_failed",
-                tool_name=tool_name,
-                tool_use_id=tool_use_id,
-            )
-            async with db_factory() as db:
-                await ConversationRepository.record_tool_execution(
-                    db,
-                    model_invocation_id=invocation_id,
-                    tool_name=tool_name,
-                    tool_use_id=tool_use_id,
-                    input_payload=input_payload,
-                    status="error",
-                    error_message=f"unknown tool: {tool_name}",
-                )
-            outcome.terminal_error_code = ErrorCode.INTERNAL_ERROR
-            return outcome
-
-        # Input validation. Surface as terminal ``validation_error`` per
-        # SEV-495 acceptance criteria — the tool framework guarantees
-        # ``execute`` only ever sees a well-typed ``Input`` instance.
-        try:
-            validated_input = tool.Input.model_validate(raw_input)
-        except pydantic.ValidationError as exc:
-            async with db_factory() as db:
-                await ConversationRepository.record_tool_execution(
-                    db,
-                    model_invocation_id=invocation_id,
-                    tool_name=tool_name,
-                    tool_use_id=tool_use_id,
-                    input_payload=input_payload,
-                    status="error",
-                    error_message=str(exc),
-                )
-            outcome.terminal_error_code = ErrorCode.VALIDATION_ERROR
-            return outcome
-
-        # Wrap the wire emitter so we can detect whether the tool itself
-        # already announced its UI block via ``BlockStart`` (incremental
-        # streaming — C1.4) or whether the loop must do it (non-incremental
-        # case where the tool only returns the final block).
-        recording_emitter = _RecordingEmitter(sse_emitter)
-        ctx = ToolContext(
+    coros = [
+        _dispatch_one_tool_use(
+            block=block,
+            tool_registry=tool_registry,
             user_id=user_id,
             db_factory=db_factory,
-            sse_emitter=recording_emitter,  # type: ignore[arg-type]
+            sse_emitter=sse_emitter,
             http_clients=http_clients,
+            invocation_id=invocation_id,
         )
+        for block in tool_use_blocks
+    ]
+    # Default gather (no ``return_exceptions``): per-tool coroutines
+    # catch their own lookup/validation/execute failures and report
+    # them via ``_PerToolResult.error_code``. A coroutine raising out
+    # is a programming bug (e.g. DB write failed) — propagate so the
+    # outer loop's ``except Exception`` maps it to INTERNAL_ERROR.
+    results: list[_PerToolResult] = await asyncio.gather(*coros)
 
-        tool_started = time.monotonic()
-        try:
-            tool_result = await tool.execute(validated_input, ctx)
-        except Exception as exc:
-            tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
-            logger.exception(
-                "loop_tool_execute_failed",
-                tool_name=tool_name,
-                tool_use_id=tool_use_id,
-            )
-            async with db_factory() as db:
-                await ConversationRepository.record_tool_execution(
-                    db,
-                    model_invocation_id=invocation_id,
-                    tool_name=tool_name,
-                    tool_use_id=tool_use_id,
-                    input_payload=input_payload,
-                    status="error",
-                    error_message=f"{type(exc).__name__}: {exc}",
-                    latency_ms=tool_latency_ms,
-                )
-            # Tool-side failures are ``TOOL_ERROR`` regardless of the
-            # underlying exception type — that's the band of error
-            # codes reserved for "the tool itself raised". Anthropic-
-            # adjacent failures only surface when the loop calls
-            # Anthropic, not when a tool runs.
-            outcome.terminal_error_code = ErrorCode.TOOL_ERROR
-            return outcome
-        tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
-
-        # Drive the wire envelope for any UI block returned. The tool
-        # may have already emitted ``block_start`` (and ``block_data``
-        # patches) inline; if so we only emit ``block_end``. Otherwise
-        # we emit ``block_start`` with the final block + ``block_end``.
-        ui_blocks_emitted_for_row: list[dict[str, Any]] | None = None
-        if tool_result.ui_block is not None:
-            ui_block_dict = tool_result.ui_block.model_dump(mode="json")
-            block_id = ui_block_dict.get("block_id")
-            if isinstance(block_id, str) and block_id:
-                if block_id not in recording_emitter.started_block_ids:
-                    await sse_emitter.emit(BlockStart(block=ui_block_dict))
-                await sse_emitter.emit(BlockEnd(block_id=block_id))
-            outcome.ui_block_dicts.append(ui_block_dict)
-            ui_blocks_emitted_for_row = [ui_block_dict]
-
-        # Persist the audit row. Per the AI v0 plan, ``ui_blocks_emitted``
-        # is the merged final state — not a per-patch log.
-        async with db_factory() as db:
-            await ConversationRepository.record_tool_execution(
-                db,
-                model_invocation_id=invocation_id,
-                tool_name=tool_name,
-                tool_use_id=tool_use_id,
-                input_payload=input_payload,
-                status="success",
-                output_payload=tool_result.model_payload,
-                internal_trace=tool_result.internal_trace,
-                ui_blocks_emitted=ui_blocks_emitted_for_row,
-                latency_ms=tool_latency_ms,
-            )
-
-        outcome.tool_call_count += 1
-
-        # Anthropic's ``tool_result`` content can be a string or a list of
-        # text/image blocks. JSON-encode the model payload so any shape
-        # roundtrips cleanly without dropping the structure.
-        outcome.tool_result_blocks.append(
-            {
-                "type": "tool_result",
-                "tool_use_id": tool_use_id,
-                "content": json.dumps(tool_result.model_payload),
-            }
-        )
+    for result in results:
+        if result.error_code is not None and outcome.terminal_error_code is None:
+            outcome.terminal_error_code = result.error_code
+        if result.ui_block_dict is not None:
+            outcome.ui_block_dicts.append(result.ui_block_dict)
+        if result.tool_result_block is not None:
+            outcome.tool_result_blocks.append(result.tool_result_block)
+        if result.counted:
+            outcome.tool_call_count += 1
 
     return outcome
 
@@ -992,16 +1102,12 @@ async def run_agent_turn(
                             error_code = ErrorCode.OUTPUT_TOKEN_LIMIT
                             break
                         if response.stop_reason == "tool_use":
-                            # C1.2 / C1.4: dispatch tools. Each ``tool_use``
-                            # block in the assistant response triggers a
-                            # registry lookup, input validation, and an
-                            # ``execute`` call. The tool may stream
-                            # ``block_data`` patches via its own
-                            # ``ctx.sse_emitter`` while running; we wrap the
-                            # wire emitter per call so the loop can tell
-                            # whether the tool already announced its UI
-                            # block (via ``block_start``) or whether the
-                            # loop must emit it itself before ``block_end``.
+                            # C1.2 / C1.4 / SEV-565: parallel tool dispatch.
+                            # See :func:`_dispatch_tool_uses` for the
+                            # ``asyncio.gather`` machinery and
+                            # :func:`_dispatch_one_tool_use` for per-block
+                            # registry lookup / validation / execute /
+                            # audit-row / wire-event semantics.
                             tool_outcomes = await _dispatch_tool_uses(
                                 response_blocks=response.content,
                                 tool_registry=tool_registry,
