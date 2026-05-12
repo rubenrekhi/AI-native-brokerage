@@ -8,12 +8,20 @@ lagging. Favorited rows always have `expires_at = NULL` by invariant
 """
 
 import uuid
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import func
 
 from app.models.radar_item import RadarItem
+
+SOURCE_USER_ADDED = "user_added"
+SOURCE_AI_GENERATED = "ai_generated"
+
+# AI-generated rows expire 7 days after creation unless the user favorites
+# them, at which point `expires_at` is nulled on the write path.
+AI_ITEM_TTL = timedelta(days=7)
 
 
 class RadarItemRepository:
@@ -59,3 +67,49 @@ class RadarItemRepository:
             )
         )
         return result.scalar_one_or_none()
+
+    @staticmethod
+    async def create_user_added(
+        db: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        symbol: str,
+        company_name: str | None,
+    ) -> RadarItem:
+        """Create a user-added radar row. Auto-favorited, no expiry."""
+        item = RadarItem(
+            user_id=user_id,
+            symbol=symbol,
+            company_name=company_name,
+            source=SOURCE_USER_ADDED,
+            is_favorited=True,
+            expires_at=None,
+        )
+        db.add(item)
+        await db.flush()
+        return item
+
+    @staticmethod
+    async def create_ai_item(
+        db: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        symbol: str,
+        company_name: str | None,
+        context_blurb: str | None = None,
+        relevance_score: float | None = None,
+    ) -> RadarItem:
+        """Create an AI-generated radar row. Unfavorited, expires in 7 days."""
+        item = RadarItem(
+            user_id=user_id,
+            symbol=symbol,
+            company_name=company_name,
+            source=SOURCE_AI_GENERATED,
+            is_favorited=False,
+            context_blurb=context_blurb,
+            relevance_score=relevance_score,
+            expires_at=datetime.now(timezone.utc) + AI_ITEM_TTL,
+        )
+        db.add(item)
+        await db.flush()
+        return item

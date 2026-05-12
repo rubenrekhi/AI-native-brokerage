@@ -134,3 +134,83 @@ async def test_get_by_id_for_user_returns_none_for_unknown_id(
         db_session, uuid.uuid4(), test_user
     )
     assert result is None
+
+
+async def test_create_user_added_sets_favorited_no_expiry_user_source(
+    db_session, test_user
+):
+    item = await RadarItemRepository.create_user_added(
+        db_session,
+        user_id=test_user,
+        symbol="AAPL",
+        company_name="Apple Inc.",
+    )
+    assert item.user_id == test_user
+    assert item.symbol == "AAPL"
+    assert item.company_name == "Apple Inc."
+    assert item.source == "user_added"
+    assert item.is_favorited is True
+    assert item.expires_at is None
+
+
+async def test_create_ai_item_sets_unfavorited_7d_expiry_ai_source(
+    db_session, test_user
+):
+    before = datetime.now(timezone.utc)
+    item = await RadarItemRepository.create_ai_item(
+        db_session,
+        user_id=test_user,
+        symbol="NVDA",
+        company_name="NVIDIA Corporation",
+        context_blurb="AI chip giant with strong data center growth.",
+        relevance_score=0.92,
+    )
+    after = datetime.now(timezone.utc)
+    assert item.symbol == "NVDA"
+    assert item.company_name == "NVIDIA Corporation"
+    assert item.context_blurb == "AI chip giant with strong data center growth."
+    assert item.relevance_score == 0.92
+    assert item.source == "ai_generated"
+    assert item.is_favorited is False
+    assert item.expires_at is not None
+    # 7-day TTL is set from Python's clock, so the row should land in
+    # [before + 7d, after + 7d].
+    assert before + timedelta(days=7) <= item.expires_at <= after + timedelta(days=7)
+
+
+async def test_create_ai_item_accepts_null_blurb_and_score(
+    db_session, test_user
+):
+    item = await RadarItemRepository.create_ai_item(
+        db_session,
+        user_id=test_user,
+        symbol="TSLA",
+        company_name="Tesla, Inc.",
+    )
+    assert item.context_blurb is None
+    assert item.relevance_score is None
+
+
+async def test_create_user_added_rejects_duplicate_for_same_user(
+    db_session, test_user
+):
+    await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    with pytest.raises(IntegrityError):
+        await RadarItemRepository.create_user_added(
+            db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+        )
+
+
+async def test_create_user_added_allows_same_symbol_for_different_user(
+    db_session, test_user, make_extra_user
+):
+    other_user = await make_extra_user()
+    await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    item = await RadarItemRepository.create_user_added(
+        db_session, user_id=other_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    assert item.user_id == other_user
