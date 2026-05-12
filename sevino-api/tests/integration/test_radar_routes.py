@@ -148,3 +148,41 @@ async def test_delete_radar_does_not_let_user_b_delete_user_a_item(
     # authenticated_db_client is acting as test_user, not other_user.
     response = await authenticated_db_client.delete(f"/v1/radar/{item.id}")
     assert response.status_code == 404
+
+
+async def test_patch_radar_flips_favorite_flag(
+    authenticated_db_client, db_session, test_user
+):
+    item = await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+
+    response = await authenticated_db_client.patch(
+        f"/v1/radar/{item.id}", json={"is_favorited": False}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_favorited"] is False
+
+
+async def test_patch_radar_returns_404_for_unknown_id(
+    authenticated_db_client, test_user
+):
+    response = await authenticated_db_client.patch(
+        f"/v1/radar/{uuid.uuid4()}", json={"is_favorited": True}
+    )
+    assert response.status_code == 404
+
+
+async def test_patch_radar_does_not_let_user_b_modify_user_a_item(
+    authenticated_db_client, db_session, test_user, make_extra_user
+):
+    other_user = await make_extra_user()
+    item = await RadarItemRepository.create_user_added(
+        db_session, user_id=other_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+
+    response = await authenticated_db_client.patch(
+        f"/v1/radar/{item.id}", json={"is_favorited": False}
+    )
+    assert response.status_code == 404
