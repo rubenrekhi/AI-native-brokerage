@@ -163,3 +163,70 @@ async def test_remove_raises_not_found_when_item_unknown(monkeypatch):
 
     with pytest.raises(NotFoundError):
         await RadarService(AsyncMock()).remove(uuid4(), uuid4())
+
+
+def _make_radar_item(*, is_favorited: bool, source: str = "user_added") -> RadarItem:
+    return RadarItem(
+        id=uuid4(),
+        user_id=uuid4(),
+        symbol="AAPL",
+        company_name="Apple Inc.",
+        context_blurb=None,
+        source=source,
+        is_favorited=is_favorited,
+        relevance_score=None,
+        expires_at=None,
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+
+async def test_toggle_favorite_flips_flag_and_writes_to_db(monkeypatch):
+    item = _make_radar_item(is_favorited=False)
+
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return item
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    db = AsyncMock()
+    result = await RadarService(db).toggle_favorite(uuid4(), uuid4(), True)
+
+    assert result.is_favorited is True
+    assert item.is_favorited is True
+    db.flush.assert_awaited_once()
+    db.refresh.assert_awaited_once_with(item)
+
+
+async def test_toggle_favorite_no_op_when_state_already_matches(monkeypatch):
+    item = _make_radar_item(is_favorited=True)
+
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return item
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    db = AsyncMock()
+    result = await RadarService(db).toggle_favorite(uuid4(), uuid4(), True)
+
+    assert result.is_favorited is True
+    db.flush.assert_not_called()
+    db.refresh.assert_not_called()
+
+
+async def test_toggle_favorite_raises_not_found_when_item_unknown(monkeypatch):
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    with pytest.raises(NotFoundError):
+        await RadarService(AsyncMock()).toggle_favorite(uuid4(), uuid4(), True)

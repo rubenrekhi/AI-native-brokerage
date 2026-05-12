@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.schemas.radar import RadarItemCreate, RadarItemRead
+from app.schemas.radar import RadarItemCreate, RadarItemRead, RadarItemUpdate
 from app.services.radar import RadarService
 
 router = APIRouter()
@@ -43,6 +43,19 @@ async def add_radar_item(
 ) -> RadarItemRead:
     """Add a user-chosen ticker to the radar. Auto-favorited, no expiry."""
     return await service.add_user_item(uuid.UUID(user_id), body.symbol)
+
+
+@router.patch("/{item_id}", response_model=RadarItemRead)
+async def patch_radar_item(
+    item_id: uuid.UUID,
+    body: RadarItemUpdate,
+    user_id: str = Depends(get_current_user),
+    service: RadarService = Depends(_radar_service),
+) -> RadarItemRead:
+    """Toggle the favorite flag on a radar item the user owns."""
+    return await service.toggle_favorite(
+        uuid.UUID(user_id), item_id, body.is_favorited
+    )
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

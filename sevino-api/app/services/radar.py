@@ -74,6 +74,33 @@ class RadarService:
         )
         return RadarItemRead.model_validate(item)
 
+    async def toggle_favorite(
+        self,
+        user_id: uuid.UUID,
+        item_id: uuid.UUID,
+        is_favorited: bool,
+    ) -> RadarItemRead:
+        """Set the favorite flag on a radar item the user owns.
+
+        T9 scope: basic flag toggle only. Source-specific behavior
+        (delete-on-unfavorite for `user_added` rows, expires_at reset for
+        `ai_generated` rows) is layered on in T10 — until then, an
+        unfavorited `user_added` row can exist transiently.
+        """
+        item = await RadarItemRepository.get_by_id_for_user(
+            self._db, item_id, user_id
+        )
+        if item is None:
+            raise NotFoundError("Radar item not found")
+
+        if item.is_favorited == is_favorited:
+            return RadarItemRead.model_validate(item)
+
+        item.is_favorited = is_favorited
+        await self._db.flush()
+        await self._db.refresh(item)
+        return RadarItemRead.model_validate(item)
+
     async def remove(self, user_id: uuid.UUID, item_id: uuid.UUID) -> None:
         """Hard-delete a radar item the user owns.
 
