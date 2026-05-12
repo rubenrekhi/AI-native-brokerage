@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from app.exceptions import ConflictError
+from app.exceptions import ConflictError, NotFoundError
 from app.models.asset import Asset
 from app.models.radar_item import RadarItem
 from app.schemas.radar import RadarItemRead
@@ -150,3 +150,16 @@ async def test_add_user_item_persists_company_name_from_asset(monkeypatch):
     await RadarService(AsyncMock()).add_user_item(uuid4(), "AAPL")
 
     assert captured["company_name"] == "Apple Inc."
+
+
+async def test_remove_raises_not_found_when_item_unknown(monkeypatch):
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return None
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    with pytest.raises(NotFoundError):
+        await RadarService(AsyncMock()).remove(uuid4(), uuid4())

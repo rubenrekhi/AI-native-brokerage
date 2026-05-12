@@ -9,7 +9,7 @@ trading-gated).
 
 import uuid
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
@@ -43,3 +43,14 @@ async def add_radar_item(
 ) -> RadarItemRead:
     """Add a user-chosen ticker to the radar. Auto-favorited, no expiry."""
     return await service.add_user_item(uuid.UUID(user_id), body.symbol)
+
+
+@router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def remove_radar_item(
+    item_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+    service: RadarService = Depends(_radar_service),
+) -> Response:
+    """Remove a radar item the user owns. Hard delete."""
+    await service.remove(uuid.UUID(user_id), item_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
