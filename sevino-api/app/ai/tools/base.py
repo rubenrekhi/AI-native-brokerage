@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, ClassVar, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Protocol, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -28,6 +28,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.ai.blocks import Block
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.transport.events import Event
+
+if TYPE_CHECKING:
+    from app.services.market_data import MarketDataService
 
 __all__ = [
     "SSEEmitter",
@@ -53,10 +56,16 @@ class SSEEmitter(Protocol):
 class ToolHttpClients:
     """Holder for HTTP / service clients tools may need.
 
-    Empty in C1.1 — fields are added as service tickets land (C2.2 brings
-    ``alpaca_market_data`` for the ``get_stock_info`` tool). Frozen so a
-    tool cannot mutate the shared client bundle mid-turn.
+    Populated per-request by the chat-turn endpoint from ``app.state`` and
+    handed to every tool through :class:`ToolContext`. Frozen so a tool
+    cannot mutate the shared client bundle mid-turn.
+
+    ``market_data`` is ``None`` in environments without ``FMP_API_KEY``
+    (dev convenience — see ``app/lifecycle.py``); tools that depend on it
+    must handle the ``None`` case rather than crashing the turn.
     """
+
+    market_data: "MarketDataService | None" = None
 
 
 @dataclass(frozen=True, slots=True)

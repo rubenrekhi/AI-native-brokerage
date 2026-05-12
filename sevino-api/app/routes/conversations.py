@@ -55,8 +55,8 @@ from app.ai.runtime.caps import HardCaps, get_hard_caps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
 from app.ai.runtime.errors import to_error_code
 from app.ai.runtime.loop import run_agent_turn
-from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig
-from app.ai.tools import ToolHttpClients
+from app.ai.runtime.types import ModelConfig
+from app.ai.tools import DEFAULT_REGISTRY, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
     BlockEnd,
@@ -182,8 +182,17 @@ async def post_turn(
                 user_message=body.message,
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
-                tool_registry=EMPTY_REGISTRY,
-                http_clients=ToolHttpClients(),
+                tool_registry=DEFAULT_REGISTRY,
+                http_clients=ToolHttpClients(
+                    # ``getattr`` — tests that boot a bare FastAPI app
+                    # without the lifespan never populate the attribute;
+                    # lifespan itself stores ``None`` when FMP_API_KEY is
+                    # absent. Either way the tool handles the missing
+                    # service gracefully.
+                    market_data=getattr(
+                        request.app.state, "market_data", None
+                    ),
+                ),
                 system_prompt=SYSTEM_PROMPT_V1,
                 model_config=model_config,
                 hard_caps=hard_caps,
