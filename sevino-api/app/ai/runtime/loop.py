@@ -53,6 +53,7 @@ from ulid import ULID
 
 from app.ai.observability.langfuse import LangfuseClient
 from app.ai.prompts import SystemPrompt
+from app.ai.runtime.anthropic_io import scrub_blocks
 from app.ai.runtime.caps import CapBreach, HardCaps, check_caps
 from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.db import DbSessionFactory
@@ -974,14 +975,19 @@ async def run_agent_turn(
                                 break
                             latency_ms = int((time.monotonic() - iter_started) * 1000)
 
-                            # Verbatim Anthropic content for the next iteration's
-                            # request and for model_invocations.response_content.
-                            # The JSONB column is the source of truth that A1.7's
-                            # thinking signature roundtripping reads from.
-                            response_content = [
-                                block.model_dump(mode="json")
-                                for block in response.content
-                            ]
+                            # Anthropic content for the next iteration's request
+                            # and for ``model_invocations.response_content`` (the
+                            # source of truth A1.7's thinking signature
+                            # roundtripping reads from). ``scrub_blocks`` strips
+                            # SDK-only fields like ``parsed_output`` / ``citations``
+                            # / ``caller``; Anthropic accepts them on output but
+                            # 400s when they re-appear as input on iteration N+1.
+                            response_content = scrub_blocks(
+                                [
+                                    block.model_dump(mode="json")
+                                    for block in response.content
+                                ]
+                            )
                             cost = cost_usd_micros(
                                 response.usage, model_config.model_id
                             )
