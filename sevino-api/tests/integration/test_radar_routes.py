@@ -1,17 +1,42 @@
 """Integration tests for the /v1/radar routes."""
 
 import uuid
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from app.exceptions import MarketDataUnavailableError
+from app.main import app
 from app.models.asset import Asset
 from app.repositories.radar_item import RadarItemRepository
+from app.services.market_data import MarketDataService, get_market_data_service
 from tests.integration.conftest import _pg_available_sync
 
 pytestmark = pytest.mark.skipif(
     not _pg_available_sync, reason="Local Postgres not running"
 )
+
+
+@pytest.fixture(autouse=True)
+def mock_market_data():
+    """Stub MarketDataService for every radar test.
+
+    Autouse because the radar route's `_radar_service` factory wires in
+    `get_market_data_service` for all four endpoints (even those that
+    don't actually call market data). In test envs the real lifespan
+    never runs, so `app.state.market_data` isn't set and the real
+    Depends would raise `AttributeError`.
+
+    Default behavior is an empty quotes list (overlay fields stay null
+    on the GET response). Tests that exercise the overlay merge configure
+    `get_batch_quotes.return_value` or `.side_effect`.
+    """
+    mock = AsyncMock(spec=MarketDataService)
+    mock.get_batch_quotes.return_value = {"quotes": []}
+    app.dependency_overrides[get_market_data_service] = lambda: mock
+    yield mock
+    app.dependency_overrides.pop(get_market_data_service, None)
 
 
 @pytest.fixture
@@ -44,8 +69,8 @@ async def test_get_radar_returns_empty_list_when_user_has_no_rows(
     assert response.json() == []
 
 
-async def test_get_radar_returns_user_rows_with_null_overlay(
-    authenticated_db_client, db_session, test_user
+async def test_get_radar_returns_null_overlay_when_no_quote_matches_symbol(
+    authenticated_db_client, db_session, test_user, mock_market_data
 ):
     await RadarItemRepository.create_user_added(
         db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
@@ -60,7 +85,53 @@ async def test_get_radar_returns_user_rows_with_null_overlay(
     assert body[0]["company_name"] == "Apple Inc."
     assert body[0]["source"] == "user_added"
     assert body[0]["is_favorited"] is True
-    # T11 adds the market-data overlay; null for now.
+    # `mock_market_data` defaults to an empty quotes list → overlay null.
+    assert body[0]["price"] is None
+    assert body[0]["change_abs"] is None
+    assert body[0]["change_pct"] is None
+
+
+async def test_get_radar_merges_live_prices_into_response(
+    authenticated_db_client, db_session, test_user, mock_market_data
+):
+    await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    mock_market_data.get_batch_quotes.return_value = {
+        "quotes": [
+            {
+                "symbol": "AAPL",
+                "price": "180.50",
+                "change": "1.25",
+                "change_percent": "1.24",
+            }
+        ]
+    }
+
+    response = await authenticated_db_client.get("/v1/radar")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["price"] == "180.50"
+    assert body[0]["change_abs"] == "1.25"
+    # FMP-percent (1.24) converted to PctStr factor (0.0124), serialized
+    # with the 4-decimal PctStr precision.
+    assert body[0]["change_pct"] == "0.0124"
+
+
+async def test_get_radar_returns_200_with_null_overlay_when_market_data_fails(
+    authenticated_db_client, db_session, test_user, mock_market_data
+):
+    await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    mock_market_data.get_batch_quotes.side_effect = MarketDataUnavailableError()
+
+    response = await authenticated_db_client.get("/v1/radar")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body[0]["symbol"] == "AAPL"
     assert body[0]["price"] is None
     assert body[0]["change_abs"] is None
     assert body[0]["change_pct"] is None

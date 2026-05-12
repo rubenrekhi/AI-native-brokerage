@@ -2,12 +2,17 @@
 
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import ConflictError, NotFoundError
+from app.exceptions import (
+    ConflictError,
+    MarketDataUnavailableError,
+    NotFoundError,
+)
 from app.repositories.asset import AssetRepository
 from app.repositories.radar_item import (
     AI_ITEM_TTL,
@@ -16,20 +21,50 @@ from app.repositories.radar_item import (
     RadarItemRepository,
 )
 from app.schemas.radar import RadarItemRead
+from app.services.market_data import MarketDataService
 
 logger = structlog.get_logger(__name__)
 
 
 class RadarService:
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self, market_data: MarketDataService, db: AsyncSession
+    ) -> None:
+        self._market_data = market_data
         self._db = db
 
     async def list_for_user(
         self, user_id: uuid.UUID
     ) -> list[RadarItemRead]:
-        """Return the user's visible radar rows."""
+        """Return the user's visible radar rows with live prices merged.
+
+        Prices come from `MarketDataService.get_batch_quotes` (FMP-backed,
+        cached per-symbol). If the upstream is unavailable, returns the
+        rows with null overlay fields — the radar table is the source of
+        truth and a missing price overlay is degraded UX, not a 5xx.
+        """
         items = await RadarItemRepository.list_for_user(self._db, user_id)
-        return [RadarItemRead.model_validate(item) for item in items]
+        if not items:
+            return []
+
+        symbols = [item.symbol for item in items]
+        quotes_by_symbol: dict[str, dict] = {}
+        try:
+            response = await self._market_data.get_batch_quotes(symbols)
+            quotes_by_symbol = {
+                q["symbol"]: q for q in response.get("quotes", [])
+            }
+        except MarketDataUnavailableError:
+            logger.warning(
+                "radar_quotes_unavailable",
+                user_id=str(user_id),
+                symbol_count=len(symbols),
+            )
+
+        return [
+            _build_read(item, quotes_by_symbol.get(item.symbol))
+            for item in items
+        ]
 
     async def add_user_item(
         self, user_id: uuid.UUID, symbol: str
@@ -151,3 +186,22 @@ class RadarService:
             radar_item_id=str(item_id),
             symbol=item.symbol,
         )
+
+
+def _build_read(item, quote: dict | None) -> RadarItemRead:
+    """Construct a RadarItemRead from an ORM row + optional quote overlay.
+
+    FMP returns `change_percent` as a percentage value (e.g. "1.24" for
+    1.24%); the radar schema's `change_pct` is `PctStr` (factor of 1, so
+    0.0124 for 1.24%). The conversion happens here at the boundary.
+    """
+    base = RadarItemRead.model_validate(item)
+    if quote is None:
+        return base
+    return base.model_copy(
+        update={
+            "price": Decimal(quote["price"]),
+            "change_abs": Decimal(quote["change"]),
+            "change_pct": Decimal(quote["change_percent"]) / Decimal(100),
+        }
+    )
