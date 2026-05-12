@@ -150,7 +150,7 @@ async def test_delete_radar_does_not_let_user_b_delete_user_a_item(
     assert response.status_code == 404
 
 
-async def test_patch_radar_flips_favorite_flag(
+async def test_patch_unfavorite_user_added_returns_204_and_deletes_row(
     authenticated_db_client, db_session, test_user
 ):
     item = await RadarItemRepository.create_user_added(
@@ -161,8 +161,51 @@ async def test_patch_radar_flips_favorite_flag(
         f"/v1/radar/{item.id}", json={"is_favorited": False}
     )
 
+    assert response.status_code == 204
+    # Subsequent GET excludes the deleted row.
+    get_response = await authenticated_db_client.get("/v1/radar")
+    assert get_response.json() == []
+
+
+async def test_patch_favorite_ai_generated_nulls_expires_at(
+    authenticated_db_client, db_session, test_user
+):
+    item = await RadarItemRepository.create_ai_item(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    # Sanity: AI items start with a 7-day expiry from T3's factory.
+    assert item.expires_at is not None
+
+    response = await authenticated_db_client.patch(
+        f"/v1/radar/{item.id}", json={"is_favorited": True}
+    )
+
     assert response.status_code == 200
-    assert response.json()["is_favorited"] is False
+    body = response.json()
+    assert body["is_favorited"] is True
+    assert body["expires_at"] is None
+
+
+async def test_patch_unfavorite_ai_generated_resets_expires_at(
+    authenticated_db_client, db_session, test_user
+):
+    # Start with a favorited AI item (expires_at=None) so the unfavorite
+    # path has to repopulate the timer.
+    item = await RadarItemRepository.create_ai_item(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    item.is_favorited = True
+    item.expires_at = None
+    await db_session.flush()
+
+    response = await authenticated_db_client.patch(
+        f"/v1/radar/{item.id}", json={"is_favorited": False}
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["is_favorited"] is False
+    assert body["expires_at"] is not None
 
 
 async def test_patch_radar_returns_404_for_unknown_id(

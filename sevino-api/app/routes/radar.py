@@ -45,17 +45,31 @@ async def add_radar_item(
     return await service.add_user_item(uuid.UUID(user_id), body.symbol)
 
 
-@router.patch("/{item_id}", response_model=RadarItemRead)
+@router.patch(
+    "/{item_id}",
+    response_model=RadarItemRead,
+    responses={
+        204: {"description": "Row deleted (unfavorited user_added)"},
+    },
+)
 async def patch_radar_item(
     item_id: uuid.UUID,
     body: RadarItemUpdate,
     user_id: str = Depends(get_current_user),
     service: RadarService = Depends(_radar_service),
-) -> RadarItemRead:
-    """Toggle the favorite flag on a radar item the user owns."""
-    return await service.toggle_favorite(
+) -> Response | RadarItemRead:
+    """Toggle the favorite flag on a radar item the user owns.
+
+    Returns 200 with the updated row in most cases. Returns 204 when
+    the flip deletes the row (unfavoriting a `user_added` row — the
+    star is the watchlist-membership signal).
+    """
+    result = await service.toggle_favorite(
         uuid.UUID(user_id), item_id, body.is_favorited
     )
+    if result is None:
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return result
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
