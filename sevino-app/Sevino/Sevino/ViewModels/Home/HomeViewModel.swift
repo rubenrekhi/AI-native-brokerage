@@ -69,11 +69,23 @@ final class HomeViewModel {
      appear.
      */
     func resume(conversationId: UUID) async {
+        // Load the transcript *before* swapping the live store so the home
+        // surface keeps rendering the previous conversation throughout the
+        // sidebar's spring animation. Swapping first causes a visible flicker:
+        // messages briefly drops to [] (showing the greeting), then the new
+        // chat pops in mid-animation at a different offset, which reads as
+        // choppy when the user taps a sidebar row. Loading first means the
+        // user sees old chat → new chat as a single, clean transition once
+        // the sidebar finishes closing.
+        //
+        // On failure, the store stays as-is — the user gets the resume-error
+        // alert and the previous chat is still visible. That's the right UX:
+        // a failed resume shouldn't blank the screen.
         resumeError = nil
         let store = conversationStoreFactory(conversationId)
-        conversationStore = store
         do {
             try await store.load()
+            conversationStore = store
         } catch {
             resumeError = error.localizedDescription
         }

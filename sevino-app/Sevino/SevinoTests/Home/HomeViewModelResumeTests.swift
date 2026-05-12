@@ -80,10 +80,15 @@ final class HomeViewModelResumeTests: XCTestCase {
         XCTAssertNil(viewModel.resumeError, "happy path leaves no error")
     }
 
-    func testResumeFailureSurfacesResumeError() async {
-        // Acceptance criterion: the failed load is surfaced on the view
-        // model as `resumeError` (not silently swallowed). Closing the
-        // sidebar without feedback was the issue auditors flagged.
+    func testResumeFailureSurfacesResumeErrorAndKeepsPreviousStore() async {
+        // Acceptance criteria:
+        // - The failed load is surfaced on the view model as `resumeError`
+        //   (not silently swallowed).
+        // - The previous `conversationStore` stays in place — we don't
+        //   blank the screen when load fails. The user sees their prior
+        //   chat plus the resume-error alert, then can dismiss and try
+        //   again. This is part of the same fix that loads-before-swap
+        //   for the no-flicker animation.
         let mockAPI = MockAPIClient()
         mockAPI.errorToThrow = URLError(.notConnectedToInternet)
         let initialStore = ConversationStore(
@@ -109,9 +114,11 @@ final class HomeViewModelResumeTests: XCTestCase {
         let conversationId = UUID()
         await viewModel.resume(conversationId: conversationId)
 
-        XCTAssertNotIdentical(viewModel.conversationStore, initialStore)
-        XCTAssertEqual(viewModel.conversationStore.conversationId, conversationId)
-        XCTAssertFalse(viewModel.isConversationActive, "no transcript on failed load")
+        XCTAssertIdentical(
+            viewModel.conversationStore,
+            initialStore,
+            "failed resume must not swap the store"
+        )
         XCTAssertNotNil(viewModel.resumeError, "failure must surface to the view")
     }
 
