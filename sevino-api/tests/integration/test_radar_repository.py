@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.models.radar_item import RadarItem
@@ -214,3 +215,58 @@ async def test_create_user_added_allows_same_symbol_for_different_user(
         db_session, user_id=other_user, symbol="AAPL", company_name="Apple Inc.",
     )
     assert item.user_id == other_user
+
+
+async def test_delete_removes_the_row(db_session, test_user):
+    item = await RadarItemRepository.create_user_added(
+        db_session, user_id=test_user, symbol="AAPL", company_name="Apple Inc.",
+    )
+    item_id = item.id
+
+    await RadarItemRepository.delete(db_session, item)
+
+    assert await RadarItemRepository.get_by_id_for_user(
+        db_session, item_id, test_user
+    ) is None
+
+
+async def test_delete_expired_ai_items_only_deletes_expired_non_favorited_ai_rows(
+    db_session, test_user
+):
+    now = datetime.now(timezone.utc)
+    past = now - timedelta(days=1)
+    future = now + timedelta(days=1)
+    # (symbol, source, is_favorited, expires_at). Only EXPIRED_AI should
+    # match the sweep predicate. USER_ADDED_DRIFT exercises the
+    # defense-in-depth source filter — the row is a state that the write
+    # path shouldn't produce, but the sweep must not touch user_added.
+    rows = [
+        ("EXPIRED_AI", "ai_generated", False, past),
+        ("FRESH_AI", "ai_generated", False, future),
+        ("FAV_AI", "ai_generated", True, None),
+        ("USER_ADDED", "user_added", True, None),
+        ("USER_ADDED_DRIFT", "user_added", False, past),
+    ]
+    for symbol, source, fav, expires in rows:
+        db_session.add(RadarItem(
+            user_id=test_user, symbol=symbol,
+            source=source, is_favorited=fav, expires_at=expires,
+        ))
+    await db_session.flush()
+
+    deleted_count = await RadarItemRepository.delete_expired_ai_items(db_session)
+
+    assert deleted_count == 1
+    result = await db_session.execute(select(RadarItem.symbol))
+    remaining = set(result.scalars().all())
+    assert remaining == {"FRESH_AI", "FAV_AI", "USER_ADDED", "USER_ADDED_DRIFT"}
+
+
+async def test_delete_expired_ai_items_returns_zero_when_no_match(
+    db_session, test_user
+):
+    await RadarItemRepository.create_ai_item(
+        db_session, user_id=test_user, symbol="NVDA", company_name="NVIDIA Corp.",
+    )
+
+    assert await RadarItemRepository.delete_expired_ai_items(db_session) == 0

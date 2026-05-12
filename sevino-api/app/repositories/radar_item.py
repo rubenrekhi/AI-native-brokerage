@@ -10,6 +10,7 @@ lagging. Favorited rows always have `expires_at = NULL` by invariant
 import uuid
 from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import delete as sa_delete
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.functions import func
@@ -113,3 +114,25 @@ class RadarItemRepository:
         db.add(item)
         await db.flush()
         return item
+
+    @staticmethod
+    async def delete(db: AsyncSession, item: RadarItem) -> None:
+        """Hard-delete a radar row."""
+        await db.delete(item)
+        await db.flush()
+
+    @staticmethod
+    async def delete_expired_ai_items(db: AsyncSession) -> int:
+        """Bulk-delete expired non-favorited AI rows. Returns row count.
+
+        Used by the daily sweep cron. The defense-in-depth `source` filter
+        guarantees `user_added` rows are never touched even if the
+        favorited-vs-expiry invariant ever drifts elsewhere.
+        """
+        stmt = sa_delete(RadarItem).where(
+            RadarItem.source == SOURCE_AI_GENERATED,
+            RadarItem.is_favorited.is_(False),
+            RadarItem.expires_at < func.now(),
+        )
+        result = await db.execute(stmt)
+        return result.rowcount or 0
