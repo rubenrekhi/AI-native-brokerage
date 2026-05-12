@@ -6084,6 +6084,26 @@
         }
       }
     },
+    "sidebar.resume_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "sidebar.resume_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t open conversation"
+          }
+        }
+      }
+    },
     "sidebar.search_placeholder" : {
       "localizations" : {
         "en" : {
@@ -6100,6 +6120,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Talk to the founders"
+          }
+        }
+      }
+    },
+    "sidebar.untitled_conversation" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Conversation"
           }
         }
       }

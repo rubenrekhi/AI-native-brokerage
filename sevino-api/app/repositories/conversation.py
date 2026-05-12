@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,59 @@ from app.models.tool_execution import ToolExecution
 # Tool execution statuses that imply the call has finished and
 # ``completed_at`` should be stamped if the caller didn't pass it.
 _TERMINAL_TOOL_STATUSES = frozenset({"success", "error", "cancelled"})
+
+# Max characters for an auto-derived conversation title (first user message).
+_TITLE_MAX_CHARS = 40
+
+
+def _derive_title_from_blocks(content_blocks: list[dict[str, Any]]) -> str | None:
+    """Pull a stable title out of the first user message.
+
+    Looks for the first ``{"type": "text", ...}`` block, collapses internal
+    whitespace, and truncates to roughly :data:`_TITLE_MAX_CHARS`. Returns
+    ``None`` if no text block is present so the column stays NULL — list
+    callers fall back to a client-side placeholder rather than rendering an
+    empty string.
+    """
+    for block in content_blocks:
+        if block.get("type") != "text":
+            continue
+        text = block.get("text")
+        if not isinstance(text, str):
+            continue
+        cleaned = " ".join(text.split())
+        if not cleaned:
+            continue
+        if len(cleaned) <= _TITLE_MAX_CHARS:
+            return cleaned
+        return cleaned[: _TITLE_MAX_CHARS - 1].rstrip() + "…"
+    return None
+
+
+def extract_text_preview(
+    content_blocks: list[dict[str, Any]] | None, max_chars: int = 120
+) -> str | None:
+    """First-text-block preview, used by the list endpoint.
+
+    Mirrors :func:`_derive_title_from_blocks` but allows a longer truncation
+    so the sidebar shows enough of the assistant's reply (or user prompt) to
+    be useful at a glance.
+    """
+    if not content_blocks:
+        return None
+    for block in content_blocks:
+        if block.get("type") != "text":
+            continue
+        text = block.get("text")
+        if not isinstance(text, str):
+            continue
+        cleaned = " ".join(text.split())
+        if not cleaned:
+            continue
+        if len(cleaned) <= max_chars:
+            return cleaned
+        return cleaned[: max_chars - 1].rstrip() + "…"
+    return None
 
 
 class ConversationRepository:
@@ -81,6 +134,103 @@ class ConversationRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_conversations_for_user(
+        db: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        limit: int,
+        cursor_last_message_at: datetime | None = None,
+        cursor_id: uuid.UUID | None = None,
+    ) -> list[tuple[Conversation, list[dict[str, Any]] | None]]:
+        """List a user's conversations ordered by recency.
+
+        Skips rows with NULL ``last_message_at`` (i.e. conversations whose
+        first turn hasn't landed yet) so the sidebar only surfaces
+        conversations the user has actually engaged with. The
+        ``(last_message_at, id)`` tuple is a stable sort key — ``id`` breaks
+        ties when two conversations share a timestamp.
+
+        Each row carries the ``content_blocks`` of its most recent message so
+        the endpoint can derive a one-line preview without a follow-up
+        query. The correlated subquery runs once per row in the result page
+        (≤ ``limit`` rows) so the cost is bounded.
+        """
+        last_blocks_subq = (
+            select(Message.content_blocks)
+            .where(Message.conversation_id == Conversation.id)
+            .order_by(Message.created_at.desc(), Message.id.desc())
+            .limit(1)
+            .correlate(Conversation)
+            .scalar_subquery()
+        )
+
+        stmt = (
+            select(Conversation, last_blocks_subq.label("last_content_blocks"))
+            .where(Conversation.user_id == user_id)
+            .where(Conversation.last_message_at.is_not(None))
+        )
+        if cursor_last_message_at is not None and cursor_id is not None:
+            # Compound row comparison: keep walking down the (timestamp, id)
+            # sort key past the cursor's position. NULLs are already excluded
+            # by the predicate above, so the tuple ordering is total.
+            stmt = stmt.where(
+                or_(
+                    Conversation.last_message_at < cursor_last_message_at,
+                    and_(
+                        Conversation.last_message_at == cursor_last_message_at,
+                        Conversation.id < cursor_id,
+                    ),
+                )
+            )
+        stmt = stmt.order_by(
+            Conversation.last_message_at.desc(), Conversation.id.desc()
+        ).limit(limit)
+
+        result = await db.execute(stmt)
+        return [(row[0], row[1]) for row in result.all()]
+
+    @staticmethod
+    async def list_messages_for_conversation(
+        db: AsyncSession,
+        *,
+        conversation_id: uuid.UUID,
+        user_id: uuid.UUID,
+        limit: int,
+        cursor_created_at: datetime | None = None,
+        cursor_id: uuid.UUID | None = None,
+    ) -> list[Message]:
+        """List a conversation's messages in arrival order, owner-scoped.
+
+        Raises :class:`NotFoundError` when the conversation doesn't exist or
+        belongs to another user — same response shape either way so the
+        endpoint can't be used to probe for the existence of foreign
+        conversation ids.
+        """
+        conversation = await db.get(Conversation, conversation_id)
+        if conversation is None or conversation.user_id != user_id:
+            raise NotFoundError(
+                "Conversation not found", resource="conversation"
+            )
+
+        stmt = select(Message).where(Message.conversation_id == conversation_id)
+        if cursor_created_at is not None and cursor_id is not None:
+            stmt = stmt.where(
+                or_(
+                    Message.created_at > cursor_created_at,
+                    and_(
+                        Message.created_at == cursor_created_at,
+                        Message.id > cursor_id,
+                    ),
+                )
+            )
+        stmt = stmt.order_by(
+            Message.created_at.asc(), Message.id.asc()
+        ).limit(limit)
+
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    @staticmethod
     async def _append_message(
         db: AsyncSession,
         *,
@@ -94,6 +244,35 @@ class ConversationRepository:
             content_blocks=content_blocks,
         )
         db.add(message)
+        await db.flush()
+
+        # Maintain the denormalised list-view fields on the conversation:
+        # * ``last_message_at`` tracks the most recent message for sidebar
+        #   sorting. ``GREATEST`` guards against concurrent appends landing
+        #   out-of-order — a stale timestamp would push the conversation
+        #   down the sidebar by a few seconds until the next turn.
+        # * ``title`` is set from the first user message and frozen
+        #   afterwards (``CASE WHEN title IS NULL THEN :t ELSE title END``)
+        #   so follow-up turns don't rewrite the sidebar label.
+        # Single UPDATE keeps the per-message write to one round-trip.
+        values: dict[str, Any] = {
+            "last_message_at": func.greatest(
+                func.coalesce(Conversation.last_message_at, message.created_at),
+                message.created_at,
+            ),
+        }
+        if role == "user":
+            derived_title = _derive_title_from_blocks(content_blocks)
+            if derived_title is not None:
+                values["title"] = case(
+                    (Conversation.title.is_(None), derived_title),
+                    else_=Conversation.title,
+                )
+        await db.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(**values)
+        )
         await db.flush()
         return message
 

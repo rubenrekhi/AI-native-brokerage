@@ -376,9 +376,13 @@ class TestHappyPath:
                 .all()
             )
             assert [m.role for m in msgs] == ["user", "assistant"]
-            assert msgs[0].content_blocks == [
-                {"type": "text", "text": "how is AMD"}
-            ]
+            # User text block carries a server-minted ``block_id`` for the
+            # iOS resume decoder; assert shape without pinning the ULID.
+            assert len(msgs[0].content_blocks) == 1
+            user_block = msgs[0].content_blocks[0]
+            assert user_block["type"] == "text"
+            assert user_block["text"] == "how is AMD"
+            assert isinstance(user_block["block_id"], str) and user_block["block_id"]
             # B2.4: persisted assistant blocks carry the same block_id the
             # ``block_start`` frame announced, so iOS can correlate the
             # streamed envelope with the durable row.

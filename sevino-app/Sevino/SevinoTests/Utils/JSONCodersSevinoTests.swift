@@ -44,4 +44,36 @@ final class JSONCodersSevinoTests: XCTestCase {
         XCTAssertTrue(string.contains("my_field"))
         XCTAssertFalse(string.contains("myField"))
     }
+
+    // Pydantic v2 serializes `datetime` with microseconds by default
+    // (`2026-05-11T22:14:16.704003Z`). The stock `.iso8601` strategy
+    // rejects fractional seconds, so the Sevino decoder swaps in a custom
+    // strategy that accepts both shapes. These tests pin that behavior.
+
+    func test_decoder_acceptsFractionalSeconds() throws {
+        struct Probe: Decodable { let ts: Date }
+        let json = Data(#"{"ts": "2026-05-11T22:14:16.704003Z"}"#.utf8)
+
+        let probe = try JSONDecoder.sevino().decode(Probe.self, from: json)
+
+        let expected = ISO8601DateFormatter()
+        expected.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let target = try XCTUnwrap(
+            expected.date(from: "2026-05-11T22:14:16.704003Z")
+        )
+        XCTAssertEqual(probe.ts, target)
+    }
+
+    func test_decoder_rejectsGarbageDateAsDataCorrupted() {
+        struct Probe: Decodable { let ts: Date }
+        let json = Data(#"{"ts": "not a date"}"#.utf8)
+
+        XCTAssertThrowsError(
+            try JSONDecoder.sevino().decode(Probe.self, from: json)
+        ) { error in
+            guard case DecodingError.dataCorrupted = error else {
+                return XCTFail("expected DecodingError.dataCorrupted, got \(error)")
+            }
+        }
+    }
 }

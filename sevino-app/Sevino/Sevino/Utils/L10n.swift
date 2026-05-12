@@ -520,6 +520,9 @@ enum L10n {
         static let searchPlaceholder = String(localized: "sidebar.search_placeholder")
         static let chatsHeader = String(localized: "sidebar.chats_header")
         static let newChatAccessibility = String(localized: "sidebar.new_chat_accessibility")
+        static let untitledConversation = String(localized: "sidebar.untitled_conversation")
+        static let resumeErrorTitle = String(localized: "sidebar.resume_error_title")
+        static let resumeErrorDismiss = String(localized: "sidebar.resume_error_dismiss")
     }
 
     enum Settings {

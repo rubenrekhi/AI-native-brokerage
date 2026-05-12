@@ -71,6 +71,19 @@ class IncompleteOnboardingError(Exception):
         self.missing_fields = missing_fields or []
 
 
+class InvalidCursorError(Exception):
+    """Cursor query parameter is malformed (bad base64, JSON, or fields).
+
+    Surfaces as 422 with ``code=INVALID_CURSOR`` so clients can distinguish
+    "you sent us garbage" from "the page is empty" — both could otherwise
+    look like a 422 ``VALIDATION_ERROR``.
+    """
+
+    def __init__(self, message: str = "Invalid cursor"):
+        self.message = message
+        super().__init__(message)
+
+
 class MarketDataError(Exception):
     """No data available for the requested symbol (e.g. unknown ticker)."""
 
@@ -172,6 +185,12 @@ async def conflict_error_handler(
         if exc.field:
             detail["field"] = exc.field
     return error_response(409, exc.message, exc.code, detail=detail)
+
+
+async def invalid_cursor_error_handler(
+    request: Request, exc: InvalidCursorError
+) -> JSONResponse:
+    return error_response(422, exc.message, "INVALID_CURSOR")
 
 
 async def incomplete_onboarding_error_handler(
@@ -407,6 +426,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     app.add_exception_handler(AuthorizationError, authorization_error_handler)
     app.add_exception_handler(NotFoundError, not_found_error_handler)
     app.add_exception_handler(ConflictError, conflict_error_handler)
+    app.add_exception_handler(InvalidCursorError, invalid_cursor_error_handler)
     app.add_exception_handler(IncompleteOnboardingError, incomplete_onboarding_error_handler)
     from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
     app.add_exception_handler(AlpacaBrokerError, alpaca_error_handler)

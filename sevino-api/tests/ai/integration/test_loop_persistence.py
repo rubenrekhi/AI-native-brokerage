@@ -298,9 +298,14 @@ class TestHappyPathPersistence:
             msgs = list(msgs_q.scalars().all())
             assert len(msgs) == 2
             assert msgs[0].role == "user"
-            assert msgs[0].content_blocks == [
-                {"type": "text", "text": "how is AMD"}
-            ]
+            # User text block carries a server-minted ``block_id`` (matches
+            # assistant block shape so the iOS resume decoder can hydrate
+            # the bubble). Don't pin the ULID, just verify shape + text.
+            assert len(msgs[0].content_blocks) == 1
+            user_block = msgs[0].content_blocks[0]
+            assert user_block["type"] == "text"
+            assert user_block["text"] == "how is AMD"
+            assert isinstance(user_block["block_id"], str) and user_block["block_id"]
             assert msgs[1].role == "assistant"
             assert msgs[1].content_blocks == [
                 {

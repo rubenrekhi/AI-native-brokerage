@@ -35,14 +35,19 @@ SSE stream opens. Three outcomes:
 from __future__ import annotations
 
 import asyncio
+import base64
+import binascii
+import json
 import uuid
+from datetime import datetime
 from typing import AsyncIterator
 
 import sentry_sdk
 import structlog
 from anthropic import AsyncAnthropic
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
 from ulid import ULID
@@ -75,15 +80,213 @@ from app.ai.transport.idempotency import (
 )
 from app.auth import get_current_user
 from app.config import settings
-from app.exceptions import ConflictError
+from app.database import get_db
+from app.exceptions import ConflictError, InvalidCursorError
 from app.models.agent_turn import AgentTurn
 from app.rate_limit import limiter
-from app.repositories.conversation import ConversationRepository
-from app.schemas.conversations import ChatTurnRequest
+from app.repositories.conversation import (
+    ConversationRepository,
+    extract_text_preview,
+)
+from app.schemas.conversations import (
+    ChatTurnRequest,
+    ConversationListItem,
+    ConversationListResponse,
+    ConversationMessagesResponse,
+    MessageItem,
+)
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
+
+# Page-size knobs for the SEV-564 list endpoints. Bounded above so a single
+# request can't materialise an unbounded query result; the lower bound on
+# ``limit`` keeps callers from polling a noop.
+_LIST_DEFAULT_LIMIT = 20
+_LIST_MAX_LIMIT = 100
+_MESSAGES_DEFAULT_LIMIT = 50
+_MESSAGES_MAX_LIMIT = 200
+
+
+def _encode_cursor(payload: dict[str, str]) -> str:
+    """Base64url-encode a JSON cursor payload (no padding stripped — clients
+    round-trip the exact string)."""
+    raw = json.dumps(payload, sort_keys=True).encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii")
+
+
+def _decode_cursor(cursor: str) -> dict[str, str]:
+    """Inverse of :func:`_encode_cursor`.
+
+    Raises ``ValueError`` if the cursor is malformed. The route translates
+    that into a 422 via the validation handler so callers see a structured
+    error rather than an opaque 500.
+    """
+    try:
+        decoded = base64.urlsafe_b64decode(cursor.encode("ascii"))
+        parsed = json.loads(decoded)
+    except (binascii.Error, json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise ValueError(f"Invalid cursor: {exc}") from exc
+    if not isinstance(parsed, dict):
+        raise ValueError("Invalid cursor: payload must be an object")
+    return parsed
+
+
+def _parse_list_cursor(
+    cursor: str | None,
+) -> tuple[datetime | None, uuid.UUID | None]:
+    """Decode a list-endpoint cursor into ``(last_message_at, id)`` parts."""
+    if cursor is None:
+        return None, None
+    payload = _decode_cursor(cursor)
+    ts = payload.get("last_message_at")
+    rid = payload.get("id")
+    if not isinstance(ts, str) or not isinstance(rid, str):
+        raise ValueError("Invalid cursor: missing fields")
+    return datetime.fromisoformat(ts), uuid.UUID(rid)
+
+
+def _parse_messages_cursor(
+    cursor: str | None,
+) -> tuple[datetime | None, uuid.UUID | None]:
+    """Decode a messages-endpoint cursor into ``(created_at, id)`` parts."""
+    if cursor is None:
+        return None, None
+    payload = _decode_cursor(cursor)
+    ts = payload.get("created_at")
+    rid = payload.get("id")
+    if not isinstance(ts, str) or not isinstance(rid, str):
+        raise ValueError("Invalid cursor: missing fields")
+    return datetime.fromisoformat(ts), uuid.UUID(rid)
+
+
+@router.get("", response_model=ConversationListResponse)
+@limiter.limit("60/minute")
+async def list_conversations(
+    request: Request,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(
+        default=_LIST_DEFAULT_LIMIT, ge=1, le=_LIST_MAX_LIMIT
+    ),
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationListResponse:
+    """Paginated list of the authenticated user's conversations.
+
+    Ordered by ``last_message_at DESC`` so the sidebar shows the most
+    recently active threads at the top. Conversations whose first turn
+    hasn't landed yet (``last_message_at IS NULL``) are filtered out so the
+    sidebar never shows a row the user has never engaged with.
+
+    The cursor is opaque to clients — round-trip the ``next_cursor`` value
+    from a previous response untouched.
+    """
+    user_uuid = uuid.UUID(user_id)
+    try:
+        cursor_ts, cursor_id = _parse_list_cursor(cursor)
+    except ValueError as exc:
+        raise InvalidCursorError(str(exc)) from exc
+
+    rows = await ConversationRepository.list_conversations_for_user(
+        db,
+        user_id=user_uuid,
+        limit=limit + 1,
+        cursor_last_message_at=cursor_ts,
+        cursor_id=cursor_id,
+    )
+
+    items: list[ConversationListItem] = []
+    next_cursor: str | None = None
+    for index, (conversation, last_content_blocks) in enumerate(rows):
+        if index >= limit:
+            # The (limit+1)-th row is the lookahead used to detect another
+            # page. Don't include it in the response — instead record the
+            # last *returned* row's sort key as the next cursor.
+            last_returned = rows[limit - 1][0]
+            next_cursor = _encode_cursor(
+                {
+                    "last_message_at": last_returned.last_message_at.isoformat(),
+                    "id": str(last_returned.id),
+                }
+            )
+            break
+        items.append(
+            ConversationListItem(
+                id=conversation.id,
+                title=conversation.title,
+                last_message_at=conversation.last_message_at,
+                last_message_preview=extract_text_preview(last_content_blocks),
+            )
+        )
+
+    return ConversationListResponse(items=items, next_cursor=next_cursor)
+
+
+@router.get(
+    "/{conversation_id}/messages",
+    response_model=ConversationMessagesResponse,
+)
+@limiter.limit("120/minute")
+async def list_conversation_messages(
+    request: Request,
+    conversation_id: uuid.UUID,
+    cursor: str | None = Query(default=None),
+    limit: int = Query(
+        default=_MESSAGES_DEFAULT_LIMIT, ge=1, le=_MESSAGES_MAX_LIMIT
+    ),
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConversationMessagesResponse:
+    """Paginated transcript of a single conversation, oldest message first.
+
+    Returns 404 (not 403) when the conversation belongs to another user, so
+    the endpoint can't be used to probe for the existence of conversation
+    ids the caller doesn't own.
+
+    ``content_blocks`` is the persisted JSONB column verbatim — for v0 the
+    loop only persists ``text`` blocks (see SEV-571 for thinking-block
+    persistence), so resumed transcripts render text-only assistant replies.
+    Clients should log + drop unknown block types rather than crashing the
+    resume.
+    """
+    user_uuid = uuid.UUID(user_id)
+    try:
+        cursor_ts, cursor_id = _parse_messages_cursor(cursor)
+    except ValueError as exc:
+        raise InvalidCursorError(str(exc)) from exc
+
+    messages = await ConversationRepository.list_messages_for_conversation(
+        db,
+        conversation_id=conversation_id,
+        user_id=user_uuid,
+        limit=limit + 1,
+        cursor_created_at=cursor_ts,
+        cursor_id=cursor_id,
+    )
+
+    items: list[MessageItem] = []
+    next_cursor: str | None = None
+    for index, message in enumerate(messages):
+        if index >= limit:
+            last_returned = messages[limit - 1]
+            next_cursor = _encode_cursor(
+                {
+                    "created_at": last_returned.created_at.isoformat(),
+                    "id": str(last_returned.id),
+                }
+            )
+            break
+        items.append(
+            MessageItem(
+                id=message.id,
+                role=message.role,
+                created_at=message.created_at,
+                content_blocks=message.content_blocks,
+            )
+        )
+
+    return ConversationMessagesResponse(items=items, next_cursor=next_cursor)
 
 
 @router.post("/{conversation_id}/turns")

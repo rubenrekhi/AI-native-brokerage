@@ -49,9 +49,10 @@ final class ConversationStore {
     private(set) var currentTurnId: UUID?
 
     private let sseClient: any SSEClientProtocol
-    private let conversationId: UUID
+    let conversationId: UUID
     private let baseURL: String
     private let idempotencyKeyFactory: @Sendable () -> String
+    private let apiClient: any APIClientProtocol
 
     /// Default `JSONDecoder` for `SSEEvent`. The event payload structs declare
     /// explicit `CodingKeys` (e.g. `turnId = "turn_id"`) that *only* match
@@ -81,12 +82,72 @@ final class ConversationStore {
             tokenProvider: { await (AuthService.shared as AuthServiceProtocol).accessToken }
         ),
         baseURL: String = AppConfig.apiBaseURL,
-        idempotencyKeyFactory: @escaping @Sendable () -> String = { UUID().uuidString }
+        idempotencyKeyFactory: @escaping @Sendable () -> String = { UUID().uuidString },
+        apiClient: any APIClientProtocol = APIClient.shared
     ) {
         self.conversationId = conversationId
         self.sseClient = sseClient
         self.baseURL = baseURL
         self.idempotencyKeyFactory = idempotencyKeyFactory
+        self.apiClient = apiClient
+    }
+
+    /**
+     Replace `messages` with the persisted transcript for `conversationId`.
+
+     Calls `GET /v1/conversations/{id}/messages` and rebuilds the in-memory
+     message list from the JSONB-persisted blocks. Used by the sidebar's
+     tap-to-resume flow: a new store is constructed with the chosen
+     conversation id, then `load()` populates it before the chat surface
+     comes into view.
+
+     For v0 the loop only persists `text` blocks; future block types
+     (status pills, stock cards) will need their own persistence policy
+     (see SEV-571 for thinking blocks). Unknown block payloads log and are
+     dropped — a single decode failure won't tear down the whole resume.
+
+     Pagination intentionally not threaded through to the UI: typical
+     conversations fit in one page (50 messages) and infinite-scroll is a
+     follow-up. The `next_cursor` field is dropped here; if a transcript
+     overflows one page the client only sees the oldest 50 turns until the
+     follow-up lands.
+
+     Throws on transport / decode failures and parks `state` in `.error`
+     (matching `send(text:)`'s pattern) so the view layer has one shape to
+     handle regardless of which API surface raised.
+     */
+    func load() async throws {
+        let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/messages"
+        do {
+            let response: ConversationMessagesDTO = try await apiClient.get(path)
+            messages = response.items.map(buildMessage(from:))
+            state = .idle
+        } catch {
+            state = .error(.internalError, error.localizedDescription)
+            throw error
+        }
+    }
+
+    /// Translate one wire-format `MessageDTO` into a UI `Message`. Decode
+    /// failures on individual blocks are swallowed (logged in DEBUG) so a
+    /// single malformed block doesn't drop the whole message — the user
+    /// still sees the rest of the transcript around the bad row.
+    /// Reuses the cached `encoder`/`blockDecoder` from `self` so a 50-
+    /// message resume doesn't allocate a hundred fresh coders.
+    private func buildMessage(from dto: MessageDTO) -> Message {
+        let role = Role(rawValue: dto.role) ?? .assistant
+        let blocks: [Block] = dto.contentBlocks.compactMap { raw in
+            do {
+                let data = try encoder.encode(raw)
+                return try blockDecoder.decode(Block.self, from: data)
+            } catch {
+                #if DEBUG
+                Self.logger.error("resume: dropped malformed block: \(String(describing: error), privacy: .public)")
+                #endif
+                return nil
+            }
+        }
+        return Message(id: dto.id, role: role, blocks: blocks)
     }
 
     /**

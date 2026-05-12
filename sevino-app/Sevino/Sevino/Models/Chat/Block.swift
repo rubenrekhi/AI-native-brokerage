@@ -77,9 +77,35 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
 /// Plain markdown payload — rendered with `swift-markdown-ui` per C4.1.
 /// Streamed via `text_delta` events that append to `text` between
 /// `block_start` and `block_end`.
+///
+/// Custom `init(from:)` because the loop persists user messages as
+/// ``{"type": "text", "text": "..."}`` without a `block_id` (loop.py
+/// `append_user_message` call site). Resuming a conversation with the
+/// synthesized decoder would reject every user block and drop user
+/// bubbles entirely. We mint a fresh ULID-like id when the wire payload
+/// omits it — user-message blocks never receive `block_data` patches, so
+/// the synthetic id only needs to be unique within the resumed
+/// transcript (not stable across reloads).
 struct TextBlock: Codable, Equatable, Sendable {
     let blockId: String
     let text: String
+
+    private enum CodingKeys: String, CodingKey {
+        case blockId, text
+    }
+
+    init(blockId: String, text: String) {
+        self.blockId = blockId
+        self.text = text
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.text = try container.decode(String.self, forKey: .text)
+        self.blockId =
+            (try? container.decode(String.self, forKey: .blockId))
+            ?? UUID().uuidString
+    }
 }
 
 /// Inline progress pill ("Searching the web", "Fetching price"). The runtime

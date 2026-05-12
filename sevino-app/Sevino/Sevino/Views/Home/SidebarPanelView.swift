@@ -10,6 +10,15 @@ struct SidebarPanelView: View {
     let founderPhoneURL: URL?
     let founderTextURL: URL?
     let contactEmailURL: URL?
+    /// Conversation id of the chat currently rendered on the home surface,
+    /// or `nil` when no conversation is active (fresh greeting state). The
+    /// matching sidebar row gets the accent background so the user can see
+    /// which thread is loaded.
+    var activeConversationId: UUID? = nil
+    /// Invoked when the user taps a sidebar row. Owner (`HomeView`) is
+    /// responsible for calling `HomeViewModel.resume(conversationId:)` and
+    /// dismissing the sidebar; this view just emits the intent.
+    var onSelectChat: ((UUID) -> Void)? = nil
 
     @State private var searchText = ""
     @State private var showContactOptions = false
@@ -59,7 +68,7 @@ struct SidebarPanelView: View {
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(chats) { chat in
-                            Button(action: {}) {
+                            Button(action: { onSelectChat?(chat.conversationId) }) {
                                 Text(chat.title)
                                     .font(.system(size: 16 * scale))
                                     .foregroundStyle(Color.sevinoSecondary)
@@ -68,13 +77,13 @@ struct SidebarPanelView: View {
                                     .padding(.vertical, 11 * scale)
                                     .padding(.horizontal, 12 * scale)
                                     .background(
-                                        chat.id == chats.first?.id
+                                        chat.conversationId == activeConversationId
                                             ? Color.sevinoGreyAccent.opacity(0.3)
                                             : .clear,
                                         in: .rect(cornerRadius: 8 * scale)
                                     )
                             }
-                            .disabled(true)
+                            .disabled(onSelectChat == nil)
                         }
                     }
                 }

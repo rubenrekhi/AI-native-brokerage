@@ -383,9 +383,14 @@ class TestHappyPath:
 
         repo_mocks["append_user_message"].assert_awaited_once()
         kwargs = repo_mocks["append_user_message"].call_args.kwargs
-        assert kwargs["content_blocks"] == [
-            {"type": "text", "text": "how is AMD"}
-        ]
+        # The loop mints a server-assigned ULID ``block_id`` so the persisted
+        # shape matches assistant text blocks — iOS resume rejects blocks
+        # without it. Verify the user-visible fields without pinning the ULID.
+        assert len(kwargs["content_blocks"]) == 1
+        block = kwargs["content_blocks"][0]
+        assert block["type"] == "text"
+        assert block["text"] == "how is AMD"
+        assert isinstance(block["block_id"], str) and block["block_id"]
 
     async def test_starts_agent_turn_with_prompt_hash_and_model(self, repo_mocks):
         client = _make_client(_make_response())
