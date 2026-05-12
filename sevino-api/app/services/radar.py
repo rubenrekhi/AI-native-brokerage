@@ -1,6 +1,7 @@
 """Business logic for the `/v1/radar` endpoints."""
 
 import uuid
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy.exc import IntegrityError
@@ -8,7 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import ConflictError, NotFoundError
 from app.repositories.asset import AssetRepository
-from app.repositories.radar_item import RadarItemRepository
+from app.repositories.radar_item import (
+    AI_ITEM_TTL,
+    SOURCE_AI_GENERATED,
+    SOURCE_USER_ADDED,
+    RadarItemRepository,
+)
 from app.schemas.radar import RadarItemRead
 
 logger = structlog.get_logger(__name__)
@@ -79,13 +85,22 @@ class RadarService:
         user_id: uuid.UUID,
         item_id: uuid.UUID,
         is_favorited: bool,
-    ) -> RadarItemRead:
+    ) -> RadarItemRead | None:
         """Set the favorite flag on a radar item the user owns.
 
-        T9 scope: basic flag toggle only. Source-specific behavior
-        (delete-on-unfavorite for `user_added` rows, expires_at reset for
-        `ai_generated` rows) is layered on in T10 — until then, an
-        unfavorited `user_added` row can exist transiently.
+        Behavior diverges by `source`:
+
+        - ``user_added`` rows unfavorited are deleted (the star is the
+          watchlist-membership signal — unstar = remove). Returns
+          ``None`` so the route can render 204 No Content.
+        - ``ai_generated`` rows have ``expires_at`` adjusted alongside
+          the flip: favoriting nulls it (sticky), unfavoriting resets
+          it to ``now() + AI_ITEM_TTL``.
+
+        No-op when the row is already at the requested state.
+
+        Post-condition: an unfavorited ``user_added`` row cannot exist
+        — the sweep cron and read-time expiry filter can trust this.
         """
         item = await RadarItemRepository.get_by_id_for_user(
             self._db, item_id, user_id
@@ -96,7 +111,23 @@ class RadarService:
         if item.is_favorited == is_favorited:
             return RadarItemRead.model_validate(item)
 
+        if not is_favorited and item.source == SOURCE_USER_ADDED:
+            await RadarItemRepository.delete(self._db, item)
+            logger.info(
+                "radar_item_unfavorited_deleted",
+                user_id=str(user_id),
+                radar_item_id=str(item_id),
+                symbol=item.symbol,
+            )
+            return None
+
         item.is_favorited = is_favorited
+        if item.source == SOURCE_AI_GENERATED:
+            item.expires_at = (
+                None
+                if is_favorited
+                else datetime.now(timezone.utc) + AI_ITEM_TTL
+            )
         await self._db.flush()
         await self._db.refresh(item)
         return RadarItemRead.model_validate(item)

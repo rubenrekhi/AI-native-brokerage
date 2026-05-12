@@ -1,6 +1,6 @@
 """Unit tests for RadarService."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -165,7 +165,12 @@ async def test_remove_raises_not_found_when_item_unknown(monkeypatch):
         await RadarService(AsyncMock()).remove(uuid4(), uuid4())
 
 
-def _make_radar_item(*, is_favorited: bool, source: str = "user_added") -> RadarItem:
+def _make_radar_item(
+    *,
+    is_favorited: bool,
+    source: str = "user_added",
+    expires_at: datetime | None = None,
+) -> RadarItem:
     return RadarItem(
         id=uuid4(),
         user_id=uuid4(),
@@ -175,7 +180,7 @@ def _make_radar_item(*, is_favorited: bool, source: str = "user_added") -> Radar
         source=source,
         is_favorited=is_favorited,
         relevance_score=None,
-        expires_at=None,
+        expires_at=expires_at,
         created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
     )
 
@@ -230,3 +235,81 @@ async def test_toggle_favorite_raises_not_found_when_item_unknown(monkeypatch):
 
     with pytest.raises(NotFoundError):
         await RadarService(AsyncMock()).toggle_favorite(uuid4(), uuid4(), True)
+
+
+async def test_toggle_unfavorite_user_added_deletes_row_and_returns_none(
+    monkeypatch,
+):
+    item = _make_radar_item(is_favorited=True, source="user_added")
+
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return item
+
+    deleted: list[RadarItem] = []
+
+    async def fake_delete(db, target):
+        deleted.append(target)
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.delete", fake_delete
+    )
+
+    result = await RadarService(AsyncMock()).toggle_favorite(
+        uuid4(), uuid4(), False
+    )
+
+    assert result is None
+    assert deleted == [item]
+
+
+async def test_toggle_favorite_ai_generated_nulls_expires_at(monkeypatch):
+    future = datetime.now(timezone.utc) + timedelta(days=3)
+    item = _make_radar_item(
+        is_favorited=False, source="ai_generated", expires_at=future
+    )
+
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return item
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    result = await RadarService(AsyncMock()).toggle_favorite(
+        uuid4(), uuid4(), True
+    )
+
+    assert result is not None
+    assert result.is_favorited is True
+    assert item.expires_at is None
+
+
+async def test_toggle_unfavorite_ai_generated_resets_expires_at(monkeypatch):
+    item = _make_radar_item(
+        is_favorited=True, source="ai_generated", expires_at=None
+    )
+
+    async def fake_get_by_id_for_user(db, item_id, user_id):
+        return item
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_id_for_user",
+        fake_get_by_id_for_user,
+    )
+
+    before = datetime.now(timezone.utc)
+    result = await RadarService(AsyncMock()).toggle_favorite(
+        uuid4(), uuid4(), False
+    )
+    after = datetime.now(timezone.utc)
+
+    assert result is not None
+    assert result.is_favorited is False
+    # expires_at lands in [before + 7d, after + 7d].
+    assert item.expires_at is not None
+    assert before + timedelta(days=7) <= item.expires_at <= after + timedelta(days=7)
