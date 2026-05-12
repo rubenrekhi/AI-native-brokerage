@@ -17,6 +17,7 @@ from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
+from app.tasks.sweep_expired_radar import sweep_expired_radar_items
 from app.tasks.sync_assets import sync_assets
 
 logger = structlog.get_logger(__name__)
@@ -187,12 +188,19 @@ async def shutdown(ctx: dict) -> None:
 
 
 class WorkerSettings:
-    functions = [health_ping, check_listener_liveness, sync_assets]
+    functions = [
+        health_ping,
+        check_listener_liveness,
+        sync_assets,
+        sweep_expired_radar_items,
+    ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
         cron(check_listener_liveness, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
         # Pre-market sync: US equities open at 14:30 UTC / 9:30 AM ET.
         cron(sync_assets, hour={10}, minute={0}),
+        # Low-traffic window; pure DB hygiene, can run any time of day.
+        cron(sweep_expired_radar_items, hour={3}, minute={0}),
     ]
     on_startup = startup
     on_shutdown = shutdown
