@@ -15,13 +15,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth import get_current_user
 from app.database import get_db
 from app.schemas.radar import RadarItemCreate, RadarItemRead, RadarItemUpdate
+from app.services.market_data import MarketDataService, get_market_data_service
 from app.services.radar import RadarService
 
 router = APIRouter()
 
 
-def _radar_service(db: AsyncSession = Depends(get_db)) -> RadarService:
-    return RadarService(db)
+def _radar_service(
+    market_data: MarketDataService = Depends(get_market_data_service),
+    db: AsyncSession = Depends(get_db),
+) -> RadarService:
+    # `market_data` is eagerly wired for every endpoint, even those (POST,
+    # PATCH, DELETE) that never call it. Splitting into two factories
+    # would double the wiring with no benefit — the only failure mode is
+    # `FMP_API_KEY` unset at startup, which is permanent and hard-fails
+    # the whole feature, not a transient outage.
+    return RadarService(market_data, db)
 
 
 @router.get("", response_model=list[RadarItemRead])
