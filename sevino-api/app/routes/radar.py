@@ -9,12 +9,12 @@ trading-gated).
 
 import uuid
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.schemas.radar import RadarItemRead
+from app.schemas.radar import RadarItemCreate, RadarItemRead
 from app.services.radar import RadarService
 
 router = APIRouter()
@@ -31,3 +31,15 @@ async def list_radar(
 ) -> list[RadarItemRead]:
     """Return the user's radar items."""
     return await service.list_for_user(uuid.UUID(user_id))
+
+
+@router.post(
+    "", response_model=RadarItemRead, status_code=status.HTTP_201_CREATED
+)
+async def add_radar_item(
+    body: RadarItemCreate,
+    user_id: str = Depends(get_current_user),
+    service: RadarService = Depends(_radar_service),
+) -> RadarItemRead:
+    """Add a user-chosen ticker to the radar. Auto-favorited, no expiry."""
+    return await service.add_user_item(uuid.UUID(user_id), body.symbol)
