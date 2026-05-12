@@ -138,6 +138,22 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
     }
 
+    func testTextBlockWithoutBlockIdDecodesWithSyntheticId() throws {
+        // Backwards compat for legacy user messages persisted before the
+        // loop minted a `block_id` for user blocks — the wire payload
+        // omits the field. Decoder must mint a fresh id rather than
+        // rejecting the block, otherwise the iOS resume path drops the
+        // user bubble and the conversation renders without user turns.
+        let json = Data(#"{"type":"text","text":"how is AMD"}"#.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .text(let block) = decoded else {
+            return XCTFail("expected .text variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.text, "how is AMD")
+        XCTAssertFalse(block.blockId.isEmpty, "blockId fallback must be non-empty")
+    }
+
     func testMissingDiscriminatorIsRejected() {
         let json = Data("""
         {"block_id":"x","text":"hi"}

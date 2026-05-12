@@ -317,9 +317,14 @@ class TestPartialPersistence:
                     )
                 )
             ).scalar_one()
-            assert user_msg.content_blocks == [
-                {"type": "text", "text": "say hi"}
-            ]
+            # Persisted user blocks carry a server-minted ``block_id`` so the
+            # iOS resume decoder can hydrate user bubbles; we don't pin the
+            # exact ULID, just the user-visible fields.
+            assert len(user_msg.content_blocks) == 1
+            block = user_msg.content_blocks[0]
+            assert block["type"] == "text"
+            assert block["text"] == "say hi"
+            assert isinstance(block["block_id"], str) and block["block_id"]
 
     async def test_cancel_before_any_delta_persists_no_assistant_message(
         self, db_engine, fixture

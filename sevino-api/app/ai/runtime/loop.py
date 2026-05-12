@@ -700,12 +700,21 @@ async def run_agent_turn(
 
     try:
         # 1. Persist the user message before anything else so a crash mid-turn
-        #    still leaves the user's input recorded.
+        #    still leaves the user's input recorded. Mint a ``block_id`` so the
+        #    persisted shape matches assistant text blocks (which always carry
+        #    one via the SSE accumulator). Without it the iOS resume decoder
+        #    drops the block and the user bubble renders empty (SEV-564).
         async with db_factory() as db:
             user_msg = await ConversationRepository.append_user_message(
                 db,
                 conversation_id=conversation_id,
-                content_blocks=[{"type": "text", "text": user_message}],
+                content_blocks=[
+                    {
+                        "type": "text",
+                        "block_id": str(ULID()),
+                        "text": user_message,
+                    }
+                ],
             )
             user_message_id = user_msg.id
 
