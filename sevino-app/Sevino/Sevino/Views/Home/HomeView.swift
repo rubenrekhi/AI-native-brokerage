@@ -289,6 +289,9 @@ struct HomeView: View {
                 founderPhoneURL: viewModel.founderPhoneURL(),
                 founderTextURL: viewModel.founderTextURL(),
                 contactEmailURL: viewModel.contactEmailURL(),
+                activeConversationId: viewModel.isConversationActive
+                    ? viewModel.conversationStore.conversationId
+                    : nil,
                 onSelectChat: { conversationId in
                     Task { await resumeConversation(conversationId) }
                 }

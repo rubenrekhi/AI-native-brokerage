@@ -10,6 +10,11 @@ struct SidebarPanelView: View {
     let founderPhoneURL: URL?
     let founderTextURL: URL?
     let contactEmailURL: URL?
+    /// Conversation id of the chat currently rendered on the home surface,
+    /// or `nil` when no conversation is active (fresh greeting state). The
+    /// matching sidebar row gets the accent background so the user can see
+    /// which thread is loaded.
+    var activeConversationId: UUID? = nil
     /// Invoked when the user taps a sidebar row. Owner (`HomeView`) is
     /// responsible for calling `HomeViewModel.resume(conversationId:)` and
     /// dismissing the sidebar; this view just emits the intent.
@@ -72,7 +77,7 @@ struct SidebarPanelView: View {
                                     .padding(.vertical, 11 * scale)
                                     .padding(.horizontal, 12 * scale)
                                     .background(
-                                        chat.id == chats.first?.id
+                                        chat.conversationId == activeConversationId
                                             ? Color.sevinoGreyAccent.opacity(0.3)
                                             : .clear,
                                         in: .rect(cornerRadius: 8 * scale)
