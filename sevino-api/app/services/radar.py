@@ -6,7 +6,7 @@ import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import ConflictError
+from app.exceptions import ConflictError, NotFoundError
 from app.repositories.asset import AssetRepository
 from app.repositories.radar_item import RadarItemRepository
 from app.schemas.radar import RadarItemRead
@@ -73,3 +73,23 @@ class RadarService:
             radar_item_id=str(item.id),
         )
         return RadarItemRead.model_validate(item)
+
+    async def remove(self, user_id: uuid.UUID, item_id: uuid.UUID) -> None:
+        """Hard-delete a radar item the user owns.
+
+        Cross-user attempts surface as 404 (not 403) so the API doesn't
+        leak whether the id exists under another account.
+        """
+        item = await RadarItemRepository.get_by_id_for_user(
+            self._db, item_id, user_id
+        )
+        if item is None:
+            raise NotFoundError("Radar item not found")
+
+        await RadarItemRepository.delete(self._db, item)
+        logger.info(
+            "radar_item_removed",
+            user_id=str(user_id),
+            radar_item_id=str(item_id),
+            symbol=item.symbol,
+        )
