@@ -25,6 +25,7 @@ from app.routes.market_data import router as market_data_router
 from app.routes.onboarding import router as onboarding_router
 from app.routes.phone_auth import router as phone_auth_router
 from app.routes.portfolio import router as portfolio_router
+from app.routes.radar import router as radar_router
 from app.routes.settings import router as settings_router
 from app.routes.trading import router as trading_router
 
@@ -121,6 +122,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(
         market_data_router, prefix="/v1/market-data", tags=["market-data"]
     )
+    app.include_router(radar_router, prefix="/v1/radar", tags=["radar"])
     app.include_router(
         conversations_router, prefix="/v1/conversations", tags=["conversations"]
     )
