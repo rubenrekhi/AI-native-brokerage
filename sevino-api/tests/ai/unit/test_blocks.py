@@ -15,8 +15,10 @@ from app.ai.blocks import (
     Bar,
     BlockAdapter,
     BlockListAdapter,
+    RangeBars,
     StatusBlock,
     StockCardBlock,
+    StockStats,
     TextBlock,
 )
 
@@ -241,3 +243,110 @@ class TestStockCardBlockShape:
 
         with pytest.raises(ValidationError):
             BlockAdapter.validate_python(payload)
+
+    def test_bars_by_range_defaults_to_none(self):
+        # Single-range tools omit the field; iOS's ``bars(for:)`` falls
+        # back to ``bars`` for every range. Pin the default so a future
+        # schema bump doesn't silently change the contract.
+        block = BlockAdapter.validate_python(_stock_card_payload())
+
+        assert isinstance(block, StockCardBlock)
+        assert block.bars_by_range is None
+
+    def test_bars_by_range_round_trips(self):
+        # Encoded as a list of ``{range, bars}`` (not a dict) so literal
+        # range labels like "1D" aren't subject to Swift's
+        # ``convertToSnakeCase`` mangling — verify the list survives the
+        # round trip with labels preserved and bars typed as ``Bar``.
+        payload = _stock_card_payload()
+        payload["bars_by_range"] = [
+            {
+                "range": "1D",
+                "bars": [{"t": "2026-04-29T13:30:00Z", "c": 184.92}],
+                "change_abs": 2.12,
+                "change_pct": 0.0116,
+            },
+            {
+                "range": "1Y",
+                "bars": [
+                    {"t": "2025-04-29T13:30:00Z", "c": 100.10},
+                    {"t": "2026-04-29T13:30:00Z", "c": 184.92},
+                ],
+                "change_abs": 84.82,
+                "change_pct": 0.8474,
+            },
+        ]
+
+        original = StockCardBlock.model_validate(payload)
+        restored = BlockAdapter.validate_json(original.model_dump_json())
+
+        assert isinstance(restored, StockCardBlock)
+        assert restored.bars_by_range is not None
+        assert [item.range for item in restored.bars_by_range] == ["1D", "1Y"]
+        assert all(
+            isinstance(item, RangeBars) for item in restored.bars_by_range
+        )
+        assert all(
+            isinstance(bar, Bar)
+            for item in restored.bars_by_range
+            for bar in item.bars
+        )
+        # Per-range change values round-trip alongside the bars.
+        assert restored.bars_by_range[0].change_abs == pytest.approx(2.12)
+        assert restored.bars_by_range[1].change_pct == pytest.approx(0.8474)
+
+    def test_stats_defaults_to_none(self):
+        # Compact card (default) omits the stats grid. Expanded card
+        # populates it.
+        block = BlockAdapter.validate_python(_stock_card_payload())
+
+        assert isinstance(block, StockCardBlock)
+        assert block.stats is None
+
+    def test_stats_round_trips_with_all_fields(self):
+        # The full stats grid round-trips with every field — counts as
+        # ints, money/ratio values as decimal strings.
+        payload = _stock_card_payload()
+        payload["stats"] = {
+            "open": "188.00",
+            "day_high": "190.00",
+            "day_low": "187.50",
+            "previous_close": "183.69",
+            "year_high": "199.62",
+            "year_low": "164.08",
+            "volume": 50_000_000,
+            "avg_volume": 60_000_000,
+            "market_cap": 3_500_000_000_000,
+            "pe_ratio": "23.45",
+            "eps": "8.10",
+            "beta": "1.25",
+            "dividend_yield": "0.0048",
+            "exchange": "NASDAQ",
+        }
+
+        original = StockCardBlock.model_validate(payload)
+        restored = BlockAdapter.validate_json(original.model_dump_json())
+
+        assert isinstance(restored, StockCardBlock)
+        assert isinstance(restored.stats, StockStats)
+        assert restored.stats.market_cap == 3_500_000_000_000
+        assert restored.stats.pe_ratio == "23.45"
+        assert restored.stats.exchange == "NASDAQ"
+
+    def test_stats_with_partial_fields_round_trips(self):
+        # FMP doesn't always return every value (beta/EPS often null);
+        # partial stats must validate so iOS can omit rows for nil fields.
+        payload = _stock_card_payload()
+        payload["stats"] = {
+            "market_cap": 3_500_000_000_000,
+            "exchange": "NASDAQ",
+        }
+
+        block = BlockAdapter.validate_python(payload)
+
+        assert isinstance(block, StockCardBlock)
+        assert block.stats is not None
+        assert block.stats.market_cap == 3_500_000_000_000
+        assert block.stats.exchange == "NASDAQ"
+        assert block.stats.beta is None
+        assert block.stats.eps is None

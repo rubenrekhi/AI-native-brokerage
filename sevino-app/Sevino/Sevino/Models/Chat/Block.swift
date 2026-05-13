@@ -132,9 +132,59 @@ struct Bar: Codable, Equatable, Sendable {
     let c: Double
 }
 
+/// Per-range chart data + change values for one option of a
+/// `StockCardBlock`. Encoded as a list (not a dict) on the wire so
+/// literal range labels like "1D" aren't subject to
+/// `JSONEncoder.convertToSnakeCase` mangling.
+///
+/// `changeAbs` / `changePct` are the BE-authoritative change values
+/// for the range:
+/// - For "1D", from FMP's daily quote (vs yesterday's close).
+/// - For longer ranges, `current_price - first_bar.close`.
+/// The iOS card reads these directly when the user slides the range
+/// selector — no FE-side derivation.
+struct RangeBars: Codable, Equatable, Sendable {
+    let range: String
+    let bars: [Bar]
+    let changeAbs: Double
+    let changePct: Double
+}
+
+/// Optional valuation/technical stats shown on an expanded `StockCardBlock`.
+/// Every field is optional — FMP doesn't always return every value, and
+/// the iOS card renders rows only for fields that arrive non-nil. Money
+/// values arrive as decimal strings (decimal-on-the-wire convention);
+/// the view layer formats them via `Decimal` extensions.
+struct StockStats: Codable, Equatable, Sendable {
+    let open: String?
+    let dayHigh: String?
+    let dayLow: String?
+    let previousClose: String?
+    let yearHigh: String?
+    let yearLow: String?
+    let volume: Int?
+    let avgVolume: Int?
+    let marketCap: Int?
+    let peRatio: String?
+    let eps: String?
+    let beta: String?
+    let dividendYield: String?
+    let exchange: String?
+}
+
 /// Inline stock card with header, price/change row, sparkline, and range
-/// pills. Rendered by `StockCardView` (C4.3). `bars` and `price` arrive
+/// pills. Rendered by `SingleStockCard`. `bars` and `price` arrive
 /// incrementally via `block_data` patches as the tool fetches data.
+///
+/// When the tool pre-fetches every range up front it populates
+/// `barsByRange` with one `RangeBars` entry per option. The card's
+/// `bars(for:)` helper uses that list to swap chart data client-side
+/// as the user slides the range selector — no refetch round trip.
+/// Tools that only fetch one range omit `barsByRange`, and
+/// `bars(for:)` falls back to `bars`.
+///
+/// `stats` is populated when the tool was called with `expanded: true`
+/// and renders a grid below the chart with valuation/technical fields.
 struct StockCardBlock: Codable, Equatable, Sendable {
     let blockId: String
     let symbol: String
@@ -145,8 +195,59 @@ struct StockCardBlock: Codable, Equatable, Sendable {
     let changePct: Double
     let colorState: ColorState
     let bars: [Bar]
+    let barsByRange: [RangeBars]?
     let range: String
     let rangeOptions: [String]
+    let stats: StockStats?
+
+    init(
+        blockId: String,
+        symbol: String,
+        companyName: String,
+        logoUrl: String? = nil,
+        price: Double,
+        changeAbs: Double,
+        changePct: Double,
+        colorState: ColorState,
+        bars: [Bar],
+        barsByRange: [RangeBars]? = nil,
+        range: String,
+        rangeOptions: [String],
+        stats: StockStats? = nil
+    ) {
+        self.blockId = blockId
+        self.symbol = symbol
+        self.companyName = companyName
+        self.logoUrl = logoUrl
+        self.price = price
+        self.changeAbs = changeAbs
+        self.changePct = changePct
+        self.colorState = colorState
+        self.bars = bars
+        self.barsByRange = barsByRange
+        self.range = range
+        self.rangeOptions = rangeOptions
+        self.stats = stats
+    }
+
+    /// Bars to display for `range`. Prefers `barsByRange` when the tool
+    /// pre-fetched it; otherwise falls back to `bars` so the chart
+    /// always renders something while the backend stays on single-range
+    /// payloads.
+    func bars(for range: String) -> [Bar] {
+        barsByRange?.first(where: { $0.range == range })?.bars ?? bars
+    }
+
+    /// Per-range change values (`changeAbs`, `changePct`) as
+    /// computed authoritatively by the tool. Falls back to the
+    /// top-level daily change when `barsByRange` is missing or doesn't
+    /// include `range` — same fallback semantics as `bars(for:)`.
+    func change(for range: String) -> (abs: Double, pct: Double) {
+        if let entry = barsByRange?.first(where: { $0.range == range }) {
+            return (entry.changeAbs, entry.changePct)
+        }
+        return (changeAbs, changePct)
+    }
 }
 
 enum ColorState: String, Codable, Sendable {

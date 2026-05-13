@@ -12,6 +12,17 @@ struct PortfolioChartView: View {
     var dates: [Date] = []
     var currency: String = "USD"
     var range: TimeRange = .oneMonth
+    /// Stroke + gradient fill + scrub-dot colour. Defaults to the
+    /// portfolio's always-positive green; the chat stock card overrides
+    /// this per `colorState` so a losing stock renders a red line.
+    var color: Color = .sevinoPositive
+    /// Whether to fade the chart out/in on range changes. Defaults
+    /// to `true` for the portfolio screen — the fade masks the
+    /// network refetch latency between range tap and new data arriving.
+    /// The chat stock card sets this to `false` because it swaps bars
+    /// client-side from `block.barsByRange`; with no network gap, the
+    /// fade would just hide the new data instead of bridging anything.
+    var animatesRangeChange: Bool = true
     let scale: CGFloat
     @Binding var scrubValue: String?
 
@@ -32,14 +43,14 @@ struct PortfolioChartView: View {
                 ChartFill(points: displayPoints, size: geo.size)
                     .fill(
                         LinearGradient(
-                            colors: [Color.sevinoPositive.opacity(0.3), Color.sevinoPositive.opacity(0.02)],
+                            colors: [color.opacity(0.3), color.opacity(0.02)],
                             startPoint: .top,
                             endPoint: .bottom
                         )
                     )
 
                 ChartLine(points: displayPoints, size: geo.size)
-                    .stroke(Color.sevinoPositive, lineWidth: 2 * scale)
+                    .stroke(color, lineWidth: 2 * scale)
 
                 if let idx = scrubIndex, idx < displayPoints.count, let label = scrubValue {
                     let step = width / CGFloat(displayPoints.count - 1)
@@ -55,7 +66,7 @@ struct PortfolioChartView: View {
                         .accessibilityHidden(true)
 
                     Circle()
-                        .fill(Color.sevinoPositive)
+                        .fill(color)
                         .frame(width: 8 * scale, height: 8 * scale)
                         .position(x: x, y: y)
                         .accessibilityHidden(true)
@@ -113,6 +124,18 @@ struct PortfolioChartView: View {
             // Auto-cancels on view disappear or on the next range change.
             if displayPoints.isEmpty {
                 displayPoints = points
+                return
+            }
+
+            // Stock card and any other caller with synchronous data
+            // (per-range bars already in memory) opts out of the fade
+            // entirely. The `.onChange(of: points)` modifier below has
+            // already snapped `displayPoints` to the new array — fading
+            // here would just hide the new chart for ~600ms.
+            if !animatesRangeChange {
+                if displayPoints != points {
+                    displayPoints = points
+                }
                 return
             }
 

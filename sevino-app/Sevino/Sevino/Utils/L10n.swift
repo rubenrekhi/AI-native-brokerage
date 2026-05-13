@@ -476,22 +476,6 @@ enum L10n {
         static let homeLoadErrorTitle = String(localized: "home.home_load_error_title")
         static let homeLoadErrorRetry = String(localized: "home.home_load_error_retry")
         static let homeLoadErrorDismiss = String(localized: "home.home_load_error_dismiss")
-
-        // MARK: - Single stock card stats
-        static let stockStatBid = String(localized: "home.stock_stat_bid")
-        static let stockStatAsk = String(localized: "home.stock_stat_ask")
-        static let stockStatLastSale = String(localized: "home.stock_stat_last_sale")
-        static let stockStatOpen = String(localized: "home.stock_stat_open")
-        static let stockStatHigh = String(localized: "home.stock_stat_high")
-        static let stockStatLow = String(localized: "home.stock_stat_low")
-        static let stockStatExchange = String(localized: "home.stock_stat_exchange")
-        static let stockStatMarketCap = String(localized: "home.stock_stat_market_cap")
-        static let stockStatPeRatio = String(localized: "home.stock_stat_pe_ratio")
-        static let stockStatFiftyTwoWeekHigh = String(localized: "home.stock_stat_fifty_two_week_high")
-        static let stockStatFiftyTwoWeekLow = String(localized: "home.stock_stat_fifty_two_week_low")
-        static let stockStatVolume = String(localized: "home.stock_stat_volume")
-        static let stockStatAvgVolume = String(localized: "home.stock_stat_avg_volume")
-        static let stockStatMarginReq = String(localized: "home.stock_stat_margin_req")
     }
 
     enum Chat {
@@ -504,9 +488,32 @@ enum L10n {
         static func statusFailedAccessibility(_ label: String) -> String {
             String(format: String(localized: "chat.status_failed_accessibility"), label)
         }
-        static func stockCardPlaceholder(_ symbol: String) -> String {
-            String(format: String(localized: "chat.stock_card_placeholder"), symbol)
+        static func stockCardChartAccessibilityLabel(_ symbol: String) -> String {
+            String(
+                format: String(localized: "chat.stock_card_chart_accessibility_label"),
+                symbol
+            )
         }
+        static func stockCardChartAccessibilityValue(_ price: String, _ period: String) -> String {
+            String(
+                format: String(localized: "chat.stock_card_chart_accessibility_value"),
+                price, period
+            )
+        }
+        static let stockStatOpen = String(localized: "chat.stock_stat_open")
+        static let stockStatDayHigh = String(localized: "chat.stock_stat_day_high")
+        static let stockStatDayLow = String(localized: "chat.stock_stat_day_low")
+        static let stockStatPreviousClose = String(localized: "chat.stock_stat_previous_close")
+        static let stockStatYearHigh = String(localized: "chat.stock_stat_year_high")
+        static let stockStatYearLow = String(localized: "chat.stock_stat_year_low")
+        static let stockStatVolume = String(localized: "chat.stock_stat_volume")
+        static let stockStatAvgVolume = String(localized: "chat.stock_stat_avg_volume")
+        static let stockStatMarketCap = String(localized: "chat.stock_stat_market_cap")
+        static let stockStatPeRatio = String(localized: "chat.stock_stat_pe_ratio")
+        static let stockStatEps = String(localized: "chat.stock_stat_eps")
+        static let stockStatBeta = String(localized: "chat.stock_stat_beta")
+        static let stockStatDividendYield = String(localized: "chat.stock_stat_dividend_yield")
+        static let stockStatExchange = String(localized: "chat.stock_stat_exchange")
     }
 
     enum Sidebar {

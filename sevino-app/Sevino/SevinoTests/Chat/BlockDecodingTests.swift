@@ -184,10 +184,10 @@ final class BlockDecodingTests: XCTestCase {
 
     // MARK: - Optional fields
 
-    func testStockCardDecodesWithoutLogoUrl() throws {
-        // `logoUrl` is the only optional field; the backend defaults it to
-        // None when the tool can't resolve a logo. Decoding must accept the
-        // omitted key as nil rather than rejecting the payload.
+    func testStockCardDecodesWithoutOptionalFields() throws {
+        // `logoUrl`, `barsByRange`, and `stats` are all optional. The
+        // single-range / compact path omits them; decoding must accept
+        // the missing keys as nil rather than rejecting the payload.
         let json = Data("""
         {"type":"stock_card","block_id":"x","symbol":"X","company_name":"X",
          "price":1,"change_abs":0,"change_pct":0,"color_state":"neutral",
@@ -199,6 +199,183 @@ final class BlockDecodingTests: XCTestCase {
             return XCTFail("expected .stockCard variant, got \(decoded)")
         }
         XCTAssertNil(card.logoUrl)
+        XCTAssertNil(card.barsByRange)
+        XCTAssertNil(card.stats)
+    }
+
+    // MARK: - Multi-range bars
+
+    func testStockCardBarsByRangeRoundTrips() throws {
+        // Encoded as a list of {range, bars} (not a dict) so literal range
+        // labels like "1D" aren't subject to `convertToSnakeCase` mangling.
+        // Verify the list survives a round trip with labels preserved and
+        // bars typed as Bar instances.
+        let json = Data("""
+        {
+          "type": "stock_card",
+          "block_id": "x",
+          "symbol": "AMD",
+          "company_name": "AMD",
+          "price": 184.92,
+          "change_abs": 2.12,
+          "change_pct": 0.0116,
+          "color_state": "positive",
+          "bars": [{"t": "2026-04-29T13:00:00Z", "c": 184.92}],
+          "bars_by_range": [
+            {
+              "range": "1D",
+              "bars": [{"t": "2026-04-29T13:00:00Z", "c": 184.92}],
+              "change_abs": 2.12,
+              "change_pct": 0.0116
+            },
+            {
+              "range": "1Y",
+              "bars": [
+                {"t": "2025-04-29T13:00:00Z", "c": 100.10},
+                {"t": "2026-04-29T13:00:00Z", "c": 184.92}
+              ],
+              "change_abs": 84.82,
+              "change_pct": 0.8474
+            }
+          ],
+          "range": "1D",
+          "range_options": ["1D", "1Y"]
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .stockCard(let card) = decoded else {
+            return XCTFail("expected .stockCard variant, got \(decoded)")
+        }
+
+        let byRange = try XCTUnwrap(card.barsByRange)
+        XCTAssertEqual(byRange.map(\.range), ["1D", "1Y"])
+        XCTAssertEqual(byRange[1].bars.count, 2)
+
+        // The bars(for:) resolver returns per-range bars when present.
+        XCTAssertEqual(card.bars(for: "1Y").count, 2)
+        // Unknown ranges fall back to `bars`.
+        XCTAssertEqual(card.bars(for: "5Y").count, 1)
+
+        // change(for:) returns the per-range change values when present.
+        XCTAssertEqual(card.change(for: "1D").abs, 2.12, accuracy: 1e-6)
+        XCTAssertEqual(card.change(for: "1Y").abs, 84.82, accuracy: 1e-6)
+        XCTAssertEqual(card.change(for: "1Y").pct, 0.8474, accuracy: 1e-6)
+        // Unknown range falls back to top-level changeAbs/changePct.
+        XCTAssertEqual(card.change(for: "UNKNOWN").abs, card.changeAbs)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testBarsForRangeFallsBackToBarsWhenByRangeNil() {
+        // No `bars_by_range` field → every requested range returns the
+        // initial `bars` array. The slider visually slides but data
+        // doesn't actually change.
+        let card = StockCardBlock(
+            blockId: "x",
+            symbol: "X",
+            companyName: "X",
+            price: 1,
+            changeAbs: 0,
+            changePct: 0,
+            colorState: .neutral,
+            bars: [Bar(t: "2026-04-29T13:00:00Z", c: 1.0)],
+            range: "1M",
+            rangeOptions: ["1D", "1M"]
+        )
+
+        XCTAssertEqual(card.bars(for: "1D").count, 1)
+        XCTAssertEqual(card.bars(for: "1M").count, 1)
+    }
+
+    // MARK: - Stats grid
+
+    func testStockCardStatsRoundTrips() throws {
+        // Expanded card carries a full stats grid with money values as
+        // decimal strings and counts as ints.
+        let json = Data("""
+        {
+          "type": "stock_card",
+          "block_id": "x",
+          "symbol": "AMD",
+          "company_name": "AMD",
+          "price": 184.92,
+          "change_abs": 2.12,
+          "change_pct": 0.0116,
+          "color_state": "positive",
+          "bars": [],
+          "range": "1M",
+          "range_options": ["1M"],
+          "stats": {
+            "open": "188.00",
+            "day_high": "190.00",
+            "day_low": "187.50",
+            "previous_close": "183.69",
+            "year_high": "199.62",
+            "year_low": "164.08",
+            "volume": 50000000,
+            "avg_volume": 60000000,
+            "market_cap": 3500000000000,
+            "pe_ratio": "23.45",
+            "eps": "8.10",
+            "beta": "1.25",
+            "dividend_yield": "0.0048",
+            "exchange": "NASDAQ"
+          }
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .stockCard(let card) = decoded else {
+            return XCTFail("expected .stockCard variant, got \(decoded)")
+        }
+
+        let stats = try XCTUnwrap(card.stats)
+        XCTAssertEqual(stats.open, "188.00")
+        XCTAssertEqual(stats.marketCap, 3_500_000_000_000)
+        XCTAssertEqual(stats.peRatio, "23.45")
+        XCTAssertEqual(stats.dividendYield, "0.0048")
+        XCTAssertEqual(stats.exchange, "NASDAQ")
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testStockCardStatsWithPartialFieldsDecodes() throws {
+        // FMP doesn't always return every value (beta/EPS often null);
+        // partial stats must validate so the iOS card omits rows for
+        // nil fields rather than failing the whole decode.
+        let json = Data("""
+        {
+          "type": "stock_card",
+          "block_id": "x",
+          "symbol": "AMD",
+          "company_name": "AMD",
+          "price": 1,
+          "change_abs": 0,
+          "change_pct": 0,
+          "color_state": "neutral",
+          "bars": [],
+          "range": "1M",
+          "range_options": ["1M"],
+          "stats": {"market_cap": 1000000000, "exchange": "NASDAQ"}
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .stockCard(let card) = decoded else {
+            return XCTFail("expected .stockCard variant, got \(decoded)")
+        }
+
+        let stats = try XCTUnwrap(card.stats)
+        XCTAssertEqual(stats.marketCap, 1_000_000_000)
+        XCTAssertEqual(stats.exchange, "NASDAQ")
+        XCTAssertNil(stats.beta)
+        XCTAssertNil(stats.eps)
+        XCTAssertNil(stats.peRatio)
     }
 
     // MARK: - List round trip

@@ -76,6 +76,7 @@ private extension Theme {
             .emphasis {
                 FontStyle(.italic)
             }
+            .strikethrough { }
             .link {
                 ForegroundColor(.sevinoHighlightText)
             }

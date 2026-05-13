@@ -88,6 +88,53 @@ class TestRequest:
         # Body must not leak into the exception message.
         assert "rate limited" not in info.value.message
 
+    async def test_402_with_symbol_param_maps_to_market_data_error(self):
+        # 402 from FMP means "ticker not in subscription tier" — a
+        # permanent per-ticker coverage gap. Surface as `MarketDataError`
+        # (the "no data for ticker" branch) so the agent apologises
+        # instead of telling the user to retry.
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(402, text="Premium Query Parameter")
+
+        client = _make_client(handler)
+        with pytest.raises(MarketDataError) as info:
+            await client._request("/quote", {"symbol": "IBM"})
+
+        assert info.value.symbol == "IBM"
+        assert "IBM" in info.value.message
+
+    async def test_402_without_symbol_param_still_raises_market_data_error(self):
+        # Some FMP endpoints (chart routes) put the ticker in the URL
+        # path rather than the query string. The 402 short-circuit
+        # still needs to produce a typed error — the symbol on the
+        # raised error is empty in that case but the bucketing is
+        # correct.
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(402, text="Premium Query Parameter")
+
+        client = _make_client(handler)
+        with pytest.raises(MarketDataError) as info:
+            await client._request("/stable/stock-price-change")
+
+        assert info.value.symbol == ""
+
+    async def test_402_does_not_capture_to_sentry(self, mocker):
+        # Section 11.2 of the backend rulebook: expected no-op paths
+        # don't page on-call. Sentry capture lives below the 402
+        # short-circuit so unsupported-ticker calls stay silent.
+        capture_mock = mocker.patch(
+            "app.services.fmp.sentry_sdk.capture_message"
+        )
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(402, text="Premium Query Parameter")
+
+        client = _make_client(handler)
+        with pytest.raises(MarketDataError):
+            await client._request("/quote", {"symbol": "IBM"})
+
+        capture_mock.assert_not_called()
+
 
 class TestQuote:
     async def test_returns_first_element_when_array_non_empty(self):

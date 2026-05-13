@@ -54,6 +54,35 @@ _SAMPLE_RESPONSE = {
     "analyst": {"target_consensus": "220.50", "strong_buy": 12},
 }
 
+# Ranges the tool fetches charts for, in the same order as
+# ``PERFORMANCE_RANGES`` in ``_performance.py``.
+_RANGES = ("1D", "1W", "1M", "3M", "6M", "1Y")
+
+
+def _chart_for_range(range_label: str, *, n: int = 3) -> dict[str, Any]:
+    """Build a per-range chart payload where the close prices encode
+    the range slot — lets tests verify the tool routed each chart's
+    bars into the right ``performance`` entry.
+    """
+    base = 100.0 + (_RANGES.index(range_label) * 10)
+    return {
+        "symbol": "AAPL",
+        "timeframe": range_label,
+        "bars": [
+            {
+                "timestamp": f"2026-04-29T13:{i:02d}:00Z",
+                "open": str(base),
+                "high": str(base + 1),
+                "low": str(base - 1),
+                "close": str(base + i),
+                "volume": 1_000_000,
+                "vwap": str(base),
+                "trade_count": 100,
+            }
+            for i in range(n)
+        ],
+    }
+
 
 class _RecordingEmitter:
     """Test double for ``SSEEmitter`` — appends every event to a list."""
@@ -78,28 +107,64 @@ def _make_ctx(
     return ctx, emitter
 
 
+def _market_data_mock(
+    *,
+    info: dict[str, Any] | None = None,
+    info_exc: Exception | None = None,
+    chart_exc_per_range: dict[str, Exception] | None = None,
+) -> MagicMock:
+    """Compose a ``MarketDataService`` mock with happy-path defaults.
+
+    ``get_chart`` differentiates by range so tests can verify the tool
+    routed each range's bars into the right performance entry.
+    Per-range failures can be injected via ``chart_exc_per_range``.
+    """
+    md = MagicMock()
+    if info_exc is not None:
+        md.get_stock_info = AsyncMock(side_effect=info_exc)
+    else:
+        md.get_stock_info = AsyncMock(return_value=info or _SAMPLE_RESPONSE)
+
+    chart_exc_per_range = chart_exc_per_range or {}
+
+    async def _get_chart(symbol: str, range_label: str) -> dict[str, Any]:
+        if range_label in chart_exc_per_range:
+            raise chart_exc_per_range[range_label]
+        return _chart_for_range(range_label)
+
+    md.get_chart = AsyncMock(side_effect=_get_chart)
+    return md
+
+
 class TestHappyPath:
     async def test_returns_aggregated_payload_and_completes_pill(self):
-        market_data = MagicMock()
-        market_data.get_stock_info = AsyncMock(return_value=_SAMPLE_RESPONSE)
-        ctx, emitter = _make_ctx(market_data=market_data)
+        md = _market_data_mock()
+        ctx, emitter = _make_ctx(market_data=md)
 
         result = await GetStockInfo().execute(
             StockInfoInput(ticker="aapl"), ctx
         )
 
-        market_data.get_stock_info.assert_awaited_once_with("AAPL")
-        assert result.model_payload == _SAMPLE_RESPONSE
-        assert result.internal_trace == {"raw": _SAMPLE_RESPONSE}
+        md.get_stock_info.assert_awaited_once_with("AAPL")
+        # Charts fetched once per range so per-range performance can
+        # be computed via the shared helper.
+        assert md.get_chart.await_count == len(_RANGES)
+        chart_calls = {call.args for call in md.get_chart.await_args_list}
+        assert chart_calls == {("AAPL", r) for r in _RANGES}
+
+        # The model_payload extends the raw service response with a
+        # ``performance`` dict keyed by range.
+        assert result.model_payload["quote"] == _SAMPLE_RESPONSE["quote"]
+        assert result.model_payload["profile"] == _SAMPLE_RESPONSE["profile"]
+        assert "performance" in result.model_payload
 
         assert isinstance(result.ui_block, StatusBlock)
         assert result.ui_block.state == "complete"
         assert result.ui_block.label == "Pulling data on AAPL"
 
     async def test_emits_block_start_active_then_block_data_complete(self):
-        market_data = MagicMock()
-        market_data.get_stock_info = AsyncMock(return_value=_SAMPLE_RESPONSE)
-        ctx, emitter = _make_ctx(market_data=market_data)
+        md = _market_data_mock()
+        ctx, emitter = _make_ctx(market_data=md)
 
         result = await GetStockInfo().execute(
             StockInfoInput(ticker="AAPL"), ctx
@@ -123,25 +188,43 @@ class TestHappyPath:
         assert result.ui_block.block_id == start.block["block_id"]
 
     async def test_ticker_is_normalised_to_uppercase_in_label(self):
-        market_data = MagicMock()
-        market_data.get_stock_info = AsyncMock(return_value=_SAMPLE_RESPONSE)
-        ctx, emitter = _make_ctx(market_data=market_data)
+        md = _market_data_mock()
+        ctx, emitter = _make_ctx(market_data=md)
 
         await GetStockInfo().execute(StockInfoInput(ticker="msft"), ctx)
 
         assert emitter.events[0].block["label"] == "Pulling data on MSFT"
-        market_data.get_stock_info.assert_awaited_once_with("MSFT")
+        md.get_stock_info.assert_awaited_once_with("MSFT")
+
+    async def test_performance_dict_carries_per_range_change(self):
+        # The shared ``change_for_range`` helper produces:
+        # - 1D from FMP's daily change (vs yesterday's close): 1.23 / 0.0065
+        # - longer ranges from current price (189.84) vs first-bar close,
+        #   where _chart_for_range encodes base = 100 + index*10.
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL"), ctx
+        )
+
+        performance = result.model_payload["performance"]
+        assert performance["1D"]["change_abs"] == pytest.approx(1.23)
+        assert performance["1D"]["change_pct"] == pytest.approx(0.0065)
+        # 1W: first bar close = 110, price = 189.84 → change_abs = 79.84
+        assert performance["1W"]["change_abs"] == pytest.approx(79.84)
+        # 1Y: first bar close = 150 → change_abs = 39.84
+        assert performance["1Y"]["change_abs"] == pytest.approx(39.84)
 
 
 class TestUnknownTicker:
     async def test_market_data_error_returns_error_payload_and_fails_pill(
         self,
     ):
-        market_data = MagicMock()
-        market_data.get_stock_info = AsyncMock(
-            side_effect=MarketDataError("no data", symbol="BADTKR")
+        md = _market_data_mock(
+            info_exc=MarketDataError("no data", symbol="BADTKR"),
         )
-        ctx, emitter = _make_ctx(market_data=market_data)
+        ctx, emitter = _make_ctx(market_data=md)
 
         result = await GetStockInfo().execute(
             StockInfoInput(ticker="BADTKR"), ctx
@@ -161,13 +244,12 @@ class TestUnknownTicker:
         assert emitter.events[1].data["state"] == "failed"
 
     async def test_invalid_input_error_treated_as_unknown_ticker(self):
-        market_data = MagicMock()
-        market_data.get_stock_info = AsyncMock(
-            side_effect=MarketDataInvalidInputError(
+        md = _market_data_mock(
+            info_exc=MarketDataInvalidInputError(
                 "bad symbol", symbol="!!!"
-            )
+            ),
         )
-        ctx, _emitter = _make_ctx(market_data=market_data)
+        ctx, _emitter = _make_ctx(market_data=md)
 
         result = await GetStockInfo().execute(
             StockInfoInput(ticker="!!!"), ctx

@@ -540,12 +540,162 @@
         }
       }
     },
-    "chat.stock_card_placeholder" : {
+    "chat.stock_card_chart_accessibility_label" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stock card: %@"
+            "value" : "%@ price chart"
+          }
+        }
+      }
+    },
+    "chat.stock_card_chart_accessibility_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ over %2$@"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_avg_volume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Avg Volume"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_beta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beta"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_day_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "High"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_day_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Low"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_dividend_yield" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dividend Yield"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_eps" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPS"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_exchange" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exchange"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_market_cap" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Market Cap"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_open" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_pe_ratio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P/E Ratio"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_previous_close" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prev Close"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_volume" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volume"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_year_high" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "52W High"
+          }
+        }
+      }
+    },
+    "chat.stock_stat_year_low" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "52W Low"
           }
         }
       }
@@ -1654,146 +1804,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Since %@"
-          }
-        }
-      }
-    },
-    "home.stock_stat_ask" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ask"
-          }
-        }
-      }
-    },
-    "home.stock_stat_avg_volume" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Avg Volume"
-          }
-        }
-      }
-    },
-    "home.stock_stat_bid" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bid"
-          }
-        }
-      }
-    },
-    "home.stock_stat_exchange" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Exchange"
-          }
-        }
-      }
-    },
-    "home.stock_stat_fifty_two_week_high" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "52W High"
-          }
-        }
-      }
-    },
-    "home.stock_stat_fifty_two_week_low" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "52W Low"
-          }
-        }
-      }
-    },
-    "home.stock_stat_high" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "High"
-          }
-        }
-      }
-    },
-    "home.stock_stat_last_sale" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Last Sale"
-          }
-        }
-      }
-    },
-    "home.stock_stat_low" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Low"
-          }
-        }
-      }
-    },
-    "home.stock_stat_margin_req" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Margin Req"
-          }
-        }
-      }
-    },
-    "home.stock_stat_market_cap" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mkt Cap"
-          }
-        }
-      }
-    },
-    "home.stock_stat_open" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open"
-          }
-        }
-      }
-    },
-    "home.stock_stat_pe_ratio" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "P/E Ratio"
-          }
-        }
-      }
-    },
-    "home.stock_stat_volume" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Volume"
           }
         }
       }

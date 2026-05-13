@@ -17,6 +17,7 @@ loop iterations.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, ClassVar
 
 import structlog
@@ -24,6 +25,11 @@ from pydantic import BaseModel, Field
 from ulid import ULID
 
 from app.ai.blocks import StatusBlock
+from app.ai.tools._performance import (
+    PERFORMANCE_RANGES,
+    bars_from_chart,
+    change_for_range,
+)
 from app.ai.tools.base import Tool, ToolContext, ToolResult
 from app.ai.transport.events import BlockData, BlockStart
 from app.exceptions import (
@@ -103,27 +109,26 @@ class GetStockInfo(Tool[StockInfoInput]):
                 },
             )
 
+        # Fetch the quote/profile/ratios/analyst bundle *and* chart bars
+        # for every range option in parallel. The chart bars feed
+        # ``change_for_range``, which produces the per-range performance
+        # values the LLM cites in prose. Using the same helper (and same
+        # cached bars) as ``display_stock_card`` guarantees the model's
+        # numbers and the card's numbers can't drift apart.
+        info_task = market_data.get_stock_info(ticker)
+        chart_tasks = [
+            market_data.get_chart(ticker, r) for r in PERFORMANCE_RANGES
+        ]
         try:
-            data = await market_data.get_stock_info(ticker)
-        except (MarketDataError, MarketDataInvalidInputError) as exc:
-            logger.info(
-                "stock_info_lookup_failed",
-                ticker=ticker,
-                error=str(exc),
-                exc_type=type(exc).__name__,
+            results = await asyncio.gather(
+                info_task, *chart_tasks, return_exceptions=True
             )
-            return await self._fail(
-                ctx=ctx,
-                block_id=block_id,
-                label=label,
-                payload={
-                    "error": f"No data found for ticker {ticker}.",
-                    "ticker": ticker,
-                },
-            )
-        except (MarketDataUnavailableError, MarketDataUpstreamError) as exc:
+        except Exception as exc:
+            # ``return_exceptions`` should swallow per-task errors, so an
+            # exception bubbling here is a programming bug. Map to the
+            # generic upstream failure for graceful degradation.
             logger.warning(
-                "stock_info_upstream_failure",
+                "stock_info_gather_failed",
                 ticker=ticker,
                 error=str(exc),
                 exc_type=type(exc).__name__,
@@ -137,6 +142,101 @@ class GetStockInfo(Tool[StockInfoInput]):
                     "ticker": ticker,
                 },
             )
+
+        info_result, *chart_results = results
+
+        # The info call is required.
+        if isinstance(info_result, (MarketDataError, MarketDataInvalidInputError)):
+            logger.info(
+                "stock_info_lookup_failed",
+                ticker=ticker,
+                error=str(info_result),
+                exc_type=type(info_result).__name__,
+            )
+            return await self._fail(
+                ctx=ctx,
+                block_id=block_id,
+                label=label,
+                payload={
+                    "error": f"No data found for ticker {ticker}.",
+                    "ticker": ticker,
+                },
+            )
+        if isinstance(
+            info_result, (MarketDataUnavailableError, MarketDataUpstreamError)
+        ):
+            logger.warning(
+                "stock_info_upstream_failure",
+                ticker=ticker,
+                error=str(info_result),
+                exc_type=type(info_result).__name__,
+            )
+            return await self._fail(
+                ctx=ctx,
+                block_id=block_id,
+                label=label,
+                payload={
+                    "error": "Market data provider is temporarily unavailable.",
+                    "ticker": ticker,
+                },
+            )
+        if isinstance(info_result, BaseException):
+            logger.warning(
+                "stock_info_unexpected_failure",
+                ticker=ticker,
+                error=str(info_result),
+                exc_type=type(info_result).__name__,
+            )
+            return await self._fail(
+                ctx=ctx,
+                block_id=block_id,
+                label=label,
+                payload={
+                    "error": "Market data provider is temporarily unavailable.",
+                    "ticker": ticker,
+                },
+            )
+
+        data = info_result
+        quote = data.get("quote", {})
+        try:
+            price = float(quote.get("price", "0"))
+            daily_change_abs = float(quote.get("change", "0"))
+            daily_change_pct = (
+                float(quote.get("change_percent", "0")) / 100.0
+            )
+        except (TypeError, ValueError):
+            price, daily_change_abs, daily_change_pct = 0.0, 0.0, 0.0
+
+        # Build the per-range performance dict using the *same* helper
+        # ``display_stock_card`` uses. Chart fetches that failed are
+        # silently dropped from the map — the LLM falls back to the
+        # daily change for those ranges.
+        performance: dict[str, dict[str, float]] = {}
+        for r, chart in zip(PERFORMANCE_RANGES, chart_results):
+            if isinstance(chart, BaseException):
+                logger.warning(
+                    "stock_info_chart_range_failed",
+                    ticker=ticker,
+                    range=r,
+                    error=str(chart),
+                    exc_type=type(chart).__name__,
+                )
+                continue
+            bars = bars_from_chart(chart)
+            change_abs, change_pct = change_for_range(
+                range_label=r,
+                bars=bars,
+                price=price,
+                daily_change_abs=daily_change_abs,
+                daily_change_pct=daily_change_pct,
+            )
+            performance[r] = {
+                "change_abs": change_abs,
+                "change_pct": change_pct,
+            }
+
+        data["performance"] = performance
 
         complete_pill = StatusBlock(
             block_id=block_id, label=label, state="complete"

@@ -2,6 +2,11 @@ import SwiftUI
 
 struct HomeTimeRangeSelector: View {
     let selected: TimeRange
+    /// Range options to render as pills, in display order. Defaults to
+    /// every `TimeRange`; the chat stock card narrows this to whatever
+    /// the backend block emitted in `range_options` so a phantom pill
+    /// (e.g. YTD or 5Y) doesn't appear when the data doesn't support it.
+    var options: [TimeRange] = TimeRange.allCases
     let scale: CGFloat
     let onSelect: (TimeRange) -> Void
 
@@ -18,13 +23,13 @@ struct HomeTimeRangeSelector: View {
     }
 
     private var itemWidth: CGFloat {
-        let count = CGFloat(TimeRange.allCases.count)
+        let count = CGFloat(options.count)
         guard count > 0 else { return 0 }
         return totalWidth / count
     }
 
     private var indicatorOffsetX: CGFloat {
-        guard let idx = TimeRange.allCases.firstIndex(of: activeRange) else { return 0 }
+        guard let idx = options.firstIndex(of: activeRange) else { return 0 }
         return CGFloat(idx) * itemWidth
     }
 
@@ -41,7 +46,7 @@ struct HomeTimeRangeSelector: View {
             }
 
             HStack(spacing: 0) {
-                ForEach(TimeRange.allCases) { range in
+                ForEach(options) { range in
                     Text(range.rawValue)
                         .font(.system(size: 13 * scale, weight: .medium))
                         .foregroundStyle(
@@ -81,11 +86,10 @@ struct HomeTimeRangeSelector: View {
     }
 
     private func rangeAt(x: CGFloat) -> TimeRange? {
-        let cases = TimeRange.allCases
-        guard !cases.isEmpty, totalWidth > 0, itemWidth > 0 else { return nil }
+        guard !options.isEmpty, totalWidth > 0, itemWidth > 0 else { return nil }
         let clamped = max(0, min(x, totalWidth - 0.001))
         let idx = Int(clamped / itemWidth)
-        guard idx >= 0, idx < cases.count else { return nil }
-        return cases[idx]
+        guard idx >= 0, idx < options.count else { return nil }
+        return options[idx]
     }
 }

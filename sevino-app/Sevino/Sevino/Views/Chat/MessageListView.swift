@@ -102,27 +102,8 @@ private struct BlockView: View {
         case .status(let statusBlock):
             StatusPillView(block: statusBlock)
         case .stockCard(let stockCardBlock):
-            // TODO(SEV-509): replace with SingleStockCard(block:).
-            StockCardPlaceholder(block: stockCardBlock, scale: scale)
+            SingleStockCard(block: stockCardBlock, scale: scale)
         }
-    }
-}
-
-private struct StockCardPlaceholder: View {
-    let block: StockCardBlock
-    let scale: CGFloat
-
-    var body: some View {
-        Text(L10n.Chat.stockCardPlaceholder(block.symbol))
-            .font(.system(size: 13 * scale, weight: .medium))
-            .foregroundStyle(Color.sevinoGreyContrast)
-            .padding(.horizontal, 12 * scale)
-            .padding(.vertical, 10 * scale)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 12 * scale)
-                    .fill(Color.sevinoGreyAccent.opacity(0.15))
-            )
     }
 }
 

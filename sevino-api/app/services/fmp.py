@@ -96,6 +96,26 @@ class FmpClient:
             raise MarketDataUnavailableError() from exc
 
         if resp.status_code != 200:
+            # 402 from FMP means "this symbol isn't in your subscription
+            # tier" — a permanent per-ticker coverage gap, not a transient
+            # outage. Short-circuit *before* the warning log and Sentry
+            # capture below: this is an expected no-op for unsupported
+            # tickers and shouldn't page on-call. Surface as
+            # `MarketDataError` (the "no data for ticker" branch) so the
+            # agent tells the user the ticker isn't supported instead of
+            # "temporarily unavailable, please retry."
+            if resp.status_code == 402:
+                symbol = params.get("symbol", "") if params else ""
+                logger.info(
+                    "fmp_symbol_not_in_tier",
+                    path=path,
+                    symbol=symbol or None,
+                )
+                raise MarketDataError(
+                    f"FMP 402: symbol {symbol or 'unknown'} not in subscription tier",
+                    symbol=str(symbol),
+                )
+
             safe_body = _redact(resp.text[:BODY_LOG_LIMIT], self._api_key)
             logger.warning(
                 "fmp_api_error",

@@ -14,6 +14,10 @@ from app.ai.tools.base import (
     ToolRegistry,
     ToolResult,
 )
+from app.ai.tools.display_stock_card import (
+    DisplayStockCard,
+    DisplayStockCardInput,
+)
 from app.ai.tools.stock_info import GetStockInfo, StockInfoInput
 
 __all__ = [
@@ -23,6 +27,8 @@ __all__ = [
     "ToolHttpClients",
     "ToolRegistry",
     "ToolResult",
+    "DisplayStockCard",
+    "DisplayStockCardInput",
     "GetStockInfo",
     "StockInfoInput",
     "build_default_registry",
@@ -39,6 +45,7 @@ def build_default_registry() -> ToolRegistry:
     """
     registry = ToolRegistry()
     registry.register(GetStockInfo())
+    registry.register(DisplayStockCard())
     return registry
 
 
