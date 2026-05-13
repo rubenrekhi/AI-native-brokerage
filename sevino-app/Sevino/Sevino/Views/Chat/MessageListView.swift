@@ -93,6 +93,12 @@ struct MessageListView: View {
                 .text(TextBlock(blockId: "1", text: "How is Tesla doing?"))
             ]),
             Message(id: UUID(), role: .assistant, blocks: [
+                .thinking(ThinkingBlock(
+                    blockId: "th1",
+                    text: "User asked about Tesla. Let me pull the latest figures.",
+                    redacted: false,
+                    state: .complete
+                )),
                 .text(TextBlock(blockId: "2", text: "Tesla is currently trading at $443.30, up 0.08% over the past 3 months."))
             ])
         ],

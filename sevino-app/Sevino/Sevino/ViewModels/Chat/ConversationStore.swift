@@ -247,14 +247,36 @@ final class ConversationStore {
 
         case .textDelta(let payload):
             mutateAssistantMessage { message in
-                guard let index = message.blocks.firstIndex(where: { $0.blockId == payload.blockId }),
-                      case .text(let block) = message.blocks[index] else {
-                    Self.logger.error("text_delta references unknown text block id")
+                guard let index = message.blocks.firstIndex(where: { $0.blockId == payload.blockId }) else {
+                    Self.logger.error("text_delta references unknown block id")
                     return
                 }
-                message.blocks[index] = .text(
-                    TextBlock(blockId: block.blockId, text: block.text + payload.text)
-                )
+                switch message.blocks[index] {
+                case .text(let block):
+                    message.blocks[index] = .text(
+                        TextBlock(blockId: block.blockId, text: block.text + payload.text)
+                    )
+                case .thinking(let block):
+                    // SEV-571: backend forwards `thinking_delta` chunks
+                    // as `text_delta` events targeting the thinking
+                    // block's id, so the append happens here too.
+                    message.blocks[index] = .thinking(
+                        ThinkingBlock(
+                            blockId: block.blockId,
+                            text: block.text + payload.text,
+                            redacted: block.redacted,
+                            state: block.state
+                        )
+                    )
+                case .status:
+                    Self.logger.error(
+                        "text_delta targeted .status block id=\(payload.blockId, privacy: .public)"
+                    )
+                case .stockCard:
+                    Self.logger.error(
+                        "text_delta targeted .stockCard block id=\(payload.blockId, privacy: .public)"
+                    )
+                }
             }
 
         case .blockData(let payload):

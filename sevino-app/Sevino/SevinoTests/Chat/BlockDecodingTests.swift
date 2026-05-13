@@ -21,6 +21,18 @@ final class BlockDecodingTests: XCTestCase {
     {"type":"status","block_id":"blk_2","label":"Searching the web","state":"active"}
     """
 
+    private static let thinkingStreamingJSON = """
+    {"type":"thinking","block_id":"blk_th","text":"Let me think.","redacted":false,"state":"streaming"}
+    """
+
+    private static let thinkingCompleteJSON = """
+    {"type":"thinking","block_id":"blk_th_complete","text":"The answer is straightforward.","redacted":false,"state":"complete"}
+    """
+
+    private static let thinkingRedactedJSON = """
+    {"type":"thinking","block_id":"blk_th_redacted","text":"","redacted":true,"state":"complete"}
+    """
+
     private static let stockCardBlockJSON = """
     {
       "type": "stock_card",
@@ -77,6 +89,105 @@ final class BlockDecodingTests: XCTestCase {
         let reEncoded = try JSONEncoder.sevino().encode(decoded)
         let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
         XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testThinkingStreamingBlockRoundTrip() throws {
+        // SEV-571: streaming thinking block decodes with state=.streaming
+        // and round-trips byte-for-byte.
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.thinkingStreamingJSON.utf8)
+        )
+
+        guard case .thinking(let thinkingBlock) = decoded else {
+            return XCTFail("expected .thinking variant, got \(decoded)")
+        }
+        XCTAssertEqual(thinkingBlock.blockId, "blk_th")
+        XCTAssertEqual(thinkingBlock.text, "Let me think.")
+        XCTAssertFalse(thinkingBlock.redacted)
+        XCTAssertEqual(thinkingBlock.state, .streaming)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testThinkingCompleteBlockRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.thinkingCompleteJSON.utf8)
+        )
+
+        guard case .thinking(let thinkingBlock) = decoded else {
+            return XCTFail("expected .thinking variant, got \(decoded)")
+        }
+        XCTAssertEqual(thinkingBlock.state, .complete)
+        XCTAssertEqual(thinkingBlock.text, "The answer is straightforward.")
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testThinkingRedactedBlockRoundTrip() throws {
+        // SEV-571: redacted_thinking carries encrypted content we can't
+        // show. Decodes with redacted=true and empty text; should
+        // round-trip unchanged.
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.thinkingRedactedJSON.utf8)
+        )
+
+        guard case .thinking(let thinkingBlock) = decoded else {
+            return XCTFail("expected .thinking variant, got \(decoded)")
+        }
+        XCTAssertTrue(thinkingBlock.redacted)
+        XCTAssertEqual(thinkingBlock.text, "")
+        XCTAssertEqual(thinkingBlock.state, .complete)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testThinkingBlockMinimalPayloadDecodesWithDefaults() throws {
+        // SEV-571: an initial `block_start` may carry only `block_id`
+        // (defaults: text="", redacted=false, state=.streaming). Without
+        // these decoder fallbacks the streaming-start frame would throw
+        // and iOS would drop the entire thinking envelope.
+        let json = Data(#"{"type":"thinking","block_id":"blk_th_min"}"#.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .thinking(let block) = decoded else {
+            return XCTFail("expected .thinking variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.blockId, "blk_th_min")
+        XCTAssertEqual(block.text, "")
+        XCTAssertFalse(block.redacted)
+        XCTAssertEqual(block.state, .streaming)
+    }
+
+    func testInvalidThinkingStateIsRejected() {
+        let json = Data("""
+        {"type":"thinking","block_id":"x","state":"paused"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testNullThinkingStateIsRejected() {
+        // The decoder's "missing-key falls back, present-but-invalid
+        // throws" stance is asserted by this case: `null` is *present*
+        // but doesn't decode to a `ThinkingState`, so it must throw
+        // rather than silently fall back to `.streaming`. Locks the
+        // decoder pattern (`contains(.state) ? try decode : default`)
+        // against a future drift to `decodeIfPresent ?? default`,
+        // which would silently swallow the malformed value.
+        let json = Data("""
+        {"type":"thinking","block_id":"x","state":null}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
     }
 
     func testStockCardBlockRoundTripPreservesVariant() throws {
