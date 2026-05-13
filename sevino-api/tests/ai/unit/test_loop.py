@@ -577,11 +577,17 @@ class TestSSEWireEnvelope:
         ]
         assert result.assistant_message_blocks == persisted_blocks
 
-    async def test_thinking_blocks_do_not_emit_user_facing_events(
+    async def test_thinking_blocks_emit_thinking_wire_envelope(
         self, repo_mocks
     ):
-        # Thinking blocks ride on Anthropic's stream but stay server-side;
-        # only the text block produces wire events.
+        # SEV-571: thinking blocks now ship to iOS as a ``ThinkingBlock``
+        # envelope. The wire shape is ``block_start`` (state=streaming) →
+        # one ``text_delta`` per ``thinking_delta`` → ``block_data``
+        # patch flipping state to ``complete`` → ``block_end``. The
+        # signed Anthropic block still rides on
+        # ``model_invocations.response_content`` for A1.7's signature
+        # roundtripping — that is asserted by the integration test in
+        # ``test_thinking_roundtrip.py``.
         client = _make_client(
             _make_response(
                 text="answer",
@@ -599,11 +605,96 @@ class TestSSEWireEnvelope:
 
         block_starts = [e for e in events if isinstance(e, BlockStart)]
         block_ends = [e for e in events if isinstance(e, BlockEnd)]
-        # Exactly one text block round-trips on the wire; the thinking
-        # block doesn't.
-        assert len(block_starts) == 1
-        assert len(block_ends) == 1
-        assert block_starts[0].block["type"] == "text"
+        # One thinking + one text envelope on the wire.
+        assert len(block_starts) == 2
+        assert len(block_ends) == 2
+
+        thinking_start = next(
+            e for e in block_starts if e.block["type"] == "thinking"
+        )
+        assert thinking_start.block["state"] == "streaming"
+        assert thinking_start.block["redacted"] is False
+        assert isinstance(thinking_start.block["block_id"], str)
+        thinking_id = thinking_start.block["block_id"]
+
+        # Exactly one text_delta for the thinking block, carrying the
+        # thinking text. The text block also emits its own delta, but
+        # _events_for puts the thinking block at index 1 so the test
+        # asserts by block_id rather than position.
+        thinking_deltas = [
+            e
+            for e in events
+            if isinstance(e, TextDelta) and e.block_id == thinking_id
+        ]
+        assert len(thinking_deltas) == 1
+        assert thinking_deltas[0].text == "hidden plan"
+
+        # The state→complete patch lands as a ``BlockData`` event
+        # targeting the thinking block.
+        from app.ai.transport.events import BlockData
+
+        thinking_patches = [
+            e
+            for e in events
+            if isinstance(e, BlockData) and e.block_id == thinking_id
+        ]
+        assert thinking_patches == [
+            BlockData(
+                id=thinking_patches[0].id,
+                block_id=thinking_id,
+                data={"state": "complete"},
+            )
+        ]
+        # And the bracket closes.
+        thinking_ends = [
+            e for e in block_ends if e.block_id == thinking_id
+        ]
+        assert len(thinking_ends) == 1
+
+    async def test_redacted_thinking_block_emits_complete_envelope(
+        self, repo_mocks
+    ):
+        # SEV-571: ``redacted_thinking`` blocks have encrypted content
+        # we can't show. Emit a single ``block_start`` with
+        # ``redacted=true, state=complete`` followed immediately by
+        # ``block_end`` — no deltas, no state patch.
+        from anthropic.types import RedactedThinkingBlock
+
+        client = _make_client(
+            _make_response(
+                text="answer",
+                extra_blocks=[
+                    RedactedThinkingBlock(
+                        data="encrypted_bytes_blob",
+                        type="redacted_thinking",
+                    ),
+                ],
+            )
+        )
+
+        _result, events = await _run(client, repo_mocks)
+
+        block_starts = [e for e in events if isinstance(e, BlockStart)]
+        thinking_starts = [
+            e for e in block_starts if e.block["type"] == "thinking"
+        ]
+        assert len(thinking_starts) == 1
+        redacted = thinking_starts[0]
+        assert redacted.block["redacted"] is True
+        assert redacted.block["state"] == "complete"
+        assert redacted.block["text"] == ""
+
+        redacted_id = redacted.block["block_id"]
+        # No deltas for the redacted block.
+        redacted_deltas = [
+            e
+            for e in events
+            if isinstance(e, TextDelta) and e.block_id == redacted_id
+        ]
+        assert redacted_deltas == []
+        # Bracket closes.
+        block_ends = [e for e in events if isinstance(e, BlockEnd)]
+        assert any(e.block_id == redacted_id for e in block_ends)
 
     async def test_iteration_cap_breach_emits_error_event(self, repo_mocks):
         client = _make_client(_make_response())
@@ -777,6 +868,87 @@ class TestRequestShape:
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
             }
+        ]
+
+    async def test_history_drops_non_text_ui_blocks(self, repo_mocks):
+        # SEV-571: ``ThinkingBlock`` (and the existing ``StatusBlock`` /
+        # ``StockCardBlock`` UI-only variants) must not survive into the
+        # next turn's Anthropic request — Anthropic 400s on unknown
+        # ``type`` values. ``_to_anthropic_content`` should keep only
+        # ``text`` blocks.
+        import copy
+
+        prior_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "first turn"}],
+            },
+        )()
+        prior_assistant = type(
+            "M",
+            (),
+            {
+                "role": "assistant",
+                "content_blocks": [
+                    {
+                        "type": "thinking",
+                        "block_id": "blk_th",
+                        "text": "Let me think.",
+                        "redacted": False,
+                        "state": "complete",
+                    },
+                    {
+                        "type": "status",
+                        "block_id": "blk_status",
+                        "label": "Fetched price",
+                        "state": "complete",
+                    },
+                    {
+                        "type": "text",
+                        "block_id": "blk_text",
+                        "text": "first answer",
+                    },
+                ],
+            },
+        )()
+        new_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [{"type": "text", "text": "follow-up"}],
+            },
+        )()
+        repo_mocks["load_history"] = AsyncMock(
+            return_value=[prior_user, prior_assistant, new_user]
+        )
+        import app.ai.runtime.loop as loop_module
+
+        loop_module.ConversationRepository.load_history = repo_mocks[
+            "load_history"
+        ]
+
+        captured: list[list[dict[str, Any]]] = []
+        final = _make_response(text="second answer")
+
+        def _stream_side_effect(**kwargs: Any) -> _FakeStreamManager:
+            captured.append(copy.deepcopy(kwargs["messages"]))
+            return _FakeStreamManager(_FakeStream(_events_for(final), final))
+
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(side_effect=_stream_side_effect)
+
+        await _run(client, repo_mocks, user_message="follow-up")
+
+        assert len(captured) == 1
+        sent_messages = captured[0]
+        # The thinking + status blocks are dropped; only the text block
+        # survives — and without its ``block_id``, which Anthropic's
+        # content-block schema rejects.
+        assert sent_messages[1]["content"] == [
+            {"type": "text", "text": "first answer"}
         ]
 
     async def test_history_assistant_text_blocks_strip_block_id(

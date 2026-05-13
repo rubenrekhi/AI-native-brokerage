@@ -20,6 +20,7 @@ from app.ai.blocks import (
     StockCardBlock,
     StockStats,
     TextBlock,
+    ThinkingBlock,
 )
 
 
@@ -82,6 +83,37 @@ class TestDiscriminatorDispatch:
         assert isinstance(block.bars[0], Bar)
         assert block.bars[0].c == pytest.approx(182.80)
 
+    def test_thinking_payload_validates_to_thinking_block(self):
+        block = BlockAdapter.validate_python(
+            {
+                "type": "thinking",
+                "block_id": "blk_th",
+                "text": "The user asked about AMD; let me think.",
+                "redacted": False,
+                "state": "streaming",
+            }
+        )
+
+        assert isinstance(block, ThinkingBlock)
+        assert block.block_id == "blk_th"
+        assert block.text.startswith("The user")
+        assert block.redacted is False
+        assert block.state == "streaming"
+
+    def test_thinking_block_defaults(self):
+        # SEV-571: a streaming-start frame may only carry ``block_id``;
+        # ``text`` / ``redacted`` / ``state`` should default to the
+        # "streaming, unredacted, empty" shape the loop emits on
+        # ``content_block_start``.
+        block = BlockAdapter.validate_python(
+            {"type": "thinking", "block_id": "blk_th"}
+        )
+
+        assert isinstance(block, ThinkingBlock)
+        assert block.text == ""
+        assert block.redacted is False
+        assert block.state == "streaming"
+
     def test_unknown_type_rejected(self):
         # Pydantic checks the discriminator before per-field validation, so an
         # unknown tag fails before any of the variants is even attempted.
@@ -127,6 +159,40 @@ class TestRoundTripSerialisation:
         assert isinstance(restored, StockCardBlock)
         assert restored == original
 
+    def test_thinking_block_json_roundtrip_preserves_variant(self):
+        original = ThinkingBlock(
+            block_id="blk_th",
+            text="Let me think through this carefully.",
+            redacted=False,
+            state="complete",
+        )
+
+        as_json = original.model_dump_json()
+        restored = BlockAdapter.validate_json(as_json)
+
+        assert isinstance(restored, ThinkingBlock)
+        assert restored == original
+
+    def test_redacted_thinking_block_json_roundtrip(self):
+        # ``redacted_thinking`` blocks carry no visible text. The loop
+        # emits them with ``state="complete"`` straight away because
+        # there are no deltas to stream — pin that the redacted variant
+        # round-trips with the same defaults.
+        original = ThinkingBlock(
+            block_id="blk_th_redacted",
+            text="",
+            redacted=True,
+            state="complete",
+        )
+
+        as_json = original.model_dump_json()
+        restored = BlockAdapter.validate_json(as_json)
+
+        assert isinstance(restored, ThinkingBlock)
+        assert restored.redacted is True
+        assert restored.text == ""
+        assert restored.state == "complete"
+
     def test_dump_always_includes_type_discriminator(self):
         # The wire format must always carry ``type`` so the iOS decoder can
         # dispatch — guards against a future Pydantic config that excludes
@@ -138,15 +204,24 @@ class TestRoundTripSerialisation:
         stock_card_dump = StockCardBlock.model_validate(
             _stock_card_payload()
         ).model_dump()
+        thinking_dump = ThinkingBlock(block_id="blk_th").model_dump()
 
         assert text_dump["type"] == "text"
         assert status_dump["type"] == "status"
         assert stock_card_dump["type"] == "stock_card"
+        assert thinking_dump["type"] == "thinking"
 
     def test_list_adapter_dispatches_each_item_independently(self):
         # ``messages.content_blocks`` is ``list[Block]`` — the list-level
         # adapter must dispatch each item through the discriminator.
         items = [
+            {
+                "type": "thinking",
+                "block_id": "blk_0",
+                "text": "Let me think.",
+                "redacted": False,
+                "state": "complete",
+            },
             {
                 "type": "status",
                 "block_id": "blk_1",
@@ -159,10 +234,11 @@ class TestRoundTripSerialisation:
 
         restored = BlockListAdapter.validate_python(items)
 
-        assert len(restored) == 3
-        assert isinstance(restored[0], StatusBlock)
-        assert isinstance(restored[1], TextBlock)
-        assert isinstance(restored[2], StockCardBlock)
+        assert len(restored) == 4
+        assert isinstance(restored[0], ThinkingBlock)
+        assert isinstance(restored[1], StatusBlock)
+        assert isinstance(restored[2], TextBlock)
+        assert isinstance(restored[3], StockCardBlock)
 
     def test_list_json_roundtrip_preserves_order_and_variants(self):
         original = [
@@ -189,6 +265,19 @@ class TestStatusStateLiteral:
         # contract violation iOS won't decode, so we want it to fail loudly.
         with pytest.raises(ValidationError):
             StatusBlock(block_id="blk_1", label="x", state="pending")  # type: ignore[arg-type]
+
+
+class TestThinkingStateLiteral:
+    @pytest.mark.parametrize("state", ["streaming", "complete"])
+    def test_valid_states_accepted(self, state):
+        block = ThinkingBlock(block_id="blk_th", state=state)  # type: ignore[arg-type]
+        assert block.state == state
+
+    def test_invalid_state_rejected(self):
+        # SEV-571: the iOS decoder maps the literal to a closed Swift
+        # enum, so anything outside the set is a wire-format violation.
+        with pytest.raises(ValidationError):
+            ThinkingBlock(block_id="blk_th", state="paused")  # type: ignore[arg-type]
 
 
 class TestStockCardBlockShape:
