@@ -100,6 +100,31 @@ Conventional commits: `<type>(<scope>): <summary>`
 - Summary: imperative, under 72 chars, no period
 - Reference Linear tickets in body: `Refs: SEV-42`
 
+### Comments — no AI slop
+
+**Default to writing no comments.** This codebase is authored with AI assistance, and the dominant failure mode is comment slop: restated code, task narration, banner sections, and empty docstring shells that bury the actual signal. Strip them.
+
+A comment only earns its place when removing it would leave a future reader confused about something the code itself cannot express. Three justifications, and only three:
+
+1. **Non-obvious WHY** — a business rule, external-system quirk, or workaround a reader cannot infer (e.g. `# Alpaca returns APPROVED before funding completes; orders would 400 until ACTIVE`).
+2. **Concrete TODO/FIXME** — with a ticket reference or specific what+why. `# TODO(SEV-123): handle partial fills`, never `# TODO: clean up`.
+3. **Public-contract docstring / DocC** — on a module, class, public function, or protocol whose contract is non-trivial. Private helpers whose name already states their purpose get no docstring.
+
+Do NOT write:
+- Comments that restate the next line of code (`# Check if account is active` above `if account.status == "ACTIVE":`).
+- Banner / section comments inside a function (`# ---- validate input ----`, `# Step 1: fetch user`). If you need section labels, extract helpers instead.
+- Narration of the current task or PR (`# Added for SEV-456`, `# New: handle cancel path`, `// Updated to use Liquid Glass`). That belongs in the commit message.
+- Caller references (`# Called from worker.py`, `// Used by the onboarding flow`). They rot the moment another caller appears.
+- Vacuous TODOs (`# TODO: refactor`, `// TODO: fix this later`).
+- Commented-out code or modifiers. Git history is the archive.
+- Auto-generated docstring shells (`"""Get the user."""` on `get_user`, `/// Returns the user.` on `func user()`).
+- Signature restatement in docstrings (`:param user_id: The user_id.`, `Returns: A User object.`). Type hints already carry that.
+- Multi-paragraph prose docstrings on small helpers, or bullet-list "feature descriptions" inside docstrings.
+
+Exempt: Pydantic `Field(..., description=...)` strings (OpenAPI contract), `# noqa` / `# type: ignore` tooling directives, and SwiftUI `#Preview` blocks.
+
+For the full pattern list and examples, see `.claude/agents/be-auditor/AGENT.md` §16 (Python) and `.claude/agents/fe-auditor/AGENT.md` §13 (Swift). When in doubt, delete the comment — the bar for keeping one is high.
+
 ### PRs
 
 Use the template in `.github/PULL_REQUEST_TEMPLATE.md` with emoji headers. Each PR should be a single logical change. The PR description should cover the branch's net change, not individual commits.
