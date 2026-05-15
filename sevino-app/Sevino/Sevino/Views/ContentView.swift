@@ -185,6 +185,7 @@ private struct LoadingLogoView: View {
     var body: some View {
         ZStack {
             OnboardingBackgroundView()
+            LoadingDotGridView()
             GeometryReader { proxy in
                 let scale = proxy.size.width / 393
                 Image("logo_white")

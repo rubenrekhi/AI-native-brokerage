@@ -193,6 +193,7 @@ struct SettingsView: View {
         tradeVM.prepareTrade()
         showTradeTest = true
     }
+
     #endif
 
     private func confirmLogOut() {
