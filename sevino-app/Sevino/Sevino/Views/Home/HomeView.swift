@@ -31,11 +31,6 @@ struct HomeView: View {
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
 
-    /// Top inset for `MessageListView` that clears the nav row (44pt button + 4pt top
-    /// padding, plus a small breathing gap). Mirrors the y-positioning of the morphing
-    /// portfolio/funding cards above.
-    private static let conversationListTopInset: CGFloat = 60
-
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
         return colorScheme == .light ? -0.3 : -0.2
@@ -170,19 +165,9 @@ struct HomeView: View {
                 tickerPopupDismissButton
 
                 VStack(spacing: 0) {
-                    // Wrapped in Group so the VStack sees exactly two children
-                    // (active-area, input-bar) in both branches — keeps the
-                    // input bar's SwiftUI identity stable across the empty ↔
-                    // conversation transition (preserves `@FocusState` and the
-                    // `chatInputHeight` geometry reading).
                     Group {
                         if viewModel.isConversationActive {
-                            MessageListView(messages: viewModel.messages, scale: scale)
-                                .padding(.top, Self.conversationListTopInset * scale)
-                                .blur(radius: anyModalOpen ? 10 : 0)
-                                .brightness(modalDimBrightness(when: anyModalOpen))
-                                .allowsHitTesting(!anyModalOpen)
-                                .accessibilityHidden(anyModalOpen)
+                            Spacer()
                         } else {
                             VStack(spacing: 0) {
                                 Spacer()
@@ -214,6 +199,19 @@ struct HomeView: View {
                 }
             }
         }
+        .overlay(alignment: .bottom) {
+            if tickerMentionViewModel.isShowingPopup && !anyModalOpen {
+                TickerMentionPopup(
+                    results: tickerMentionViewModel.results,
+                    onSelect: { tickerMentionViewModel.selectResult($0) }
+                )
+                .padding(.horizontal, 16 * scale)
+                .padding(.bottom, chatInputHeight - 8 * scale)
+                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
+            }
+        }
+        .overlay(alignment: .bottom) { quickCommandsOverlay }
+        .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .overlay(alignment: .topTrailing) {
             if showHoldingsFilter {
                 HoldingsFilterPopup(
@@ -233,19 +231,6 @@ struct HomeView: View {
                 .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
             }
         }
-        .overlay(alignment: .bottom) {
-            if tickerMentionViewModel.isShowingPopup && !anyModalOpen {
-                TickerMentionPopup(
-                    results: tickerMentionViewModel.results,
-                    onSelect: { tickerMentionViewModel.selectResult($0) }
-                )
-                .padding(.horizontal, 16 * scale)
-                .padding(.bottom, chatInputHeight - 8 * scale)
-                .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
-            }
-        }
-        .overlay(alignment: .bottom) { quickCommandsOverlay }
-        .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .background { HomeBackgroundView() }
         .background {
             GeometryReader { geo in

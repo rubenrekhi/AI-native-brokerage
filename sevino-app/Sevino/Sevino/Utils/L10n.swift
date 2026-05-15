@@ -478,44 +478,6 @@ enum L10n {
         static let homeLoadErrorDismiss = String(localized: "home.home_load_error_dismiss")
     }
 
-    enum Chat {
-        static func statusActiveAccessibility(_ label: String) -> String {
-            String(format: String(localized: "chat.status_active_accessibility"), label)
-        }
-        static func statusCompleteAccessibility(_ label: String) -> String {
-            String(format: String(localized: "chat.status_complete_accessibility"), label)
-        }
-        static func statusFailedAccessibility(_ label: String) -> String {
-            String(format: String(localized: "chat.status_failed_accessibility"), label)
-        }
-        static func stockCardChartAccessibilityLabel(_ symbol: String) -> String {
-            String(
-                format: String(localized: "chat.stock_card_chart_accessibility_label"),
-                symbol
-            )
-        }
-        static func stockCardChartAccessibilityValue(_ price: String, _ period: String) -> String {
-            String(
-                format: String(localized: "chat.stock_card_chart_accessibility_value"),
-                price, period
-            )
-        }
-        static let stockStatOpen = String(localized: "chat.stock_stat_open")
-        static let stockStatDayHigh = String(localized: "chat.stock_stat_day_high")
-        static let stockStatDayLow = String(localized: "chat.stock_stat_day_low")
-        static let stockStatPreviousClose = String(localized: "chat.stock_stat_previous_close")
-        static let stockStatYearHigh = String(localized: "chat.stock_stat_year_high")
-        static let stockStatYearLow = String(localized: "chat.stock_stat_year_low")
-        static let stockStatVolume = String(localized: "chat.stock_stat_volume")
-        static let stockStatAvgVolume = String(localized: "chat.stock_stat_avg_volume")
-        static let stockStatMarketCap = String(localized: "chat.stock_stat_market_cap")
-        static let stockStatPeRatio = String(localized: "chat.stock_stat_pe_ratio")
-        static let stockStatEps = String(localized: "chat.stock_stat_eps")
-        static let stockStatBeta = String(localized: "chat.stock_stat_beta")
-        static let stockStatDividendYield = String(localized: "chat.stock_stat_dividend_yield")
-        static let stockStatExchange = String(localized: "chat.stock_stat_exchange")
-    }
-
     enum Sidebar {
         static let accountPillFallback = String(localized: "sidebar.account_pill_fallback")
         static let chatAccessibility = String(localized: "sidebar.chat_accessibility")
