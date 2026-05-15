@@ -19,6 +19,11 @@ struct Message: Identifiable, Equatable, Sendable {
     let id: UUID
     let role: Role
     var blocks: [Block]
+    /// Structured context attached when the user sent the message with a
+    /// modal open (portfolio, holdings, etc.). Rendered as a card attachment
+    /// below the user bubble. `nil` for assistant messages and user messages
+    /// sent without a modal.
+    var attachedContext: AttachedContext? = nil
 }
 
 enum Role: String, Codable, Equatable, Sendable {

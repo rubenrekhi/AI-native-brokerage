@@ -116,7 +116,11 @@ class ConversationRepository:
         await db.execute(stmt)
         await db.flush()
         conversation = await db.get(Conversation, conversation_id)
-        if conversation is None or conversation.user_id != user_id:
+        if (
+            conversation is None
+            or conversation.user_id != user_id
+            or conversation.is_deleted
+        ):
             raise NotFoundError(
                 "Conversation not found", resource="conversation"
             )
@@ -168,6 +172,7 @@ class ConversationRepository:
             select(Conversation, last_blocks_subq.label("last_content_blocks"))
             .where(Conversation.user_id == user_id)
             .where(Conversation.last_message_at.is_not(None))
+            .where(Conversation.is_deleted == False)  # noqa: E712
         )
         if cursor_last_message_at is not None and cursor_id is not None:
             # Compound row comparison: keep walking down the (timestamp, id)
@@ -207,7 +212,11 @@ class ConversationRepository:
         conversation ids.
         """
         conversation = await db.get(Conversation, conversation_id)
-        if conversation is None or conversation.user_id != user_id:
+        if (
+            conversation is None
+            or conversation.user_id != user_id
+            or conversation.is_deleted
+        ):
             raise NotFoundError(
                 "Conversation not found", resource="conversation"
             )
@@ -502,3 +511,33 @@ class ConversationRepository:
         db.add(tool_execution)
         await db.flush()
         return tool_execution
+
+    @staticmethod
+    async def delete_conversation(
+        db: AsyncSession,
+        *,
+        conversation_id: uuid.UUID,
+        user_id: uuid.UUID,
+    ) -> None:
+        """Soft-delete a conversation owned by *user_id*.
+
+        Sets ``is_deleted = True`` rather than removing the row so
+        conversation data is retained for audit / analytics. The list
+        endpoint filters out soft-deleted rows. Raises
+        :class:`NotFoundError` if the conversation doesn't exist or
+        belongs to another user.
+        """
+        result = await db.execute(
+            update(Conversation)
+            .where(
+                and_(
+                    Conversation.id == conversation_id,
+                    Conversation.user_id == user_id,
+                    Conversation.is_deleted == False,  # noqa: E712
+                )
+            )
+            .values(is_deleted=True)
+        )
+        if result.rowcount == 0:
+            raise NotFoundError("Conversation not found")
+        await db.flush()

@@ -478,6 +478,28 @@ enum L10n {
         static let homeLoadErrorDismiss = String(localized: "home.home_load_error_dismiss")
     }
 
+    enum Chat {
+        static let statusInProgress = String(localized: "chat.status_in_progress")
+        static let statusComplete = String(localized: "chat.status_complete")
+        static let statusFailed = String(localized: "chat.status_failed")
+        static let errorRetry = String(localized: "chat.error_retry")
+        static let errorModelBusy = String(localized: "chat.error_model_busy")
+        static let errorGeneric = String(localized: "chat.error_generic")
+        static let errorTooLong = String(localized: "chat.error_too_long")
+        static let errorCancelled = String(localized: "chat.error_cancelled")
+        static let errorUnexpected = String(localized: "chat.error_unexpected")
+        static let contextPortfolio = String(localized: "chat.context_portfolio")
+        static let contextHoldings = String(localized: "chat.context_holdings")
+        static let contextCash = String(localized: "chat.context_cash")
+        static let contextRadar = String(localized: "chat.context_radar")
+        static let fundingBalance = String(localized: "chat.funding_balance")
+        static let fundingApy = String(localized: "chat.funding_apy")
+        static let fundingBuyingPower = String(localized: "chat.funding_buying_power")
+        static func moreItems(_ count: Int) -> String {
+            String(format: String(localized: "chat.more_items"), count)
+        }
+    }
+
     enum Sidebar {
         static let accountPillFallback = String(localized: "sidebar.account_pill_fallback")
         static let chatAccessibility = String(localized: "sidebar.chat_accessibility")
@@ -492,6 +514,7 @@ enum L10n {
         static let untitledConversation = String(localized: "sidebar.untitled_conversation")
         static let resumeErrorTitle = String(localized: "sidebar.resume_error_title")
         static let resumeErrorDismiss = String(localized: "sidebar.resume_error_dismiss")
+        static let deleteChat = String(localized: "sidebar.delete_chat")
     }
 
     enum Settings {

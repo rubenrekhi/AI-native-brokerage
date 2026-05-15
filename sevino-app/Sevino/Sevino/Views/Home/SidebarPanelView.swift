@@ -19,11 +19,18 @@ struct SidebarPanelView: View {
     /// responsible for calling `HomeViewModel.resume(conversationId:)` and
     /// dismissing the sidebar; this view just emits the intent.
     var onSelectChat: ((UUID) -> Void)? = nil
+    var onNewChat: (() -> Void)? = nil
+    var onDeleteChat: ((UUID) -> Void)? = nil
 
     @State private var searchText = ""
     @State private var showContactOptions = false
     @State private var showFounderContact = false
     @State private var showSettings = false
+
+    private var filteredChats: [ChatItem] {
+        guard !searchText.isEmpty else { return chats }
+        return chats.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    }
 
     var body: some View {
         SevinoGlassContainer {
@@ -67,7 +74,7 @@ struct SidebarPanelView: View {
 
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(chats) { chat in
+                        ForEach(filteredChats) { chat in
                             Button(action: { onSelectChat?(chat.conversationId) }) {
                                 Text(chat.title)
                                     .font(.system(size: 16 * scale))
@@ -84,6 +91,15 @@ struct SidebarPanelView: View {
                                     )
                             }
                             .disabled(onSelectChat == nil)
+                            .contextMenu {
+                                if let onDeleteChat {
+                                    Button(role: .destructive) {
+                                        onDeleteChat(chat.conversationId)
+                                    } label: {
+                                        Label(L10n.Sidebar.deleteChat, systemImage: "trash")
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -112,13 +128,14 @@ struct SidebarPanelView: View {
 
                     Spacer()
 
-                    Button(L10n.Sidebar.newChatAccessibility, systemImage: "plus.circle", action: {})
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 24 * scale, weight: .light))
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .frame(width: 44 * scale, height: 44 * scale)
-                        .modifier(SevinoGlass.navCircleClear)
-                        .disabled(true)
+                    Button(L10n.Sidebar.newChatAccessibility, systemImage: "plus.circle") {
+                        onNewChat?()
+                    }
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 24 * scale, weight: .light))
+                    .foregroundStyle(Color.sevinoSecondary)
+                    .frame(width: 44 * scale, height: 44 * scale)
+                    .modifier(SevinoGlass.navCircleClear)
                 }
                 .padding(.bottom, 8 * scale)
             }

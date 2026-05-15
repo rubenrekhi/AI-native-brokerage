@@ -6,6 +6,7 @@ import Foundation
 /// drawer that lists past conversations.
 protocol RecentChatsServiceProtocol: Sendable {
     func fetchRecentChats() async throws -> [ChatItem]
+    func deleteConversation(_ id: UUID) async throws
 }
 
 /// Real implementation backed by `GET /v1/conversations` (SEV-564). Pulls one
@@ -21,6 +22,10 @@ final class LiveRecentChatsService: RecentChatsServiceProtocol {
 
     init(apiClient: any APIClientProtocol = APIClient.shared) {
         self.apiClient = apiClient
+    }
+
+    func deleteConversation(_ id: UUID) async throws {
+        try await apiClient.delete("/v1/conversations/\(id.uuidString.lowercased())")
     }
 
     func fetchRecentChats() async throws -> [ChatItem] {
@@ -48,6 +53,8 @@ final class LiveRecentChatsService: RecentChatsServiceProtocol {
 /// stub the network. Production wiring uses `LiveRecentChatsService`.
 final class PlaceholderRecentChatsService: RecentChatsServiceProtocol {
     static let shared = PlaceholderRecentChatsService()
+
+    func deleteConversation(_ id: UUID) async throws {}
 
     func fetchRecentChats() async throws -> [ChatItem] {
         let now = Date.now

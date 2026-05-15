@@ -151,6 +151,18 @@ def _to_anthropic_content(
             converted.append(
                 {"type": "text", "text": block.get("text", "")}
             )
+        elif block.get("type") == "context":
+            data = block.get("data", {})
+            converted.append(
+                {
+                    "type": "text",
+                    "text": (
+                        "[Attached context from the user's open modal — "
+                        "use this data to inform your response]\n"
+                        + json.dumps(data, separators=(",", ":"), default=str)
+                    ),
+                }
+            )
         # Other block types are UI-only artefacts (StatusBlock,
         # StockCardBlock, …) — silently skip rather than forwarding to
         # Anthropic.
@@ -571,6 +583,7 @@ async def run_agent_turn(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_message: str,
+    user_context: dict[str, Any] | None = None,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
@@ -705,16 +718,25 @@ async def run_agent_turn(
         #    one via the SSE accumulator). Without it the iOS resume decoder
         #    drops the block and the user bubble renders empty (SEV-564).
         async with db_factory() as db:
+            content_blocks: list[dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "block_id": str(ULID()),
+                    "text": user_message,
+                }
+            ]
+            if user_context:
+                content_blocks.append(
+                    {
+                        "type": "context",
+                        "block_id": str(ULID()),
+                        "data": user_context,
+                    }
+                )
             user_msg = await ConversationRepository.append_user_message(
                 db,
                 conversation_id=conversation_id,
-                content_blocks=[
-                    {
-                        "type": "text",
-                        "block_id": str(ULID()),
-                        "text": user_message,
-                    }
-                ],
+                content_blocks=content_blocks,
             )
             user_message_id = user_msg.id
 

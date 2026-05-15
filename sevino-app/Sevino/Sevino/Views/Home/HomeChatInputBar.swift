@@ -7,6 +7,7 @@ struct HomeChatInputBar: View {
     @Bindable var viewModel: TickerMentionViewModel
     let scale: CGFloat
     let isDimmed: Bool
+    var isStreaming: Bool = false
     let onSend: ([MessageSegment]) -> Void
     let onQuickCommands: () -> Void
     @FocusState private var isFocused: Bool
@@ -18,6 +19,7 @@ struct HomeChatInputBar: View {
         viewModel: TickerMentionViewModel,
         scale: CGFloat,
         isDimmed: Bool,
+        isStreaming: Bool = false,
         onSend: @escaping ([MessageSegment]) -> Void,
         onQuickCommands: @escaping () -> Void,
         inputViewModel: HomeChatInputViewModel? = nil
@@ -25,6 +27,7 @@ struct HomeChatInputBar: View {
         self.viewModel = viewModel
         self.scale = scale
         self.isDimmed = isDimmed
+        self.isStreaming = isStreaming
         self.onSend = onSend
         self.onQuickCommands = onQuickCommands
         _inputVM = State(initialValue: inputViewModel ?? HomeChatInputViewModel(mention: viewModel))
@@ -114,7 +117,7 @@ struct HomeChatInputBar: View {
                     .frame(width: 30 * scale, height: 30 * scale)
                     .background(hasText ? Color.homeSendActiveBg : .clear, in: .circle)
                     .frame(width: 44 * scale, height: 44 * scale)
-                    .disabled(!hasText)
+                    .disabled(!hasText || isStreaming)
             }
             .padding(.horizontal, 4 * scale)
             .padding(.bottom, 4 * scale)

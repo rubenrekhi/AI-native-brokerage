@@ -223,6 +223,21 @@ async def list_conversations(
     return ConversationListResponse(items=items, next_cursor=next_cursor)
 
 
+@router.delete("/{conversation_id}", status_code=204)
+@limiter.limit("30/minute")
+async def delete_conversation(
+    request: Request,
+    conversation_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Soft-delete a conversation. Data is retained for audit."""
+    user_uuid = uuid.UUID(user_id)
+    await ConversationRepository.delete_conversation(
+        db, conversation_id=conversation_id, user_id=user_uuid
+    )
+
+
 @router.get(
     "/{conversation_id}/messages",
     response_model=ConversationMessagesResponse,
@@ -383,6 +398,7 @@ async def post_turn(
                 user_id=user_uuid,
                 conversation_id=conversation_id,
                 user_message=body.message,
+                user_context=body.context,
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=DEFAULT_REGISTRY,

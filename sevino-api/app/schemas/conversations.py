@@ -17,12 +17,32 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+
+_MAX_CONTEXT_BYTES = 10_000
 
 
 class ChatTurnRequest(BaseModel):
     message: str = Field(..., min_length=1)
     idempotency_key: str = Field(..., min_length=1)
+    context: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional structured context attached by the client "
+        "(e.g. portfolio snapshot, holdings) when the user sends a message "
+        "while a data modal is open. Injected into the user message so the "
+        "AI can reference it. Max serialized size: 10 KB.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_context_size(self) -> "ChatTurnRequest":
+        if self.context is not None:
+            import json
+
+            if len(json.dumps(self.context, default=str)) > _MAX_CONTEXT_BYTES:
+                msg = f"context exceeds {_MAX_CONTEXT_BYTES} byte limit"
+                raise ValueError(msg)
+        return self
 
 
 class ConversationListItem(BaseModel):

@@ -67,7 +67,21 @@ struct HomeView: View {
                     .accessibilityHidden(anyModalOpen)
                     .blur(radius: anyModalOpen ? 10 : 0)
                     .brightness(modalDimBrightness(when: anyModalOpen))
+                    .transition(.opacity.combined(with: .offset(y: 20)))
                 }
+
+                chatContentLayer
+
+                Button(action: dismissTopLayer) {
+                    Color.sevinoPrimary
+                        .opacity(anyModalOpen ? 0.4 : 0)
+                        .ignoresSafeArea()
+                }
+                .buttonStyle(.plain)
+                .contentShape(Rectangle())
+                .accessibilityLabel(L10n.Home.dismissAccessibility)
+                .accessibilityHidden(!anyDismissableLayerOpen)
+                .allowsHitTesting(anyDismissableLayerOpen)
 
                 VStack(spacing: 0) {
                     HStack(spacing: 8 * scale) {
@@ -92,17 +106,6 @@ struct HomeView: View {
                 .blur(radius: anyModalOpen ? 10 : 0)
                 .brightness(modalDimBrightness(when: anyModalOpen))
                 .allowsHitTesting(!anyModalOpen)
-
-                Button(action: dismissTopLayer) {
-                    Color.sevinoPrimary
-                        .opacity(anyModalOpen ? 0.4 : 0)
-                        .ignoresSafeArea()
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .accessibilityLabel(L10n.Home.dismissAccessibility)
-                .accessibilityHidden(!anyDismissableLayerOpen)
-                .allowsHitTesting(anyDismissableLayerOpen)
 
                 PortfolioMorphingView(
                     scale: scale,
@@ -164,41 +167,10 @@ struct HomeView: View {
 
                 tickerPopupDismissButton
 
-                VStack(spacing: 0) {
-                    Group {
-                        if viewModel.isConversationActive {
-                            Spacer()
-                        } else {
-                            VStack(spacing: 0) {
-                                Spacer()
-
-                                HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
-                                    .padding(.bottom, 20 * scale)
-                                    .padding(.horizontal, 16 * scale)
-                                    .blur(radius: anyModalOpen ? 10 : 0)
-                                    .brightness(modalDimBrightness(when: anyModalOpen))
-                                    .allowsHitTesting(!anyModalOpen)
-                            }
-                        }
-                    }
-
-                    HomeChatInputBar(
-                        viewModel: tickerMentionViewModel,
-                        scale: scale,
-                        isDimmed: anyModalOpen,
-                        onSend: sendMessage,
-                        onQuickCommands: openQuickCommands
-                    )
-                    .padding(.horizontal, 16 * scale)
-                    .padding(.bottom, 8 * scale)
-                    .onGeometryChange(for: CGFloat.self) { proxy in
-                        proxy.size.height
-                    } action: { newHeight in
-                        chatInputHeight = newHeight
-                    }
-                }
+                inputBarLayer
             }
         }
+        .animation(.spring(duration: 0.4, bounce: 0.1), value: viewModel.isConversationActive)
         .overlay(alignment: .bottom) {
             if tickerMentionViewModel.isShowingPopup && !anyModalOpen {
                 TickerMentionPopup(
@@ -212,33 +184,17 @@ struct HomeView: View {
         }
         .overlay(alignment: .bottom) { quickCommandsOverlay }
         .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
-        .overlay(alignment: .topTrailing) {
-            if showHoldingsFilter {
-                HoldingsFilterPopup(
-                    scale: scale,
-                    displayOption: holdingsViewModel.displayOption,
-                    sortOption: holdingsViewModel.sortOption,
-                    onSelectDisplay: holdingsViewModel.setDisplayOption,
-                    onSelectSort: holdingsViewModel.setSortOption,
-                    onDismiss: {
-                        withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
-                            showHoldingsFilter = false
-                        }
-                    }
-                )
-                .padding(.trailing, 36 * scale)
-                .padding(.top, 54 * scale)
-                .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
-            }
-        }
+        .overlay(alignment: .topTrailing) { holdingsFilterOverlay }
         .background { HomeBackgroundView() }
-        .background {
-            GeometryReader { geo in
-                Color.clear.onAppear {
-                    baseScale = geo.size.width / 393
-                    bottomSafeArea = geo.safeAreaInsets.bottom
-                }
-            }
+        .onGeometryChange(for: CGSize.self) { geo in
+            geo.size
+        } action: { size in
+            baseScale = size.width / 393
+        }
+        .onGeometryChange(for: EdgeInsets.self) { geo in
+            geo.safeAreaInsets
+        } action: { insets in
+            bottomSafeArea = insets.bottom
         }
         .overlay(alignment: .leading) {
             Color.clear
@@ -253,18 +209,7 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: showSidebar ? 28 * scale : 0)
                 .ignoresSafeArea()
         }
-        .overlay {
-            Button(action: toggleSidebar) {
-                Color.clear
-                    .contentShape(.rect)
-                    .ignoresSafeArea()
-            }
-            .buttonStyle(.plain)
-            .highPriorityGesture(sidebarDragGesture)
-            .accessibilityLabel(L10n.Home.sidebarDismissAccessibility)
-            .accessibilityHidden(!showSidebar)
-            .allowsHitTesting(showSidebar)
-        }
+        .overlay { sidebarDismissOverlay }
         .offset(x: sidebarOffset)
         .background {
             SidebarPanelView(
@@ -279,10 +224,25 @@ struct HomeView: View {
                     : nil,
                 onSelectChat: { conversationId in
                     Task { await resumeConversation(conversationId) }
+                },
+                onNewChat: {
+                    viewModel.startNewConversation()
+                    withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
+                        showSidebar = false
+                        sidebarDragOffset = 0
+                    }
+                },
+                onDeleteChat: { conversationId in
+                    Task { await viewModel.deleteConversation(conversationId) }
                 }
             )
         }
         .task { await viewModel.load() }
+        .onChange(of: viewModel.turnState) { oldState, newState in
+            if oldState == .streaming && newState == .idle {
+                Task { await viewModel.refreshChats() }
+            }
+        }
         .task { await holdingsViewModel.loadHoldings() }
         .task { await radarViewModel.loadRadar() }
         .task(id: portfolioViewModel.selectedTimeRange) {
@@ -363,6 +323,19 @@ struct HomeView: View {
 
     // TODO(SEV-567): replace this string collapse with structured ticker
     // mentions in the wire payload so the backend doesn't have to re-parse.
+    private func retryLastMessage() {
+        guard let lastUserMessage = viewModel.messages.last(where: { $0.role == .user }),
+              let textBlock = lastUserMessage.blocks.first,
+              case .text(let tb) = textBlock else { return }
+        Task {
+            do {
+                try await viewModel.send(text: tb.text)
+            } catch {
+                // Failure reflected in conversation store's turn state.
+            }
+        }
+    }
+
     private func sendMessage(segments: [MessageSegment]) {
         let text = segments.map { segment -> String in
             switch segment {
@@ -371,15 +344,61 @@ struct HomeView: View {
             }
         }.joined()
         guard !text.isEmpty else { return }
+
+        let attached = captureAttachedContext()
+        if anyModalOpen {
+            dismissAllModals()
+        }
+
         tickerMentionViewModel.clear()
         Task {
             do {
-                try await viewModel.send(text: text)
+                try await viewModel.send(text: text, context: attached?.wireContext, attachedContext: attached)
             } catch {
                 // Failure is already reflected in the conversation store's
                 // turn state; user-facing surfacing of send errors is post-v0.
             }
         }
+    }
+
+    private func captureAttachedContext() -> AttachedContext? {
+        if showPortfolio {
+            return .portfolio(
+                equity: portfolioViewModel.equity,
+                currency: portfolioViewModel.currency,
+                gainAbs: portfolioViewModel.gainAbs,
+                gainPct: portfolioViewModel.gainPct,
+                timeRange: portfolioViewModel.selectedTimeRange.rawValue
+            )
+        }
+        if showFunding {
+            return .funding(
+                balance: fundingViewModel.cashBalance,
+                apy: fundingViewModel.cashApy,
+                buyingPower: fundingViewModel.cashBuyingPower
+            )
+        }
+        if showHoldings {
+            return .holdings(holdings: holdingsViewModel.holdings.map {
+                HoldingSummary(
+                    ticker: $0.ticker,
+                    marketValue: $0.marketValue,
+                    unrealizedPl: $0.unrealizedPl
+                )
+            })
+        }
+        if showRadar {
+            return .radar(items: radarViewModel.radarItems.map {
+                RadarSummary(
+                    ticker: $0.ticker,
+                    description: $0.description,
+                    price: $0.price,
+                    changePercent: $0.changePercent,
+                    isPositive: $0.isPositive
+                )
+            })
+        }
+        return nil
     }
 
     private func dismissTopLayer() {
@@ -551,6 +570,92 @@ struct HomeView: View {
         .accessibilityLabel(L10n.Home.dismissAccessibility)
         .accessibilityHidden(!tickerMentionViewModel.isShowingPopup)
         .allowsHitTesting(tickerMentionViewModel.isShowingPopup)
+    }
+
+    private var inputBarLayer: some View {
+        VStack {
+            Spacer()
+            HomeChatInputBar(
+                viewModel: tickerMentionViewModel,
+                scale: scale,
+                isDimmed: anyModalOpen,
+                isStreaming: viewModel.turnState == .streaming,
+                onSend: sendMessage,
+                onQuickCommands: openQuickCommands
+            )
+            .padding(.horizontal, 16 * scale)
+            .padding(.bottom, 8 * scale)
+            .onGeometryChange(for: CGFloat.self) { proxy in
+                proxy.size.height
+            } action: { newHeight in
+                chatInputHeight = newHeight
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var chatContentLayer: some View {
+        if viewModel.isConversationActive {
+            MessageListView(
+                messages: viewModel.messages,
+                turnState: viewModel.turnState,
+                scale: scale,
+                onRetry: retryLastMessage
+            )
+            .safeAreaPadding(.top, 56 * scale)
+            .safeAreaPadding(.bottom, chatInputHeight + 48 * scale)
+            .blur(radius: anyModalOpen ? 10 : 0)
+            .brightness(modalDimBrightness(when: anyModalOpen))
+            .allowsHitTesting(!anyModalOpen)
+            .accessibilityHidden(anyModalOpen)
+            .transition(.opacity)
+        } else {
+            VStack(spacing: 0) {
+                Spacer()
+
+                HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
+                    .padding(.bottom, chatInputHeight + 20 * scale)
+                    .padding(.horizontal, 16 * scale)
+                    .blur(radius: anyModalOpen ? 10 : 0)
+                    .brightness(modalDimBrightness(when: anyModalOpen))
+                    .allowsHitTesting(!anyModalOpen)
+            }
+            .transition(.opacity.combined(with: .move(edge: .bottom)))
+        }
+    }
+
+    @ViewBuilder
+    private var holdingsFilterOverlay: some View {
+        if showHoldingsFilter {
+            HoldingsFilterPopup(
+                scale: scale,
+                displayOption: holdingsViewModel.displayOption,
+                sortOption: holdingsViewModel.sortOption,
+                onSelectDisplay: holdingsViewModel.setDisplayOption,
+                onSelectSort: holdingsViewModel.setSortOption,
+                onDismiss: {
+                    withAnimation(.spring(duration: 0.3, bounce: 0.15)) {
+                        showHoldingsFilter = false
+                    }
+                }
+            )
+            .padding(.trailing, 36 * scale)
+            .padding(.top, 54 * scale)
+            .transition(.scale(scale: 0.8, anchor: .topTrailing).combined(with: .opacity))
+        }
+    }
+
+    private var sidebarDismissOverlay: some View {
+        Button(action: toggleSidebar) {
+            Color.clear
+                .contentShape(.rect)
+                .ignoresSafeArea()
+        }
+        .buttonStyle(.plain)
+        .highPriorityGesture(sidebarDragGesture)
+        .accessibilityLabel(L10n.Home.sidebarDismissAccessibility)
+        .accessibilityHidden(!showSidebar)
+        .allowsHitTesting(showSidebar)
     }
 
     private var navSidebarButton: some View {

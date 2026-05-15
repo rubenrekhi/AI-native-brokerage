@@ -7,6 +7,7 @@ struct HomeTimeRangeSelector: View {
     /// the backend block emitted in `range_options` so a phantom pill
     /// (e.g. YTD or 5Y) doesn't appear when the data doesn't support it.
     var options: [TimeRange] = TimeRange.allCases
+    var usesGlass: Bool = true
     let scale: CGFloat
     let onSelect: (TimeRange) -> Void
 
@@ -36,13 +37,20 @@ struct HomeTimeRangeSelector: View {
     var body: some View {
         ZStack(alignment: .leading) {
             if totalWidth > 0 {
-                Capsule()
-                    .fill(.clear)
-                    .modifier(SevinoGlass.navPillClear)
-                    .frame(width: itemWidth)
-                    .scaleEffect(isPressing ? 1.12 : 1.0)
-                    .offset(x: indicatorOffsetX)
-                    .allowsHitTesting(false)
+                Group {
+                    if usesGlass {
+                        Capsule()
+                            .fill(.clear)
+                            .modifier(SevinoGlass.navPillClear)
+                    } else {
+                        Capsule()
+                            .fill(Color.sevinoGreyAccent.opacity(0.3))
+                    }
+                }
+                .frame(width: itemWidth)
+                .scaleEffect(isPressing ? 1.12 : 1.0)
+                .offset(x: indicatorOffsetX)
+                .allowsHitTesting(false)
             }
 
             HStack(spacing: 0) {

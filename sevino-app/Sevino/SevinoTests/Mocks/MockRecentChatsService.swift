@@ -12,4 +12,12 @@ final class MockRecentChatsService: RecentChatsServiceProtocol {
         if let error = fetchRecentChatsError { throw error }
         return chats
     }
+
+    var deleteConversationError: Error?
+    private(set) var deletedConversationIds: [UUID] = []
+
+    func deleteConversation(_ id: UUID) async throws {
+        deletedConversationIds.append(id)
+        if let error = deleteConversationError { throw error }
+    }
 }

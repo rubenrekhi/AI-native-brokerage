@@ -168,16 +168,23 @@ final class ConversationStore {
      Pass an explicit key when retrying a failed turn so the backend (B3.2 idempotency
      slot) replays the persisted assistant message instead of re-running the agent.
      */
-    func send(text: String, idempotencyKey: String? = nil) async throws {
+    func send(
+        text: String,
+        context: [String: JSONValue]? = nil,
+        attachedContext: AttachedContext? = nil,
+        idempotencyKey: String? = nil
+    ) async throws {
         let userMessage = Message(
             id: UUID(),
             role: .user,
-            blocks: [.text(TextBlock(blockId: UUID().uuidString, text: text))]
+            blocks: [.text(TextBlock(blockId: UUID().uuidString, text: text))],
+            attachedContext: attachedContext
         )
         messages.append(userMessage)
 
         let request = try buildRequest(
             message: text,
+            context: context,
             idempotencyKey: idempotencyKey ?? idempotencyKeyFactory()
         )
         state = .streaming
@@ -330,7 +337,7 @@ final class ConversationStore {
         }
     }
 
-    private func buildRequest(message: String, idempotencyKey: String) throws -> URLRequest {
+    private func buildRequest(message: String, context: [String: JSONValue]?, idempotencyKey: String) throws -> URLRequest {
         let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/turns"
         guard let url = URL(string: baseURL + path) else {
             throw URLError(.badURL)
@@ -338,17 +345,16 @@ final class ConversationStore {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = TurnRequestBody(message: message, idempotencyKey: idempotencyKey)
+        let body = TurnRequestBody(message: message, context: context, idempotencyKey: idempotencyKey)
         request.httpBody = try encoder.encode(body)
         return request
     }
 }
 
 /// Wire body for `POST /v1/conversations/{id}/turns`. Mirrors
-/// `app/schemas/conversations.py:ChatTurnRequest`. Lives here (not in
-/// `Models/`) because it has no consumers outside the store and the wire
-/// shape is one-line trivial.
+/// `app/schemas/conversations.py:ChatTurnRequest`.
 private struct TurnRequestBody: Encodable {
     let message: String
+    let context: [String: JSONValue]?
     let idempotencyKey: String
 }

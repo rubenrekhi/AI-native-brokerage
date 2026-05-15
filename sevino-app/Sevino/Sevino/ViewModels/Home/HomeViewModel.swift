@@ -15,6 +15,7 @@ final class HomeViewModel {
     private(set) var conversationStore: ConversationStore
 
     var messages: [Message] { conversationStore.messages }
+    var turnState: ConversationStore.TurnState { conversationStore.state }
     var isConversationActive: Bool { !conversationStore.messages.isEmpty }
 
     private(set) var greeting = ""
@@ -48,8 +49,8 @@ final class HomeViewModel {
             conversationStoreFactory ?? { ConversationStore(conversationId: $0) }
     }
 
-    func send(text: String) async throws {
-        try await conversationStore.send(text: text)
+    func send(text: String, context: [String: JSONValue]? = nil, attachedContext: AttachedContext? = nil) async throws {
+        try await conversationStore.send(text: text, context: context, attachedContext: attachedContext)
     }
 
     /**
@@ -88,6 +89,32 @@ final class HomeViewModel {
             conversationStore = store
         } catch {
             resumeError = error.localizedDescription
+        }
+    }
+
+    func startNewConversation() {
+        conversationStore = ConversationStore()
+    }
+
+    func deleteConversation(_ id: UUID) async {
+        let removed = chats.filter { $0.conversationId == id }
+        chats.removeAll { $0.conversationId == id }
+        if conversationStore.conversationId == id {
+            conversationStore = ConversationStore()
+        }
+        do {
+            try await chatService.deleteConversation(id)
+        } catch {
+            chats.append(contentsOf: removed)
+            self.error = error.localizedDescription
+        }
+    }
+
+    func refreshChats() async {
+        do {
+            chats = try await chatService.fetchRecentChats()
+        } catch {
+            // Stale sidebar is acceptable; don't surface this error.
         }
     }
 
