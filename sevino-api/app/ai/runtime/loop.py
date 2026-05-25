@@ -1213,24 +1213,27 @@ async def run_agent_turn(
                             metadata={"iteration_index": iteration_index},
                         ) as gen:
                             iter_started = time.monotonic()
-                            # Maps Anthropic's ``index`` for an in-flight TEXT
-                            # block to the server-assigned wire-level block_id.
-                            # Thinking blocks track separately so the delta
-                            # branch can route to the right wire envelope —
-                            # ``thinking_delta`` chunks target
-                            # ``open_thinking_blocks``, ``text_delta`` chunks
-                            # target ``open_text_blocks``. Tool-use blocks are
-                            # not user-facing in v0 so they don't enter either
-                            # map.
+                            # SEV-571 / B2.4 wire protocols emitted by this loop:
+                            #
+                            #   text:     block_start → text_delta* → block_end
+                            #   thinking: block_start(state=streaming)
+                            #             → text_delta* (one per thinking_delta)
+                            #             → block_data(state=complete)
+                            #             → block_end
+                            #   redacted_thinking: block_start(redacted=true,
+                            #                                  state=complete)
+                            #                      → block_end   (no deltas)
+                            #
+                            # Each open content-block index needs a wire-level
+                            # block_id; text and thinking track in separate
+                            # maps so the delta branch can route by chunk type.
+                            # ``text_delta`` chunks are also reused for
+                            # thinking deltas — iOS dispatches by block_id on
+                            # the already-open block, and the discriminator on
+                            # ``BlockStart`` is sufficient to disambiguate.
+                            # Tool-use blocks are not user-facing in v0 and
+                            # don't enter either map.
                             open_text_blocks: dict[int, str] = {}
-                            # SEV-571: maps Anthropic's ``index`` for an
-                            # in-flight ``thinking`` content block to the
-                            # server-assigned wire-level block_id. Populated on
-                            # ``content_block_start`` and consumed by the
-                            # ``thinking_delta`` and ``content_block_stop``
-                            # branches. ``redacted_thinking`` blocks never
-                            # enter this map — they emit their full envelope
-                            # synchronously on ``content_block_start``.
                             open_thinking_blocks: dict[int, str] = {}
                             # B3.3: counts text_deltas seen this iteration so
                             # ``disconnect_check`` polls on a fixed cadence
@@ -1360,17 +1363,6 @@ async def run_agent_turn(
                                                                 tool_use_id
                                                             ]["state"] = new_state
                                                 elif cb_type == "thinking":
-                                                    # SEV-571: forward thinking
-                                                    # blocks to iOS as a UI-only
-                                                    # ``ThinkingBlock`` envelope.
-                                                    # Deltas land on the same
-                                                    # wire envelope as text
-                                                    # blocks (``text_delta``);
-                                                    # the discriminator on the
-                                                    # ``BlockStart`` payload is
-                                                    # what iOS routes on, so
-                                                    # the wire format stays
-                                                    # uniform.
                                                     block_id = str(ULID())
                                                     open_thinking_blocks[
                                                         chunk.index
@@ -1387,19 +1379,10 @@ async def run_agent_turn(
                                                         )
                                                     )
                                                 elif cb_type == "redacted_thinking":
-                                                    # SEV-571: payload is
-                                                    # encrypted, so we never see
-                                                    # deltas. Emit the full
-                                                    # envelope synchronously —
-                                                    # ``state="complete"`` so
-                                                    # iOS can render the
-                                                    # encrypted-stub label
-                                                    # immediately, then close
-                                                    # the bracket. Skipping
-                                                    # ``open_thinking_blocks``
-                                                    # keeps the delta/stop
-                                                    # branches no-ops for this
-                                                    # index.
+                                                    # Skip ``open_thinking_blocks`` so the
+                                                    # delta/stop branches stay no-ops for
+                                                    # this index — encrypted payload, no
+                                                    # deltas to forward.
                                                     block_id = str(ULID())
                                                     await sse_emitter.emit(
                                                         BlockStart(
@@ -1458,18 +1441,6 @@ async def run_agent_turn(
                                                     and chunk.index
                                                     in open_thinking_blocks
                                                 ):
-                                                    # SEV-571: route thinking
-                                                    # deltas to the open
-                                                    # thinking block's wire id.
-                                                    # ``text_delta`` is the
-                                                    # shared append-text frame
-                                                    # — iOS dispatches by
-                                                    # ``block_id`` on the
-                                                    # already-open block, so
-                                                    # the discriminator on the
-                                                    # ``BlockStart`` payload
-                                                    # (``type: thinking``) is
-                                                    # sufficient.
                                                     await sse_emitter.emit(
                                                         TextDelta(
                                                             block_id=open_thinking_blocks[
@@ -1502,15 +1473,6 @@ async def run_agent_turn(
                                                         )
                                                     )
                                                     if thinking_block_id is not None:
-                                                        # SEV-571: flip the
-                                                        # state to ``complete``
-                                                        # via a single
-                                                        # ``block_data`` patch
-                                                        # so iOS can decide
-                                                        # whether to auto-
-                                                        # collapse the chip,
-                                                        # then close the
-                                                        # bracket.
                                                         await sse_emitter.emit(
                                                             BlockData(
                                                                 block_id=(

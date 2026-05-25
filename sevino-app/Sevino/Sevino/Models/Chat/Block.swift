@@ -263,16 +263,15 @@ enum ColorState: String, Codable, Sendable {
     case neutral
 }
 
-/// Extended-thinking output streamed alongside the model's answer
-/// (SEV-571). Rendered as an expandable chip in `ThinkingBlockView`:
-/// auto-expands while `state == .streaming` so the user can watch the
-/// chain-of-thought unfold, then auto-collapses on `.complete` unless
-/// the user has manually pinned it open.
+/// Extended-thinking output (SEV-571). Mirrors `ThinkingBlock` in
+/// `app/ai/blocks.py`.
 ///
-/// `redacted == true` covers Anthropic's `redacted_thinking` variant —
-/// the payload is encrypted, so the view shows a single stub line
-/// instead of empty content. Redacted blocks arrive with
-/// `state == .complete` and no deltas.
+/// Streaming-start frames may carry only `block_id`; the explicit-
+/// fallback decoder mirrors the backend's Pydantic defaults so the
+/// initial `block_start` decode doesn't throw and drop the turn.
+/// `redacted == true` covers Anthropic's `redacted_thinking` variant:
+/// the payload is encrypted and arrives with `state == .complete` and
+/// no deltas.
 struct ThinkingBlock: Codable, Equatable, Sendable {
     let blockId: String
     let text: String
@@ -296,16 +295,11 @@ struct ThinkingBlock: Codable, Equatable, Sendable {
     }
 
     init(from decoder: any Decoder) throws {
-        // Mirror the backend Pydantic defaults: a streaming-start frame
-        // may only carry `block_id`, with `text` / `redacted` / `state`
-        // filled in by `block_data` patches and `text_delta` events.
-        // Without these fallbacks the initial `BlockStart` decode would
-        // throw and iOS would drop the entire turn.
-        //
-        // We distinguish "field missing" from "field present but
-        // malformed": missing keys fall back to the documented default,
-        // present-but-invalid keys throw — invalid state literals are a
-        // wire-format contract violation and must surface loudly.
+        // "Missing falls back, present-but-invalid throws": a
+        // `decodeIfPresent ?? .streaming` would silently swallow
+        // malformed state literals — those are a wire-format contract
+        // violation and must surface loudly. Pinned by
+        // `testNullThinkingStateIsRejected`.
         let container = try decoder.container(keyedBy: CodingKeys.self)
         self.blockId = try container.decode(String.self, forKey: .blockId)
         self.text =

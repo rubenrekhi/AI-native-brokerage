@@ -96,11 +96,10 @@ def _events_for(message: Message) -> list[Any]:
     """Build a stream of raw Anthropic events that, when consumed, would
     accumulate into ``message``.
 
-    The loop only branches on ``content_block_start`` / ``content_block_delta``
-    / ``content_block_stop`` for text blocks, so for thinking and other
-    blocks we still emit the start/stop bracket (so block-index tracking
-    is realistic) but no deltas — matching what the SDK does when the
-    final accumulated block is reconstructed in one piece.
+    Text and thinking blocks emit a real delta event in addition to the
+    start/stop bracket — the loop branches on both ``text_delta`` and
+    ``thinking_delta`` to forward visible content to iOS. Other block
+    shapes are passed through with start/stop only.
     """
     events: list[Any] = []
     for index, block in enumerate(message.content):
@@ -651,6 +650,11 @@ class TestSSEWireEnvelope:
         ]
         assert len(thinking_ends) == 1
 
+        # The state→complete patch MUST land before the close bracket;
+        # an iOS client that received them out of order could drop the
+        # patch as targeting a closed block.
+        assert events.index(thinking_patches[0]) < events.index(thinking_ends[0])
+
     async def test_redacted_thinking_block_emits_complete_envelope(
         self, repo_mocks
     ):
@@ -870,7 +874,7 @@ class TestRequestShape:
             }
         ]
 
-    async def test_history_drops_non_text_ui_blocks(self, repo_mocks):
+    async def test_history_drops_non_text_ui_blocks(self, repo_mocks, monkeypatch):
         # SEV-571: ``ThinkingBlock`` (and the existing ``StatusBlock`` /
         # ``StockCardBlock`` UI-only variants) must not survive into the
         # next turn's Anthropic request — Anthropic 400s on unknown
@@ -926,9 +930,11 @@ class TestRequestShape:
         )
         import app.ai.runtime.loop as loop_module
 
-        loop_module.ConversationRepository.load_history = repo_mocks[
-            "load_history"
-        ]
+        monkeypatch.setattr(
+            loop_module.ConversationRepository,
+            "load_history",
+            repo_mocks["load_history"],
+        )
 
         captured: list[list[dict[str, Any]]] = []
         final = _make_response(text="second answer")

@@ -24,24 +24,19 @@ import SwiftUI
  can grow with the user's text-size setting.
  */
 struct ThinkingBlockView: View {
+    private static let cornerRadius: CGFloat = 10
+
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let block: ThinkingBlock
     let scale: CGFloat
 
-    /// Whether the body is visible. Initialised from `state` so a
-    /// streaming block auto-expands; flipped manually when the user taps.
     @State private var isExpanded: Bool
-    /// True once the user has toggled the chip. We then stop overriding
-    /// `isExpanded` from the `state` transition so we don't fight the
-    /// user's intent.
+    /// Set on the first user tap; suppresses auto-collapse for the rest of the turn.
     @State private var userToggled = false
 
     init(block: ThinkingBlock, scale: CGFloat) {
         self.block = block
         self.scale = scale
-        // Auto-expand streaming blocks; redacted blocks (always complete)
-        // start collapsed so the chip reads as a quiet artifact rather
-        // than an attention grab.
         _isExpanded = State(initialValue: block.state == .streaming)
     }
 
@@ -71,18 +66,16 @@ struct ThinkingBlockView: View {
         }
         .padding(12 * scale)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Self.cornerRadius * scale)
                 .fill(Color.sevinoGreyAccent.opacity(0.18))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: Self.cornerRadius * scale)
                 .strokeBorder(Color.sevinoGreyAccent.opacity(0.3), lineWidth: 0.5)
         )
         .padding(.horizontal, 16 * scale)
         .animation(animation, value: isExpanded)
         .onChange(of: block.state) { _, newState in
-            // Auto-collapse when streaming finishes — unless the user
-            // has explicitly toggled the chip this turn.
             guard !userToggled else { return }
             if newState == .complete {
                 isExpanded = false
