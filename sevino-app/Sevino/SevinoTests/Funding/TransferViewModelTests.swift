@@ -44,7 +44,8 @@ final class TransferViewModelTests: XCTestCase {
             accountMask: accountMask,
             accountType: accountType,
             nickname: nickname,
-            status: "QUEUED"
+            status: "QUEUED",
+            requiresReauth: false
         )
     }
 

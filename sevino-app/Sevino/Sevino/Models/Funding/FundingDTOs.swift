@@ -27,6 +27,7 @@ struct AchRelationshipDTO: Decodable, Identifiable, Equatable {
     let accountType: String?
     let nickname: String?
     let status: String
+    let requiresReauth: Bool
 }
 
 /// Wrapper response for GET /v1/funding/ach-relationships. Mirrors the

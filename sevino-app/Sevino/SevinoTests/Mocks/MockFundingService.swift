@@ -8,6 +8,8 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     var linkBankResult: Result<AchRelationshipDTO, Error>?
     var listAchRelationshipsResult: Result<[AchRelationshipDTO], Error> = .success([])
     var deleteAchRelationshipResult: Result<Void, Error> = .success(())
+    var createReauthLinkTokenResult: Result<String, Error> = .success("link-update-sandbox")
+    var completeReauthResult: Result<Void, Error> = .success(())
     var createTransferResult: Result<TransferResponse, Error>?
     var listTransfersResult: Result<[TransferResponse], Error> = .success([])
     var getCashInterestResult: Result<CashInterestResponse, Error> = .success(
@@ -31,6 +33,8 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     private(set) var linkBankCalls: [LinkBankRequest] = []
     private(set) var listAchRelationshipsCalls = 0
     private(set) var deleteAchRelationshipCalls: [UUID] = []
+    private(set) var createReauthLinkTokenCalls: [UUID] = []
+    private(set) var completeReauthCalls: [UUID] = []
     private(set) var createTransferCalls: [(relationshipId: String, amount: Decimal, direction: TransferDirection)] = []
     private(set) var listTransfersCalls = 0
     private(set) var getCashInterestCalls = 0
@@ -56,6 +60,16 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     func deleteAchRelationship(id: UUID) async throws {
         deleteAchRelationshipCalls.append(id)
         try deleteAchRelationshipResult.get()
+    }
+
+    func createReauthLinkToken(relationshipId: UUID) async throws -> String {
+        createReauthLinkTokenCalls.append(relationshipId)
+        return try createReauthLinkTokenResult.get()
+    }
+
+    func completeReauth(relationshipId: UUID) async throws {
+        completeReauthCalls.append(relationshipId)
+        try completeReauthResult.get()
     }
 
     func createTransfer(
