@@ -1,8 +1,8 @@
 import SwiftUI
 
 extension Color {
-    /// Primary background — light: #F9F8F6, dark: #000000
-    static let sevinoPrimary = adaptive(light: 0xF9F8F6, dark: 0x000000)
+    /// Primary background — light: #FDFDFD, dark: #000000
+    static let sevinoPrimary = adaptive(light: 0xFDFDFD, dark: 0x000000)
 
     /// Primary text — light: #121111, dark: #F9F8F6
     static let sevinoSecondary = adaptive(light: 0x121111, dark: 0xF9F8F6)
@@ -46,7 +46,7 @@ extension Color {
     /// Drop shadow base — #000000 (same in both modes; apply opacity at use site)
     static let sevinoShadow = adaptive(light: 0x000000, dark: 0x000000)
 
-    private static func adaptive(light: UInt, dark: UInt) -> Color {
+    static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
                 ? UIColor(hex: dark)

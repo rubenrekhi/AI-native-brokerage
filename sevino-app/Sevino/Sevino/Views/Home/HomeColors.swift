@@ -14,4 +14,11 @@ extension Color {
 
     static let homePopupDivider = Color.sevinoGreyAccent.opacity(0.3)
     static let homeDragHandle = Color.sevinoGreyContrast.opacity(0.5)
+
+    // Gradient pastels for HomeBackgroundView mesh
+    static let homeGradientLavender = Color(red: 0.80, green: 0.75, blue: 1.0)
+    static let homeGradientPeach    = Color(red: 1.0,  green: 0.82, blue: 0.75)
+    static let homeGradientMint     = Color(red: 0.70, green: 0.95, blue: 0.88)
+    static let homeGradientSky      = Color(red: 0.73, green: 0.85, blue: 1.0)
+    static let homeGradientRose     = Color(red: 1.0,  green: 0.78, blue: 0.84)
 }
