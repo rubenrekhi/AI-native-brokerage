@@ -89,10 +89,12 @@ final class ConversationStoreResumeTests: XCTestCase {
     // MARK: - Forward-compatibility
 
     func testUnknownBlockTypesAreDroppedNotCrashed() async throws {
-        // The wire schema is open by design: a future thinking block lands
+        // The wire schema is open by design: a future block variant lands
         // on persisted assistant messages, but old iOS clients have no
         // decoder for it. Verify the unknown block is logged and dropped
-        // while the rest of the message survives.
+        // while the rest of the message survives. ``future_widget`` is
+        // not in the discriminated union — pick any type that isn't (was
+        // ``thinking`` before SEV-571 added the real variant).
         let json = """
         {
           "items": [
@@ -101,7 +103,7 @@ final class ConversationStoreResumeTests: XCTestCase {
               "role": "assistant",
               "created_at": "2026-05-11T20:00:00Z",
               "content_blocks": [
-                {"type": "thinking", "block_id": "t1", "summary": "ignore me"},
+                {"type": "future_widget", "block_id": "t1", "summary": "ignore me"},
                 {"type": "text", "block_id": "a1", "text": "real reply"}
               ]
             }
