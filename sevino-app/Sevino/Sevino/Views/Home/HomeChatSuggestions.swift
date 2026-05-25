@@ -17,11 +17,11 @@ struct HomeChatSuggestions: View {
                     HStack(spacing: 6 * scale) {
                         Text(suggestion)
                             .font(.system(size: 14 * scale))
-                            .foregroundStyle(Color.homeSendActiveBg)
+                            .foregroundStyle(Color.sevinoSecondary)
 
                         Image(systemName: "arrow.down.left")
                             .font(.system(size: 11 * scale, weight: .semibold))
-                            .foregroundStyle(Color.homeSendActiveBg)
+                            .foregroundStyle(Color.sevinoSecondary)
                             .accessibilityHidden(true)
                     }
                 }

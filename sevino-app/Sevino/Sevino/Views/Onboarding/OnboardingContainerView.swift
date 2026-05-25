@@ -133,21 +133,8 @@ struct OnboardingContainerView: View {
         Task { await viewModel.retryLastSave() }
     }
 
-    @ViewBuilder
     private var backgroundView: some View {
-        if [1, 5, 7, 17].contains(viewModel.currentStep) {
-            OnboardingBackgroundView()
-        } else {
-            LinearGradient(
-                stops: [
-                    .init(color: Color.sevinoAccent, location: 0),
-                    .init(color: Color.sevinoPrimary, location: 0.2),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+        OnboardingBackgroundView()
     }
 
     @ViewBuilder

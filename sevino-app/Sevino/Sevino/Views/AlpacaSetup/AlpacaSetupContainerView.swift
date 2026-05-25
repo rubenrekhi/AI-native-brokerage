@@ -143,21 +143,8 @@ struct AlpacaSetupContainerView: View {
         Task { await viewModel.retryLastSave() }
     }
 
-    @ViewBuilder
     private var backgroundView: some View {
-        if viewModel.currentStep == 1 || viewModel.currentStep == 10 {
-            OnboardingBackgroundView()
-        } else {
-            LinearGradient(
-                stops: [
-                    .init(color: Color.sevinoAccent, location: 0),
-                    .init(color: Color.sevinoPrimary, location: 0.2),
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
-        }
+        OnboardingBackgroundView()
     }
 
 

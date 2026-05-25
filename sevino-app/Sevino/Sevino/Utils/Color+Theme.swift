@@ -46,6 +46,12 @@ extension Color {
     /// Drop shadow base — #000000 (same in both modes; apply opacity at use site)
     static let sevinoShadow = adaptive(light: 0x000000, dark: 0x000000)
 
+    static let sevinoGradientLavender = Color(red: 0.80, green: 0.75, blue: 1.0)
+    static let sevinoGradientPeach    = Color(red: 1.0,  green: 0.82, blue: 0.75)
+    static let sevinoGradientMint     = Color(red: 0.70, green: 0.95, blue: 0.88)
+    static let sevinoGradientSky      = Color(red: 0.73, green: 0.85, blue: 1.0)
+    static let sevinoGradientRose     = Color(red: 1.0,  green: 0.78, blue: 0.84)
+
     static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark
