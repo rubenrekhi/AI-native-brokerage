@@ -82,6 +82,7 @@ class AchRelationshipRepository:
                 AchRelationship.user_id == user_id,
                 AchRelationship.status != STATUS_CANCELED,
             )
+            .options(selectinload(AchRelationship.plaid_item))
             .order_by(AchRelationship.created_at.desc())
         )
         return list(result.scalars().all())

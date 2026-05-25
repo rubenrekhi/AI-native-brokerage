@@ -181,6 +181,7 @@ def _make_rel(**overrides):
         account_type="CHECKING",
         nickname="My Checking",
         status="QUEUED",
+        plaid_item=None,
     )
     defaults.update(overrides)
     return SimpleNamespace(**defaults)
