@@ -18,6 +18,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
     case text(TextBlock)
     case status(StatusBlock)
     case stockCard(StockCardBlock)
+    case thinking(ThinkingBlock)
 
     /// Per-block stable identifier used for `Identifiable` and as the target
     /// of `block_data` patches. Mirrors the backend's `block_id` field.
@@ -26,6 +27,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
         case .text(let block): return block.blockId
         case .status(let block): return block.blockId
         case .stockCard(let block): return block.blockId
+        case .thinking(let block): return block.blockId
         }
     }
 
@@ -45,6 +47,8 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             self = .status(try StatusBlock(from: decoder))
         case "stock_card":
             self = .stockCard(try StockCardBlock(from: decoder))
+        case "thinking":
+            self = .thinking(try ThinkingBlock(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -69,6 +73,9 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             try block.encode(to: encoder)
         case .stockCard(let block):
             try typeContainer.encode("stock_card", forKey: .type)
+            try block.encode(to: encoder)
+        case .thinking(let block):
+            try typeContainer.encode("thinking", forKey: .type)
             try block.encode(to: encoder)
         }
     }
@@ -254,4 +261,63 @@ enum ColorState: String, Codable, Sendable {
     case positive
     case negative
     case neutral
+}
+
+/// Extended-thinking output (SEV-571). Mirrors `ThinkingBlock` in
+/// `app/ai/blocks.py`.
+///
+/// Streaming-start frames may carry only `block_id`; the explicit-
+/// fallback decoder mirrors the backend's Pydantic defaults so the
+/// initial `block_start` decode doesn't throw and drop the turn.
+/// `redacted == true` covers Anthropic's `redacted_thinking` variant:
+/// the payload is encrypted and arrives with `state == .complete` and
+/// no deltas.
+struct ThinkingBlock: Codable, Equatable, Sendable {
+    let blockId: String
+    let text: String
+    let redacted: Bool
+    let state: ThinkingState
+
+    private enum CodingKeys: String, CodingKey {
+        case blockId, text, redacted, state
+    }
+
+    init(
+        blockId: String,
+        text: String = "",
+        redacted: Bool = false,
+        state: ThinkingState = .streaming
+    ) {
+        self.blockId = blockId
+        self.text = text
+        self.redacted = redacted
+        self.state = state
+    }
+
+    init(from decoder: any Decoder) throws {
+        // "Missing falls back, present-but-invalid throws": a
+        // `decodeIfPresent ?? .streaming` would silently swallow
+        // malformed state literals — those are a wire-format contract
+        // violation and must surface loudly. Pinned by
+        // `testNullThinkingStateIsRejected`.
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.blockId = try container.decode(String.self, forKey: .blockId)
+        self.text =
+            container.contains(.text)
+            ? try container.decode(String.self, forKey: .text)
+            : ""
+        self.redacted =
+            container.contains(.redacted)
+            ? try container.decode(Bool.self, forKey: .redacted)
+            : false
+        self.state =
+            container.contains(.state)
+            ? try container.decode(ThinkingState.self, forKey: .state)
+            : .streaming
+    }
+}
+
+enum ThinkingState: String, Codable, Sendable {
+    case streaming
+    case complete
 }

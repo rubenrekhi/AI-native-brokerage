@@ -676,6 +676,76 @@
         }
       }
     },
+    "chat.thinking_accessibility_collapsed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking, collapsed"
+          }
+        }
+      }
+    },
+    "chat.thinking_accessibility_expanded" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking, expanded"
+          }
+        }
+      }
+    },
+    "chat.thinking_accessibility_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Double-tap to toggle visibility of the model's internal reasoning."
+          }
+        }
+      }
+    },
+    "chat.thinking_disclaimer" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This is the model's internal reasoning, not advice."
+          }
+        }
+      }
+    },
+    "chat.thinking_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thought"
+          }
+        }
+      }
+    },
+    "chat.thinking_redacted_body" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Internal reasoning (encrypted by the model)"
+          }
+        }
+      }
+    },
+    "chat.thinking_streaming_header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thinking…"
+          }
+        }
+      }
+    },
     "general.app_name" : {
       "localizations" : {
         "en" : {

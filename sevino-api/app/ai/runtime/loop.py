@@ -453,11 +453,14 @@ def _to_anthropic_content(
     is already in the Anthropic shape (and carries the thinking
     signatures A1.7's R1 contract requires).
 
-    UI-only block variants (``status``, ``stock_card``, …) introduced in
-    Project C are dropped entirely — they never went to the model in
-    the first place, and Anthropic 400s on unknown ``type`` values.
-    Subsequent turns therefore lose tool-use context across turns; in
-    v0 the assistant text answer is sufficient continuity.
+    UI-only block variants (``status``, ``stock_card``, ``thinking``, …)
+    introduced in Project C are dropped entirely — they never went to
+    the model in the first place (or, in the case of ``thinking``, the
+    signed Anthropic block was already roundtripped inside the same
+    turn via ``response_content`` and isn't useful as cross-turn
+    history), and Anthropic 400s on unknown ``type`` values. Subsequent
+    turns therefore lose tool-use context across turns; in v0 the
+    assistant text answer is sufficient continuity.
     """
     converted: list[dict[str, Any]] = []
     for block in content_blocks:
@@ -938,8 +941,15 @@ async def run_agent_turn(
     SSE wire (B2.4): once ``agent_turns.id`` is known the loop emits
     ``turn_started`` on ``sse_emitter``. Each text block streamed by
     Anthropic produces ``block_start`` (with a server-assigned ULID
-    ``block_id``) → one ``text_delta`` per chunk → ``block_end``. Thinking
-    and tool-use blocks stay server-side. The loop closes with
+    ``block_id``) → one ``text_delta`` per chunk → ``block_end``.
+    SEV-571: each ``thinking`` content block also produces a
+    ``ThinkingBlock`` envelope on the wire — ``block_start`` (state
+    ``streaming``) → one ``text_delta`` per ``thinking_delta`` → a
+    single ``block_data`` patch flipping ``state`` to ``complete`` →
+    ``block_end``. ``redacted_thinking`` blocks emit a single
+    ``block_start`` (``redacted=true``, ``state="complete"``) followed
+    by ``block_end`` — no deltas, since the payload is encrypted.
+    Tool-use blocks stay server-side. The loop closes with
     ``turn_completed`` on success, or ``error`` on cap breach / Anthropic
     failure. **The loop only guarantees a terminal frame for normal exit
     paths** (cap breach, Anthropic error trapped in the inner ``except
@@ -1203,16 +1213,35 @@ async def run_agent_turn(
                             metadata={"iteration_index": iteration_index},
                         ) as gen:
                             iter_started = time.monotonic()
-                            # Maps Anthropic's ``index`` for an in-flight TEXT
-                            # block to the server-assigned wire-level block_id.
-                            # Only text blocks land here — thinking / tool_use
-                            # are not user-facing in v0 so they don't get
-                            # ``block_start`` / ``block_end`` events.
+                            # SEV-571 / B2.4 wire protocols emitted by this loop:
+                            #
+                            #   text:     block_start → text_delta* → block_end
+                            #   thinking: block_start(state=streaming)
+                            #             → text_delta* (one per thinking_delta)
+                            #             → block_data(state=complete)
+                            #             → block_end
+                            #   redacted_thinking: block_start(redacted=true,
+                            #                                  state=complete)
+                            #                      → block_end   (no deltas)
+                            #
+                            # Each open content-block index needs a wire-level
+                            # block_id; text and thinking track in separate
+                            # maps so the delta branch can route by chunk type.
+                            # ``text_delta`` chunks are also reused for
+                            # thinking deltas — iOS dispatches by block_id on
+                            # the already-open block, and the discriminator on
+                            # ``BlockStart`` is sufficient to disambiguate.
+                            # Tool-use blocks are not user-facing in v0 and
+                            # don't enter either map.
                             open_text_blocks: dict[int, str] = {}
+                            open_thinking_blocks: dict[int, str] = {}
                             # B3.3: counts text_deltas seen this iteration so
                             # ``disconnect_check`` polls on a fixed cadence
                             # rather than once per chunk (every chunk would be
-                            # a hot-path ASGI-receive call).
+                            # a hot-path ASGI-receive call). Counts both
+                            # ``text_delta`` and ``thinking_delta`` chunks —
+                            # the cadence is per visible-text emission, not
+                            # per content-block type.
                             text_deltas_seen = 0
                             # B3.4: parallel map of accumulated delta text per
                             # in-flight text block. On mid-stream cancellation
@@ -1229,7 +1258,8 @@ async def run_agent_turn(
                                     try:
                                         async for chunk in stream:
                                             if chunk.type == "content_block_start":
-                                                if chunk.content_block.type == "text":
+                                                cb_type = chunk.content_block.type
+                                                if cb_type == "text":
                                                     block_id = str(ULID())
                                                     open_text_blocks[chunk.index] = (
                                                         block_id
@@ -1246,8 +1276,7 @@ async def run_agent_turn(
                                                     )
                                                 elif (
                                                     server_tools_config.any_enabled
-                                                    and chunk.content_block.type
-                                                    == "server_tool_use"
+                                                    and cb_type == "server_tool_use"
                                                 ):
                                                     tool_use_id = getattr(
                                                         chunk.content_block,
@@ -1287,7 +1316,7 @@ async def run_agent_turn(
                                                         )
                                                 elif (
                                                     server_tools_config.any_enabled
-                                                    and chunk.content_block.type
+                                                    and cb_type
                                                     in _SERVER_TOOL_RESULT_BLOCK_TYPES
                                                 ):
                                                     result_block = chunk.content_block
@@ -1333,6 +1362,42 @@ async def run_agent_turn(
                                                             status_block_records[
                                                                 tool_use_id
                                                             ]["state"] = new_state
+                                                elif cb_type == "thinking":
+                                                    block_id = str(ULID())
+                                                    open_thinking_blocks[
+                                                        chunk.index
+                                                    ] = block_id
+                                                    await sse_emitter.emit(
+                                                        BlockStart(
+                                                            block={
+                                                                "type": "thinking",
+                                                                "block_id": block_id,
+                                                                "text": "",
+                                                                "redacted": False,
+                                                                "state": "streaming",
+                                                            }
+                                                        )
+                                                    )
+                                                elif cb_type == "redacted_thinking":
+                                                    # Skip ``open_thinking_blocks`` so the
+                                                    # delta/stop branches stay no-ops for
+                                                    # this index — encrypted payload, no
+                                                    # deltas to forward.
+                                                    block_id = str(ULID())
+                                                    await sse_emitter.emit(
+                                                        BlockStart(
+                                                            block={
+                                                                "type": "thinking",
+                                                                "block_id": block_id,
+                                                                "text": "",
+                                                                "redacted": True,
+                                                                "state": "complete",
+                                                            }
+                                                        )
+                                                    )
+                                                    await sse_emitter.emit(
+                                                        BlockEnd(block_id=block_id)
+                                                    )
                                             elif chunk.type == "content_block_delta":
                                                 if (
                                                     chunk.delta.type == "text_delta"
@@ -1370,6 +1435,29 @@ async def run_agent_turn(
                                                         and await disconnect_check()
                                                     ):
                                                         raise asyncio.CancelledError
+                                                elif (
+                                                    chunk.delta.type
+                                                    == "thinking_delta"
+                                                    and chunk.index
+                                                    in open_thinking_blocks
+                                                ):
+                                                    await sse_emitter.emit(
+                                                        TextDelta(
+                                                            block_id=open_thinking_blocks[
+                                                                chunk.index
+                                                            ],
+                                                            text=chunk.delta.thinking,
+                                                        )
+                                                    )
+                                                    text_deltas_seen += 1
+                                                    if (
+                                                        disconnect_check is not None
+                                                        and text_deltas_seen
+                                                        % _DISCONNECT_CHECK_DELTA_INTERVAL
+                                                        == 0
+                                                        and await disconnect_check()
+                                                    ):
+                                                        raise asyncio.CancelledError
                                             elif chunk.type == "content_block_stop":
                                                 block_id = open_text_blocks.get(
                                                     chunk.index
@@ -1378,6 +1466,32 @@ async def run_agent_turn(
                                                     await sse_emitter.emit(
                                                         BlockEnd(block_id=block_id)
                                                     )
+                                                else:
+                                                    thinking_block_id = (
+                                                        open_thinking_blocks.get(
+                                                            chunk.index
+                                                        )
+                                                    )
+                                                    if thinking_block_id is not None:
+                                                        await sse_emitter.emit(
+                                                            BlockData(
+                                                                block_id=(
+                                                                    thinking_block_id
+                                                                ),
+                                                                data={
+                                                                    "state": (
+                                                                        "complete"
+                                                                    )
+                                                                },
+                                                            )
+                                                        )
+                                                        await sse_emitter.emit(
+                                                            BlockEnd(
+                                                                block_id=(
+                                                                    thinking_block_id
+                                                                )
+                                                            )
+                                                        )
                                         response = await stream.get_final_message()
                                     except asyncio.CancelledError:
                                         # B3.4: mid-stream cancellation. Close

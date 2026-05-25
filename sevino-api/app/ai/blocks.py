@@ -27,6 +27,39 @@ class StatusBlock(BaseModel):
     state: Literal["active", "complete", "failed"]
 
 
+class ThinkingBlock(BaseModel):
+    """Extended-thinking output streamed to iOS as an expandable chip.
+
+    SEV-571. Anthropic emits ``thinking`` content blocks alongside
+    ``text`` / ``tool_use`` when extended thinking is enabled
+    (``thinking={"type": "enabled", ...}`` on ``messages.create``). The
+    loop keeps the original signed blocks server-side for the next
+    iteration's request (R1 in A1.7), but also forwards them to the wire
+    as ``ThinkingBlock`` so iOS can render the chain-of-thought as a
+    distinct, expandable surface (qualitatively different from
+    ``StatusBlock``: it carries content, not progress).
+
+    ``redacted=True`` covers Anthropic's ``redacted_thinking`` variant,
+    whose payload is encrypted — the iOS view shows a stub line rather
+    than the unreadable bytes. Redacted blocks have no deltas; the loop
+    emits a single ``block_start`` with ``state="complete"`` then
+    ``block_end``.
+
+    Not persisted to ``messages.content_blocks`` in v0 (matches the
+    StatusBlock / StockCardBlock policy: UI-only artefacts are dropped
+    on the next turn's assistant-content conversion). Reopening the
+    conversation later loses the thinking blocks; if we ever want full
+    transcript reconstruction the policy flips in one place
+    (``loop._to_anthropic_content``).
+    """
+
+    type: Literal["thinking"] = "thinking"
+    block_id: str
+    text: str = ""
+    redacted: bool = False
+    state: Literal["streaming", "complete"] = "streaming"
+
+
 class Bar(BaseModel):
     """One price point inside a :class:`StockCardBlock` chart payload.
 
@@ -120,16 +153,17 @@ class StockCardBlock(BaseModel):
 
 
 Block = Annotated[
-    TextBlock | StatusBlock | StockCardBlock, Field(discriminator="type")
+    TextBlock | StatusBlock | StockCardBlock | ThinkingBlock,
+    Field(discriminator="type"),
 ]
 
 
 # Module-level adapters so callers don't rebuild a TypeAdapter per validation.
 # ``BlockAdapter`` validates a single block dict; ``BlockListAdapter`` validates
 # the full ``messages.content_blocks`` shape.
-BlockAdapter: TypeAdapter[TextBlock | StatusBlock | StockCardBlock] = TypeAdapter(
-    Block
-)
+BlockAdapter: TypeAdapter[
+    TextBlock | StatusBlock | StockCardBlock | ThinkingBlock
+] = TypeAdapter(Block)
 BlockListAdapter: TypeAdapter[
-    list[TextBlock | StatusBlock | StockCardBlock]
+    list[TextBlock | StatusBlock | StockCardBlock | ThinkingBlock]
 ] = TypeAdapter(list[Block])

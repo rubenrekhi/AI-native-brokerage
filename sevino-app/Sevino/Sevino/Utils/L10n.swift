@@ -498,6 +498,13 @@ enum L10n {
         static func moreItems(_ count: Int) -> String {
             String(format: String(localized: "chat.more_items"), count)
         }
+        static let thinkingHeader = String(localized: "chat.thinking_header")
+        static let thinkingStreamingHeader = String(localized: "chat.thinking_streaming_header")
+        static let thinkingRedactedBody = String(localized: "chat.thinking_redacted_body")
+        static let thinkingDisclaimer = String(localized: "chat.thinking_disclaimer")
+        static let thinkingAccessibilityCollapsed = String(localized: "chat.thinking_accessibility_collapsed")
+        static let thinkingAccessibilityExpanded = String(localized: "chat.thinking_accessibility_expanded")
+        static let thinkingAccessibilityHint = String(localized: "chat.thinking_accessibility_hint")
     }
 
     enum Sidebar {
