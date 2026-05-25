@@ -17,6 +17,7 @@ from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
+from app.tasks.reconcile_funding import reconcile_funding
 from app.tasks.sweep_expired_radar import sweep_expired_radar_items
 from app.tasks.sync_assets import sync_assets
 
@@ -193,6 +194,7 @@ class WorkerSettings:
         check_listener_liveness,
         sync_assets,
         sweep_expired_radar_items,
+        reconcile_funding,
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
@@ -201,6 +203,8 @@ class WorkerSettings:
         cron(sync_assets, hour={10}, minute={0}),
         # Low-traffic window; pure DB hygiene, can run any time of day.
         cron(sweep_expired_radar_items, hour={3}, minute={0}),
+        # Hourly at :15 — offset from health_ping/listener_liveness on :00.
+        cron(reconcile_funding, minute={15}),
     ]
     on_startup = startup
     on_shutdown = shutdown
