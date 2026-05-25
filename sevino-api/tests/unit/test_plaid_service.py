@@ -106,6 +106,64 @@ class TestCreateProcessorToken:
         assert token == fixture["processor_token"]
 
 
+class TestCreateUpdateLinkToken:
+    async def test_sends_access_token_and_omits_products(
+        self, service: PlaidService
+    ):
+        service._client.link_token_create.return_value = _mock_response(
+            _load("plaid_link_token.json")
+        )
+
+        await service.create_update_link_token(
+            user_id="user-123", access_token="access-sandbox-abc"
+        )
+
+        (request,), _ = service._client.link_token_create.call_args
+        body = request.to_dict()
+        assert body["access_token"] == "access-sandbox-abc"
+        assert body["user"]["client_user_id"] == "user-123"
+        assert body["client_name"] == "Sevino"
+        assert body["country_codes"] == ["US"]
+        assert body["language"] == "en"
+        # Update mode forbids `products` per Plaid docs.
+        assert "products" not in body
+
+    async def test_returns_link_token_from_response(
+        self, service: PlaidService
+    ):
+        fixture = _load("plaid_link_token.json")
+        service._client.link_token_create.return_value = _mock_response(fixture)
+
+        token = await service.create_update_link_token(
+            user_id="user-123", access_token="access-sandbox-abc"
+        )
+
+        assert token == fixture["link_token"]
+
+
+class TestGetWebhookVerificationKey:
+    async def test_sends_key_id_in_request(self, service: PlaidService):
+        service._client.webhook_verification_key_get.return_value = _mock_response(
+            _load("plaid_webhook_key.json")
+        )
+
+        await service.get_webhook_verification_key("kid-abc-123")
+
+        (request,), _ = service._client.webhook_verification_key_get.call_args
+        assert request.to_dict()["key_id"] == "kid-abc-123"
+
+    async def test_returns_only_the_key_field(self, service: PlaidService):
+        fixture = _load("plaid_webhook_key.json")
+        service._client.webhook_verification_key_get.return_value = _mock_response(
+            fixture
+        )
+
+        key = await service.get_webhook_verification_key("kid-abc-123")
+
+        assert key == fixture["key"]
+        assert key["kid"] == "bfbd5111-8e33-4643-8ced-b2e642a72f3c"
+
+
 class TestErrorMapping:
     async def test_plaid_api_exception_maps_to_service_error(self, service: PlaidService):
         body = json.dumps(

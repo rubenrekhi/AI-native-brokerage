@@ -1,0 +1,14 @@
+{
+  "key": {
+    "alg": "ES256",
+    "created_at": 1560211745,
+    "crv": "P-256",
+    "expired_at": null,
+    "kid": "bfbd5111-8e33-4643-8ced-b2e642a72f3c",
+    "kty": "EC",
+    "use": "sig",
+    "x": "fnMsBYUuT-FBl_v3VTOJVDDejaOTrQYZK_DSbV5MawA",
+    "y": "Trc1V_3T2cVQqRpFkLT2eAtTYJWUz9oOPzU1B_kU5J0"
+  },
+  "request_id": "Whfa3OBPwLgGfx9"
+}
