@@ -152,6 +152,14 @@ def patch_repos(mocker, brokerage):
             new_callable=AsyncMock,
             return_value=None,
         ),
+        get_access_token=mocker.patch(
+            "app.services.funding.PlaidItemRepository.get_access_token_plaintext",
+            new_callable=AsyncMock,
+        ),
+        mark_active=mocker.patch(
+            "app.services.funding.PlaidItemRepository.mark_active",
+            new_callable=AsyncMock,
+        ),
     )
     return patches
 
@@ -825,3 +833,91 @@ class TestCreateLinkToken:
 
         assert token == "link-sandbox-abc"
         plaid.create_link_token.assert_awaited_once_with(user_id=str(user_id))
+
+
+# ---------------------------------------------------------------------------
+# create_reauth_link_token
+# ---------------------------------------------------------------------------
+
+
+class TestCreateReauthLinkToken:
+    async def test_happy_path(self, db, plaid, patch_repos, user_id):
+        rel = _make_rel(user_id)
+        patch_repos.get_rel.return_value = rel
+        patch_repos.get_access_token.return_value = "access-sandbox-existing"
+        plaid.create_update_link_token.return_value = "link-update-sandbox"
+
+        token = await FundingService.create_reauth_link_token(
+            db, plaid=plaid, user_id=user_id, relationship_pk=rel.id
+        )
+
+        assert token == "link-update-sandbox"
+        patch_repos.get_access_token.assert_awaited_once_with(db, rel.plaid_item_id)
+        plaid.create_update_link_token.assert_awaited_once_with(
+            user_id=str(user_id), access_token="access-sandbox-existing"
+        )
+
+    async def test_cross_user_raises_not_found(self, db, plaid, patch_repos, user_id):
+        other_user_rel = _make_rel(uuid.uuid4())
+        patch_repos.get_rel.return_value = other_user_rel
+
+        with pytest.raises(NotFoundError):
+            await FundingService.create_reauth_link_token(
+                db, plaid=plaid, user_id=user_id, relationship_pk=other_user_rel.id
+            )
+
+        plaid.create_update_link_token.assert_not_awaited()
+
+    async def test_relationship_with_null_plaid_item_id_raises(
+        self, db, plaid, patch_repos, user_id
+    ):
+        rel = _make_rel(user_id, plaid_item_id=None)
+        patch_repos.get_rel.return_value = rel
+
+        with pytest.raises(NotFoundError, match="re-authenticated"):
+            await FundingService.create_reauth_link_token(
+                db, plaid=plaid, user_id=user_id, relationship_pk=rel.id
+            )
+
+        patch_repos.get_access_token.assert_not_awaited()
+        plaid.create_update_link_token.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# mark_reauth_complete
+# ---------------------------------------------------------------------------
+
+
+class TestMarkReauthComplete:
+    async def test_happy_path_flips_plaid_item_to_active(
+        self, db, patch_repos, user_id
+    ):
+        rel = _make_rel(user_id)
+        patch_repos.get_rel.return_value = rel
+
+        await FundingService.mark_reauth_complete(
+            db, user_id=user_id, relationship_pk=rel.id
+        )
+
+        patch_repos.mark_active.assert_awaited_once_with(db, rel.plaid_item_id)
+
+    async def test_cross_user_raises_not_found(self, db, patch_repos, user_id):
+        other_user_rel = _make_rel(uuid.uuid4())
+        patch_repos.get_rel.return_value = other_user_rel
+
+        with pytest.raises(NotFoundError):
+            await FundingService.mark_reauth_complete(
+                db, user_id=user_id, relationship_pk=other_user_rel.id
+            )
+
+        patch_repos.mark_active.assert_not_awaited()
+
+    async def test_null_plaid_item_id_is_noop(self, db, patch_repos, user_id):
+        rel = _make_rel(user_id, plaid_item_id=None)
+        patch_repos.get_rel.return_value = rel
+
+        await FundingService.mark_reauth_complete(
+            db, user_id=user_id, relationship_pk=rel.id
+        )
+
+        patch_repos.mark_active.assert_not_awaited()

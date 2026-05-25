@@ -94,6 +94,41 @@ async def list_ach_relationships(
     )
 
 
+@router.post(
+    "/ach-relationships/{relationship_id}/reauth-link-token",
+    response_model=LinkTokenResponse,
+)
+async def create_reauth_link_token(
+    relationship_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    plaid: PlaidService = Depends(get_plaid),
+) -> LinkTokenResponse:
+    token = await FundingService.create_reauth_link_token(
+        db,
+        plaid=plaid,
+        user_id=uuid.UUID(user_id),
+        relationship_pk=relationship_id,
+    )
+    return LinkTokenResponse(link_token=token)
+
+
+@router.post(
+    "/ach-relationships/{relationship_id}/reauth-complete",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def reauth_complete(
+    relationship_id: uuid.UUID,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await FundingService.mark_reauth_complete(
+        db,
+        user_id=uuid.UUID(user_id),
+        relationship_pk=relationship_id,
+    )
+
+
 @router.delete("/ach-relationships/{relationship_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ach_relationship(
     relationship_id: uuid.UUID,

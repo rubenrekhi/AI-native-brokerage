@@ -125,6 +125,14 @@ def patch_repos(mocker, brokerage):
             new_callable=AsyncMock,
             return_value=None,
         ),
+        get_access_token=mocker.patch(
+            "app.services.funding.PlaidItemRepository.get_access_token_plaintext",
+            new_callable=AsyncMock,
+        ),
+        mark_active=mocker.patch(
+            "app.services.funding.PlaidItemRepository.mark_active",
+            new_callable=AsyncMock,
+        ),
     )
     return patches
 
@@ -561,3 +569,94 @@ class TestAuth:
     async def test_list_transfers_requires_auth(self, unauthenticated_client):
         response = await unauthenticated_client.get("/v1/funding/transfers")
         assert response.status_code == 401
+
+    async def test_reauth_link_token_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.post(
+            f"/v1/funding/ach-relationships/{uuid.uuid4()}/reauth-link-token"
+        )
+        assert response.status_code == 401
+
+    async def test_reauth_complete_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.post(
+            f"/v1/funding/ach-relationships/{uuid.uuid4()}/reauth-complete"
+        )
+        assert response.status_code == 401
+
+
+# ---------------------------------------------------------------------------
+# POST /ach-relationships/{id}/reauth-link-token
+# ---------------------------------------------------------------------------
+
+
+class TestReauthLinkToken:
+    async def test_happy_path(self, client, plaid_mock, patch_repos):
+        rel = _make_rel()
+        patch_repos.get_rel.return_value = rel
+        patch_repos.get_access_token.return_value = "access-existing"
+        plaid_mock.create_update_link_token.return_value = "link-update-sandbox"
+
+        response = await client.post(
+            f"/v1/funding/ach-relationships/{rel.id}/reauth-link-token"
+        )
+
+        assert response.status_code == 200
+        assert response.json() == {"link_token": "link-update-sandbox"}
+        plaid_mock.create_update_link_token.assert_awaited_once_with(
+            user_id=TEST_USER_ID, access_token="access-existing"
+        )
+
+    async def test_cross_user_returns_404(self, client, plaid_mock, patch_repos):
+        other_user_rel = _make_rel(user_id=uuid.uuid4())
+        patch_repos.get_rel.return_value = other_user_rel
+
+        response = await client.post(
+            f"/v1/funding/ach-relationships/{other_user_rel.id}/reauth-link-token"
+        )
+
+        assert response.status_code == 404
+        plaid_mock.create_update_link_token.assert_not_awaited()
+
+    async def test_null_plaid_item_id_returns_404(
+        self, client, plaid_mock, patch_repos
+    ):
+        rel = _make_rel(plaid_item_id=None)
+        patch_repos.get_rel.return_value = rel
+
+        response = await client.post(
+            f"/v1/funding/ach-relationships/{rel.id}/reauth-link-token"
+        )
+
+        assert response.status_code == 404
+        assert "re-authenticated" in response.json()["error"]
+        plaid_mock.create_update_link_token.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# POST /ach-relationships/{id}/reauth-complete
+# ---------------------------------------------------------------------------
+
+
+class TestReauthComplete:
+    async def test_happy_path_returns_204(self, client, patch_repos):
+        rel = _make_rel()
+        patch_repos.get_rel.return_value = rel
+
+        response = await client.post(
+            f"/v1/funding/ach-relationships/{rel.id}/reauth-complete"
+        )
+
+        assert response.status_code == 204
+        patch_repos.mark_active.assert_awaited_once_with(
+            patch_repos.mark_active.call_args.args[0], rel.plaid_item_id
+        )
+
+    async def test_cross_user_returns_404(self, client, patch_repos):
+        other_user_rel = _make_rel(user_id=uuid.uuid4())
+        patch_repos.get_rel.return_value = other_user_rel
+
+        response = await client.post(
+            f"/v1/funding/ach-relationships/{other_user_rel.id}/reauth-complete"
+        )
+
+        assert response.status_code == 404
+        patch_repos.mark_active.assert_not_awaited()
