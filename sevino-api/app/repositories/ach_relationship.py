@@ -7,6 +7,7 @@ import uuid
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.models.ach_relationship import AchRelationship
 
@@ -91,6 +92,22 @@ class AchRelationshipRepository:
     ) -> list[AchRelationship]:
         result = await db.execute(
             select(AchRelationship).where(AchRelationship.user_id == user_id)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_all_non_canceled(
+        db: AsyncSession,
+    ) -> list[AchRelationship]:
+        """Worker-only: every non-canceled relationship across all users.
+
+        Never call from a request handler — this deliberately crosses user
+        boundaries for the reconcile cron and would leak data otherwise.
+        """
+        result = await db.execute(
+            select(AchRelationship)
+            .where(AchRelationship.status != STATUS_CANCELED)
+            .options(selectinload(AchRelationship.brokerage_account))
         )
         return list(result.scalars().all())
 

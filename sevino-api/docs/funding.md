@@ -181,6 +181,42 @@ Structured log events fire at boundary points. All include `user_id` for correla
 
 No tokens (access, public, processor) are ever logged.
 
+## Background jobs
+
+### `reconcile_funding` (hourly at :15 UTC)
+
+ARQ cron registered in `app/worker.py`; implementation in `app/tasks/reconcile_funding.py`. Diffs every non-canceled local `ach_relationship` (whose brokerage account is `ACTIVE`) against Alpaca's `/v1/accounts/{id}/ach_relationships`. Closes the two blind spots the refresh-on-read pattern can't cover:
+
+- **Server-side cancellation** — Alpaca cancels a relationship (compliance, fraud, account closure) and the user never opens the app to trigger a refresh.
+- **Silent transitions** — `QUEUED → APPROVED` while the user is away; without the cron we'd only notice the next time they hit `GET /v1/funding/ach-relationships`.
+
+Per-account error isolation: one account's Alpaca failure (network blip, 4xx) is logged via `funding_reconcile_account_failed` and the sweep continues. PR-preview environments short-circuit at the top.
+
+Transfer reconciliation is intentionally out of scope here — once SEV-214's transfer SSE listener lands, it owns transfer state. This cron is the belt to that future SSE's suspenders for relationships only.
+
+### Drift events
+
+Every detected drift emits a single structured log `funding_reconcile_drift`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `kind` | `status_change` \| `server_side_cancellation` | Status changed at Alpaca, or row disappeared entirely. |
+| `relationship_pk` | uuid | Local `ach_relationships.id`. |
+| `user_id` | uuid | Owner of the relationship. |
+| `alpaca_relationship_id` | string | Alpaca's id, useful for support correlation. |
+| `status_from` | string | Local status before the update. |
+| `status_to` | string | New status (`CANCELED` for server-side cancellation). |
+
+A run-summary `funding_reconcile_complete` log fires once per successful run with counts: `checked`, `drifted`, `canceled_server_side`, `errored_accounts`.
+
+### Operator playbook
+
+- **`kind=server_side_cancellation`** — Alpaca dropped the link, usually compliance or account closure on their side. Treat the same as a user-initiated unlink for support purposes. If volume spikes, ping Alpaca to ask why.
+- **`kind=status_change` to anything other than `APPROVED` or `CANCEL_REQUESTED`** — unexpected. Pull the row by `relationship_pk` and inspect Alpaca's response shape for new lifecycle values.
+- **Alert: no `funding_reconcile_complete` log in ~3h** — configured in Sentry/Logflare, not in code. Indicates the worker is down or the cron stopped registering. Check `make worker` health + arq logs.
+
+To verify the cron against real Alpaca sandbox: `scripts/funding_reconcile_smoke.sh` (see "Running the smoke scripts" below).
+
 ## Running the smoke scripts
 
 Prereqs: `make infra` + real Plaid sandbox + Alpaca sandbox creds in `.env`.
@@ -194,6 +230,8 @@ bash scripts/funding_smoke.sh                   # full happy path (link + deposi
 bash scripts/funding_withdraw_smoke.sh          # adds deposit settle wait + withdraw
 bash scripts/funding_withdraw_smoke.sh --assume-settled   # withdraw only, using an existing relationship
 bash scripts/funding_errors_smoke.sh            # error-branch coverage
+bash scripts/funding_smoke.sh --skip-unlink && \
+  bash scripts/funding_reconcile_smoke.sh       # reconcile cron drift + server-side cancel (SEV-580)
 ```
 
 ## Database schema
@@ -215,11 +253,10 @@ Tracked in Linear under the **Alpaca — Bank Linking & Transfers (+Plaid)** pro
 - **SEV-225** — `ITEM_LOGIN_REQUIRED` re-auth. Needs Plaid webhook consumer + update-mode link-token endpoint. `PLAID_ITEM_STATUS_REQUIRES_REAUTH` constant reserved. Status transitions not observed today (we don't consume webhooks yet, so `plaid_items.status` stays `active` forever after a successful link).
 - **SEV-226** — Settings entry point for bank management (list + unlink + optional nickname edit). Backend DELETE endpoint is live; no iOS surface.
 - **SEV-214** — Alpaca transfer status SSE listener. Transfer lifecycle transitions (QUEUED → SENT_TO_CLEARING → COMPLETE) are only observed when the user opens the history screen; `GET /v1/funding/transfers` refetches from Alpaca each call. Worth deferring until push notifications or a local transfers table actually need push updates — today the refresh-on-read pattern is correct and simpler.
-- **ACH relationship status.** Alpaca does **not** publish an SSE stream for the `ach_relationship` resource — only for `transfer`. `ach_relationships.status` is kept fresh via refresh-on-read inside `GET /v1/funding/ach-relationships` and `POST /v1/funding/transfers` (one `GET /v1/accounts/{id}/ach_relationships` call per operation, bounded by the user's relationship count — usually 1). No background reconciliation job today; users who never open the app won't see their status updated.
+- **ACH relationship status.** Alpaca does **not** publish an SSE stream for the `ach_relationship` resource — only for `transfer`. `ach_relationships.status` is kept fresh via refresh-on-read inside `GET /v1/funding/ach-relationships` and `POST /v1/funding/transfers`, plus the hourly `reconcile_funding` cron (see "Background jobs") for users who never open the app.
 
 Operational gaps worth tracking separately (no ticket yet):
 
-- **No reconciliation job.** A periodic diff between our `ach_relationships` and Alpaca's `/v1/accounts/{id}/ach_relationships` would catch orphan drift from causes the in-process compensation can't reach (process crashes, mid-call pod kill).
 - **No idempotency key on `POST /v1/funding/transfers`.** The endpoint accepts no client-supplied idempotency key. Mitigated today by the iOS button-disable pattern but a proper production feature should accept and forward `Idempotency-Key` to Alpaca.
 - **No audit-log table.** `ach_relationships.status` is overwritten in place with no history. Dispute resolution would struggle.
 - **No kill switch.** Funding endpoints can't be disabled without a redeploy.
