@@ -450,13 +450,14 @@ struct HomeView: View {
     }
 
     private func startTransfer(_ direction: TransferDirection) {
-        // Collapse the cash detail modal first; the transfer card sheet then appears
-        // over the home screen. When chat is built, this state will move to the chat
-        // screen's MCP renderer.
+        let text: String = switch direction {
+        case .deposit: L10n.Home.chatPrefillDeposit
+        case .withdraw: L10n.Home.chatPrefillWithdraw
+        }
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
             showFunding = false
         }
-        transferViewModel.start(direction: direction)
+        tickerMentionViewModel.prefill(text)
     }
 
     private func toggleHoldings() {

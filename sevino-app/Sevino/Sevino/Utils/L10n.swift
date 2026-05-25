@@ -346,6 +346,8 @@ enum L10n {
 
     enum Home {
         static let chatPlaceholder = String(localized: "home.chat_placeholder")
+        static let chatPrefillDeposit = String(localized: "home.chat_prefill_deposit")
+        static let chatPrefillWithdraw = String(localized: "home.chat_prefill_withdraw")
         static let micAccessibility = String(localized: "home.mic_accessibility")
         static let micStopAccessibility = String(localized: "home.mic_stop_accessibility")
         static let micRecordingState = String(localized: "home.mic_recording_state")

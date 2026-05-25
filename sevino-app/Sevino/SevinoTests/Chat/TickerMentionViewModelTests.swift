@@ -318,6 +318,17 @@ final class TickerMentionViewModelTests: XCTestCase {
         ])
     }
 
+    // MARK: - Prefill
+
+    func testPrefillSetsTextAndBumpsFocus() {
+        let initialFocusTick = viewModel.focusRequestTick
+
+        viewModel.prefill("Deposit $")
+
+        XCTAssertEqual(viewModel.text, "Deposit $")
+        XCTAssertEqual(viewModel.focusRequestTick, initialFocusTick &+ 1)
+    }
+
     // MARK: - Clear
 
     func testClearResetsEverything() async throws {

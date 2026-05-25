@@ -796,6 +796,26 @@
         }
       }
     },
+    "home.chat_prefill_deposit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deposit $"
+          }
+        }
+      }
+    },
+    "home.chat_prefill_withdraw" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Withdraw $"
+          }
+        }
+      }
+    },
     "home.current_apy" : {
       "localizations" : {
         "en" : {
