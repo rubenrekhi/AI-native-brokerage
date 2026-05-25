@@ -183,6 +183,64 @@ class FundingService:
                 )
 
     @staticmethod
+    async def create_reauth_link_token(
+        db: AsyncSession,
+        *,
+        plaid: PlaidService,
+        user_id: uuid.UUID,
+        relationship_pk: uuid.UUID,
+    ) -> str:
+        """Mint a Plaid update-mode link token for an existing relationship.
+
+        The existing `access_token` stays valid after a successful update-mode
+        Link; iOS doesn't exchange a new public token. Raises `NotFoundError`
+        when the relationship has no `plaid_item_id` (FK was set NULL by an
+        earlier hard-delete) since we can't re-auth without an access token.
+        """
+        rel = await _load_relationship_for_user(db, user_id, relationship_pk)
+        if rel.plaid_item_id is None:
+            raise NotFoundError(
+                "This bank link can no longer be re-authenticated; please re-link."
+            )
+        access_token = await PlaidItemRepository.get_access_token_plaintext(
+            db, rel.plaid_item_id
+        )
+        assert access_token is not None
+        token = await plaid.create_update_link_token(
+            user_id=str(user_id), access_token=access_token
+        )
+        logger.info(
+            "reauth_link_token_created",
+            user_id=str(user_id),
+            relationship_pk=str(rel.id),
+            plaid_item_pk=str(rel.plaid_item_id),
+        )
+        return token
+
+    @staticmethod
+    async def mark_reauth_complete(
+        db: AsyncSession,
+        *,
+        user_id: uuid.UUID,
+        relationship_pk: uuid.UUID,
+    ) -> None:
+        """Flip the linked `plaid_items.status` back to `active` after a
+        successful update-mode Link. Idempotent: a relationship whose
+        `plaid_item_id` is NULL (rare race or post-cleanup) is a no-op since
+        the user-visible re-auth already succeeded at Plaid.
+        """
+        rel = await _load_relationship_for_user(db, user_id, relationship_pk)
+        if rel.plaid_item_id is None:
+            return
+        await PlaidItemRepository.mark_active(db, rel.plaid_item_id)
+        logger.info(
+            "reauth_completed",
+            user_id=str(user_id),
+            relationship_pk=str(rel.id),
+            plaid_item_pk=str(rel.plaid_item_id),
+        )
+
+    @staticmethod
     async def list_active_ach_relationships(
         db: AsyncSession,
         *,
