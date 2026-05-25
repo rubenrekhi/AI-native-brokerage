@@ -172,6 +172,22 @@ class TestSignatureFailures:
 
 
 class TestKeyRotation:
+    async def test_upstream_jwk_fetch_failure_surfaces_as_signature_error(
+        self, keypair, plaid_mock
+    ):
+        private_pem, _ = keypair
+        plaid_mock.get_webhook_verification_key.side_effect = PlaidServiceError(
+            code="INVALID_INPUT", message="unknown kid", status_code=400
+        )
+        token = _sign(private_pem=private_pem, body=b"{}")
+
+        with pytest.raises(PlaidServiceError) as info:
+            await verify_webhook(
+                plaid_mock, raw_body=b"{}", signature_header=token
+            )
+
+        _assert_rejected(info.value)
+
     async def test_expired_jwk_rejected_on_fetch(self, keypair, plaid_mock):
         private_pem, public_jwk = keypair
         public_jwk["expired_at"] = int(time.time()) - 10

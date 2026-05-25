@@ -10,7 +10,9 @@ from app.exceptions import error_response
 
 logger = structlog.get_logger(__name__)
 
-_EXEMPT_PATHS = frozenset({"/health", "/docs", "/redoc", "/openapi.json"})
+_EXEMPT_PATHS = frozenset(
+    {"/health", "/docs", "/redoc", "/openapi.json", "/v1/plaid/webhooks"}
+)
 
 
 class APIKeyMiddleware(BaseHTTPMiddleware):

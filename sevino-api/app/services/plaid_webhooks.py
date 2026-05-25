@@ -70,7 +70,10 @@ async def verify_webhook(
 
     jwk_dict = _jwk_cache.get(kid)
     if jwk_dict is None:
-        jwk_dict = await plaid.get_webhook_verification_key(kid)
+        try:
+            jwk_dict = await plaid.get_webhook_verification_key(kid)
+        except PlaidServiceError as exc:
+            raise _invalid("Failed to fetch signing key") from exc
         _check_not_expired(jwk_dict)
         _jwk_cache[kid] = jwk_dict
     else:
