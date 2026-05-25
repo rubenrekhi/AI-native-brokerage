@@ -39,6 +39,28 @@ class ModelConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ServerToolsConfig:
+    """Anthropic server-side tools to advertise to the model."""
+
+    web_search_enabled: bool = False
+    web_fetch_enabled: bool = False
+    code_execution_enabled: bool = False
+    web_search_max_uses: int = 5
+    web_fetch_max_uses: int = 5
+
+    @property
+    def any_enabled(self) -> bool:
+        return (
+            self.web_search_enabled
+            or self.web_fetch_enabled
+            or self.code_execution_enabled
+        )
+
+
+DISABLED_SERVER_TOOLS = ServerToolsConfig()
+
+
+@dataclass(frozen=True, slots=True)
 class AgentTurnResult:
     """Return value of ``run_agent_turn``.
 

@@ -6,6 +6,8 @@ struct MessageRowView: View {
     let turnState: ConversationStore.TurnState
     let scale: CGFloat
 
+    @State private var sequencer = MessageTypewriterSequencer()
+
     private var isStreamingText: Bool {
         isLastAssistantMessage && turnState == .streaming
     }
@@ -36,21 +38,43 @@ struct MessageRowView: View {
 
     @ViewBuilder
     private var assistantRow: some View {
+        // Status pills and stock cards don't get gated — only text blocks
+        // are sequenced against each other.
+        let ordinals = textBlockOrdinals(in: message.blocks)
+        let lastTextOrdinal = ordinals.values.max() ?? -1
         VStack(alignment: .leading, spacing: 8 * scale) {
             ForEach(message.blocks) { block in
-                blockView(block)
+                blockView(block, ordinals: ordinals, lastTextOrdinal: lastTextOrdinal)
             }
         }
     }
 
+    private func textBlockOrdinals(in blocks: [Block]) -> [String: Int] {
+        var result: [String: Int] = [:]
+        var ordinal = 0
+        for case let .text(tb) in blocks {
+            result[tb.blockId] = ordinal
+            ordinal += 1
+        }
+        return result
+    }
+
     @ViewBuilder
-    private func blockView(_ block: Block) -> some View {
+    private func blockView(
+        _ block: Block,
+        ordinals: [String: Int],
+        lastTextOrdinal: Int
+    ) -> some View {
         switch block {
         case .text(let tb):
+            let ordinal = ordinals[tb.blockId] ?? 0
             AssistantTextBlockView(
                 block: tb,
                 isStreaming: isStreamingText,
-                scale: scale
+                scale: scale,
+                ordinal: ordinal,
+                hasLaterTextBlock: ordinal < lastTextOrdinal,
+                sequencer: sequencer
             )
         case .status(let sb):
             StatusPillView(block: sb, scale: scale)

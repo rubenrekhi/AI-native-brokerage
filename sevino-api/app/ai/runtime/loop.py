@@ -46,6 +46,7 @@ from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
 import pydantic
+import sentry_sdk
 import structlog
 from anthropic import AsyncAnthropic
 from langfuse import propagate_attributes
@@ -59,14 +60,17 @@ from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode, to_error_code
 from app.ai.runtime.types import (
+    DISABLED_SERVER_TOOLS,
     AgentTurnResult,
     LoopState,
     ModelConfig,
+    ServerToolsConfig,
     ToolRegistry,
 )
 from app.ai.tools.base import ToolContext, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
+    BlockData,
     BlockEnd,
     BlockStart,
     Error,
@@ -118,6 +122,316 @@ _DISCONNECT_CHECK_DELTA_INTERVAL = 16
 # constant is fine; later phases can plumb through an explicit reason
 # (e.g. ``"server_shutdown"``, ``"timeout"``).
 _DEFAULT_CANCELLATION_REASON = "client_disconnect"
+
+_ANTHROPIC_SERVER_TOOL_PREFIX = "anthropic:"
+
+_SERVER_TOOL_RESULT_BLOCK_TYPES: frozenset[str] = frozenset(
+    {
+        "web_search_tool_result",
+        "web_fetch_tool_result",
+        "code_execution_tool_result",
+    }
+)
+
+_SERVER_TOOL_STATUS_LABELS: dict[str, str] = {
+    "web_search": "Searching the web",
+    "web_fetch": "Fetching webpage",
+    "code_execution": "Running code",
+}
+
+
+def _server_tool_status_label(name: str | None) -> str:
+    if not isinstance(name, str) or not name:
+        return "Using tool"
+    if name not in _SERVER_TOOL_STATUS_LABELS:
+        # New Anthropic server tool we haven't labelled — fall back to
+        # the raw snake_case name, but log so we notice in observability.
+        logger.warning("loop_unknown_server_tool_label", name=name)
+    return _SERVER_TOOL_STATUS_LABELS.get(name, f"Using {name}")
+
+
+def _result_block_status_state(result_block: Any) -> str:
+    content = getattr(result_block, "content", None)
+    content_type = (
+        getattr(content, "type", None) if content is not None else None
+    )
+    if isinstance(content_type, str) and content_type.endswith("_error"):
+        return "failed"
+    return "complete"
+
+
+def _build_server_tool_specs(
+    config: ServerToolsConfig,
+) -> list[dict[str, Any]]:
+    # ``type`` is Anthropic's date-suffixed version pin (treat as opaque).
+    # Bumping the date means opting into behavior changes — coordinate
+    # with the matching SDK Param type before changing.
+    specs: list[dict[str, Any]] = []
+    if config.web_search_enabled:
+        specs.append(
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": config.web_search_max_uses,
+            }
+        )
+    if config.web_fetch_enabled:
+        specs.append(
+            {
+                "type": "web_fetch_20250910",
+                "name": "web_fetch",
+                "max_uses": config.web_fetch_max_uses,
+            }
+        )
+    if config.code_execution_enabled:
+        specs.append(
+            {
+                "type": "code_execution_20250825",
+                "name": "code_execution",
+            }
+        )
+    return specs
+
+
+def _append_status_blocks_for_persistence(
+    *,
+    tool_use_ids: list[str],
+    status_block_records: dict[str, dict[str, Any]],
+    status_blocks_persisted: set[str],
+    assistant_blocks: list[dict[str, Any]],
+) -> None:
+    """Append unpersisted status-pill records to ``assistant_blocks``.
+
+    Two paths land here: the normal post-iteration persistence pass
+    (which iterates ``response.content`` to preserve text/pill
+    interleaving) and the cancel handler (which iterates all known
+    records to flush them in unknown order). Both dedup against the
+    shared ``status_blocks_persisted`` set so an in-flight use that gets
+    its result block on a later iteration isn't appended twice.
+    """
+    for tool_use_id in tool_use_ids:
+        if tool_use_id in status_blocks_persisted:
+            continue
+        record = status_block_records.get(tool_use_id)
+        if record is None:
+            continue
+        assistant_blocks.append(record)
+        status_blocks_persisted.add(tool_use_id)
+
+
+def _truncate_for_audit(value: Any, max_chars: int = 2000) -> Any:
+    """Clip oversize payloads for the audit row.
+
+    ``_preview`` is a raw JSON-string slice (may end mid-token); it is
+    intended for debug eyeballing only — never JSON-parsed downstream.
+    ``default=str`` coerces non-JSON-serializable values (e.g. Decimal,
+    datetime) to their ``str`` form so the audit row always lands; if a
+    future server tool returns financial Decimals this loses precision
+    silently, but the audit pipeline isn't a serialization boundary for
+    money today.
+    """
+    try:
+        encoded = json.dumps(value, default=str)
+    except (TypeError, ValueError):
+        return {"_audit_error": "non_json_payload"}
+    if len(encoded) <= max_chars:
+        return value
+    return {"_truncated": True, "_preview": encoded[:max_chars]}
+
+
+async def _record_server_tool_executions(
+    *,
+    response_blocks: list[Any],
+    pending_uses: dict[str, dict[str, Any]],
+    invocation_id: uuid.UUID,
+    db_factory: DbSessionFactory,
+    turn_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+) -> None:
+    """Pair server-tool uses with their results across iterations.
+
+    Anthropic can return a ``server_tool_use`` block in iteration N and
+    its matching ``*_tool_result`` block in iteration N+1 (when iteration
+    N also contained custom ``tool_use`` blocks that needed to
+    roundtrip). ``pending_uses`` is the turn-scoped dict that tracks
+    use-without-result entries waiting for their pair.
+
+    This function: (1) records new uses into ``pending_uses`` and
+    (2) writes a ``tool_executions`` row for every result that lands
+    this iteration, looking up the matching use's input from
+    ``pending_uses`` and removing it on a successful pair. Use entries
+    left over after the last iteration are handled by
+    :func:`_flush_orphan_server_tool_uses`.
+    """
+    if not response_blocks:
+        return
+
+    for block in response_blocks:
+        if getattr(block, "type", None) != "server_tool_use":
+            continue
+        tool_use_id = getattr(block, "id", "") or ""
+        raw_name = getattr(block, "name", "") or ""
+        if not tool_use_id or tool_use_id in pending_uses:
+            continue
+        raw_input = getattr(block, "input", None)
+        pending_uses[tool_use_id] = {
+            "tool_name": f"{_ANTHROPIC_SERVER_TOOL_PREFIX}{raw_name}",
+            "input_payload": raw_input if isinstance(raw_input, dict) else {},
+        }
+
+    for block in response_blocks:
+        block_type = getattr(block, "type", None)
+        if block_type not in _SERVER_TOOL_RESULT_BLOCK_TYPES:
+            continue
+        tool_use_id = getattr(block, "tool_use_id", None)
+        if not isinstance(tool_use_id, str) or not tool_use_id:
+            continue
+        use_info = pending_uses.pop(tool_use_id, None)
+        if use_info is None:
+            logger.warning(
+                "loop_server_tool_orphan_result",
+                tool_use_id=tool_use_id,
+            )
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("turn_id", str(turn_id))
+                scope.set_tag("conversation_id", str(conversation_id))
+                scope.set_tag("tool_use_id", tool_use_id)
+                sentry_sdk.capture_message(
+                    "loop_server_tool_orphan_result",
+                    level="warning",
+                )
+            continue
+
+        content = getattr(block, "content", None)
+        content_type = (
+            getattr(content, "type", None) if content is not None else None
+        )
+        is_error = isinstance(content_type, str) and content_type.endswith(
+            "_error"
+        )
+        try:
+            if hasattr(content, "model_dump"):
+                dumped_content = content.model_dump(mode="json")
+            elif isinstance(content, list):
+                # ``WebSearchToolResultBlock.content`` is a list of
+                # Pydantic ``WebSearchResultBlock`` items on the success
+                # path. ``json.dumps(default=str)`` would fall back to
+                # ``str(item)`` repr strings — round-trip via model_dump
+                # to keep structured JSON in the audit row.
+                dumped_content = [
+                    item.model_dump(mode="json")
+                    if hasattr(item, "model_dump")
+                    else item
+                    for item in content
+                ]
+            else:
+                dumped_content = content
+        except Exception:
+            logger.exception(
+                "loop_server_tool_content_dump_failed",
+                tool_name=use_info["tool_name"],
+                tool_use_id=tool_use_id,
+            )
+            with sentry_sdk.new_scope() as scope:
+                scope.set_tag("turn_id", str(turn_id))
+                scope.set_tag("conversation_id", str(conversation_id))
+                scope.set_tag("tool_use_id", tool_use_id)
+                scope.set_tag("tool_name", use_info["tool_name"])
+                sentry_sdk.capture_message(
+                    "loop_server_tool_content_dump_failed",
+                    level="warning",
+                )
+            dumped_content = {"_dump_failed": True}
+
+        if is_error:
+            status = "error"
+            error_code = (
+                getattr(content, "error_code", None)
+                if content is not None
+                else None
+            )
+            error_message = (
+                str(error_code) if error_code is not None else "unknown_error"
+            )
+            output_payload: dict[str, Any] | None = None
+        else:
+            status = "success"
+            error_message = None
+            output_payload = {"content": _truncate_for_audit(dumped_content)}
+
+        async with db_factory() as db:
+            await ConversationRepository.record_tool_execution(
+                db,
+                model_invocation_id=invocation_id,
+                tool_name=use_info["tool_name"],
+                tool_use_id=tool_use_id,
+                input_payload=use_info["input_payload"],
+                status=status,
+                output_payload=output_payload,
+                error_message=error_message,
+            )
+
+
+async def _flush_orphan_server_tool_uses(
+    *,
+    pending_uses: dict[str, dict[str, Any]],
+    open_status_blocks: dict[str, str],
+    status_block_records: dict[str, dict[str, Any]],
+    invocation_id: uuid.UUID | None,
+    db_factory: DbSessionFactory,
+    sse_emitter: SSEEmitter,
+    turn_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+) -> None:
+    """Close any server-tool uses that never got a matching result.
+
+    Runs after the iteration loop exits. Anthropic should always pair a
+    use with a result eventually, possibly across iterations — anything
+    still in ``pending_uses`` here is a contract violation (or the turn
+    ended early). Emits a failed-state ``BlockData`` + ``BlockEnd`` for
+    each orphan pill and writes a ``status=error`` audit row.
+    """
+    for tool_use_id, use_info in list(pending_uses.items()):
+        logger.warning(
+            "loop_server_tool_missing_result_block",
+            tool_name=use_info["tool_name"],
+            tool_use_id=tool_use_id,
+        )
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("turn_id", str(turn_id))
+            scope.set_tag("conversation_id", str(conversation_id))
+            scope.set_tag("tool_use_id", tool_use_id)
+            scope.set_tag("tool_name", use_info["tool_name"])
+            sentry_sdk.capture_message(
+                "loop_server_tool_missing_result_block",
+                level="warning",
+            )
+
+        status_block_id = open_status_blocks.pop(tool_use_id, None)
+        if status_block_id is not None:
+            await sse_emitter.emit(
+                BlockData(
+                    block_id=status_block_id, data={"state": "failed"}
+                )
+            )
+            await sse_emitter.emit(BlockEnd(block_id=status_block_id))
+            if tool_use_id in status_block_records:
+                status_block_records[tool_use_id]["state"] = "failed"
+
+        if invocation_id is not None:
+            async with db_factory() as db:
+                await ConversationRepository.record_tool_execution(
+                    db,
+                    model_invocation_id=invocation_id,
+                    tool_name=use_info["tool_name"],
+                    tool_use_id=tool_use_id,
+                    input_payload=use_info["input_payload"],
+                    status="error",
+                    output_payload=None,
+                    error_message="missing_result_block",
+                )
+
+    pending_uses.clear()
 
 
 def _to_anthropic_content(
@@ -595,6 +909,7 @@ async def run_agent_turn(
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
     disconnect_check: Callable[[], Awaitable[bool]] | None = None,
+    server_tools_config: ServerToolsConfig = DISABLED_SERVER_TOOLS,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
@@ -816,6 +1131,13 @@ async def run_agent_turn(
                     "model_id": model_config.model_id,
                 },
             ):
+                # Server-tool state is turn-level because Anthropic can defer
+                # a result block to a later iteration.
+                open_status_blocks: dict[str, str] = {}
+                status_block_records: dict[str, dict[str, Any]] = {}
+                pending_server_tool_uses: dict[str, dict[str, Any]] = {}
+                status_blocks_persisted: set[str] = set()
+                invocation_id: uuid.UUID | None = None
                 try:
                     while True:
                         # B3.3: poll for client disconnect at the iteration
@@ -847,17 +1169,24 @@ async def run_agent_turn(
                             },
                         }
                         # Anthropic 400s on an empty tools array, so omit the key
-                        # entirely when no tools are registered (the v0 case). Per
-                        # A1.8: mark the last tool with cache_control so the
-                        # entire tools array is cached together with the system
-                        # prompt.
-                        if not tool_registry.is_empty:
-                            tools_spec = list(tool_registry.to_anthropic_spec())
-                            tools_spec[-1] = {
-                                **tools_spec[-1],
+                        # when no tools are present. Per A1.8: cache_control on
+                        # the last entry caches the tools array alongside the
+                        # system prompt.
+                        server_tool_specs = _build_server_tool_specs(
+                            server_tools_config
+                        )
+                        registry_specs: list[dict[str, Any]] = (
+                            list(tool_registry.to_anthropic_spec())
+                            if not tool_registry.is_empty
+                            else []
+                        )
+                        combined_tools = [*server_tool_specs, *registry_specs]
+                        if combined_tools:
+                            combined_tools[-1] = {
+                                **combined_tools[-1],
                                 "cache_control": {"type": "ephemeral"},
                             }
-                            create_kwargs["tools"] = tools_spec
+                            create_kwargs["tools"] = combined_tools
 
                         # Pass a shallow copy of ``messages`` so the captured
                         # input reflects the request as it was sent — the loop
@@ -915,6 +1244,95 @@ async def run_agent_turn(
                                                             }
                                                         )
                                                     )
+                                                elif (
+                                                    server_tools_config.any_enabled
+                                                    and chunk.content_block.type
+                                                    == "server_tool_use"
+                                                ):
+                                                    tool_use_id = getattr(
+                                                        chunk.content_block,
+                                                        "id",
+                                                        None,
+                                                    )
+                                                    raw_name = getattr(
+                                                        chunk.content_block,
+                                                        "name",
+                                                        None,
+                                                    )
+                                                    if (
+                                                        isinstance(tool_use_id, str)
+                                                        and tool_use_id
+                                                    ):
+                                                        status_block_id = str(ULID())
+                                                        open_status_blocks[
+                                                            tool_use_id
+                                                        ] = status_block_id
+                                                        record: dict[str, Any] = {
+                                                            "type": "status",
+                                                            "block_id": (
+                                                                status_block_id
+                                                            ),
+                                                            "label": (
+                                                                _server_tool_status_label(
+                                                                    raw_name
+                                                                )
+                                                            ),
+                                                            "state": "active",
+                                                        }
+                                                        status_block_records[
+                                                            tool_use_id
+                                                        ] = record
+                                                        await sse_emitter.emit(
+                                                            BlockStart(block=record)
+                                                        )
+                                                elif (
+                                                    server_tools_config.any_enabled
+                                                    and chunk.content_block.type
+                                                    in _SERVER_TOOL_RESULT_BLOCK_TYPES
+                                                ):
+                                                    result_block = chunk.content_block
+                                                    tool_use_id = getattr(
+                                                        result_block,
+                                                        "tool_use_id",
+                                                        None,
+                                                    )
+                                                    if (
+                                                        isinstance(tool_use_id, str)
+                                                        and tool_use_id
+                                                    ):
+                                                        status_block_id = (
+                                                            open_status_blocks.pop(
+                                                                tool_use_id, None
+                                                            )
+                                                        )
+                                                        if status_block_id is not None:
+                                                            new_state = (
+                                                                _result_block_status_state(
+                                                                    result_block
+                                                                )
+                                                            )
+                                                            await sse_emitter.emit(
+                                                                BlockData(
+                                                                    block_id=(
+                                                                        status_block_id
+                                                                    ),
+                                                                    data={
+                                                                        "state": (
+                                                                            new_state
+                                                                        )
+                                                                    },
+                                                                )
+                                                            )
+                                                            await sse_emitter.emit(
+                                                                BlockEnd(
+                                                                    block_id=(
+                                                                        status_block_id
+                                                                    )
+                                                                )
+                                                            )
+                                                            status_block_records[
+                                                                tool_use_id
+                                                            ]["state"] = new_state
                                             elif chunk.type == "content_block_delta":
                                                 if (
                                                     chunk.delta.type == "text_delta"
@@ -987,6 +1405,18 @@ async def run_agent_turn(
                                                         "text": partial,
                                                     }
                                                 )
+                                        # Pill ordering loses text/pill
+                                        # interleaving on cancel since
+                                        # response.content is unavailable —
+                                        # pills land after partial text.
+                                        _append_status_blocks_for_persistence(
+                                            tool_use_ids=list(
+                                                status_block_records.keys()
+                                            ),
+                                            status_block_records=status_block_records,
+                                            status_blocks_persisted=status_blocks_persisted,
+                                            assistant_blocks=assistant_blocks,
+                                        )
                                         gen.update(
                                             level="WARNING",
                                             status_message="cancelled",
@@ -1084,6 +1514,16 @@ async def run_agent_turn(
                             )
                             invocation_id = invocation.id
 
+                        if server_tools_config.any_enabled:
+                            await _record_server_tool_executions(
+                                response_blocks=response.content,
+                                pending_uses=pending_server_tool_uses,
+                                invocation_id=invocation_id,
+                                db_factory=db_factory,
+                                turn_id=turn_id,
+                                conversation_id=conversation_id,
+                            )
+
                         state.iterations += 1
                         state.output_tokens += response.usage.output_tokens
                         totals["input"] += response.usage.input_tokens
@@ -1097,13 +1537,9 @@ async def run_agent_turn(
                             {"role": "assistant", "content": response_content}
                         )
 
-                        # User-facing blocks: only ``text`` blocks land in
-                        # messages.content_blocks for v0. Thinking, tool_use, and
-                        # future block types are excluded — A1.7 keeps thinking
-                        # server-side and Phase 3 introduces the StatusBlock /
-                        # StockCardBlock pipeline. The block_id reuses the ULID
-                        # already emitted on ``block_start`` so iOS can correlate
-                        # the persisted block back to the streamed events.
+                        # User-facing blocks land in messages.content_blocks
+                        # in response.content order so reload renders the same
+                        # [text, pill, text, ...] sequence as the live stream.
                         for index, block in enumerate(response.content):
                             if block.type == "text":
                                 block_id = open_text_blocks.get(index)
@@ -1130,6 +1566,15 @@ async def run_agent_turn(
                                         "text": block.text,
                                     }
                                 )
+                            elif block.type == "server_tool_use":
+                                tool_use_id = getattr(block, "id", None)
+                                if isinstance(tool_use_id, str):
+                                    _append_status_blocks_for_persistence(
+                                        tool_use_ids=[tool_use_id],
+                                        status_block_records=status_block_records,
+                                        status_blocks_persisted=status_blocks_persisted,
+                                        assistant_blocks=assistant_blocks,
+                                    )
 
                         if response.stop_reason == "end_turn":
                             terminal_state = "end_turn"
@@ -1202,6 +1647,20 @@ async def run_agent_turn(
                         # record verbatim so the audit row carries the real signal.
                         terminal_state = response.stop_reason or "unknown"
                         break
+                    # Close any server-tool uses Anthropic never paired with
+                    # a result. Runs for every break path so cap breaches /
+                    # mid-turn errors don't leave pills stuck active.
+                    if server_tools_config.any_enabled:
+                        await _flush_orphan_server_tool_uses(
+                            pending_uses=pending_server_tool_uses,
+                            open_status_blocks=open_status_blocks,
+                            status_block_records=status_block_records,
+                            invocation_id=invocation_id,
+                            db_factory=db_factory,
+                            sse_emitter=sse_emitter,
+                            turn_id=turn_id,
+                            conversation_id=conversation_id,
+                        )
                     # Reached only via a normal break — used below to gate the
                     # terminal SSE frame.
                     completed_normally = True
@@ -1218,6 +1677,16 @@ async def run_agent_turn(
                     terminal_state = "cancelled"
                     error_code = ErrorCode.CANCELLED
                     cancellation_reason = _DEFAULT_CANCELLATION_REASON
+                    # SEV-566: any pills that were still active when the
+                    # turn was cancelled would otherwise persist with
+                    # state="active" forever — flip them in-place so
+                    # reload shows a failed pill, not a phantom spinner.
+                    # The records dict already holds references to the
+                    # block dicts in ``assistant_blocks``, so mutating
+                    # here propagates to the persisted message.
+                    for record in status_block_records.values():
+                        if record.get("state") == "active":
+                            record["state"] = "failed"
                     raise
                 finally:
                     # Inner finally: just update the langfuse turn span — the

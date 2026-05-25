@@ -55,12 +55,12 @@ from ulid import ULID
 from app.ai.anthropic_client import get_anthropic
 from app.ai.models import get_default_model_config
 from app.ai.observability.langfuse import LangfuseClient, get_langfuse
-from app.ai.prompts import SYSTEM_PROMPT_V1
+from app.ai.prompts import system_prompt_for
 from app.ai.runtime.caps import HardCaps, get_hard_caps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
 from app.ai.runtime.errors import to_error_code
 from app.ai.runtime.loop import run_agent_turn
-from app.ai.runtime.types import ModelConfig
+from app.ai.runtime.types import ModelConfig, ServerToolsConfig
 from app.ai.tools import DEFAULT_REGISTRY, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
@@ -394,6 +394,13 @@ async def post_turn(
             # the loop signature for unit-test ergonomics and so future
             # work can wire it to a working signal (e.g.
             # ``EventSourceResponse``'s ``client_close_handler_callable``).
+            server_tools_config = ServerToolsConfig(
+                web_search_enabled=settings.anthropic_enable_web_search,
+                web_fetch_enabled=settings.anthropic_enable_web_fetch,
+                code_execution_enabled=settings.anthropic_enable_code_execution,
+                web_search_max_uses=settings.anthropic_web_search_max_uses,
+                web_fetch_max_uses=settings.anthropic_web_fetch_max_uses,
+            )
             result = await run_agent_turn(
                 user_id=user_uuid,
                 conversation_id=conversation_id,
@@ -412,12 +419,13 @@ async def post_turn(
                         request.app.state, "market_data", None
                     ),
                 ),
-                system_prompt=SYSTEM_PROMPT_V1,
+                system_prompt=system_prompt_for(server_tools_config),
                 model_config=model_config,
                 hard_caps=hard_caps,
                 langfuse=langfuse,
                 environment=settings.environment,
                 sse_emitter=emitter,
+                server_tools_config=server_tools_config,
             )
             result_turn_id = result.turn_id
             # Only ``end_turn`` with persisted blocks is replayable. Cap

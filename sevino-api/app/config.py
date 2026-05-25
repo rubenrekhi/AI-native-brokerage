@@ -60,6 +60,11 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     railway_environment_name: str = ""
     anthropic_model_main: str = "claude-sonnet-4-6"
+    anthropic_enable_web_search: bool = False
+    anthropic_enable_web_fetch: bool = False
+    anthropic_enable_code_execution: bool = False
+    anthropic_web_search_max_uses: int = 5
+    anthropic_web_fetch_max_uses: int = 5
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://us.cloud.langfuse.com"

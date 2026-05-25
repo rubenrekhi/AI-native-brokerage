@@ -17,6 +17,10 @@ final class WelcomeFlowUITests: XCTestCase {
         app = XCUIApplication()
         app.launchArguments.append("-AppleLanguages")
         app.launchArguments.append("(en)")
+        // Force unauthenticated state so the welcome screen renders
+        // regardless of any persisted Supabase session in the simulator
+        // keychain (which leaks between manual runs and UI tests).
+        app.launchArguments.append("--ui-test-mode=unauthenticated")
         app.launch()
     }
 

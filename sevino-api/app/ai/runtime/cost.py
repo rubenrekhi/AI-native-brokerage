@@ -32,6 +32,12 @@ class ModelPricing:
     cache_write_1h: float
 
 
+# $10 per 1,000 requests, verified 2026-05-13. Code execution is metered
+# by container time and not surfaced on ``Usage`` — omitted.
+_WEB_SEARCH_RATE_USD_MICROS = 10_000
+_WEB_FETCH_RATE_USD_MICROS = 10_000
+
+
 # Source: https://www.anthropic.com/pricing#api
 _PRICING: dict[str, ModelPricing] = {
     "claude-sonnet-4-6": ModelPricing(
@@ -94,5 +100,10 @@ def cost_usd_micros(usage: Usage, model_id: str) -> int:
         )
     elif usage.cache_creation_input_tokens:
         cost += usage.cache_creation_input_tokens * pricing.cache_write_5m
+
+    server_usage = usage.server_tool_use
+    if server_usage is not None:
+        cost += server_usage.web_search_requests * _WEB_SEARCH_RATE_USD_MICROS
+        cost += server_usage.web_fetch_requests * _WEB_FETCH_RATE_USD_MICROS
 
     return round(cost)

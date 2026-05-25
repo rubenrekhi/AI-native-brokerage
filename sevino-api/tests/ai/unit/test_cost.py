@@ -3,6 +3,7 @@
 import pytest
 from anthropic.types import Usage
 from anthropic.types.cache_creation import CacheCreation
+from anthropic.types.server_tool_usage import ServerToolUsage
 
 from app.ai.models import MODELS
 from app.ai.runtime.cost import _PRICING, cost_usd_micros
@@ -214,6 +215,67 @@ class TestPricingCoversConfiguredModels:
 
     def test_smoke_model_is_priced(self):
         assert MODELS.SMOKE in _PRICING
+
+
+class TestServerToolSurcharge:
+    """Web search/fetch billed at $10/1k requests = 10,000 microUSD each."""
+
+    def test_web_search_surcharge_added_per_request(self):
+        # 3 searches × 10,000 microUSD = 30,000 microUSD of surcharge,
+        # plus 1000 input × 3 + 500 output × 15 = 3000 + 7500 = 10,500.
+        usage = Usage(
+            input_tokens=1000,
+            output_tokens=500,
+            server_tool_use=ServerToolUsage(
+                web_search_requests=3,
+                web_fetch_requests=0,
+            ),
+        )
+        assert cost_usd_micros(usage, "claude-sonnet-4-6") == 40_500
+
+    def test_web_fetch_surcharge_added_per_request(self):
+        # 2 fetches × 10,000 microUSD = 20,000 microUSD of surcharge,
+        # plus 1000 × 3 + 500 × 15 = 10,500.
+        usage = Usage(
+            input_tokens=1000,
+            output_tokens=500,
+            server_tool_use=ServerToolUsage(
+                web_search_requests=0,
+                web_fetch_requests=2,
+            ),
+        )
+        assert cost_usd_micros(usage, "claude-sonnet-4-6") == 30_500
+
+    def test_search_and_fetch_summed(self):
+        # 2 searches + 3 fetches = 5 × 10,000 = 50,000 + 0 token cost
+        usage = Usage(
+            input_tokens=0,
+            output_tokens=0,
+            server_tool_use=ServerToolUsage(
+                web_search_requests=2,
+                web_fetch_requests=3,
+            ),
+        )
+        assert cost_usd_micros(usage, "claude-sonnet-4-6") == 50_000
+
+    def test_zero_counts_add_nothing(self):
+        usage = Usage(
+            input_tokens=1000,
+            output_tokens=500,
+            server_tool_use=ServerToolUsage(
+                web_search_requests=0,
+                web_fetch_requests=0,
+            ),
+        )
+        assert cost_usd_micros(usage, "claude-sonnet-4-6") == 10_500
+
+    def test_absent_server_tool_use_treated_as_zero(self):
+        usage = Usage(
+            input_tokens=1000,
+            output_tokens=500,
+            server_tool_use=None,
+        )
+        assert cost_usd_micros(usage, "claude-sonnet-4-6") == 10_500
 
 
 class TestPureFunction:

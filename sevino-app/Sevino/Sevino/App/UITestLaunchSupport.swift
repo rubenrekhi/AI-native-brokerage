@@ -26,6 +26,10 @@ enum UITestLaunchArgument {
         /// service in the unverified state. Lets tests assert routing + view
         /// behavior without spinning up Supabase.
         case emailVerification = "email-verification"
+        /// Force the unauthenticated path so the welcome screen is on top
+        /// regardless of any persisted Supabase session in the simulator
+        /// keychain. Used by WelcomeFlowUITests.
+        case unauthenticated = "unauthenticated"
     }
 }
 
@@ -76,6 +80,10 @@ extension FakeAuthServiceForUITests {
         switch mode {
         case .emailVerification:
             return FakeAuthServiceForUITests()
+        case .unauthenticated:
+            return FakeAuthServiceForUITests(
+                isAuthenticated: false, currentEmail: nil
+            )
         }
     }
 }

@@ -43,10 +43,16 @@ from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.loop import run_agent_turn
-from app.ai.runtime.types import EMPTY_REGISTRY, ModelConfig, ToolRegistry
+from app.ai.runtime.types import (
+    EMPTY_REGISTRY,
+    ModelConfig,
+    ServerToolsConfig,
+    ToolRegistry,
+)
 from app.ai.tools import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import (
+    BlockData,
     BlockEnd,
     BlockStart,
     Error,
@@ -323,6 +329,7 @@ async def _run(
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
     emitter: SSEEmitter | None = None,
+    server_tools_config: ServerToolsConfig | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -333,22 +340,26 @@ async def _run(
     em = emitter or SSEEmitter()
     drain_task = asyncio.create_task(_drain(em))
 
+    kwargs: dict[str, Any] = {
+        "user_id": user_id or uuid.uuid4(),
+        "conversation_id": conversation_id or uuid.uuid4(),
+        "user_message": user_message,
+        "anthropic_client": client,
+        "db_factory": _make_db_factory(),
+        "tool_registry": tool_registry or EMPTY_REGISTRY,
+        "http_clients": ToolHttpClients(),
+        "system_prompt": SYSTEM_PROMPT,
+        "model_config": ModelConfig(model_id=MODEL_ID),
+        "hard_caps": hard_caps or HardCaps(),
+        "langfuse": langfuse if langfuse is not None else _NoopLangfuse(),
+        "environment": "test",
+        "sse_emitter": em,
+    }
+    if server_tools_config is not None:
+        kwargs["server_tools_config"] = server_tools_config
+
     try:
-        result = await run_agent_turn(
-            user_id=user_id or uuid.uuid4(),
-            conversation_id=conversation_id or uuid.uuid4(),
-            user_message=user_message,
-            anthropic_client=client,
-            db_factory=_make_db_factory(),
-            tool_registry=tool_registry or EMPTY_REGISTRY,
-            http_clients=ToolHttpClients(),
-            system_prompt=SYSTEM_PROMPT,
-            model_config=ModelConfig(model_id=MODEL_ID),
-            hard_caps=hard_caps or HardCaps(),
-            langfuse=langfuse if langfuse is not None else _NoopLangfuse(),
-            environment="test",
-            sse_emitter=em,
-        )
+        result = await run_agent_turn(**kwargs)
     finally:
         await em.close()
     events = await drain_task
@@ -1781,3 +1792,785 @@ class TestOuterCancellation:
         # finalise, so complete_agent_turn isn't called.
         repo_mocks["append_user_message"].assert_awaited_once()
         repo_mocks["complete_agent_turn"].assert_not_awaited()
+
+
+# ---------- Anthropic server tools ----------
+
+
+class TestAnthropicServerTools:
+
+    async def test_no_tools_kwarg_when_no_server_tools_enabled_and_empty_registry(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(),
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert "tools" not in create_kwargs
+
+    async def test_web_search_spec_prepended_with_cache_control(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(
+                web_search_enabled=True,
+                web_search_max_uses=3,
+            ),
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["tools"] == [
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 3,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+    async def test_all_three_server_tools_enabled(self, repo_mocks):
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(
+                web_search_enabled=True,
+                web_fetch_enabled=True,
+                code_execution_enabled=True,
+                web_search_max_uses=2,
+                web_fetch_max_uses=4,
+            ),
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["tools"] == [
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 2,
+            },
+            {
+                "type": "web_fetch_20250910",
+                "name": "web_fetch",
+                "max_uses": 4,
+            },
+            {
+                "type": "code_execution_20250825",
+                "name": "code_execution",
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
+    async def test_server_tools_prepended_before_registry(self, repo_mocks):
+        registry_spec = [
+            {"name": "get_stock_info", "description": "...", "input_schema": {}},
+        ]
+
+        class _Reg:
+            @property
+            def is_empty(self) -> bool:
+                return False
+
+            def to_anthropic_spec(self) -> list[dict[str, Any]]:
+                return registry_spec
+
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            tool_registry=_Reg(),
+            server_tools_config=ServerToolsConfig(
+                web_search_enabled=True,
+                web_search_max_uses=5,
+            ),
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["tools"] == [
+            {
+                "type": "web_search_20250305",
+                "name": "web_search",
+                "max_uses": 5,
+            },
+            {
+                "name": "get_stock_info",
+                "description": "...",
+                "input_schema": {},
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
+    async def test_writes_audit_row_for_web_search_call(self, repo_mocks):
+        from anthropic.types import (
+            ServerToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_1",
+            input={"query": "AMD earnings today"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        search_result = WebSearchToolResultBlock(
+            tool_use_id="srvtoolu_1",
+            content=[
+                WebSearchResultBlock(
+                    encrypted_content="enc1",
+                    title="AMD posts strong Q3",
+                    type="web_search_result",
+                    url="https://example.com/amd-q3",
+                )
+            ],
+            type="web_search_tool_result",
+        )
+        response = _make_response(
+            text="AMD posted strong Q3 numbers today.",
+            extra_blocks=[server_use, search_result],
+        )
+        client = _make_client(response)
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        repo_mocks["record_tool_execution"].assert_awaited_once()
+        kwargs = repo_mocks["record_tool_execution"].call_args.kwargs
+        assert kwargs["tool_name"] == "anthropic:web_search"
+        assert kwargs["tool_use_id"] == "srvtoolu_1"
+        assert kwargs["input_payload"] == {"query": "AMD earnings today"}
+        assert kwargs["status"] == "success"
+        assert kwargs.get("internal_trace") is None
+        assert kwargs["output_payload"] is not None
+        assert "content" in kwargs["output_payload"]
+
+    async def test_writes_audit_row_for_web_fetch_error(self, repo_mocks):
+        from anthropic.types import ServerToolUseBlock, WebFetchToolResultBlock
+        from anthropic.types.web_fetch_tool_result_error_block import (
+            WebFetchToolResultErrorBlock,
+        )
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_2",
+            input={"url": "https://blocked.example.com"},
+            name="web_fetch",
+            type="server_tool_use",
+        )
+        error_result = WebFetchToolResultBlock(
+            tool_use_id="srvtoolu_2",
+            content=WebFetchToolResultErrorBlock(
+                error_code="url_not_allowed",
+                type="web_fetch_tool_result_error",
+            ),
+            type="web_fetch_tool_result",
+        )
+        response = _make_response(
+            text="Couldn't fetch that URL.",
+            extra_blocks=[server_use, error_result],
+        )
+        client = _make_client(response)
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_fetch_enabled=True),
+        )
+
+        repo_mocks["record_tool_execution"].assert_awaited_once()
+        kwargs = repo_mocks["record_tool_execution"].call_args.kwargs
+        assert kwargs["tool_name"] == "anthropic:web_fetch"
+        assert kwargs["status"] == "error"
+        assert kwargs["error_message"] == "url_not_allowed"
+        assert kwargs["output_payload"] is None
+
+    async def test_no_audit_rows_when_server_tools_disabled(self, repo_mocks):
+        client = _make_client(_make_response(text="plain text response"))
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(),
+        )
+
+        repo_mocks["record_tool_execution"].assert_not_awaited()
+
+    async def test_writes_audit_row_for_code_execution_success(self, repo_mocks):
+        from anthropic.types import (
+            CodeExecutionToolResultBlock,
+            ServerToolUseBlock,
+        )
+        from anthropic.types.code_execution_result_block import (
+            CodeExecutionResultBlock,
+        )
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_code",
+            input={"code": "print(2 + 2)"},
+            name="code_execution",
+            type="server_tool_use",
+        )
+        success_result = CodeExecutionToolResultBlock(
+            tool_use_id="srvtoolu_code",
+            content=CodeExecutionResultBlock(
+                content=[],
+                return_code=0,
+                stderr="",
+                stdout="4\n",
+                type="code_execution_result",
+            ),
+            type="code_execution_tool_result",
+        )
+        response = _make_response(
+            text="2 + 2 = 4",
+            extra_blocks=[server_use, success_result],
+        )
+        client = _make_client(response)
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(
+                code_execution_enabled=True,
+            ),
+        )
+
+        repo_mocks["record_tool_execution"].assert_awaited_once()
+        kwargs = repo_mocks["record_tool_execution"].call_args.kwargs
+        assert kwargs["tool_name"] == "anthropic:code_execution"
+        assert kwargs["status"] == "success"
+        assert kwargs["input_payload"] == {"code": "print(2 + 2)"}
+        assert kwargs["output_payload"] is not None
+        assert "content" in kwargs["output_payload"]
+
+    async def test_logs_warning_when_server_tool_use_missing_result_block(
+        self, repo_mocks, caplog
+    ):
+        from anthropic.types import ServerToolUseBlock
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_orphan",
+            input={"query": "test"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        response = _make_response(
+            text="couldn't search",
+            extra_blocks=[server_use],
+        )
+        client = _make_client(response)
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        repo_mocks["record_tool_execution"].assert_awaited_once()
+        kwargs = repo_mocks["record_tool_execution"].call_args.kwargs
+        assert kwargs["status"] == "error"
+        assert kwargs["error_message"] == "missing_result_block"
+
+    async def test_emits_status_pill_events_for_web_search(self, repo_mocks):
+        from anthropic.types import (
+            ServerToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_search",
+            input={"query": "AMD earnings"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        search_result = WebSearchToolResultBlock(
+            tool_use_id="srvtoolu_search",
+            content=[
+                WebSearchResultBlock(
+                    encrypted_content="enc",
+                    title="AMD beats",
+                    type="web_search_result",
+                    url="https://example.com",
+                )
+            ],
+            type="web_search_tool_result",
+        )
+        response = _make_response(
+            text="Per the earnings beat…",
+            extra_blocks=[server_use, search_result],
+        )
+        client = _make_client(response)
+
+        _, events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        status_starts = [
+            e
+            for e in events
+            if isinstance(e, BlockStart) and e.block.get("type") == "status"
+        ]
+        assert len(status_starts) == 1
+        start = status_starts[0]
+        assert start.block["state"] == "active"
+        assert start.block["label"] == "Searching the web"
+        assert isinstance(start.block["block_id"], str) and start.block["block_id"]
+
+        status_block_id = start.block["block_id"]
+        data_events = [
+            e
+            for e in events
+            if isinstance(e, BlockData) and e.block_id == status_block_id
+        ]
+        assert len(data_events) == 1
+        assert data_events[0].data == {"state": "complete"}
+        end_events = [
+            e
+            for e in events
+            if isinstance(e, BlockEnd) and e.block_id == status_block_id
+        ]
+        assert len(end_events) == 1
+
+    async def test_status_pill_state_failed_on_result_error(self, repo_mocks):
+        from anthropic.types import ServerToolUseBlock, WebFetchToolResultBlock
+        from anthropic.types.web_fetch_tool_result_error_block import (
+            WebFetchToolResultErrorBlock,
+        )
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_fail",
+            input={"url": "https://blocked.example.com"},
+            name="web_fetch",
+            type="server_tool_use",
+        )
+        error_result = WebFetchToolResultBlock(
+            tool_use_id="srvtoolu_fail",
+            content=WebFetchToolResultErrorBlock(
+                error_code="url_not_allowed",
+                type="web_fetch_tool_result_error",
+            ),
+            type="web_fetch_tool_result",
+        )
+        response = _make_response(
+            text="Couldn't fetch.",
+            extra_blocks=[server_use, error_result],
+        )
+        client = _make_client(response)
+
+        _, events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_fetch_enabled=True),
+        )
+
+        status_starts = [
+            e
+            for e in events
+            if isinstance(e, BlockStart) and e.block.get("type") == "status"
+        ]
+        assert len(status_starts) == 1
+        assert status_starts[0].block["label"] == "Fetching webpage"
+        data_events = [e for e in events if isinstance(e, BlockData)]
+        assert len(data_events) == 1
+        assert data_events[0].data == {"state": "failed"}
+
+    async def test_status_pill_persisted_to_message_blocks(self, repo_mocks):
+        from anthropic.types import (
+            ServerToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_persist",
+            input={"query": "test"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        search_result = WebSearchToolResultBlock(
+            tool_use_id="srvtoolu_persist",
+            content=[
+                WebSearchResultBlock(
+                    encrypted_content="enc",
+                    title="t",
+                    type="web_search_result",
+                    url="https://example.com",
+                )
+            ],
+            type="web_search_tool_result",
+        )
+        response = _make_response(
+            text="Found it.",
+            extra_blocks=[server_use, search_result],
+        )
+        client = _make_client(response)
+
+        await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        kwargs = repo_mocks["append_assistant_message"].call_args.kwargs
+        blocks = kwargs["content_blocks"]
+        types = [b["type"] for b in blocks]
+        assert "status" in types
+        assert "text" in types
+        status_block = next(b for b in blocks if b["type"] == "status")
+        assert status_block["state"] == "complete"
+        assert status_block["label"] == "Searching the web"
+        assert isinstance(status_block["block_id"], str)
+
+    async def test_no_status_pill_events_when_server_tools_disabled(
+        self, repo_mocks
+    ):
+        from anthropic.types import ServerToolUseBlock
+
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_x",
+            input={"query": "x"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        response = _make_response(
+            text="hi", extra_blocks=[server_use]
+        )
+        client = _make_client(response)
+
+        _, events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(),
+        )
+
+        status_starts = [
+            e
+            for e in events
+            if isinstance(e, BlockStart) and e.block.get("type") == "status"
+        ]
+        assert status_starts == []
+        data_events = [e for e in events if isinstance(e, BlockData)]
+        assert data_events == []
+
+    async def test_cross_iteration_pill_closes_when_result_lands_later(
+        self, repo_mocks, monkeypatch
+    ):
+        # The bug: when Anthropic returns a server_tool_use AND a custom
+        # tool_use in iter 0, the search result is deferred to iter 1.
+        # The status pill should still flip to complete when the result
+        # arrives in iter 1, and the audit row should reflect success.
+        from anthropic.types import (
+            ServerToolUseBlock,
+            ToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        from app.ai.runtime.loop import _ToolDispatchOutcome
+
+        # Iter 0: server_tool_use + custom tool_use, stop_reason=tool_use
+        iter0 = _make_response(
+            text="thinking about AMD",
+            stop_reason="tool_use",
+            extra_blocks=[
+                ToolUseBlock(
+                    id="toolu_custom",
+                    name="get_stock_info",
+                    input={"symbol": "AMD"},
+                    type="tool_use",
+                ),
+                ServerToolUseBlock(
+                    id="srvtoolu_deferred",
+                    input={"query": "AMD news"},
+                    name="web_search",
+                    type="server_tool_use",
+                ),
+            ],
+        )
+        # Iter 1: web_search_tool_result for the iter-0 use + text
+        iter1 = _make_response(
+            text="Based on the search…",
+            stop_reason="end_turn",
+            extra_blocks=[
+                WebSearchToolResultBlock(
+                    tool_use_id="srvtoolu_deferred",
+                    content=[
+                        WebSearchResultBlock(
+                            encrypted_content="enc",
+                            title="AMD beats",
+                            type="web_search_result",
+                            url="https://example.com",
+                        )
+                    ],
+                    type="web_search_tool_result",
+                )
+            ],
+        )
+
+        # Stub out custom-tool dispatch so iter 0 → iter 1 cleanly without
+        # needing a real ToolRegistry with a working get_stock_info.
+        async def _stub_dispatch(**kwargs: Any) -> _ToolDispatchOutcome:
+            outcome = _ToolDispatchOutcome()
+            outcome.tool_call_count = 1
+            outcome.tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_custom",
+                    "content": "{\"ok\": true}",
+                }
+            )
+            return outcome
+
+        monkeypatch.setattr(
+            "app.ai.runtime.loop._dispatch_tool_uses", _stub_dispatch
+        )
+
+        client = _make_client([iter0, iter1])
+
+        result, events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 2
+
+        # Pill events fired across iterations: one BlockStart(active) in
+        # iter 0, one BlockData(complete) + BlockEnd in iter 1.
+        status_starts = [
+            e
+            for e in events
+            if isinstance(e, BlockStart) and e.block.get("type") == "status"
+        ]
+        assert len(status_starts) == 1
+        status_block_id = status_starts[0].block["block_id"]
+        assert status_starts[0].block["state"] == "active"
+
+        data_events = [
+            e
+            for e in events
+            if isinstance(e, BlockData) and e.block_id == status_block_id
+        ]
+        assert len(data_events) == 1
+        assert data_events[0].data == {"state": "complete"}
+
+        end_events = [
+            e
+            for e in events
+            if isinstance(e, BlockEnd) and e.block_id == status_block_id
+        ]
+        assert len(end_events) == 1
+
+        # Audit row: status=success with the original input from iter 0.
+        # Find the row keyed on the server tool's tool_use_id (other rows
+        # may exist for the custom tool dispatch — though our stub
+        # bypasses record_tool_execution for that path).
+        server_audit_calls = [
+            c
+            for c in repo_mocks["record_tool_execution"].call_args_list
+            if c.kwargs.get("tool_use_id") == "srvtoolu_deferred"
+        ]
+        assert len(server_audit_calls) == 1
+        kwargs = server_audit_calls[0].kwargs
+        assert kwargs["tool_name"] == "anthropic:web_search"
+        assert kwargs["status"] == "success"
+        assert kwargs["error_message"] is None
+        assert kwargs["input_payload"] == {"query": "AMD news"}
+        assert kwargs["output_payload"] is not None
+
+        # Persisted assistant message has the pill in its terminal state.
+        msg_kwargs = (
+            repo_mocks["append_assistant_message"].call_args.kwargs
+        )
+        status_blocks = [
+            b for b in msg_kwargs["content_blocks"] if b["type"] == "status"
+        ]
+        assert len(status_blocks) == 1
+        assert status_blocks[0]["state"] == "complete"
+
+    async def test_orphan_pill_closes_failed_when_result_never_arrives(
+        self, repo_mocks
+    ):
+        # If a server_tool_use lands but no matching result block ever
+        # arrives (turn ends with stop_reason=end_turn), the orphan-flush
+        # path closes the pill as failed and writes an error audit row.
+        from anthropic.types import ServerToolUseBlock
+
+        response = _make_response(
+            text="orphan",
+            extra_blocks=[
+                ServerToolUseBlock(
+                    id="srvtoolu_orphan",
+                    input={"query": "test"},
+                    name="web_search",
+                    type="server_tool_use",
+                )
+            ],
+        )
+        client = _make_client(response)
+
+        _, events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        status_starts = [
+            e
+            for e in events
+            if isinstance(e, BlockStart) and e.block.get("type") == "status"
+        ]
+        assert len(status_starts) == 1
+        status_block_id = status_starts[0].block["block_id"]
+
+        data_events = [
+            e
+            for e in events
+            if isinstance(e, BlockData) and e.block_id == status_block_id
+        ]
+        assert len(data_events) == 1
+        assert data_events[0].data == {"state": "failed"}
+
+        end_events = [
+            e
+            for e in events
+            if isinstance(e, BlockEnd) and e.block_id == status_block_id
+        ]
+        assert len(end_events) == 1
+
+        kwargs = repo_mocks["record_tool_execution"].call_args.kwargs
+        assert kwargs["status"] == "error"
+        assert kwargs["error_message"] == "missing_result_block"
+
+        msg_kwargs = (
+            repo_mocks["append_assistant_message"].call_args.kwargs
+        )
+        status_blocks = [
+            b for b in msg_kwargs["content_blocks"] if b["type"] == "status"
+        ]
+        assert len(status_blocks) == 1
+        assert status_blocks[0]["state"] == "failed"
+
+    async def test_cancel_flips_active_pill_to_failed(self, repo_mocks):
+        # If the turn is cancelled while a pill is still in flight, the
+        # persisted message must not show a phantom spinner on reload —
+        # the cancel handler flips active pills to failed in place.
+        from anthropic.types import ServerToolUseBlock
+
+        N = 16  # _DISCONNECT_CHECK_DELTA_INTERVAL
+        text_chunks = ["c"] * (N + 4)
+        full_text = "".join(text_chunks)
+        server_use = ServerToolUseBlock(
+            id="srvtoolu_cancel",
+            input={"query": "test"},
+            name="web_search",
+            type="server_tool_use",
+        )
+        final = _make_response(
+            text=full_text, extra_blocks=[server_use]
+        )
+
+        # Stream: server_tool_use lands first (pill emitted active), then
+        # N+4 text deltas. disconnect_check trips after the Nth delta, the
+        # loop raises CancelledError before the result block can arrive.
+        from anthropic.types import (
+            ServerToolUseBlock as ServerToolUseBlockType,
+        )
+
+        events_list: list[Any] = [
+            RawContentBlockStartEvent(
+                content_block=ServerToolUseBlockType(
+                    id="srvtoolu_cancel",
+                    input={"query": "test"},
+                    name="web_search",
+                    type="server_tool_use",
+                ),
+                index=0,
+                type="content_block_start",
+            ),
+            RawContentBlockStopEvent(
+                index=0, type="content_block_stop"
+            ),
+            RawContentBlockStartEvent(
+                content_block=TextBlock(text="", type="text"),
+                index=1,
+                type="content_block_start",
+            ),
+            *[
+                RawContentBlockDeltaEvent(
+                    delta=AnthropicTextDelta(text=c, type="text_delta"),
+                    index=1,
+                    type="content_block_delta",
+                )
+                for c in text_chunks
+            ],
+            RawContentBlockStopEvent(
+                index=1, type="content_block_stop"
+            ),
+        ]
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(_FakeStream(events_list, final))
+        )
+
+        check_calls = 0
+
+        async def disconnect() -> bool:
+            nonlocal check_calls
+            check_calls += 1
+            return check_calls > 1
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+        try:
+            with pytest.raises(asyncio.CancelledError):
+                await run_agent_turn(
+                    user_id=uuid.uuid4(),
+                    conversation_id=uuid.uuid4(),
+                    user_message="hello",
+                    anthropic_client=client,
+                    db_factory=_make_db_factory(),
+                    tool_registry=EMPTY_REGISTRY,
+                    http_clients=ToolHttpClients(),
+                    system_prompt=SYSTEM_PROMPT,
+                    model_config=ModelConfig(model_id=MODEL_ID),
+                    hard_caps=HardCaps(),
+                    langfuse=_NoopLangfuse(),
+                    environment="test",
+                    sse_emitter=em,
+                    disconnect_check=disconnect,
+                    server_tools_config=ServerToolsConfig(
+                        web_search_enabled=True
+                    ),
+                )
+        finally:
+            await em.close()
+        await drain_task
+
+        # The persisted assistant message has the pill flipped to failed,
+        # not stuck in active.
+        msg_kwargs = (
+            repo_mocks["append_assistant_message"].call_args.kwargs
+        )
+        status_blocks = [
+            b for b in msg_kwargs["content_blocks"] if b["type"] == "status"
+        ]
+        assert len(status_blocks) == 1
+        assert status_blocks[0]["state"] == "failed"

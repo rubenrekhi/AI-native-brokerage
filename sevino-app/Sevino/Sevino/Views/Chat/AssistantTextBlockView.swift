@@ -5,18 +5,34 @@ struct AssistantTextBlockView: View {
     let block: TextBlock
     let isStreaming: Bool
     let scale: CGFloat
+    let ordinal: Int
+    let hasLaterTextBlock: Bool
+    let sequencer: MessageTypewriterSequencer
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var displayedText = ""
+
+    private var isGated: Bool {
+        isStreaming && !sequencer.isUnlocked(ordinal: ordinal)
+    }
+
+    // Marking completed is only safe once no more deltas can arrive — otherwise
+    // the typewriter catches up mid-stream and unlocks the next block early.
+    private var isStreamSettled: Bool {
+        !isStreaming || hasLaterTextBlock
+    }
 
     var body: some View {
         Markdown(renderedText)
             .markdownTheme(.sevino(scale: scale))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16 * scale)
-            .task(id: block.text) {
+            .opacity(isGated ? 0 : 1)
+            .task(id: typewriterTaskId) {
+                guard !isGated else { return }
                 guard isStreaming, !reduceMotion else {
                     displayedText = block.text
+                    sequencer.markCompleted(ordinal: ordinal)
                     return
                 }
                 while !Task.isCancelled {
@@ -26,6 +42,9 @@ struct AssistantTextBlockView: View {
                     )
                     if next == block.text {
                         displayedText = block.text
+                        if isStreamSettled {
+                            sequencer.markCompleted(ordinal: ordinal)
+                        }
                         break
                     }
                     displayedText = next
@@ -35,6 +54,7 @@ struct AssistantTextBlockView: View {
             .onChange(of: isStreaming) { _, streaming in
                 if !streaming {
                     displayedText = block.text
+                    sequencer.markCompleted(ordinal: ordinal)
                 }
             }
     }
@@ -43,7 +63,13 @@ struct AssistantTextBlockView: View {
         if !isStreaming || reduceMotion {
             return block.text
         }
-        return displayedText.isEmpty ? block.text : displayedText
+        return displayedText.isEmpty ? "" : displayedText
+    }
+
+    // `isStreamSettled` is part of the key so a caught-up typewriter re-runs
+    // (and marks completed) when a later block finally arrives.
+    private var typewriterTaskId: String {
+        "\(isGated)|\(isStreamSettled)|\(block.text)"
     }
 }
 
@@ -56,7 +82,10 @@ struct AssistantTextBlockView: View {
                 text: "Here is **bold** and *italic* text.\n\n### Heading\n\n| Col A | Col B |\n|---|---|\n| 1 | 2 |"
             ),
             isStreaming: false,
-            scale: 1
+            scale: 1,
+            ordinal: 0,
+            hasLaterTextBlock: false,
+            sequencer: MessageTypewriterSequencer()
         )
     }
     .preferredColorScheme(.dark)
