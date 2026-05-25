@@ -152,6 +152,14 @@ final class TickerMentionViewModel {
         focusRequestTick &+= 1
     }
 
+    /// Replace the input text and raise the keyboard. Used by surfaces that want to seed
+    /// a chat prompt the user can edit inline — e.g. the funding modal's Deposit/Withdraw
+    /// buttons. The caret lands at the end of `newText`.
+    func prefill(_ newText: String) {
+        updateText(newText)
+        focusRequestTick &+= 1
+    }
+
     // MARK: - Mention detection
 
     /// Scans backwards from the end of `text` for a `$QUERY` pattern — `$` followed by 1+ letters —
