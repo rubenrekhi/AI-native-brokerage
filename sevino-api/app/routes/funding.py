@@ -6,6 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
+from app.models.ach_relationship import AchRelationship
+from app.repositories.plaid_item import STATUS_REQUIRES_REAUTH
 from app.schemas.funding import (
     AchRelationshipListResponse,
     AchRelationshipResponse,
@@ -30,6 +32,18 @@ def get_alpaca(request: Request) -> AlpacaBrokerService:
 
 def get_plaid(request: Request) -> PlaidService:
     return request.app.state.plaid
+
+
+def _build_relationship_response(
+    rel: AchRelationship,
+) -> AchRelationshipResponse:
+    """Reads `rel.plaid_item.status` directly — caller must eager-load it."""
+    response = AchRelationshipResponse.model_validate(rel)
+    response.requires_reauth = (
+        rel.plaid_item is not None
+        and rel.plaid_item.status == STATUS_REQUIRES_REAUTH
+    )
+    return response
 
 
 @router.post("/link-token", response_model=LinkTokenResponse)
@@ -76,7 +90,7 @@ async def list_ach_relationships(
         db, alpaca=alpaca, user_id=uuid.UUID(user_id)
     )
     return AchRelationshipListResponse(
-        relationships=[AchRelationshipResponse.model_validate(r) for r in relationships]
+        relationships=[_build_relationship_response(r) for r in relationships]
     )
 
 
