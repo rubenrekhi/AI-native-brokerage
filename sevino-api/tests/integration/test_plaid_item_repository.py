@@ -104,6 +104,65 @@ class TestMarkInactive:
         assert refreshed.status == "inactive"
 
 
+class TestMarkRequiresReauth:
+    async def test_flips_status_and_returns_item(
+        self, db_session: AsyncSession, test_user
+    ):
+        item = await _make_item(
+            db_session, test_user, plaid_item_id="item_reauth_1"
+        )
+        assert item.status == "active"
+
+        result = await PlaidItemRepository.mark_requires_reauth(
+            db_session, "item_reauth_1"
+        )
+
+        assert result is not None
+        assert result.id == item.id
+        assert result.status == "requires_reauth"
+
+        refreshed = await PlaidItemRepository.get_by_id(db_session, item.id)
+        assert refreshed is not None
+        assert refreshed.status == "requires_reauth"
+
+    async def test_unknown_plaid_item_id_returns_none(
+        self, db_session: AsyncSession, test_user
+    ):
+        result = await PlaidItemRepository.mark_requires_reauth(
+            db_session, "item_does_not_exist"
+        )
+        assert result is None
+
+
+class TestMarkActive:
+    async def test_flips_requires_reauth_back_to_active(
+        self, db_session: AsyncSession, test_user
+    ):
+        item = await _make_item(
+            db_session, test_user, plaid_item_id="item_active_1"
+        )
+        await PlaidItemRepository.mark_requires_reauth(db_session, "item_active_1")
+
+        await PlaidItemRepository.mark_active(db_session, item.id)
+
+        refreshed = await PlaidItemRepository.get_by_id(db_session, item.id)
+        assert refreshed is not None
+        assert refreshed.status == "active"
+
+    async def test_unknown_pk_does_not_touch_other_rows(
+        self, db_session: AsyncSession, test_user
+    ):
+        sentinel = await _make_item(
+            db_session, test_user, plaid_item_id="item_sentinel"
+        )
+
+        await PlaidItemRepository.mark_active(db_session, uuid.uuid4())
+
+        refreshed = await PlaidItemRepository.get_by_id(db_session, sentinel.id)
+        assert refreshed is not None
+        assert refreshed.status == "active"
+
+
 class TestUniqueConstraint:
     async def test_duplicate_plaid_item_id_raises_integrity_error(
         self, db_session: AsyncSession, test_user

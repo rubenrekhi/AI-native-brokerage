@@ -80,3 +80,27 @@ class PlaidItemRepository:
             return
         item.status = "inactive"
         await db.flush()
+
+    @staticmethod
+    async def mark_requires_reauth(
+        db: AsyncSession, plaid_item_id: str
+    ) -> PlaidItem | None:
+        """Webhook entrypoint — lookup by Plaid's item_id string, not our PK.
+
+        Returns None when the webhook references an item we never linked, so
+        the handler can ack Plaid (200) without raising.
+        """
+        item = await PlaidItemRepository.get_by_plaid_item_id(db, plaid_item_id)
+        if item is None:
+            return None
+        item.status = STATUS_REQUIRES_REAUTH
+        await db.flush()
+        return item
+
+    @staticmethod
+    async def mark_active(db: AsyncSession, item_pk: uuid.UUID) -> None:
+        item = await PlaidItemRepository.get_by_id(db, item_pk)
+        if item is None:
+            return
+        item.status = STATUS_ACTIVE
+        await db.flush()

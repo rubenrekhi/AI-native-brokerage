@@ -20,6 +20,7 @@ from plaid.model.link_token_create_request import LinkTokenCreateRequest
 from plaid.model.link_token_create_request_user import LinkTokenCreateRequestUser
 from plaid.model.processor_token_create_request import ProcessorTokenCreateRequest
 from plaid.model.products import Products
+from plaid.model.webhook_verification_key_get_request import WebhookVerificationKeyGetRequest
 
 from app.config import settings
 
@@ -98,6 +99,33 @@ class PlaidService:
         )
         response = await self._call(self._client.processor_token_create, request)
         return response["processor_token"]
+
+    async def create_update_link_token(
+        self, *, user_id: str, access_token: str
+    ) -> str:
+        """POST /link/token/create in update mode for an existing item.
+
+        Per Plaid docs, `products` must be omitted in update mode; the
+        existing `access_token` remains valid after a successful re-auth,
+        so callers do not need to exchange a new public token.
+        """
+        request = LinkTokenCreateRequest(
+            client_name="Sevino",
+            country_codes=[CountryCode("US")],
+            language="en",
+            user=LinkTokenCreateRequestUser(client_user_id=user_id),
+            access_token=access_token,
+        )
+        response = await self._call(self._client.link_token_create, request)
+        return response["link_token"]
+
+    async def get_webhook_verification_key(self, key_id: str) -> dict[str, Any]:
+        """POST /webhook_verification_key/get — fetch the JWK for a `kid`."""
+        request = WebhookVerificationKeyGetRequest(key_id=key_id)
+        response = await self._call(
+            self._client.webhook_verification_key_get, request
+        )
+        return response["key"]
 
     async def _call(self, fn, request) -> dict[str, Any]:
         try:
