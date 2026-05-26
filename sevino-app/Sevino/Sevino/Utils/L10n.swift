@@ -441,6 +441,7 @@ enum L10n {
         static let deposit = String(localized: "home.deposit")
         static let withdraw = String(localized: "home.withdraw")
         static let linkBankAccount = String(localized: "home.link_bank_account")
+        static let reconnectBankAction = String(localized: "home.reconnect_bank_action")
         static let fundingGenericError = String(localized: "home.funding_generic_error")
         static let fundingPlaidConnectionError = String(localized: "home.funding_plaid_connection_error")
         static let cashInterestInfo = String(localized: "home.cash_interest_info")
