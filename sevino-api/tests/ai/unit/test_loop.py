@@ -2516,7 +2516,7 @@ class TestAnthropicServerTools:
             return outcome
 
         monkeypatch.setattr(
-            "app.ai.runtime.loop._dispatch_tool_uses", _stub_dispatch
+            "app.ai.runtime.iteration.dispatch_tool_uses", _stub_dispatch
         )
 
         client = _make_client([iter0, iter1])
