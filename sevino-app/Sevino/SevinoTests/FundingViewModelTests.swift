@@ -22,7 +22,8 @@ final class FundingViewModelTests: XCTestCase {
             accountMask: "0000",
             accountType: "CHECKING",
             nickname: nickname,
-            status: status
+            status: status,
+            requiresReauth: false
         )
     }
 

@@ -282,6 +282,8 @@ private final class PreviewAccountHistoryFundingService: FundingServiceProtocol,
     func linkBank(_: LinkBankRequest) async throws -> AchRelationshipDTO { throw PreviewUnimplemented() }
     func listAchRelationships() async throws -> [AchRelationshipDTO] { [] }
     func deleteAchRelationship(id _: UUID) async throws {}
+    func createReauthLinkToken(relationshipId _: UUID) async throws -> String { "" }
+    func completeReauth(relationshipId _: UUID) async throws {}
     func createTransfer(
         relationshipId _: String,
         amount _: Decimal,

@@ -268,7 +268,8 @@ final class SettingsViewModelTests: XCTestCase {
             accountMask: "0000",
             accountType: "CHECKING",
             nickname: nil,
-            status: "QUEUED"
+            status: "QUEUED",
+            requiresReauth: false
         )
         mockFunding.createLinkTokenResult = .success("link-sandbox-abc")
         mockFunding.linkBankResult = .success(rel)

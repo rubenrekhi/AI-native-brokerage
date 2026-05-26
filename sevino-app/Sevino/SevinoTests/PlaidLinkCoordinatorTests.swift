@@ -21,7 +21,8 @@ final class PlaidLinkCoordinatorTests: XCTestCase {
             accountMask: "0000",
             accountType: "CHECKING",
             nickname: nil,
-            status: "QUEUED"
+            status: "QUEUED",
+            requiresReauth: false
         )
     }
 
@@ -224,5 +225,130 @@ final class PlaidLinkCoordinatorTests: XCTestCase {
 
         XCTAssertNil(sut.linkToken)
         XCTAssertFalse(sut.isShowingPlaidLink)
+    }
+
+    // MARK: - beginReauth
+
+    func test_beginReauth_setsTokenAndShowsSheet() async {
+        let (sut, mock) = makeSUT()
+        mock.createReauthLinkTokenResult = .success("link-update-sandbox")
+        let relId = UUID()
+
+        await sut.beginReauth(relationshipId: relId)
+
+        XCTAssertEqual(sut.linkToken, "link-update-sandbox")
+        XCTAssertTrue(sut.isShowingPlaidLink)
+        XCTAssertEqual(mock.createReauthLinkTokenCalls, [relId])
+    }
+
+    func test_beginReauth_whenApiFails_storesServerErrorAndDoesNotShowSheet() async {
+        let (sut, mock) = makeSUT()
+        let error = APIError(error: "Cannot reauth", code: "NOT_FOUND")
+        mock.createReauthLinkTokenResult = .failure(error)
+
+        await sut.beginReauth(relationshipId: UUID())
+
+        XCTAssertEqual(sut.serverError, error)
+        XCTAssertFalse(sut.isShowingPlaidLink)
+        XCTAssertNil(sut.linkToken)
+    }
+
+    func test_beginReauth_whenNonAPIErrorThrown_storesLocalErrorFallback() async {
+        let (sut, mock) = makeSUT()
+        mock.createReauthLinkTokenResult = .failure(URLError(.notConnectedToInternet))
+
+        await sut.beginReauth(relationshipId: UUID())
+
+        XCTAssertEqual(sut.localError, L10n.Home.fundingGenericError)
+        XCTAssertFalse(sut.isShowingPlaidLink)
+    }
+
+    // MARK: - onPlaidSuccess routing through pendingIntent
+
+    func test_onPlaidSuccess_inReauthMode_callsCompleteReauthNotLinkBank() async {
+        var linkedCalls = 0
+        let (sut, mock) = makeSUT(onLinked: { linkedCalls += 1 })
+        let relId = UUID()
+        mock.createReauthLinkTokenResult = .success("link-update-sandbox")
+        await sut.beginReauth(relationshipId: relId)
+
+        await sut.onPlaidSuccess(
+            publicToken: "public-from-update-mode",
+            accountId: "acct-ignored",
+            institutionName: "Chase",
+            accountMask: "1234",
+            accountName: "Chase Checking"
+        )
+
+        XCTAssertEqual(mock.completeReauthCalls, [relId])
+        XCTAssertTrue(
+            mock.linkBankCalls.isEmpty,
+            "linkBank must not be called after a re-auth — access_token unchanged"
+        )
+        XCTAssertEqual(linkedCalls, 1)
+        XCTAssertFalse(sut.isShowingPlaidLink)
+        XCTAssertNil(sut.linkToken)
+    }
+
+    func test_onPlaidSuccess_inReauthMode_apiErrorStoresServerError() async {
+        var linkedCalls = 0
+        let (sut, mock) = makeSUT(onLinked: { linkedCalls += 1 })
+        let error = APIError(error: "Bad relationship", code: "NOT_FOUND")
+        mock.createReauthLinkTokenResult = .success("link-update-sandbox")
+        mock.completeReauthResult = .failure(error)
+        await sut.beginReauth(relationshipId: UUID())
+
+        await sut.onPlaidSuccess(
+            publicToken: "pt", accountId: "acct",
+            institutionName: nil, accountMask: nil, accountName: nil
+        )
+
+        XCTAssertEqual(sut.serverError, error)
+        XCTAssertEqual(linkedCalls, 0)
+        XCTAssertFalse(sut.isShowingPlaidLink)
+    }
+
+    func test_onPlaidSuccess_resetsPendingIntentSoNextLinkIsInitial() async {
+        let (sut, mock) = makeSUT()
+        let rel = makeRelationship()
+        mock.createReauthLinkTokenResult = .success("link-update-sandbox")
+        mock.linkBankResult = .success(rel)
+        mock.createLinkTokenResult = .success("link-sandbox-abc")
+        // First trip: re-auth flow.
+        await sut.beginReauth(relationshipId: UUID())
+        await sut.onPlaidSuccess(
+            publicToken: "pt-1", accountId: "acct-1",
+            institutionName: nil, accountMask: nil, accountName: nil
+        )
+
+        // Second trip: initial link — must route through linkBank, not completeReauth.
+        await sut.startBankLink()
+        await sut.onPlaidSuccess(
+            publicToken: "pt-2", accountId: "acct-2",
+            institutionName: nil, accountMask: nil, accountName: nil
+        )
+
+        XCTAssertEqual(mock.linkBankCalls.count, 1, "second trip should hit linkBank")
+        XCTAssertEqual(mock.completeReauthCalls.count, 1, "completeReauth only ran on the first trip")
+    }
+
+    func test_onPlaidExit_resetsPendingIntentSoNextLinkIsInitial() async {
+        let (sut, mock) = makeSUT()
+        let rel = makeRelationship()
+        mock.createReauthLinkTokenResult = .success("link-update-sandbox")
+        mock.createLinkTokenResult = .success("link-sandbox-abc")
+        mock.linkBankResult = .success(rel)
+        await sut.beginReauth(relationshipId: UUID())
+
+        sut.onPlaidExit(error: URLError(.cancelled))
+
+        await sut.startBankLink()
+        await sut.onPlaidSuccess(
+            publicToken: "pt", accountId: "acct",
+            institutionName: nil, accountMask: nil, accountName: nil
+        )
+
+        XCTAssertEqual(mock.linkBankCalls.count, 1)
+        XCTAssertTrue(mock.completeReauthCalls.isEmpty)
     }
 }

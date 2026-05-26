@@ -18,6 +18,12 @@ final class PlaidLinkCoordinator {
     private(set) var serverError: APIError?
     private(set) var localError: String?
 
+    /// Tracks why the Plaid sheet is currently open so `onPlaidSuccess` knows
+    /// whether to call `linkBank` (initial link) or `completeReauth` (update
+    /// mode). Plaid's update-mode `access_token` doesn't change, so calling
+    /// `linkBank` after a re-auth would incorrectly create a duplicate row.
+    private var pendingIntent: LinkIntent = .initialLink
+
     private let service: any FundingServiceProtocol
 
     /// Called after a successful link (and after `BANK_ALREADY_LINKED`, so the
@@ -64,6 +70,7 @@ final class PlaidLinkCoordinator {
     }
 
     func startBankLink() async {
+        pendingIntent = .initialLink
         clearErrors()
         isLoading = true
         defer { isLoading = false }
@@ -77,7 +84,64 @@ final class PlaidLinkCoordinator {
         }
     }
 
+    /// Fire-and-forget convenience for SwiftUI button actions.
+    func startReauth(relationshipId: UUID) {
+        Task { await beginReauth(relationshipId: relationshipId) }
+    }
+
+    func beginReauth(relationshipId: UUID) async {
+        clearErrors()
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            linkToken = try await service.createReauthLinkToken(
+                relationshipId: relationshipId
+            )
+            pendingIntent = .reauth(relationshipId: relationshipId)
+            isShowingPlaidLink = true
+        } catch let apiError as APIError {
+            serverError = apiError
+        } catch {
+            localError = L10n.Home.fundingGenericError
+        }
+    }
+
     func onPlaidSuccess(
+        publicToken: String,
+        accountId: String,
+        institutionName: String?,
+        accountMask: String?,
+        accountName: String?
+    ) async {
+        switch pendingIntent {
+        case .initialLink:
+            await handleInitialLinkSuccess(
+                publicToken: publicToken,
+                accountId: accountId,
+                institutionName: institutionName,
+                accountMask: accountMask,
+                accountName: accountName
+            )
+        case .reauth(let relationshipId):
+            await handleReauthSuccess(relationshipId: relationshipId)
+        }
+        pendingIntent = .initialLink
+        linkToken = nil
+        isShowingPlaidLink = false
+    }
+
+    func onPlaidExit(error plaidError: Error?) {
+        if plaidError != nil {
+            localError = L10n.Home.fundingPlaidConnectionError
+        }
+        pendingIntent = .initialLink
+        linkToken = nil
+        isShowingPlaidLink = false
+    }
+
+    // MARK: - Private
+
+    private func handleInitialLinkSuccess(
         publicToken: String,
         accountId: String,
         institutionName: String?,
@@ -107,15 +171,21 @@ final class PlaidLinkCoordinator {
         } catch {
             localError = L10n.Home.fundingGenericError
         }
-        linkToken = nil
-        isShowingPlaidLink = false
     }
 
-    func onPlaidExit(error plaidError: Error?) {
-        if plaidError != nil {
-            localError = L10n.Home.fundingPlaidConnectionError
+    private func handleReauthSuccess(relationshipId: UUID) async {
+        do {
+            try await service.completeReauth(relationshipId: relationshipId)
+            await onLinked()
+        } catch let apiError as APIError {
+            serverError = apiError
+        } catch {
+            localError = L10n.Home.fundingGenericError
         }
-        linkToken = nil
-        isShowingPlaidLink = false
     }
+}
+
+private enum LinkIntent {
+    case initialLink
+    case reauth(relationshipId: UUID)
 }
