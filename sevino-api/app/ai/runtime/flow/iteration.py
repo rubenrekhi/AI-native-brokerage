@@ -33,14 +33,14 @@ from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.cost import cost_usd_micros
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode, to_error_code
-from app.ai.runtime.server_tools import (
+from app.ai.runtime.dispatch.custom import dispatch_tool_uses
+from app.ai.runtime.dispatch.server import (
     ServerToolTracker,
     append_status_blocks_for_persistence,
     build_server_tool_specs,
 )
-from app.ai.runtime.stream_consumer import StreamConsumer
-from app.ai.runtime.tools_dispatch import dispatch_tool_uses
-from app.ai.runtime.turn_lifecycle import TurnTotals
+from app.ai.runtime.flow.stream_consumer import StreamConsumer
+from app.ai.runtime.flow.turn_lifecycle import TurnTotals
 from app.ai.runtime.types import (
     LoopState,
     ModelConfig,

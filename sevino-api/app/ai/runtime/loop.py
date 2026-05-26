@@ -7,12 +7,10 @@ on ``stop_reason == "pause_turn"``; prior thinking blocks are appended to
 No FastAPI imports — collaborators are passed in so the same function
 runs in sub-agents and unit tests.
 
-The orchestrator lives here; per-iteration logic lives in
-:mod:`app.ai.runtime.iteration`, stream consumption in
-:mod:`app.ai.runtime.stream_consumer`, turn-level setup/teardown in
-:mod:`app.ai.runtime.turn_lifecycle`, and the tool-dispatch / server-tool
-helpers in :mod:`app.ai.runtime.tools_dispatch` and
-:mod:`app.ai.runtime.server_tools`.
+The orchestrator lives here; per-turn execution (iteration body, stream
+consumption, lifecycle setup/teardown) lives under
+:mod:`app.ai.runtime.flow`, and tool dispatch (registered tools, hosted
+server tools) lives under :mod:`app.ai.runtime.dispatch`.
 
 Each write opens a fresh ``AsyncSession`` so audit rows are durable
 mid-turn, not batched at the end.
@@ -34,13 +32,13 @@ from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import CapBreach, HardCaps, check_caps
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode
-from app.ai.runtime.iteration import run_one_iteration
-from app.ai.runtime.server_tools import ServerToolTracker
-from app.ai.runtime.tools_dispatch import (
+from app.ai.runtime.dispatch.custom import (
     ToolDispatchOutcome as _ToolDispatchOutcome,
     dispatch_tool_uses as _dispatch_tool_uses,
 )
-from app.ai.runtime.turn_lifecycle import (
+from app.ai.runtime.dispatch.server import ServerToolTracker
+from app.ai.runtime.flow.iteration import run_one_iteration
+from app.ai.runtime.flow.turn_lifecycle import (
     TurnTotals,
     emit_terminal_frame,
     finalize_turn_row,

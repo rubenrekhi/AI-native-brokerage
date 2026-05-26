@@ -27,7 +27,7 @@ from anthropic import AsyncAnthropic
 from anthropic.types import Message
 from ulid import ULID
 
-from app.ai.runtime.server_tools import (
+from app.ai.runtime.dispatch.server import (
     SERVER_TOOL_RESULT_BLOCK_TYPES,
     ServerToolTracker,
 )
