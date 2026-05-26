@@ -13,7 +13,8 @@ final class FundingViewModelTests: XCTestCase {
     private func makeRelationship(
         id: UUID = UUID(),
         status: String = "QUEUED",
-        nickname: String? = nil
+        nickname: String? = nil,
+        requiresReauth: Bool = false
     ) -> AchRelationshipDTO {
         AchRelationshipDTO(
             id: id,
@@ -23,8 +24,31 @@ final class FundingViewModelTests: XCTestCase {
             accountType: "CHECKING",
             nickname: nickname,
             status: status,
-            requiresReauth: false
+            requiresReauth: requiresReauth
         )
+    }
+
+    // MARK: - firstRequiresReauth
+
+    func test_firstRequiresReauth_returnsNilWhenNoneNeedReauth() async {
+        let (sut, mock) = makeSUT()
+        mock.listAchRelationshipsResult = .success([makeRelationship()])
+        await sut.loadRelationships()
+
+        XCTAssertNil(sut.firstRequiresReauth)
+    }
+
+    func test_firstRequiresReauth_returnsTheFlaggedRelationship() async {
+        let (sut, mock) = makeSUT()
+        let flagged = makeRelationship(requiresReauth: true)
+        mock.listAchRelationshipsResult = .success([
+            makeRelationship(),
+            flagged,
+            makeRelationship(requiresReauth: true),
+        ])
+        await sut.loadRelationships()
+
+        XCTAssertEqual(sut.firstRequiresReauth?.id, flagged.id)
     }
 
     // MARK: - loadRelationships

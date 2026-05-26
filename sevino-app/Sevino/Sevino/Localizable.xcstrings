@@ -1416,6 +1416,16 @@
         }
       }
     },
+    "home.reconnect_bank_action" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reconnect Bank"
+          }
+        }
+      }
+    },
     "home.menu_accessibility" : {
       "localizations" : {
         "en" : {

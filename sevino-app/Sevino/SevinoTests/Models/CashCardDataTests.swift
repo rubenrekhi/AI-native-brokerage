@@ -3,7 +3,7 @@ import XCTest
 
 final class CashCardDataTests: XCTestCase {
 
-    private func makeSample() -> CashCardData {
+    private func makeSample(reauthRelationshipId: UUID? = nil) -> CashCardData {
         CashCardData(
             balance: 2412.08,
             apy: 0.032,
@@ -15,8 +15,19 @@ final class CashCardDataTests: XCTestCase {
             pendingDeposits: 100.50,
             interestPaidOut: .monthly,
             fdicInsuredLimit: 2_500_000,
-            hasLinkedBank: true
+            hasLinkedBank: true,
+            reauthRelationshipId: reauthRelationshipId
         )
+    }
+
+    func test_reauthRelationshipId_roundTrips() throws {
+        let id = UUID()
+        let original = makeSample(reauthRelationshipId: id)
+
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(CashCardData.self, from: data)
+
+        XCTAssertEqual(decoded.reauthRelationshipId, id)
     }
 
     func test_codableRoundTrip_preservesAllFields() throws {

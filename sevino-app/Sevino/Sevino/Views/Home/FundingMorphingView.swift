@@ -12,6 +12,11 @@ struct FundingMorphingView: View {
 
     @Namespace private var morphNamespace
 
+    private func reconnectAction(plaidLink: PlaidLinkCoordinator) -> (() -> Void)? {
+        guard let id = viewModel.firstRequiresReauth?.id else { return nil }
+        return { plaidLink.startReauth(relationshipId: id) }
+    }
+
     private var cashCardData: CashCardData {
         CashCardData(
             balance: viewModel.cashBalance,
@@ -24,7 +29,8 @@ struct FundingMorphingView: View {
             pendingDeposits: viewModel.cashPendingDeposits,
             interestPaidOut: viewModel.cashInterestPaidOut,
             fdicInsuredLimit: viewModel.cashFdicInsuredLimit,
-            hasLinkedBank: viewModel.hasLinkedBank
+            hasLinkedBank: viewModel.hasLinkedBank,
+            reauthRelationshipId: viewModel.firstRequiresReauth?.id
         )
     }
 
@@ -62,7 +68,8 @@ struct FundingMorphingView: View {
             onDeposit: onDeposit,
             onWithdraw: onWithdraw,
             onLinkBank: plaidLink.requestBankLink,
-            isLinkBankDisabled: viewModel.isLoading || plaidLink.isLoading
+            onReconnectBank: reconnectAction(plaidLink: plaidLink),
+            isPrimaryActionDisabled: viewModel.isLoading || plaidLink.isLoading
         )
         .padding(20 * scale)
         .frame(maxWidth: .infinity)

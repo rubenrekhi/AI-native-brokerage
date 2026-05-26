@@ -41,6 +41,10 @@ final class FundingViewModel {
 
     var hasLinkedBank: Bool { !relationships.isEmpty }
 
+    var firstRequiresReauth: AchRelationshipDTO? {
+        relationships.first { $0.requiresReauth }
+    }
+
     /// Coalesces relationship-load errors with Plaid-flow errors so views can
     /// observe a single error stream regardless of which call failed.
     var displayedError: String? {

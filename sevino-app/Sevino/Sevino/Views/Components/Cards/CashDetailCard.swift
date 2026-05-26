@@ -6,8 +6,9 @@ struct CashDetailCard: View {
     var onDeposit: (() -> Void)?
     var onWithdraw: (() -> Void)?
     var onLinkBank: (() -> Void)?
+    var onReconnectBank: (() -> Void)?
     var onInfoTap: (() -> Void)?
-    var isLinkBankDisabled: Bool = false
+    var isPrimaryActionDisabled: Bool = false
 
     private var balanceText: String {
         data.balance.formatted(.currency(code: "USD"))
@@ -64,6 +65,9 @@ struct CashDetailCard: View {
     }
 
     private var showsActionRow: Bool {
+        if data.reauthRelationshipId != nil {
+            return onReconnectBank != nil
+        }
         if data.hasLinkedBank {
             return onDeposit != nil || onWithdraw != nil
         }
@@ -160,10 +164,18 @@ struct CashDetailCard: View {
 
     @ViewBuilder
     private var actionRow: some View {
-        if data.hasLinkedBank {
+        if data.reauthRelationshipId != nil, let onReconnectBank {
+            primaryActionButton(
+                title: L10n.Home.reconnectBankAction,
+                action: onReconnectBank
+            )
+        } else if data.hasLinkedBank {
             depositWithdrawButtons
         } else if let onLinkBank {
-            linkBankButton(action: onLinkBank)
+            primaryActionButton(
+                title: L10n.Home.linkBankAccount,
+                action: onLinkBank
+            )
         }
     }
 
@@ -190,16 +202,19 @@ struct CashDetailCard: View {
         }
     }
 
-    private func linkBankButton(action: @escaping () -> Void) -> some View {
+    private func primaryActionButton(
+        title: String,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
-            Text(L10n.Home.linkBankAccount)
+            Text(title)
                 .font(.system(size: 15 * scale, weight: .semibold))
                 .foregroundStyle(Color.sevinoPrimary)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 14 * scale)
                 .background(Color.sevinoSecondary, in: .rect(cornerRadius: 14 * scale))
         }
-        .disabled(isLinkBankDisabled)
+        .disabled(isPrimaryActionDisabled)
     }
 
     @ViewBuilder
@@ -262,7 +277,8 @@ private extension CashCardData {
         pendingDeposits: 100.50,
         interestPaidOut: .monthly,
         fdicInsuredLimit: 2_500_000,
-        hasLinkedBank: true
+        hasLinkedBank: true,
+        reauthRelationshipId: nil
     )
 
     static let previewUnlinked = CashCardData(
@@ -276,7 +292,23 @@ private extension CashCardData {
         pendingDeposits: 0,
         interestPaidOut: .monthly,
         fdicInsuredLimit: 2_500_000,
-        hasLinkedBank: false
+        hasLinkedBank: false,
+        reauthRelationshipId: nil
+    )
+
+    static let previewNeedsReauth = CashCardData(
+        balance: 2412.08,
+        apy: 0.032,
+        thisMonthEarned: 6.43,
+        daysAccrued: 22,
+        lifetimeEarned: 41.87,
+        lifetimeSince: DateComponents(calendar: .current, year: 2025, month: 10, day: 1).date ?? Date(),
+        buyingPower: 2412.08,
+        pendingDeposits: 100.50,
+        interestPaidOut: .monthly,
+        fdicInsuredLimit: 2_500_000,
+        hasLinkedBank: true,
+        reauthRelationshipId: UUID()
     )
 }
 
@@ -313,4 +345,32 @@ private extension CashCardData {
             .padding(20)
     }
     .preferredColorScheme(.dark)
+}
+
+#Preview("Bank needs reauth") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(
+            data: .previewNeedsReauth,
+            onDeposit: { print("deposit tapped") },
+            onWithdraw: { print("withdraw tapped") },
+            onReconnectBank: { print("reconnect tapped") }
+        )
+        .padding(20)
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Bank needs reauth (light)") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(
+            data: .previewNeedsReauth,
+            onDeposit: { print("deposit tapped") },
+            onWithdraw: { print("withdraw tapped") },
+            onReconnectBank: { print("reconnect tapped") }
+        )
+        .padding(20)
+    }
+    .preferredColorScheme(.light)
 }

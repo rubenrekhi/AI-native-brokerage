@@ -12,6 +12,10 @@ struct CashCardData: Codable, Equatable {
     let interestPaidOut: PaidOutCadence
     let fdicInsuredLimit: Decimal
     let hasLinkedBank: Bool
+    /// Non-nil when the bank needs Plaid re-auth. Transfers on a broken
+    /// connection fail silently and create dispute resolution work, so
+    /// callers must gate Deposit/Withdraw before allowing transfers.
+    let reauthRelationshipId: UUID?
 }
 
 enum PaidOutCadence: String, Codable, CaseIterable {
