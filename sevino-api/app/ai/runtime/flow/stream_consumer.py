@@ -3,8 +3,8 @@
 A :class:`StreamConsumer` is created per iteration. It owns the
 stream-time state (``open_text_blocks``, ``open_thinking_blocks``,
 ``accumulated_text``) and delegates server-tool concerns to a shared
-:class:`~app.ai.runtime.server_tools.ServerToolTracker` so the pill state
-survives across iterations.
+:class:`~app.ai.runtime.dispatch.server.ServerToolTracker` so the pill
+state survives across iterations.
 
 Wire shapes the consumer produces::
 
@@ -78,6 +78,21 @@ class StreamConsumer:
                 # before the outer finally hits the DB.
                 await stream.close()
                 raise
+
+    def flush_partial_text(
+        self, assistant_blocks: list[dict[str, Any]]
+    ) -> None:
+        """Append any in-flight text-block partials to ``assistant_blocks``.
+
+        Called from the caller's cancellation handler. ``get_final_message``
+        never returns mid-stream, so partials only exist here.
+        """
+        for index, block_id in self.open_text_blocks.items():
+            partial = self.accumulated_text.get(index, "")
+            if partial:
+                assistant_blocks.append(
+                    {"type": "text", "block_id": block_id, "text": partial}
+                )
 
     async def _handle_chunk(self, chunk: Any) -> None:
         if chunk.type == "content_block_start":

@@ -32,12 +32,11 @@ from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import CapBreach, HardCaps, check_caps
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode
-from app.ai.runtime.dispatch.custom import (
+from app.ai.runtime.dispatch.custom import (  # noqa: F401  (legacy test-compat re-export)
     ToolDispatchOutcome as _ToolDispatchOutcome,
-    dispatch_tool_uses as _dispatch_tool_uses,
 )
 from app.ai.runtime.dispatch.server import ServerToolTracker
-from app.ai.runtime.flow.iteration import run_one_iteration
+from app.ai.runtime.flow.iteration import THINKING_BUDGET_TOKENS, run_one_iteration
 from app.ai.runtime.flow.turn_lifecycle import (
     TurnTotals,
     emit_terminal_frame,
@@ -55,15 +54,11 @@ from app.ai.runtime.types import (
 from app.ai.tools.base import ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import TurnStarted
-from app.repositories.conversation import ConversationRepository
+from app.repositories.conversation import (  # noqa: F401  (patched class-wide via this module path)
+    ConversationRepository,
+)
 
 __all__ = ["run_agent_turn"]
-
-# Re-exported for tests that patch / import the legacy private names.
-# ``ConversationRepository`` is patched class-wide, so re-importing here
-# routes every monkeypatch on ``app.ai.runtime.loop.ConversationRepository``
-# to the global class — affecting every caller in the runtime modules.
-_ = (_ToolDispatchOutcome, _dispatch_tool_uses, ConversationRepository)
 
 logger = structlog.get_logger(__name__)
 
@@ -74,9 +69,6 @@ _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
     CapBreach.OUTPUT_TOKEN_LIMIT: ErrorCode.OUTPUT_TOKEN_LIMIT,
     CapBreach.TIMEOUT: ErrorCode.INTERNAL_ERROR,
 }
-
-# Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
-_THINKING_BUDGET_TOKENS = 1024
 
 _DEFAULT_CANCELLATION_REASON = "client_disconnect"
 
@@ -117,10 +109,10 @@ async def run_agent_turn(
     ``request.is_disconnected`` never fires. Cancellation arrives via
     ``task.cancel()`` when the SSE asyncgen closes.
     """
-    if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
+    if hard_caps.max_output_tokens <= THINKING_BUDGET_TOKENS:
         raise ValueError(
             f"hard_caps.max_output_tokens ({hard_caps.max_output_tokens}) "
-            f"must be > thinking budget ({_THINKING_BUDGET_TOKENS}); "
+            f"must be > thinking budget ({THINKING_BUDGET_TOKENS}); "
             f"Anthropic requires budget_tokens < max_tokens."
         )
 

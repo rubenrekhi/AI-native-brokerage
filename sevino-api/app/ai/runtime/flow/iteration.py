@@ -17,7 +17,7 @@ import asyncio
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable
+from typing import Any, Awaitable, Callable, Literal
 
 import structlog
 from anthropic import AsyncAnthropic
@@ -36,7 +36,6 @@ from app.ai.runtime.errors import ErrorCode, to_error_code
 from app.ai.runtime.dispatch.custom import dispatch_tool_uses
 from app.ai.runtime.dispatch.server import (
     ServerToolTracker,
-    append_status_blocks_for_persistence,
     build_server_tool_specs,
 )
 from app.ai.runtime.flow.stream_consumer import StreamConsumer
@@ -52,6 +51,8 @@ from app.ai.transport.emitter import SSEEmitter
 from app.repositories.conversation import ConversationRepository
 
 __all__ = [
+    "THINKING_BUDGET_TOKENS",
+    "IterationAction",
     "IterationOutcome",
     "build_iteration_request",
     "run_one_iteration",
@@ -60,7 +61,11 @@ __all__ = [
 logger = structlog.get_logger(__name__)
 
 # Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
-_THINKING_BUDGET_TOKENS = 1024
+# Also imported by ``loop.py`` for the pre-flight ``max_output_tokens``
+# vs budget check — keep one source of truth.
+THINKING_BUDGET_TOKENS = 1024
+
+IterationAction = Literal["continue", "break"]
 
 
 @dataclass(slots=True)
@@ -73,7 +78,7 @@ class IterationOutcome:
     model invocation, needed by the orphan flush.
     """
 
-    action: str
+    action: IterationAction
     terminal_state: str | None = None
     error_code: ErrorCode | None = None
     invocation_id: uuid.UUID | None = None
@@ -101,7 +106,7 @@ def build_iteration_request(
         "max_tokens": hard_caps.max_output_tokens,
         "thinking": {
             "type": "enabled",
-            "budget_tokens": _THINKING_BUDGET_TOKENS,
+            "budget_tokens": THINKING_BUDGET_TOKENS,
         },
     }
     # Anthropic 400s on empty tools.
@@ -245,24 +250,13 @@ async def run_one_iteration(
             try:
                 response = await consumer.consume(anthropic_client, create_kwargs)
             except asyncio.CancelledError:
-                for index, block_id in consumer.open_text_blocks.items():
-                    partial = consumer.accumulated_text.get(index, "")
-                    if partial:
-                        assistant_blocks.append(
-                            {
-                                "type": "text",
-                                "block_id": block_id,
-                                "text": partial,
-                            }
-                        )
+                consumer.flush_partial_text(assistant_blocks)
                 # On cancel text/pill interleaving is lost — pills land
                 # after partial text.
-                append_status_blocks_for_persistence(
+                server_tool_tracker.persist_status_blocks(
                     tool_use_ids=list(
                         server_tool_tracker.status_block_records.keys()
                     ),
-                    status_block_records=server_tool_tracker.status_block_records,
-                    status_blocks_persisted=server_tool_tracker.status_blocks_persisted,
                     assistant_blocks=assistant_blocks,
                 )
                 gen.update(level="WARNING", status_message="cancelled")
@@ -373,10 +367,8 @@ async def run_one_iteration(
         elif block.type == "server_tool_use":
             tool_use_id = getattr(block, "id", None)
             if isinstance(tool_use_id, str):
-                append_status_blocks_for_persistence(
+                server_tool_tracker.persist_status_blocks(
                     tool_use_ids=[tool_use_id],
-                    status_block_records=server_tool_tracker.status_block_records,
-                    status_blocks_persisted=server_tool_tracker.status_blocks_persisted,
                     assistant_blocks=assistant_blocks,
                 )
 

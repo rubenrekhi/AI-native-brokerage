@@ -1,6 +1,6 @@
 """Custom tool dispatch — lookup → validate → execute → persist → emit.
 
-Server tools are handled in :mod:`app.ai.runtime.server_tools`. This
+Server tools are handled in :mod:`app.ai.runtime.dispatch.server`. This
 module covers the ``tool_use`` stop-reason path: tools registered in
 :class:`~app.ai.runtime.types.ToolRegistry`.
 

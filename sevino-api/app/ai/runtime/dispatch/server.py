@@ -33,7 +33,6 @@ from app.repositories.conversation import ConversationRepository
 __all__ = [
     "SERVER_TOOL_RESULT_BLOCK_TYPES",
     "ServerToolTracker",
-    "append_status_blocks_for_persistence",
     "build_server_tool_specs",
     "truncate_for_audit",
 ]
@@ -119,28 +118,6 @@ def truncate_for_audit(value: Any, max_chars: int = 2000) -> Any:
     return {"_truncated": True, "_preview": encoded[:max_chars]}
 
 
-def append_status_blocks_for_persistence(
-    *,
-    tool_use_ids: list[str],
-    status_block_records: dict[str, dict[str, Any]],
-    status_blocks_persisted: set[str],
-    assistant_blocks: list[dict[str, Any]],
-) -> None:
-    """Append unpersisted status-pill records to ``assistant_blocks``.
-
-    Dedups against ``status_blocks_persisted`` so multi-iteration tool use
-    isn't appended twice.
-    """
-    for tool_use_id in tool_use_ids:
-        if tool_use_id in status_blocks_persisted:
-            continue
-        record = status_block_records.get(tool_use_id)
-        if record is None:
-            continue
-        assistant_blocks.append(record)
-        status_blocks_persisted.add(tool_use_id)
-
-
 def _capture_loop_warning(
     name: str,
     *,
@@ -216,6 +193,26 @@ class ServerToolTracker:
         for record in self.status_block_records.values():
             if record.get("state") == "active":
                 record["state"] = "failed"
+
+    def persist_status_blocks(
+        self,
+        *,
+        tool_use_ids: list[str],
+        assistant_blocks: list[dict[str, Any]],
+    ) -> None:
+        """Append unpersisted status-pill records to ``assistant_blocks``.
+
+        Dedups against the tracker's ``status_blocks_persisted`` set so
+        multi-iteration tool use isn't appended twice.
+        """
+        for tool_use_id in tool_use_ids:
+            if tool_use_id in self.status_blocks_persisted:
+                continue
+            record = self.status_block_records.get(tool_use_id)
+            if record is None:
+                continue
+            assistant_blocks.append(record)
+            self.status_blocks_persisted.add(tool_use_id)
 
     async def record_executions(
         self,
