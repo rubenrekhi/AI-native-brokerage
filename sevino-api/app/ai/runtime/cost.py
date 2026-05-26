@@ -1,13 +1,7 @@
-"""Cost calculator for Anthropic model invocations.
+"""Per-invocation cost in microUSD.
 
-Per AI v0 plan A2.5 (sevino-api/docs/ai-v0-plan.md): pure function that
-maps an Anthropic ``Usage`` payload + ``model_id`` to an integer microUSD
-cost. Called per ``model_invocation`` and summed at end of turn.
-
-Anthropic includes thinking tokens in ``Usage.output_tokens`` and bills
-them at the output rate, so this module deliberately has no separate
-thinking term. The plan calls this out explicitly: "thinking is billed at
-output rate".
+Thinking is billed at the output rate and bundled into
+``Usage.output_tokens``, so there's no separate thinking term.
 """
 
 from __future__ import annotations
@@ -19,12 +13,7 @@ from anthropic.types import Usage
 
 @dataclass(frozen=True)
 class ModelPricing:
-    """Per-token cost in microUSD ( = USD per million tokens).
-
-    ``cache_write_5m`` / ``cache_write_1h`` correspond to Anthropic's two
-    ``ephemeral`` cache TTLs. v0 only uses 5-minute caches.
-    """
-
+    # microUSD per token ( = USD per million tokens).
     input: float
     output: float
     cache_read: float
@@ -33,7 +22,7 @@ class ModelPricing:
 
 
 # $10 per 1,000 requests, verified 2026-05-13. Code execution is metered
-# by container time and not surfaced on ``Usage`` — omitted.
+# by container time and not on ``Usage``, so it's omitted here.
 _WEB_SEARCH_RATE_USD_MICROS = 10_000
 _WEB_FETCH_RATE_USD_MICROS = 10_000
 
@@ -65,18 +54,10 @@ _PRICING: dict[str, ModelPricing] = {
 
 
 def cost_usd_micros(usage: Usage, model_id: str) -> int:
-    """Compute the cost of a single Anthropic API call, in microUSD.
+    """Cost of one Anthropic call, in microUSD.
 
-    Cache writes use the per-TTL breakdown in ``usage.cache_creation`` when
-    present (the SDK populates it whenever caching was used). When the
-    breakdown is absent but the legacy total ``cache_creation_input_tokens``
-    is set, the 5-minute rate is assumed — v0 only writes 5-minute caches.
-
-    The result is rounded to the nearest microUSD using Python's default
-    round-half-to-even, so tied half-microUSD costs may drift by ±1 µUSD —
-    irrelevant at v0 billing precision.
-
-    Raises ``ValueError`` if ``model_id`` has no entry in the rate table.
+    Uses the per-TTL ``cache_creation`` breakdown when present; falls back
+    to the 5-minute rate on the legacy total.
     """
     try:
         pricing = _PRICING[model_id]

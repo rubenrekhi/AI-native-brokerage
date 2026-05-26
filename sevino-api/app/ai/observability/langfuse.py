@@ -1,10 +1,4 @@
-"""Langfuse client singleton (AI v0 plan A3.1).
-
-`create_langfuse_client` returns a real `Langfuse` instance when both
-`LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` are configured, and a
-no-op stub otherwise. The stub keeps `app/ai/*` runtime code free of
-``if langfuse:`` branches in dev environments without a Langfuse account.
-"""
+"""Langfuse client — real instance when keys are set, no-op stub otherwise."""
 from __future__ import annotations
 
 import secrets
@@ -18,11 +12,8 @@ from app.config import Settings
 
 
 class _NoopLangfuse:
-    """No-op stand-in matching the subset of `Langfuse` used by `app/ai/*`."""
-
     def create_trace_id(self, *, seed: str | None = None) -> str:
-        # Match Langfuse's 32-char lowercase hex format so downstream code
-        # that persists trace IDs sees a uniform shape.
+        # Match Langfuse's 32-char hex shape for downstream persistence.
         return secrets.token_hex(16)
 
     def get_current_trace_id(self) -> str | None:
@@ -38,9 +29,7 @@ class _NoopLangfuse:
         yield self
 
     def update(self, *args: Any, **kwargs: Any) -> "_NoopLangfuse":
-        # The real LangfuseSpan/Generation `.update()` returns the wrapper
-        # for chaining; mirror that so call sites that rely on the return
-        # value don't break in noop mode.
+        # Real ``.update()`` returns the wrapper for chaining.
         return self
 
     def update_current_span(self, *args: Any, **kwargs: Any) -> None:

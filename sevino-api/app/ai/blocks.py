@@ -1,10 +1,6 @@
-"""Discriminated-union schemas for assistant UI blocks.
+"""Block schemas streamed via SSE and persisted to ``messages.content_blocks``.
 
-Per AI v0 plan B1.1 / C1.3 (sevino-api/docs/ai-v0-plan.md). The agent loop
-streams blocks via SSE and persists the final list to ``messages.content_blocks``
-JSONB; the wire format mirrors the iOS ``enum Block`` so both ends round-trip
-identically. Adding a variant is just a new subclass plus an entry in the
-union below.
+Mirrors the iOS ``enum Block``.
 """
 
 from __future__ import annotations
@@ -28,31 +24,8 @@ class StatusBlock(BaseModel):
 
 
 class ThinkingBlock(BaseModel):
-    """Extended-thinking output streamed to iOS as an expandable chip.
-
-    SEV-571. Anthropic emits ``thinking`` content blocks alongside
-    ``text`` / ``tool_use`` when extended thinking is enabled
-    (``thinking={"type": "enabled", ...}`` on ``messages.create``). The
-    loop keeps the original signed blocks server-side for the next
-    iteration's request (R1 in A1.7), but also forwards them to the wire
-    as ``ThinkingBlock`` so iOS can render the chain-of-thought as a
-    distinct, expandable surface (qualitatively different from
-    ``StatusBlock``: it carries content, not progress).
-
-    ``redacted=True`` covers Anthropic's ``redacted_thinking`` variant,
-    whose payload is encrypted — the iOS view shows a stub line rather
-    than the unreadable bytes. Redacted blocks have no deltas; the loop
-    emits a single ``block_start`` with ``state="complete"`` then
-    ``block_end``.
-
-    Not persisted to ``messages.content_blocks`` in v0 (matches the
-    StatusBlock / StockCardBlock policy: UI-only artefacts are dropped
-    on the next turn's assistant-content conversion). Reopening the
-    conversation later loses the thinking blocks; if we ever want full
-    transcript reconstruction the policy flips in one place
-    (``loop._to_anthropic_content``).
-    """
-
+    # ``redacted=True`` is Anthropic's encrypted ``redacted_thinking`` variant.
+    # Not persisted to content_blocks — reopening the conversation loses these.
     type: Literal["thinking"] = "thinking"
     block_id: str
     text: str = ""
@@ -61,38 +34,14 @@ class ThinkingBlock(BaseModel):
 
 
 class Bar(BaseModel):
-    """One price point inside a :class:`StockCardBlock` chart payload.
-
-    Minimal ``{t, c}`` shape — just enough to render the v0 sparkline. Raw
-    Alpaca OHLCV is preserved on ``tool_executions.internal_trace``; if iOS
-    later wants candlesticks or volume bars, that's a schema bump.
-    """
-
     t: str  # ISO 8601 timestamp
     c: float  # close price
 
 
 class RangeBars(BaseModel):
-    """Per-range chart data for a :class:`StockCardBlock`.
-
-    Encoded as a list of ``{range, bars, change_abs, change_pct}``
-    records rather than a ``{range: ...}`` dict so literal range
-    labels like ``"1D"`` aren't subject to Swift's
-    ``JSONEncoder.convertToSnakeCase`` mangling on the wire.
-
-    Each entry carries its own change values so the iOS card can read
-    the right number when the user slides the range selector — no
-    FE-side derivation. The tool is the single source of truth.
-
-    * For ``"1D"``, ``change_abs`` / ``change_pct`` are the
-      authoritative daily change vs *yesterday's close* (from the
-      FMP quote). Bars start at today's market open, which would
-      give a misleading "change since open" if the FE just diffed
-      first-bar to current price.
-    * For longer ranges, ``change_abs`` is ``current_price -
-      first_bar.close`` — current vs roughly N-time-ago's close.
-    """
-
+    # List, not dict, so range labels like "1D" survive Swift's
+    # convertToSnakeCase. "1D" change is vs yesterday's close (from FMP
+    # quote); longer ranges are price - first_bar.close.
     range: str
     bars: list[Bar]
     change_abs: float
@@ -100,14 +49,7 @@ class RangeBars(BaseModel):
 
 
 class StockStats(BaseModel):
-    """Optional valuation/technical stats shown on an expanded card.
-
-    Every field is optional — FMP doesn't always return every value, and
-    iOS only renders rows for fields that arrive non-null. Money/quantity
-    values are sent as raw decimal strings (or ints for counts) per the
-    decimal-on-the-wire convention; iOS formats them at the view layer.
-    """
-
+    # FMP returns missing values as 0/""; iOS skips None rows.
     open: str | None = None
     day_high: str | None = None
     day_low: str | None = None
@@ -134,21 +76,10 @@ class StockCardBlock(BaseModel):
     change_abs: float
     change_pct: float
     color_state: Literal["positive", "negative", "neutral"]
-    # Bars for the initial ``range`` shown when the card first lands.
-    # Mirrored into ``bars_by_range`` under that range's key so iOS's
-    # ``bars(for:)`` resolver can return them through one code path.
     bars: list[Bar]
-    # Optional: pre-fetched bars for every range option, indexed by
-    # ``range_options`` label. When populated, the iOS card swaps chart
-    # data client-side as the user slides the range selector — zero
-    # network on slide. When ``None`` or missing a requested range,
-    # iOS falls back to ``bars``.
     bars_by_range: list[RangeBars] | None = None
     range: str
     range_options: list[str]
-    # Optional: expanded stats grid (bid/ask/52w/market cap/etc.). When
-    # populated, iOS renders the grid below the chart. When ``None``,
-    # the card shows the compact layout.
     stats: StockStats | None = None
 
 
@@ -158,9 +89,6 @@ Block = Annotated[
 ]
 
 
-# Module-level adapters so callers don't rebuild a TypeAdapter per validation.
-# ``BlockAdapter`` validates a single block dict; ``BlockListAdapter`` validates
-# the full ``messages.content_blocks`` shape.
 BlockAdapter: TypeAdapter[
     TextBlock | StatusBlock | StockCardBlock | ThinkingBlock
 ] = TypeAdapter(Block)

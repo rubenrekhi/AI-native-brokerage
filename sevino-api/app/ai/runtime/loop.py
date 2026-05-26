@@ -1,39 +1,14 @@
-"""Agent loop core.
+"""Agent loop — runs one turn end-to-end.
 
-Per AI v0 plan A1.6 (sevino-api/docs/ai-v0-plan.md): a pure async function
-that runs one agent turn end-to-end. v0 has no tools, so the loop runs
-exactly one Anthropic call per turn (``stop_reason == "end_turn"``
-immediately) — but the loop is structured to handle multi-iteration tool
-use without restructuring once Project C lands.
+Extended thinking is always enabled (1024-token budget). The loop iterates
+on ``stop_reason == "pause_turn"``; prior thinking blocks are appended to
+``messages`` before each call so signatures roundtrip byte-for-byte.
 
-A1.7 adds extended thinking: every Anthropic call sends
-``thinking={"type": "enabled", "budget_tokens": 1024}`` and the loop
-continues iterating on ``stop_reason == "pause_turn"`` (Anthropic's
-documented "continue verbatim" signal). The prior assistant content —
-including ``thinking`` blocks **with their signatures** — is appended to
-``messages`` before the next call so iteration N+1's request roundtrips
-the iteration-N signature byte-for-byte. ``model_invocations.response_content``
-is the source of truth (decision R1 in the plan).
+No FastAPI imports — collaborators are passed in so the same function
+runs in sub-agents and unit tests.
 
-B2.4 wires the loop to the SSE transport. The caller passes an
-:class:`SSEEmitter`; the loop emits ``turn_started`` once
-``agent_turns.id`` is known, then ``block_start`` / ``text_delta`` /
-``block_end`` per text block as Anthropic streams, and finally
-``turn_completed`` (or ``error`` on cap breach / Anthropic failure) when
-the turn finalises. Block IDs are server-assigned ULIDs that round-trip
-through ``messages.content_blocks`` so iOS can correlate streamed
-deltas with the final persisted message.
-
-**No FastAPI imports.** All collaborators (Anthropic client, DB factory,
-tool registry, system prompt, model config, hard caps, SSE emitter) are
-passed in by the caller (typically the chat-turn endpoint added in A1.9
-and converted to SSE in B2.3) so the same function is reusable by
-sub-agents and trivially testable in isolation.
-
-Persistence pattern (decision D12): the loop opens a fresh ``AsyncSession``
-via ``db_factory`` for every write — user message, agent_turn start,
-each model_invocation, assistant message, agent_turn complete. Audit rows
-are durable mid-turn rather than batched at the end.
+Each write opens a fresh ``AsyncSession`` so audit rows are durable
+mid-turn, not batched at the end.
 """
 
 from __future__ import annotations
@@ -83,10 +58,7 @@ from app.repositories.conversation import ConversationRepository
 
 logger = structlog.get_logger(__name__)
 
-# CapBreach values map onto ErrorCode values surfaced in the SSE error event.
-# TIMEOUT has no clean counterpart — ErrorCode lacks a TURN_TIMEOUT variant —
-# so it folds into INTERNAL_ERROR for now. Adding TURN_TIMEOUT is a one-line
-# follow-up.
+# TIMEOUT folds into INTERNAL_ERROR — no clean ErrorCode counterpart.
 _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
     CapBreach.ITERATION_LIMIT: ErrorCode.TURN_ITERATION_LIMIT,
     CapBreach.TOOL_CALL_LIMIT: ErrorCode.TOOL_CALL_LIMIT,
@@ -94,33 +66,17 @@ _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
     CapBreach.TIMEOUT: ErrorCode.INTERNAL_ERROR,
 }
 
-# A1.7. Anthropic requires budget_tokens >= 1024 and < max_tokens for
-# extended thinking. v0 hardcodes the floor; future model configs can
-# carry a per-turn override (see ``ModelConfig`` docstring).
+# Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
 _THINKING_BUDGET_TOKENS = 1024
 
-# Rough chars-per-token used to estimate thinking token usage from the
-# visible thinking block content. Anthropic bundles thinking tokens into
-# ``Usage.output_tokens`` and does not expose a per-block breakdown, so
-# this heuristic gives an order-of-magnitude indicator for the
-# ``thinking_tokens`` audit columns. ``redacted_thinking`` blocks have
-# encrypted content that doesn't correlate with token count, so they
-# contribute zero — the audit row will undercount when redacted thinking
-# fires, which is acceptable for v0 observability.
+# Heuristic for the ``thinking_tokens`` audit column — Anthropic gives no
+# per-block breakdown. Redacted blocks contribute zero.
 _CHARS_PER_TOKEN = 4
 
-# B3.3: how often to poll ``disconnect_check`` mid-stream. Polled after
-# every Nth ``text_delta`` so an iOS disconnect lands a CancelledError
-# inside the loop within a few hundred milliseconds (Anthropic typically
-# streams ~50 deltas/s on Sonnet). Lower = faster cancel but more
-# is_disconnected() ASGI-receive polls; higher = cheaper but laggier.
+# Polled every Nth text_delta; lands a CancelledError within a few hundred
+# ms of an iOS disconnect at Anthropic's ~50 deltas/s.
 _DISCONNECT_CHECK_DELTA_INTERVAL = 16
 
-# B3.4: default ``cancellation_reason`` persisted on the ``agent_turns``
-# row when the loop is cancelled. v0 has only one cancellation source
-# (the framework cancels the driver task on client disconnect), so a
-# constant is fine; later phases can plumb through an explicit reason
-# (e.g. ``"server_shutdown"``, ``"timeout"``).
 _DEFAULT_CANCELLATION_REASON = "client_disconnect"
 
 _ANTHROPIC_SERVER_TOOL_PREFIX = "anthropic:"
@@ -144,8 +100,7 @@ def _server_tool_status_label(name: str | None) -> str:
     if not isinstance(name, str) or not name:
         return "Using tool"
     if name not in _SERVER_TOOL_STATUS_LABELS:
-        # New Anthropic server tool we haven't labelled — fall back to
-        # the raw snake_case name, but log so we notice in observability.
+        # Unknown server tool — fall back but log so we notice.
         logger.warning("loop_unknown_server_tool_label", name=name)
     return _SERVER_TOOL_STATUS_LABELS.get(name, f"Using {name}")
 
@@ -163,9 +118,8 @@ def _result_block_status_state(result_block: Any) -> str:
 def _build_server_tool_specs(
     config: ServerToolsConfig,
 ) -> list[dict[str, Any]]:
-    # ``type`` is Anthropic's date-suffixed version pin (treat as opaque).
-    # Bumping the date means opting into behavior changes — coordinate
-    # with the matching SDK Param type before changing.
+    # ``type`` is Anthropic's date-suffixed version pin. Bumping it opts
+    # into behavior changes — coordinate with the matching SDK Param type.
     specs: list[dict[str, Any]] = []
     if config.web_search_enabled:
         specs.append(
@@ -202,12 +156,8 @@ def _append_status_blocks_for_persistence(
 ) -> None:
     """Append unpersisted status-pill records to ``assistant_blocks``.
 
-    Two paths land here: the normal post-iteration persistence pass
-    (which iterates ``response.content`` to preserve text/pill
-    interleaving) and the cancel handler (which iterates all known
-    records to flush them in unknown order). Both dedup against the
-    shared ``status_blocks_persisted`` set so an in-flight use that gets
-    its result block on a later iteration isn't appended twice.
+    Dedups against ``status_blocks_persisted`` so multi-iteration tool use
+    isn't appended twice.
     """
     for tool_use_id in tool_use_ids:
         if tool_use_id in status_blocks_persisted:
@@ -222,13 +172,7 @@ def _append_status_blocks_for_persistence(
 def _truncate_for_audit(value: Any, max_chars: int = 2000) -> Any:
     """Clip oversize payloads for the audit row.
 
-    ``_preview`` is a raw JSON-string slice (may end mid-token); it is
-    intended for debug eyeballing only — never JSON-parsed downstream.
-    ``default=str`` coerces non-JSON-serializable values (e.g. Decimal,
-    datetime) to their ``str`` form so the audit row always lands; if a
-    future server tool returns financial Decimals this loses precision
-    silently, but the audit pipeline isn't a serialization boundary for
-    money today.
+    ``_preview`` is debug-only, never JSON-parsed downstream.
     """
     try:
         encoded = json.dumps(value, default=str)
@@ -250,17 +194,8 @@ async def _record_server_tool_executions(
 ) -> None:
     """Pair server-tool uses with their results across iterations.
 
-    Anthropic can return a ``server_tool_use`` block in iteration N and
-    its matching ``*_tool_result`` block in iteration N+1 (when iteration
-    N also contained custom ``tool_use`` blocks that needed to
-    roundtrip). ``pending_uses`` is the turn-scoped dict that tracks
-    use-without-result entries waiting for their pair.
-
-    This function: (1) records new uses into ``pending_uses`` and
-    (2) writes a ``tool_executions`` row for every result that lands
-    this iteration, looking up the matching use's input from
-    ``pending_uses`` and removing it on a successful pair. Use entries
-    left over after the last iteration are handled by
+    Anthropic may emit the use in one iteration and its result in the next.
+    Orphans left at turn end are flushed by
     :func:`_flush_orphan_server_tool_uses`.
     """
     if not response_blocks:
@@ -313,11 +248,8 @@ async def _record_server_tool_executions(
             if hasattr(content, "model_dump"):
                 dumped_content = content.model_dump(mode="json")
             elif isinstance(content, list):
-                # ``WebSearchToolResultBlock.content`` is a list of
-                # Pydantic ``WebSearchResultBlock`` items on the success
-                # path. ``json.dumps(default=str)`` would fall back to
-                # ``str(item)`` repr strings — round-trip via model_dump
-                # to keep structured JSON in the audit row.
+                # Round-trip Pydantic items via model_dump — otherwise
+                # ``json.dumps(default=str)`` would store repr strings.
                 dumped_content = [
                     item.model_dump(mode="json")
                     if hasattr(item, "model_dump")
@@ -385,11 +317,9 @@ async def _flush_orphan_server_tool_uses(
 ) -> None:
     """Close any server-tool uses that never got a matching result.
 
-    Runs after the iteration loop exits. Anthropic should always pair a
-    use with a result eventually, possibly across iterations — anything
-    still in ``pending_uses`` here is a contract violation (or the turn
-    ended early). Emits a failed-state ``BlockData`` + ``BlockEnd`` for
-    each orphan pill and writes a ``status=error`` audit row.
+    Anything still in ``pending_uses`` is a contract violation or an
+    early-ending turn. Emits a failed-state ``BlockData`` + ``BlockEnd``
+    for each orphan pill and writes a ``status=error`` audit row.
     """
     for tool_use_id, use_info in list(pending_uses.items()):
         logger.warning(
@@ -437,30 +367,12 @@ async def _flush_orphan_server_tool_uses(
 def _to_anthropic_content(
     content_blocks: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Strip Sevino-only fields from persisted blocks before re-sending.
+    """Strip Sevino-only fields before sending history back to Anthropic.
 
-    ``messages.content_blocks`` JSONB carries a server-assigned ``block_id``
-    on text blocks (B2.4) so iOS can correlate the persisted row with the
-    SSE wire envelope. Anthropic's content-block schema doesn't accept
-    that field, and a follow-up turn that loads history verbatim would
-    400 on the unknown property — silently caught by the loop's inner
-    ``except Exception`` and reported as ``INTERNAL_ERROR``.
-
-    This is the boundary that translates *persisted* blocks back to the
-    *request* shape Anthropic expects. Within a single turn we never go
-    through here — the assistant content appended on each iteration is
-    the verbatim ``response_content`` from ``model_invocations``, which
-    is already in the Anthropic shape (and carries the thinking
-    signatures A1.7's R1 contract requires).
-
-    UI-only block variants (``status``, ``stock_card``, ``thinking``, …)
-    introduced in Project C are dropped entirely — they never went to
-    the model in the first place (or, in the case of ``thinking``, the
-    signed Anthropic block was already roundtripped inside the same
-    turn via ``response_content`` and isn't useful as cross-turn
-    history), and Anthropic 400s on unknown ``type`` values. Subsequent
-    turns therefore lose tool-use context across turns; in v0 the
-    assistant text answer is sufficient continuity.
+    Drops the ``block_id`` we add for iOS correlation and UI-only variants
+    (``status``, ``stock_card``, ``thinking``) — Anthropic 400s on unknown
+    types. Tool-use context is lost across turns; the assistant text is
+    sufficient continuity.
     """
     converted: list[dict[str, Any]] = []
     for block in content_blocks:
@@ -480,18 +392,11 @@ def _to_anthropic_content(
                     ),
                 }
             )
-        # Other block types are UI-only artefacts (StatusBlock,
-        # StockCardBlock, …) — silently skip rather than forwarding to
-        # Anthropic.
     return converted
 
 
 def _estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:
-    """Approximate thinking tokens from the visible ``thinking`` block text.
-
-    See ``_CHARS_PER_TOKEN`` for why this is a heuristic rather than an
-    exact count.
-    """
+    # Heuristic — Anthropic doesn't expose a per-block token count.
     total = 0
     for block in response_content:
         if block.get("type") == "thinking":
@@ -513,24 +418,12 @@ async def _finalize_agent_turn_row(
     totals: dict[str, int],
     assistant_blocks: list[dict[str, Any]],
 ) -> None:
-    """Persist the terminal state of an agent turn — assistant message
-    plus ``complete_agent_turn`` write. Designed to be run via
-    :func:`asyncio.shield` from ``run_agent_turn``'s outer ``finally``
-    so the DB writes survive even when the parent task is being
-    cancelled.
+    """Persist the terminal state — assistant message + ``complete_agent_turn``.
 
-    On Railway under sse-starlette's task-group cancellation cascade we
-    observed agent_turn rows getting stuck in non-terminal state — the
-    parent task's ``await`` inside the ``finally`` was being interrupted
-    by additional cancellation signals before the COMMIT landed. Routing
-    the writes through ``asyncio.shield(...)`` puts them in a child task
-    whose own cancel scope is independent of the parent: when the parent
-    is cancelled, ``shield`` raises ``CancelledError`` to the parent but
-    the child task continues to run on the event loop until the writes
-    finish. Errors are caught and logged here rather than surfaced to
-    the caller, since by the time we're finalising there's nothing the
-    caller could do — the row is the audit-trail and we'd rather have a
-    log than nothing.
+    Run via ``asyncio.shield`` from the outer finally: under sse-starlette
+    teardown, raw awaits in the finally were re-cancelled before COMMIT.
+    Errors are logged rather than re-raised — by here the row is the only
+    signal left.
     """
     try:
         assistant_message_id: uuid.UUID | None = None
@@ -570,18 +463,10 @@ async def _finalize_agent_turn_row(
 
 
 class _RecordingEmitter:
-    """SSE emitter wrapper that records ``BlockStart`` ``block_id`` values.
+    """Wrap an emitter and record ``BlockStart`` block_ids.
 
-    Forwards every event to ``underlying`` unchanged. The set of seen
-    ``block_id`` values lets the loop's tool-result branch decide whether
-    a tool already announced a UI block (incremental streaming case —
-    C1.4) or whether the loop must emit ``block_start`` itself before
-    ``block_end`` (simple case where the tool only returned the final
-    block in :class:`ToolResult`).
-
-    The underlying type is the :class:`SSEEmitter` Protocol owned by
-    ``app.ai.tools.base`` — both :class:`app.ai.transport.emitter.SSEEmitter`
-    (the real producer queue) and test fakes implement it.
+    Lets the tool-result branch tell whether a tool already announced its
+    UI block inline.
     """
 
     def __init__(self, underlying: Any) -> None:
@@ -597,18 +482,10 @@ class _RecordingEmitter:
 
 
 class _ToolDispatchOutcome:
-    """Aggregated state of a single iteration's tool-use processing.
+    """Aggregated state of one iteration's tool-use processing.
 
-    On a fully successful iteration ``terminal_error_code`` is ``None``
-    and the loop appends ``tool_result_blocks`` to its messages list and
-    continues. On any tool failure (lookup, validation, or
-    ``execute``-time exception) ``terminal_error_code`` is set to the
-    error from the *first* failing block (in tool_use input order) and
-    the loop sets ``terminal_state='error'`` and breaks out. SEV-565:
-    every ``tool_use`` block in the response still gets its
-    ``tool_executions`` row written before the loop aborts — the parallel
-    dispatcher does not short-circuit sibling tools on a single failure.
-    Order is preserved (matches Anthropic's assistant content order).
+    On any tool failure, the first error in input order is set. Sibling
+    tools still run and write their audit rows.
     """
 
     __slots__ = (
@@ -627,16 +504,8 @@ class _ToolDispatchOutcome:
 
 @dataclass(slots=True)
 class _PerToolResult:
-    """Outcome of dispatching one ``tool_use`` block.
-
-    Populated by :func:`_dispatch_one_tool_use` and aggregated in input
-    order by :func:`_dispatch_tool_uses`. The per-block coroutine catches
-    its own lookup / validation / execute exceptions and surfaces them
-    via ``error_code``; only programming bugs (e.g. a DB write failure
-    inside :meth:`ConversationRepository.record_tool_execution`) raise
-    out, which is the contract :func:`asyncio.gather` expects so the
-    outer loop's ``except Exception`` can map them to ``INTERNAL_ERROR``.
-    """
+    # Lookup/validation/execute errors are caught and surfaced via
+    # ``error_code``. Programming bugs raise out.
 
     tool_result_block: dict[str, Any] | None
     ui_block_dict: dict[str, Any] | None
@@ -654,25 +523,16 @@ async def _dispatch_one_tool_use(
     http_clients: ToolHttpClients,
     invocation_id: uuid.UUID,
 ) -> _PerToolResult:
-    """Process a single ``tool_use`` block end-to-end.
+    """Lookup → validate → execute → persist → emit wire events.
 
-    Registry lookup → input validation → ``execute`` → ``tool_executions``
-    persistence → wire-event emission for the returned ``ui_block``.
-    Every exit path writes exactly one ``tool_executions`` row so the
-    audit trail is complete regardless of which step failed.
-
-    Returns a :class:`_PerToolResult`. Lookup / validation / execute
-    failures are reported via ``error_code`` so :func:`asyncio.gather`
-    can collect every sibling's outcome rather than cancelling on the
-    first raise.
+    Every exit path writes one ``tool_executions`` row.
     """
     tool_name = getattr(block, "name", "") or ""
     tool_use_id = getattr(block, "id", "") or ""
     raw_input = getattr(block, "input", None)
     input_payload = raw_input if isinstance(raw_input, dict) else {}
 
-    # Registry lookup. ``KeyError`` here means Claude called a tool
-    # that wasn't registered — wiring bug, not user-facing fault.
+    # KeyError = Claude called an unregistered tool (wiring bug).
     try:
         tool = tool_registry.get(tool_name)
     except KeyError:
@@ -698,9 +558,7 @@ async def _dispatch_one_tool_use(
             error_code=ErrorCode.INTERNAL_ERROR,
         )
 
-    # Input validation. Surface as terminal ``validation_error`` per
-    # SEV-495 acceptance criteria — the tool framework guarantees
-    # ``execute`` only ever sees a well-typed ``Input`` instance.
+    # ``execute`` only ever sees validated input.
     try:
         validated_input = tool.Input.model_validate(raw_input)
     except pydantic.ValidationError as exc:
@@ -721,14 +579,8 @@ async def _dispatch_one_tool_use(
             error_code=ErrorCode.VALIDATION_ERROR,
         )
 
-    # Wrap the wire emitter so we can detect whether the tool itself
-    # already announced its UI block via ``BlockStart`` (incremental
-    # streaming — C1.4) or whether the loop must do it (non-incremental
-    # case where the tool only returns the final block). Each per-tool
-    # coroutine owns its own ``_RecordingEmitter``: the recording is
-    # local to this tool, while the underlying ``sse_emitter`` is shared
-    # — sibling tools' events interleave on the wire (block IDs are
-    # independent so iOS still correlates).
+    # Per-tool recording emitter — recording stays local, the underlying
+    # emitter is shared. Sibling tools' events interleave on the wire.
     recording_emitter = _RecordingEmitter(sse_emitter)
     ctx = ToolContext(
         user_id=user_id,
@@ -758,11 +610,7 @@ async def _dispatch_one_tool_use(
                 error_message=f"{type(exc).__name__}: {exc}",
                 latency_ms=tool_latency_ms,
             )
-        # Tool-side failures are ``TOOL_ERROR`` regardless of the
-        # underlying exception type — that's the band of error
-        # codes reserved for "the tool itself raised". Anthropic-
-        # adjacent failures only surface when the loop calls
-        # Anthropic, not when a tool runs.
+        # Any exception from a tool is ``TOOL_ERROR``.
         return _PerToolResult(
             tool_result_block=None,
             ui_block_dict=None,
@@ -771,10 +619,7 @@ async def _dispatch_one_tool_use(
         )
     tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
 
-    # Drive the wire envelope for any UI block returned. The tool
-    # may have already emitted ``block_start`` (and ``block_data``
-    # patches) inline; if so we only emit ``block_end``. Otherwise
-    # we emit ``block_start`` with the final block + ``block_end``.
+    # Emit block_start only if the tool didn't already.
     ui_block_dict: dict[str, Any] | None = None
     ui_blocks_emitted_for_row: list[dict[str, Any]] | None = None
     if tool_result.ui_block is not None:
@@ -786,8 +631,6 @@ async def _dispatch_one_tool_use(
             await sse_emitter.emit(BlockEnd(block_id=block_id))
         ui_blocks_emitted_for_row = [ui_block_dict]
 
-    # Persist the audit row. Per the AI v0 plan, ``ui_blocks_emitted``
-    # is the merged final state — not a per-patch log.
     async with db_factory() as db:
         await ConversationRepository.record_tool_execution(
             db,
@@ -803,8 +646,7 @@ async def _dispatch_one_tool_use(
         )
 
     # Anthropic's ``tool_result`` content can be a string or a list of
-    # text/image blocks. JSON-encode the model payload so any shape
-    # roundtrips cleanly without dropping the structure.
+    # text/image blocks — JSON-encode so any shape roundtrips cleanly.
     return _PerToolResult(
         tool_result_block={
             "type": "tool_result",
@@ -827,31 +669,11 @@ async def _dispatch_tool_uses(
     http_clients: ToolHttpClients,
     invocation_id: uuid.UUID,
 ) -> _ToolDispatchOutcome:
-    """Process every ``tool_use`` block in an Anthropic response **in parallel**.
+    """Run every ``tool_use`` block in parallel.
 
-    Anthropic emits multiple ``tool_use`` blocks in one response when the
-    model judges the calls independent (e.g. ``get_stock_info("AAPL")``
-    plus ``get_stock_info("MSFT")``). SEV-565: dispatch them concurrently
-    via :func:`asyncio.gather` so wall-clock latency is ``max(t_i)`` rather
-    than ``sum(t_i)``.
-
-    Ordering: results are aggregated in tool_use input order, so
-    ``tool_result_blocks`` and ``ui_block_dicts`` match the order Anthropic
-    emitted (and the order persisted on ``model_invocations.response_content``).
-    Wire-level ``BlockStart`` / ``BlockEnd`` events for sibling tools may
-    interleave — block IDs are independent so iOS correlates per-block
-    ``text_delta`` / ``block_data`` patches by ID, not arrival order
-    (see ``ConversationStore.handle`` on the iOS side). The iOS block
-    *array* order on streaming follows ``BlockStart`` arrival, while
-    the persisted ``messages.content_blocks`` array is in tool_use input
-    order — a divergence that is only observable across a reload of an
-    incomplete render and acceptable for v0.
-
-    Error semantics: every ``tool_use`` block writes its ``tool_executions``
-    row regardless of which sibling succeeded or failed (audit-row
-    completeness wins over early termination). After ``gather`` returns
-    the aggregator picks the **first** error in input order as the
-    iteration's ``terminal_error_code``.
+    Results aggregate in input order. Wire events for siblings interleave
+    on the wire; iOS correlates by block_id. The first error becomes the
+    iteration's ``terminal_error_code``; siblings still run.
     """
     outcome = _ToolDispatchOutcome()
 
@@ -875,11 +697,7 @@ async def _dispatch_tool_uses(
         )
         for block in tool_use_blocks
     ]
-    # Default gather (no ``return_exceptions``): per-tool coroutines
-    # catch their own lookup/validation/execute failures and report
-    # them via ``_PerToolResult.error_code``. A coroutine raising out
-    # is a programming bug (e.g. DB write failed) — propagate so the
-    # outer loop's ``except Exception`` maps it to INTERNAL_ERROR.
+    # Per-tool coroutines catch their own failures; a raise here is a bug.
     results: list[_PerToolResult] = await asyncio.gather(*coros)
 
     for result in results:
@@ -916,90 +734,20 @@ async def run_agent_turn(
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
-    Returns an :class:`AgentTurnResult` describing the terminal state, the
-    user-facing assistant blocks, total cost, and iteration count. The
-    function does not raise on Anthropic errors — those are caught,
-    mapped to an :class:`ErrorCode` and persisted on ``agent_turns`` with
-    ``terminal_state='error'``. ``asyncio.CancelledError`` propagates after
-    the in-progress audit rows are flushed. B3.4 layers partial-state
-    persistence on top of that contract: when cancellation lands while a
-    text block is mid-stream, the loop closes the upstream connection,
-    captures whatever text accumulated, and writes it to
-    ``messages.content_blocks`` alongside ``agent_turns.terminal_state =
-    'cancelled'`` / ``cancellation_reason``. The ``CancelledError`` is
-    always re-raised after persistence.
+    Anthropic errors and cap breaches don't raise — they're persisted with
+    ``terminal_state='error'``. ``CancelledError`` propagates after
+    partial state is flushed.
 
-    The conversation row at ``conversation_id`` must already exist (the
-    endpoint creates it on first turn per decision D6).
+    Raises ``ValueError`` if ``max_output_tokens <= thinking budget``;
+    Anthropic 400s on every call otherwise.
 
-    Raises ``ValueError`` if ``hard_caps.max_output_tokens`` is not strictly
-    greater than the thinking budget — Anthropic 400s on every call when
-    ``budget_tokens >= max_tokens``. Fails fast before any DB writes (and
-    before any SSE event is emitted) so a misconfigured cap can't leave
-    half-written audit rows or a stranded ``turn_started`` frame.
+    The body runs inside one outer try/except/finally so cancellation at
+    any await still finalises the agent_turn row.
 
-    SSE wire (B2.4): once ``agent_turns.id`` is known the loop emits
-    ``turn_started`` on ``sse_emitter``. Each text block streamed by
-    Anthropic produces ``block_start`` (with a server-assigned ULID
-    ``block_id``) → one ``text_delta`` per chunk → ``block_end``.
-    SEV-571: each ``thinking`` content block also produces a
-    ``ThinkingBlock`` envelope on the wire — ``block_start`` (state
-    ``streaming``) → one ``text_delta`` per ``thinking_delta`` → a
-    single ``block_data`` patch flipping ``state`` to ``complete`` →
-    ``block_end``. ``redacted_thinking`` blocks emit a single
-    ``block_start`` (``redacted=true``, ``state="complete"``) followed
-    by ``block_end`` — no deltas, since the payload is encrypted.
-    Tool-use blocks stay server-side. The loop closes with
-    ``turn_completed`` on success, or ``error`` on cap breach / Anthropic
-    failure. **The loop only guarantees a terminal frame for normal exit
-    paths** (cap breach, Anthropic error trapped in the inner ``except
-    Exception``, or any of the ``stop_reason`` branches). Anything
-    escaping as an unhandled ``Exception`` or ``BaseException`` reaches
-    the caller without a terminal frame — the chat-turn endpoint's
-    ``_drive_turn`` catches non-``CancelledError`` exceptions and emits
-    its own ``error`` so iOS isn't left hanging; ``CancelledError``
-    means the client already disconnected so the missing terminal
-    frame is never observed.
-
-    Langfuse instrumentation (A3.2): the entire turn is wrapped in an
-    ``agent`` observation whose trace_id is ``agent_turn.id.hex`` so the
-    Postgres ``agent_turns`` row and the Langfuse trace cross-reference
-    on the bare turn UUID. Trace-level tags (``user_id``,
-    ``conversation_id``, ``turn_id``, ``prompt_hash``, ``environment``,
-    ``model_id``) are set via ``propagate_attributes`` so they apply to
-    every child observation in the trace. Each Anthropic call is its own
-    ``generation`` observation with input/output captured verbatim. A3.3
-    extends the generation update with ``usage_details`` (per-bucket token
-    counts including the thinking estimate) and ``cost_details`` (total
-    USD from :func:`cost_usd_micros`), so Langfuse Cloud aggregates cost
-    per turn and shows the token breakdown.
-
-    Cancellation (B3.3): the entire function body runs inside a single
-    outer ``try / except CancelledError / finally`` so a cancellation
-    landing at *any* await — early DB writes, the ``turn_started`` SSE
-    emit, langfuse setup, or anywhere inside the loop — still finalises
-    the agent_turn row instead of leaving it stuck in non-terminal state.
-    On CancelledError the outer ``except`` sets
-    ``terminal_state='cancelled'`` (if not already set by the inner
-    handler) and ``error_code=CANCELLED``, then the outer ``finally``
-    persists the row via :meth:`ConversationRepository.complete_agent_turn`
-    (when ``turn_id`` exists — i.e. ``start_agent_turn`` already ran).
-    The CancelledError re-propagates to the caller after the audit row
-    is durable.
-
-    ``disconnect_check`` is an optional polling hook left in place for
-    unit-test ergonomics and for future wiring to a real disconnect
-    signal. It is **not** wired to ``request.is_disconnected`` in
-    production: ``BaseHTTPMiddleware``-based middleware (this codebase's
-    auth / logging / correlation / rate-limit chain) consumes the ASGI
-    receive channel upstream of the route, so the route's
-    ``request.is_disconnected`` never fires. Production cancellation is
-    driven instead by the framework's external ``task.cancel()`` when the
-    SSE asyncgen is closed, which lands as a CancelledError at whatever
-    await the loop is currently in — handled by the same outer except.
-
-    No terminal SSE frame is emitted on cancellation since the client
-    connection that would consume it is gone.
+    ``disconnect_check`` is not wired in production —
+    ``BaseHTTPMiddleware`` consumes the ASGI receive channel upstream, so
+    ``request.is_disconnected`` never fires. Cancellation arrives via
+    ``task.cancel()`` when the SSE asyncgen closes.
     """
     if hard_caps.max_output_tokens <= _THINKING_BUDGET_TOKENS:
         raise ValueError(
@@ -1008,12 +756,8 @@ async def run_agent_turn(
             f"Anthropic requires budget_tokens < max_tokens."
         )
 
-    # State that the outer ``finally`` reads. Initialised before the first
-    # await so a CancelledError landing at *any* await — including the
-    # very first DB write — still finds well-defined values when the
-    # finally runs the audit-row write. ``turn_id`` stays None until
-    # ``start_agent_turn`` succeeds; the finally guards on it so we never
-    # try to finalise a row that was never opened.
+    # Initialised before the first await so the finally has well-defined
+    # values even on early cancellation. The finally guards on ``turn_id``.
     turn_id: uuid.UUID | None = None
     state = LoopState(started_at_monotonic=time.monotonic())
     assistant_blocks: list[dict[str, Any]] = []
@@ -1027,21 +771,14 @@ async def run_agent_turn(
     }
     terminal_state: str | None = None
     error_code: ErrorCode | None = None
-    # B3.4: populated when the loop catches ``CancelledError``. Persisted
-    # on ``agent_turns.cancellation_reason`` so the audit row distinguishes
-    # client disconnects from internal errors.
     cancellation_reason: str | None = None
-    # ``True`` only after the while loop exits via a ``break`` (not an
-    # exception). Used in the finally block to gate the terminal SSE frame
-    # — unexpected exceptions reach the caller, which surfaces them.
+    # Gates the terminal SSE frame — only true after a normal break.
     completed_normally = False
 
     try:
-        # 1. Persist the user message before anything else so a crash mid-turn
-        #    still leaves the user's input recorded. Mint a ``block_id`` so the
-        #    persisted shape matches assistant text blocks (which always carry
-        #    one via the SSE accumulator). Without it the iOS resume decoder
-        #    drops the block and the user bubble renders empty (SEV-564).
+        # Persist the user message first so a crash mid-turn doesn't lose
+        # the user's input. ``block_id`` is required for the iOS resume
+        # decoder.
         async with db_factory() as db:
             content_blocks: list[dict[str, Any]] = [
                 {
@@ -1065,10 +802,6 @@ async def run_agent_turn(
             )
             user_message_id = user_msg.id
 
-        # 2. Load full history (includes the just-persisted user message) and
-        #    transform into the Anthropic messages array shape. Persisted blocks
-        #    pass through ``_to_anthropic_content`` to drop Sevino-only fields
-        #    (``block_id`` on text blocks) before they re-enter the API.
         async with db_factory() as db:
             history = await ConversationRepository.load_history(db, conversation_id)
         messages: list[dict[str, Any]] = [
@@ -1076,11 +809,7 @@ async def run_agent_turn(
             for m in history
         ]
 
-        # 3. Open the agent_turn row. From here, the outer finally block
-        #    guarantees a completion call so the row never sits in a
-        #    non-terminal state — even if cancellation lands during the
-        #    ``turn_started`` emit, langfuse setup, or any await inside the
-        #    loop.
+        # Once this row is open, the outer finally guarantees we close it.
         async with db_factory() as db:
             turn = await ConversationRepository.start_agent_turn(
                 db,
@@ -1092,16 +821,13 @@ async def run_agent_turn(
             )
             turn_id = turn.id
 
-        # 4. SSE: announce the turn now that the row is durable. ``turn_id``
-        #    here is the same UUID iOS sees on subsequent ``turn_completed`` /
-        #    ``error`` frames and the same value persisted on ``agent_turns.id``.
         await sse_emitter.emit(
             TurnStarted(turn_id=turn_id, conversation_id=conversation_id)
         )
 
-        # Per A1.8: mark the system block as a cache breakpoint. Anthropic caches
-        # everything up to the marker, so the system prompt is reused across turns
-        # within the 5m TTL — input cost drops to the cache-read rate on hits.
+        # Mark the system block as a cache breakpoint so Anthropic reuses
+        # everything up to the marker across turns within the 5m TTL —
+        # input cost drops to the cache-read rate on hits.
         request_system: list[dict[str, Any]] = [
             {
                 "type": "text",
@@ -1110,10 +836,9 @@ async def run_agent_turn(
             }
         ]
 
-        # turn_id is a v4 UUID; .hex is the 32-char lowercase form Langfuse (W3C
-        # trace context) requires. Using it verbatim means a Langfuse trace can
-        # be looked up directly with the ``agent_turns.id`` value (no separate
-        # langfuse_trace_id column needed).
+        # ``turn_id.hex`` is the 32-char lowercase form W3C trace context
+        # requires, so a Langfuse trace looks up directly by
+        # ``agent_turns.id`` — no separate trace_id column needed.
         trace_context = {"trace_id": turn_id.hex}
 
         with langfuse.start_as_current_observation(
@@ -1122,10 +847,9 @@ async def run_agent_turn(
             trace_context=trace_context,
             input={"user_message": user_message},
         ) as turn_span:
-            # propagate_attributes must be entered AFTER the outer span so the
-            # span is the active OTel span when attributes are set; otherwise the
-            # tags don't reach the trace. Per the SDK docstring this is the
-            # canonical path for trace-level user_id/session_id/tags/metadata.
+            # ``propagate_attributes`` must be entered AFTER the outer span
+            # so the span is the active OTel span when attributes are set;
+            # otherwise the tags don't reach the trace.
             with propagate_attributes(
                 user_id=str(user_id),
                 session_id=str(conversation_id),
@@ -1141,8 +865,7 @@ async def run_agent_turn(
                     "model_id": model_config.model_id,
                 },
             ):
-                # Server-tool state is turn-level because Anthropic can defer
-                # a result block to a later iteration.
+                # Turn-scoped — Anthropic can defer a result to a later iteration.
                 open_status_blocks: dict[str, str] = {}
                 status_block_records: dict[str, dict[str, Any]] = {}
                 pending_server_tool_uses: dict[str, dict[str, Any]] = {}
@@ -1150,13 +873,8 @@ async def run_agent_turn(
                 invocation_id: uuid.UUID | None = None
                 try:
                     while True:
-                        # B3.3: poll for client disconnect at the iteration
-                        # boundary before doing any further work. Self-raising
-                        # CancelledError (rather than awaiting an external
-                        # ``task.cancel()``) lets the ``except`` clause below
-                        # set ``terminal_state='cancelled'`` deterministically
-                        # — the audit row distinguishes a client disconnect
-                        # from any other CancelledError.
+                        # Self-raise so the except below sets
+                        # ``terminal_state='cancelled'`` deterministically.
                         if disconnect_check is not None and await disconnect_check():
                             raise asyncio.CancelledError
 
@@ -1178,10 +896,8 @@ async def run_agent_turn(
                                 "budget_tokens": _THINKING_BUDGET_TOKENS,
                             },
                         }
-                        # Anthropic 400s on an empty tools array, so omit the key
-                        # when no tools are present. Per A1.8: cache_control on
-                        # the last entry caches the tools array alongside the
-                        # system prompt.
+                        # Anthropic 400s on empty tools. cache_control caches
+                        # the tools array with the system prompt.
                         server_tool_specs = _build_server_tool_specs(
                             server_tools_config
                         )
@@ -1198,10 +914,8 @@ async def run_agent_turn(
                             }
                             create_kwargs["tools"] = combined_tools
 
-                        # Pass a shallow copy of ``messages`` so the captured
-                        # input reflects the request as it was sent — the loop
-                        # appends the assistant response to ``messages`` after
-                        # the call, and Langfuse otherwise sees the mutated list.
+                        # Copy ``messages`` — the loop mutates it after the
+                        # call, and Langfuse would otherwise see the new state.
                         with langfuse.start_as_current_observation(
                             as_type="generation",
                             name="anthropic.messages.create",
@@ -1213,43 +927,16 @@ async def run_agent_turn(
                             metadata={"iteration_index": iteration_index},
                         ) as gen:
                             iter_started = time.monotonic()
-                            # SEV-571 / B2.4 wire protocols emitted by this loop:
-                            #
-                            #   text:     block_start → text_delta* → block_end
-                            #   thinking: block_start(state=streaming)
-                            #             → text_delta* (one per thinking_delta)
-                            #             → block_data(state=complete)
-                            #             → block_end
-                            #   redacted_thinking: block_start(redacted=true,
-                            #                                  state=complete)
-                            #                      → block_end   (no deltas)
-                            #
-                            # Each open content-block index needs a wire-level
-                            # block_id; text and thinking track in separate
-                            # maps so the delta branch can route by chunk type.
-                            # ``text_delta`` chunks are also reused for
-                            # thinking deltas — iOS dispatches by block_id on
-                            # the already-open block, and the discriminator on
-                            # ``BlockStart`` is sufficient to disambiguate.
-                            # Tool-use blocks are not user-facing in v0 and
-                            # don't enter either map.
+                            # Wire shapes:
+                            #   text:               block_start → text_delta* → block_end
+                            #   thinking:           block_start(streaming) → text_delta* → block_data(complete) → block_end
+                            #   redacted_thinking:  block_start(redacted, complete) → block_end
                             open_text_blocks: dict[int, str] = {}
                             open_thinking_blocks: dict[int, str] = {}
-                            # B3.3: counts text_deltas seen this iteration so
-                            # ``disconnect_check`` polls on a fixed cadence
-                            # rather than once per chunk (every chunk would be
-                            # a hot-path ASGI-receive call). Counts both
-                            # ``text_delta`` and ``thinking_delta`` chunks —
-                            # the cadence is per visible-text emission, not
-                            # per content-block type.
                             text_deltas_seen = 0
-                            # B3.4: parallel map of accumulated delta text per
-                            # in-flight text block. On mid-stream cancellation
-                            # this is the only record of what reached the wire,
-                            # since ``stream.get_final_message()`` never
-                            # returns — the iteration's ``response.content``
-                            # path that normally populates ``assistant_blocks``
-                            # is unreachable.
+                            # On mid-stream cancel ``get_final_message`` never
+                            # returns, so this is the only record of what
+                            # reached the wire.
                             accumulated_text: dict[int, str] = {}
                             try:
                                 async with anthropic_client.messages.stream(
@@ -1380,9 +1067,8 @@ async def run_agent_turn(
                                                     )
                                                 elif cb_type == "redacted_thinking":
                                                     # Skip ``open_thinking_blocks`` so the
-                                                    # delta/stop branches stay no-ops for
-                                                    # this index — encrypted payload, no
-                                                    # deltas to forward.
+                                                    # delta/stop branches stay no-ops —
+                                                    # encrypted payload, no deltas.
                                                     block_id = str(ULID())
                                                     await sse_emitter.emit(
                                                         BlockStart(
@@ -1415,18 +1101,9 @@ async def run_agent_turn(
                                                         )
                                                     )
                                                     text_deltas_seen += 1
-                                                    # B3.3: poll for disconnect on
-                                                    # the cadence so a mid-response
-                                                    # iOS close cancels the in-flight
-                                                    # stream within a few hundred ms
-                                                    # rather than running to
-                                                    # completion. CancelledError
-                                                    # raised here unwinds through
-                                                    # the stream's ``async with``
-                                                    # (closing the upstream HTTP
-                                                    # connection) and lands in the
-                                                    # inner ``except`` below, which
-                                                    # captures partials per B3.4.
+                                                    # Poll on cadence so iOS
+                                                    # close lands within a few
+                                                    # hundred ms.
                                                     if (
                                                         disconnect_check is not None
                                                         and text_deltas_seen
@@ -1494,20 +1171,9 @@ async def run_agent_turn(
                                                         )
                                         response = await stream.get_final_message()
                                     except asyncio.CancelledError:
-                                        # B3.4: mid-stream cancellation. Close
-                                        # the upstream connection eagerly (the
-                                        # ``async with`` would also call close
-                                        # on exit, but doing it here keeps the
-                                        # semantics explicit: the upstream
-                                        # request is released BEFORE we touch
-                                        # any DB writes in the outer finally).
-                                        # Then capture each open text block's
-                                        # accumulated text into ``assistant_blocks``
-                                        # so ``messages.content_blocks`` records
-                                        # what iOS already saw on the wire.
-                                        # Empty blocks are skipped — a
-                                        # ``BlockStart`` with no deltas yields
-                                        # no user-visible text.
+                                        # Close upstream eagerly so the
+                                        # connection is released before the
+                                        # outer finally hits the DB.
                                         await stream.close()
                                         for index, block_id in open_text_blocks.items():
                                             partial = accumulated_text.get(index, "")
@@ -1519,10 +1185,8 @@ async def run_agent_turn(
                                                         "text": partial,
                                                     }
                                                 )
-                                        # Pill ordering loses text/pill
-                                        # interleaving on cancel since
-                                        # response.content is unavailable —
-                                        # pills land after partial text.
+                                        # On cancel text/pill interleaving is
+                                        # lost — pills land after partial text.
                                         _append_status_blocks_for_persistence(
                                             tool_use_ids=list(
                                                 status_block_records.keys()
@@ -1539,10 +1203,8 @@ async def run_agent_turn(
                             except Exception as exc:
                                 error_code = to_error_code(exc)
                                 terminal_state = "error"
-                                # The exception is caught (loop never raises), so
-                                # the generation span would otherwise exit cleanly.
-                                # Tag it explicitly so Langfuse marks the gen as
-                                # failed.
+                                # We catch the exception, so tag the gen
+                                # explicitly or Langfuse will mark it OK.
                                 gen.update(
                                     level="ERROR",
                                     status_message=f"{type(exc).__name__}: {exc}",
@@ -1550,13 +1212,8 @@ async def run_agent_turn(
                                 break
                             latency_ms = int((time.monotonic() - iter_started) * 1000)
 
-                            # Anthropic content for the next iteration's request
-                            # and for ``model_invocations.response_content`` (the
-                            # source of truth A1.7's thinking signature
-                            # roundtripping reads from). ``scrub_blocks`` strips
-                            # SDK-only fields like ``parsed_output`` / ``citations``
-                            # / ``caller``; Anthropic accepts them on output but
-                            # 400s when they re-appear as input on iteration N+1.
+                            # ``scrub_blocks`` strips SDK-only fields the API
+                            # accepts on output but rejects as input.
                             response_content = scrub_blocks(
                                 [
                                     block.model_dump(mode="json")
@@ -1575,19 +1232,9 @@ async def run_agent_turn(
                             cache_create = (
                                 response.usage.cache_creation_input_tokens or 0
                             )
-                            # A3.3: ingest usage + cost on the generation so the
-                            # Langfuse trace shows USD per turn and the token
-                            # breakdown. ``thinking`` is reported as our heuristic
-                            # estimate from the visible thinking text — Anthropic
-                            # bundles thinking tokens into ``output_tokens`` and
-                            # bills them at the output rate, so ``cost_details``
-                            # is a single ``total`` (no per-bucket split). We set
-                            # ``total`` explicitly to ``input + output +
-                            # cache_read + cache_creation``; ``thinking`` is
-                            # omitted because it is already accounted for inside
-                            # ``output_tokens``, and without an explicit ``total``
-                            # Langfuse would auto-sum every bucket and inflate the
-                            # per-trace count.
+                            # Explicit ``total`` so Langfuse doesn't auto-sum
+                            # and double-count thinking (it's already in
+                            # ``output_tokens``).
                             gen.update(
                                 output=response_content,
                                 usage_details={
@@ -1651,18 +1298,14 @@ async def run_agent_turn(
                             {"role": "assistant", "content": response_content}
                         )
 
-                        # User-facing blocks land in messages.content_blocks
-                        # in response.content order so reload renders the same
-                        # [text, pill, text, ...] sequence as the live stream.
+                        # Preserve order so reload matches the live stream.
                         for index, block in enumerate(response.content):
                             if block.type == "text":
                                 block_id = open_text_blocks.get(index)
                                 if block_id is None:
-                                    # Fallback: mint a fresh ULID so the JSONB
-                                    # schema stays valid. The persisted block_id
-                                    # won't match any streamed ``block_start``,
-                                    # so iOS correlation breaks — log loudly so
-                                    # the desync surfaces in observability.
+                                    # Persisted block_id won't match any
+                                    # streamed block_start — iOS correlation
+                                    # breaks; log loudly.
                                     block_id = str(ULID())
                                     logger.warning(
                                         "loop_text_block_id_fallback",
@@ -1698,12 +1341,6 @@ async def run_agent_turn(
                             error_code = ErrorCode.OUTPUT_TOKEN_LIMIT
                             break
                         if response.stop_reason == "tool_use":
-                            # C1.2 / C1.4 / SEV-565: parallel tool dispatch.
-                            # See :func:`_dispatch_tool_uses` for the
-                            # ``asyncio.gather`` machinery and
-                            # :func:`_dispatch_one_tool_use` for per-block
-                            # registry lookup / validation / execute /
-                            # audit-row / wire-event semantics.
                             tool_outcomes = await _dispatch_tool_uses(
                                 response_blocks=response.content,
                                 tool_registry=tool_registry,
@@ -1720,12 +1357,8 @@ async def run_agent_turn(
                                     tool_outcomes.ui_block_dicts
                                 )
                                 break
-                            # Defensive: ``stop_reason == "tool_use"`` with
-                            # no ``tool_use`` blocks in the response is an
-                            # Anthropic contract violation we never expect
-                            # to see. Treat as ``INTERNAL_ERROR`` rather
-                            # than looping forever appending an empty user
-                            # message.
+                            # ``tool_use`` stop with no tool_use blocks would
+                            # loop forever — fail it.
                             if tool_outcomes.tool_call_count == 0:
                                 terminal_state = "error"
                                 error_code = ErrorCode.INTERNAL_ERROR
@@ -1734,11 +1367,8 @@ async def run_agent_turn(
                                 tool_outcomes.ui_block_dicts
                             )
                             state.tool_calls += tool_outcomes.tool_call_count
-                            # Anthropic expects the tool_result blocks to
-                            # ride on a follow-up ``user`` message —
-                            # stop_reason on the next iteration drives
-                            # whether Claude needs another tool round or
-                            # finally returns text.
+                            # Anthropic expects tool_results on a follow-up
+                            # ``user`` message.
                             messages.append(
                                 {
                                     "role": "user",
@@ -1747,23 +1377,14 @@ async def run_agent_turn(
                             )
                             continue
                         if response.stop_reason == "pause_turn":
-                            # Anthropic paused a long-running turn (typically mid
-                            # extended-thinking). Per the API contract we continue
-                            # by passing the response content back as-is — already
-                            # appended to ``messages`` above, so the next
-                            # iteration's request will roundtrip the iteration-N
-                            # thinking block with its signature intact (A1.7
-                            # requirement R1). The cap check at the top of the
-                            # next iteration enforces wall-clock / iteration /
-                            # output-token bounds.
+                            # Continue verbatim — already appended to messages
+                            # so signatures roundtrip intact.
                             continue
-                        # Any other stop reason (refusal, stop_sequence, etc.) —
-                        # record verbatim so the audit row carries the real signal.
+                        # Refusal, stop_sequence, etc. — record verbatim.
                         terminal_state = response.stop_reason or "unknown"
                         break
-                    # Close any server-tool uses Anthropic never paired with
-                    # a result. Runs for every break path so cap breaches /
-                    # mid-turn errors don't leave pills stuck active.
+                    # Close orphan server-tool uses so mid-turn errors don't
+                    # leave pills stuck active.
                     if server_tools_config.any_enabled:
                         await _flush_orphan_server_tool_uses(
                             pending_uses=pending_server_tool_uses,
@@ -1775,42 +1396,21 @@ async def run_agent_turn(
                             turn_id=turn_id,
                             conversation_id=conversation_id,
                         )
-                    # Reached only via a normal break — used below to gate the
-                    # terminal SSE frame.
                     completed_normally = True
                 except asyncio.CancelledError:
-                    # B3.3 / B3.4: cancellation landed inside the loop.
-                    # Either our ``disconnect_check`` poll raised it, the
-                    # innermost streaming handler re-raised after
-                    # capturing partial text (B3.4), or the framework
-                    # cancelled the task externally. Set
-                    # ``terminal_state='cancelled'`` plus
-                    # ``cancellation_reason`` so the inner finally tags
-                    # the langfuse span and the outer finally persists
-                    # the audit row with both fields populated.
                     terminal_state = "cancelled"
                     error_code = ErrorCode.CANCELLED
                     cancellation_reason = _DEFAULT_CANCELLATION_REASON
-                    # SEV-566: any pills that were still active when the
-                    # turn was cancelled would otherwise persist with
-                    # state="active" forever — flip them in-place so
-                    # reload shows a failed pill, not a phantom spinner.
-                    # The records dict already holds references to the
-                    # block dicts in ``assistant_blocks``, so mutating
-                    # here propagates to the persisted message.
+                    # Flip active pills in-place so reload shows them failed,
+                    # not phantom spinners. The records dict shares refs with
+                    # ``assistant_blocks``.
                     for record in status_block_records.values():
                         if record.get("state") == "active":
                             record["state"] = "failed"
                     raise
                 finally:
-                    # Inner finally: just update the langfuse turn span — the
-                    # span needs to be the active OTel span when ``update``
-                    # is called, so it can't move to the outer finally
-                    # (which runs after both ``with`` blocks have exited).
-                    # Defensive guard for terminal_state=None handles the
-                    # rare case of a non-CancelledError, non-Exception
-                    # control-flow exit (BaseException, SystemExit) so
-                    # Langfuse always gets coherent values.
+                    # Must run while the langfuse span is still the active
+                    # OTel span. Guards handle BaseException paths.
                     inner_terminal_state = terminal_state or "error"
                     inner_error_code = (
                         error_code
@@ -1837,46 +1437,24 @@ async def run_agent_turn(
                         ),
                     )
     except asyncio.CancelledError:
-        # B3.3 outer catch: cancellation landed BEFORE the inner try block —
-        # i.e. during user-message persistence, history load,
-        # ``start_agent_turn``, ``turn_started`` emit, langfuse span entry,
-        # or ``propagate_attributes`` setup. The outer ``finally`` below
-        # still runs and persists the agent_turn row (if it was opened)
-        # with ``terminal_state='cancelled'``. Without this clause, the
-        # framework's external ``task.cancel()`` would land on one of the
-        # early DB awaits and leave the row stuck in non-terminal state
-        # forever. ``raise`` re-propagates so the caller still sees
-        # CancelledError.
+        # Cancellation before the inner try (during user-message persist,
+        # history load, start_agent_turn, ...). Without this clause the
+        # row sits non-terminal forever.
         if terminal_state is None:
             terminal_state = "cancelled"
             error_code = ErrorCode.CANCELLED
-        # B3.4: populate the reason regardless of which handler set the
-        # terminal state — the inner streaming handler raises through
-        # this clause too.
         if cancellation_reason is None:
             cancellation_reason = _DEFAULT_CANCELLATION_REASON
         raise
     finally:
-        # Defensive: a non-CancelledError exception escaped without setting
-        # terminal_state. Mark it as an error so the row never sits in
-        # non-terminal state.
+        # Unhandled non-cancel exception escaped — mark as error so the
+        # row never sits non-terminal.
         if terminal_state is None:
             terminal_state = "error"
             error_code = ErrorCode.INTERNAL_ERROR
 
-        # If ``start_agent_turn`` never ran (cancellation/error during
-        # user-message persist or history load), there is no agent_turn
-        # row to finalise — the user_message row is durable on its own.
-        #
-        # Route the writes through ``asyncio.shield`` so they survive even
-        # when the parent task is cancelled mid-finally (observed under
-        # sse-starlette's task-group teardown on client disconnect: the
-        # raw await inside the finally was getting re-cancelled before
-        # COMMIT). ``shield`` runs the helper in a child task whose
-        # cancel scope is independent of the parent — when the parent
-        # gets a CancelledError while waiting on shield, the parent
-        # propagates but the child keeps running on the event loop and
-        # writes the row.
+        # ``shield`` so writes survive parent cancellation under
+        # sse-starlette teardown.
         if turn_id is not None:
             await asyncio.shield(
                 _finalize_agent_turn_row(
@@ -1892,12 +1470,8 @@ async def run_agent_turn(
                 )
             )
 
-        # Terminal SSE frame: only when the loop exited via its own
-        # break paths. If an unhandled exception is propagating, the
-        # caller surfaces it as ``error`` — emitting here would race
-        # with that and produce two terminal frames on the wire.
-        # ``turn_id is not None`` is implied by ``completed_normally``
-        # but kept explicit for the type checker.
+        # Only emit on normal break; unhandled exceptions are surfaced by
+        # the caller to avoid two terminal frames.
         if completed_normally and turn_id is not None:
             if error_code is not None:
                 await sse_emitter.emit(
@@ -1916,9 +1490,7 @@ async def run_agent_turn(
                     )
                 )
 
-    # Reachable only when the loop exited via a normal break — every
-    # cancellation / exception path re-raises through the outer except,
-    # which means turn_id was set before the loop ran.
+    # Only reachable after a normal break.
     assert turn_id is not None
     return AgentTurnResult(
         turn_id=turn_id,

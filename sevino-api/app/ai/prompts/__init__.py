@@ -33,8 +33,6 @@ def _compose_with_addendum(base: SystemPrompt, addendum: str) -> SystemPrompt:
     return SystemPrompt(text=text, hash=digest)
 
 
-# Precomputed at import so the hash isn't re-derived on every turn; matches
-# the import-time hash invariant SYSTEM_PROMPT_V1 already follows.
 _SYSTEM_PROMPT_V1_WITH_SERVER_TOOLS: SystemPrompt = _compose_with_addendum(
     SYSTEM_PROMPT_V1, _SERVER_TOOLS_ADDENDUM
 )

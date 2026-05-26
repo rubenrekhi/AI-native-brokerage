@@ -1,18 +1,6 @@
-"""``get_stock_info`` — internal stock-data lookup tool.
+"""``get_stock_info`` — fetch live quote/profile/ratios/analyst for one ticker.
 
-Wraps :meth:`app.services.market_data.MarketDataService.get_stock_info` so
-the agent can fetch live quote + profile + ratios + analyst data for a
-single US-equity ticker.
-
-UX: emits a ``StatusBlock`` pill ("Pulling data on AAPL") in ``active``
-state at call start, then patches it to ``complete`` / ``failed`` once the
-fetch resolves. No user-facing GenUI block is rendered — the data only
-flows back to the model.
-
-Context-window discipline: the model_payload is the trimmed
-``get_stock_info`` projection (~1–2 KB). Raw upstream data is stashed in
-``internal_trace`` so it is auditable but never re-tokenised on subsequent
-loop iterations.
+Shows a "Pulling data on X" pill; data goes to the model, not a card.
 """
 
 from __future__ import annotations
@@ -71,8 +59,6 @@ class StockInfoInput(BaseModel):
 
 
 class GetStockInfo(Tool[StockInfoInput]):
-    """Fetch live quote + profile + ratios + analyst data for one ticker."""
-
     name: ClassVar[str] = "get_stock_info"
     description: ClassVar[str] = _TOOL_DESCRIPTION
     Input: ClassVar[type[BaseModel]] = StockInfoInput
@@ -84,9 +70,8 @@ class GetStockInfo(Tool[StockInfoInput]):
         block_id = str(ULID())
         label = f"Pulling data on {ticker}"
 
-        # Announce the pill in ``active`` state. The loop's
-        # ``_RecordingEmitter`` sees this BlockStart and skips re-emitting
-        # one when ``ui_block`` comes back in the ToolResult.
+        # The loop's recording emitter dedups this so it isn't re-emitted
+        # when ``ui_block`` comes back in the ToolResult.
         active_pill = StatusBlock(
             block_id=block_id, label=label, state="active"
         )
@@ -109,12 +94,8 @@ class GetStockInfo(Tool[StockInfoInput]):
                 },
             )
 
-        # Fetch the quote/profile/ratios/analyst bundle *and* chart bars
-        # for every range option in parallel. The chart bars feed
-        # ``change_for_range``, which produces the per-range performance
-        # values the LLM cites in prose. Using the same helper (and same
-        # cached bars) as ``display_stock_card`` guarantees the model's
-        # numbers and the card's numbers can't drift apart.
+        # Same helper + cached bars as ``display_stock_card`` so the
+        # model's numbers can't drift from the card's.
         info_task = market_data.get_stock_info(ticker)
         chart_tasks = [
             market_data.get_chart(ticker, r) for r in PERFORMANCE_RANGES
@@ -124,9 +105,8 @@ class GetStockInfo(Tool[StockInfoInput]):
                 info_task, *chart_tasks, return_exceptions=True
             )
         except Exception as exc:
-            # ``return_exceptions`` should swallow per-task errors, so an
-            # exception bubbling here is a programming bug. Map to the
-            # generic upstream failure for graceful degradation.
+            # Shouldn't happen with ``return_exceptions=True`` — degrade
+            # rather than crash.
             logger.warning(
                 "stock_info_gather_failed",
                 ticker=ticker,
@@ -145,7 +125,6 @@ class GetStockInfo(Tool[StockInfoInput]):
 
         info_result, *chart_results = results
 
-        # The info call is required.
         if isinstance(info_result, (MarketDataError, MarketDataInvalidInputError)):
             logger.info(
                 "stock_info_lookup_failed",
@@ -208,10 +187,7 @@ class GetStockInfo(Tool[StockInfoInput]):
         except (TypeError, ValueError):
             price, daily_change_abs, daily_change_pct = 0.0, 0.0, 0.0
 
-        # Build the per-range performance dict using the *same* helper
-        # ``display_stock_card`` uses. Chart fetches that failed are
-        # silently dropped from the map — the LLM falls back to the
-        # daily change for those ranges.
+        # Skip failed ranges — the LLM falls back to daily change.
         performance: dict[str, dict[str, float]] = {}
         for r, chart in zip(PERFORMANCE_RANGES, chart_results):
             if isinstance(chart, BaseException):
@@ -261,7 +237,6 @@ class GetStockInfo(Tool[StockInfoInput]):
         label: str,
         payload: dict[str, Any],
     ) -> ToolResult:
-        """Flip the active pill to ``failed`` state and return the error payload."""
         failed_pill = StatusBlock(
             block_id=block_id, label=label, state="failed"
         )

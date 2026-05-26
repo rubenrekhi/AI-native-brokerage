@@ -1,9 +1,7 @@
-"""Anthropic model identifiers used by the AI agent.
+"""Anthropic model identifiers.
 
-Per AI v0 plan D9 (sevino-api/docs/ai-v0-plan.md):
-- ``MAIN`` is the default model for the main agent. Env-overridable via
-  ``ANTHROPIC_MODEL_MAIN`` so we can A/B in prod without redeploy.
-- ``SMOKE`` is the cheap model used by the CI smoke harness (fixed).
+``MAIN`` is env-overridable via ``ANTHROPIC_MODEL_MAIN``. ``SMOKE`` is the
+cheap fixed model used by CI.
 """
 from dataclasses import dataclass
 
@@ -24,11 +22,4 @@ MODELS = _Models(
 
 
 def get_default_model_config() -> ModelConfig:
-    """FastAPI dependency that returns the default per-turn model config.
-
-    Production resolves to ``MODELS.MAIN``. Tests override via
-    ``app.dependency_overrides[get_default_model_config]`` — the smoke
-    harness installs ``ModelConfig(model_id=MODELS.SMOKE)`` so real
-    Anthropic calls bill at the cheap Haiku tier.
-    """
     return ModelConfig(model_id=MODELS.MAIN)

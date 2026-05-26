@@ -14,8 +14,7 @@ __all__ = [
 
 
 class CapBreach(str, Enum):
-    """Values written to `agent_turns.terminal_state` when a cap ends a turn."""
-
+    # Written to ``agent_turns.terminal_state`` when a cap ends a turn.
     ITERATION_LIMIT = "iteration_limit"
     TOOL_CALL_LIMIT = "tool_call_limit"
     TIMEOUT = "timeout"
@@ -49,11 +48,4 @@ def check_caps(
 
 
 def get_hard_caps() -> HardCaps:
-    """FastAPI dependency that returns the per-turn hard caps.
-
-    Defaults to the production caps. Tests override via
-    ``app.dependency_overrides[get_hard_caps]`` — the smoke iteration-cap
-    case (B4.3) installs ``HardCaps(max_iterations=0)`` to exercise the
-    cap-breach path through the SSE endpoint without billing Anthropic.
-    """
     return HardCaps()
