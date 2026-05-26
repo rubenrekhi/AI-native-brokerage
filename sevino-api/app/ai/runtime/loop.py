@@ -36,7 +36,7 @@ from app.ai.runtime.dispatch.custom import (  # noqa: F401  (legacy test-compat 
     ToolDispatchOutcome as _ToolDispatchOutcome,
 )
 from app.ai.runtime.dispatch.server import ServerToolTracker
-from app.ai.runtime.flow.iteration import THINKING_BUDGET_TOKENS, run_one_iteration
+from app.ai.runtime.flow.iteration import run_one_iteration
 from app.ai.runtime.flow.turn_lifecycle import (
     TurnTotals,
     emit_terminal_frame,
@@ -109,10 +109,10 @@ async def run_agent_turn(
     ``request.is_disconnected`` never fires. Cancellation arrives via
     ``task.cancel()`` when the SSE asyncgen closes.
     """
-    if hard_caps.max_output_tokens <= THINKING_BUDGET_TOKENS:
+    if hard_caps.max_output_tokens <= hard_caps.thinking_budget_tokens:
         raise ValueError(
             f"hard_caps.max_output_tokens ({hard_caps.max_output_tokens}) "
-            f"must be > thinking budget ({THINKING_BUDGET_TOKENS}); "
+            f"must be > thinking budget ({hard_caps.thinking_budget_tokens}); "
             f"Anthropic requires budget_tokens < max_tokens."
         )
 

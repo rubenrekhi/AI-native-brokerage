@@ -51,7 +51,6 @@ from app.ai.transport.emitter import SSEEmitter
 from app.repositories.conversation import ConversationRepository
 
 __all__ = [
-    "THINKING_BUDGET_TOKENS",
     "IterationAction",
     "IterationOutcome",
     "build_iteration_request",
@@ -59,11 +58,6 @@ __all__ = [
 ]
 
 logger = structlog.get_logger(__name__)
-
-# Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
-# Also imported by ``loop.py`` for the pre-flight ``max_output_tokens``
-# vs budget check — keep one source of truth.
-THINKING_BUDGET_TOKENS = 1024
 
 IterationAction = Literal["continue", "break"]
 
@@ -106,7 +100,7 @@ def build_iteration_request(
         "max_tokens": hard_caps.max_output_tokens,
         "thinking": {
             "type": "enabled",
-            "budget_tokens": THINKING_BUDGET_TOKENS,
+            "budget_tokens": hard_caps.thinking_budget_tokens,
         },
     }
     # Anthropic 400s on empty tools.

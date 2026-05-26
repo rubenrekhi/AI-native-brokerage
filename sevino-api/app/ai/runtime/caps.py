@@ -27,6 +27,8 @@ class HardCaps:
     max_tool_calls: int = 20
     max_wall_clock_s: float = 60.0
     max_output_tokens: int = 2048
+    # Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
+    thinking_budget_tokens: int = 1024
 
 
 def check_caps(
