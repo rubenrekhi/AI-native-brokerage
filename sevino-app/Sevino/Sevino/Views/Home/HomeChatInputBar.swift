@@ -68,7 +68,7 @@ struct HomeChatInputBar: View {
                     if viewModel.text.isEmpty {
                         Text(L10n.Home.chatPlaceholder)
                             .font(.system(size: 16 * scale))
-                            .foregroundStyle(Color.sevinoGreyAccent)
+                            .foregroundStyle(Color.homePlaceholder)
                             .padding(.leading, 16 * scale + 5)
                             .padding(.top, 14 * scale + 8)
                             .allowsHitTesting(false)
@@ -80,7 +80,7 @@ struct HomeChatInputBar: View {
                                 .hidden()
                             Text(L10n.Home.quickCommandsDiscoverPlaceholder)
                                 .font(.system(size: 16 * scale))
-                                .foregroundStyle(Color.sevinoGreyAccent)
+                                .foregroundStyle(Color.homePlaceholder)
                         }
                         .padding(.leading, 16 * scale + 5)
                         .padding(.top, 14 * scale + 8)
@@ -115,12 +115,12 @@ struct HomeChatInputBar: View {
                     .font(.system(size: 16 * scale, weight: .semibold))
                     .foregroundStyle(hasText ? Color.sevinoPrimary : Color.sevinoGreyAccent)
                     .frame(width: 30 * scale, height: 30 * scale)
-                    .background(hasText ? Color.homeSendActiveBg : .clear, in: .circle)
+                    .background(hasText ? Color.sevinoSecondary : .clear, in: .circle)
                     .frame(width: 44 * scale, height: 44 * scale)
                     .disabled(!hasText || isStreaming)
             }
-            .padding(.horizontal, 4 * scale)
-            .padding(.bottom, 4 * scale)
+            .padding(.horizontal, 14 * scale)
+            .padding(.bottom, 8 * scale)
         }
         .modifier(SevinoGlass.card)
         .onChange(of: isDimmed) { _, newValue in

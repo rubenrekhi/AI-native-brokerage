@@ -1,16 +1,12 @@
 import SwiftUI
 
 extension Color {
-    /// Send button active circle — uses the opposite mode's accent
-    /// Light mode: dark accent #29243B, Dark mode: light accent #CCBEFF
-    static let homeSendActiveBg = Color(uiColor: UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.80, green: 0.75, blue: 1.00, alpha: 1)  // #CCBEFF
-            : UIColor(red: 0.16, green: 0.14, blue: 0.23, alpha: 1)  // #29243B
-    })
-
     /// Star/favourite yellow — #FFD60A
     static let homeStarActive = Color(red: 1.0, green: 0.84, blue: 0.04)
+
+    /// Lighter than sevinoGreyAccent in dark mode (#5A5757 vs #312E2E) for
+    /// placeholder legibility on glass surfaces.
+    static let homePlaceholder = adaptive(light: 0xBFBFBF, dark: 0x5A5757)
 
     static let homePopupDivider = Color.sevinoGreyAccent.opacity(0.3)
     static let homeDragHandle = Color.sevinoGreyContrast.opacity(0.5)

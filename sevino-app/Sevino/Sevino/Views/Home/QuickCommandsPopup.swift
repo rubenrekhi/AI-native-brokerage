@@ -21,8 +21,8 @@ struct QuickCommandsPopup: View {
     private var backgroundShape: UnevenRoundedRectangle {
         UnevenRoundedRectangle(
             topLeadingRadius: Self.topCornerRadius,
-            bottomLeadingRadius: 0,
-            bottomTrailingRadius: 0,
+            bottomLeadingRadius: 55,
+            bottomTrailingRadius: 55,
             topTrailingRadius: Self.topCornerRadius
         )
     }
@@ -41,7 +41,7 @@ struct QuickCommandsPopup: View {
                 ) {
                     Toggle("", isOn: $webSearchEnabled)
                         .labelsHidden()
-                        .tint(Color.homeSendActiveBg)
+                        .tint(.green)
                         .scaleEffect(scale)
                 }
 
@@ -92,31 +92,13 @@ struct QuickCommandsPopup: View {
     }
 
     private var header: some View {
-        HStack {
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 16 * scale, weight: .semibold))
-                    .foregroundStyle(Color.sevinoSecondary)
-                    .frame(width: Self.closeButtonSize * scale, height: Self.closeButtonSize * scale)
-            }
-            .buttonStyle(.plain)
-            .modifier(SevinoGlass.navCircleClear)
-            .contentShape(.circle)
-            .accessibilityLabel(L10n.Home.quickCommandsCloseAccessibility)
-
-            Spacer()
-
-            Text(L10n.Home.quickCommandsTitle)
-                .font(.system(size: 17 * scale, weight: .semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-
-            Spacer()
-
-            Color.clear.frame(width: Self.closeButtonSize * scale, height: Self.closeButtonSize * scale)
-        }
-        .padding(.horizontal, 16 * scale)
-        .padding(.top, 12 * scale)
-        .padding(.bottom, 16 * scale)
+        Text(L10n.Home.quickCommandsTitle)
+            .font(.system(size: 17 * scale, weight: .semibold))
+            .foregroundStyle(Color.sevinoSecondary)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16 * scale)
+            .padding(.top, 12 * scale)
+            .padding(.bottom, 16 * scale)
     }
 
     private func row<Trailing: View>(

@@ -88,7 +88,7 @@ struct AlpacaRegulatoryView: View {
             Spacer()
             Toggle("", isOn: isOn)
                 .labelsHidden()
-                .tint(Color.onboardingProgressFill)
+                .tint(.green)
         }
     }
 

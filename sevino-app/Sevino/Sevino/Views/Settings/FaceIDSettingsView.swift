@@ -60,7 +60,7 @@ struct FaceIDSettingsView: View {
                     .font(.system(size: 16 * scale))
                     .foregroundStyle(Color.sevinoSecondary)
             }
-            .tint(Color.sevinoAccent)
+            .tint(.green)
             .disabled(viewModel.isAuthenticating)
             .onChange(of: viewModel.isEnabled) { oldValue, newValue in
                 guard newValue, !oldValue else { return }

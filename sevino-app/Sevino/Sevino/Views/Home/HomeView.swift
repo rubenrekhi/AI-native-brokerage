@@ -556,6 +556,8 @@ struct HomeView: View {
                     onDiscover: selectDiscover,
                     onDismiss: dismissQuickCommands
                 )
+                .padding(.horizontal, 3)
+                .padding(.bottom, 3)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             .ignoresSafeArea()
