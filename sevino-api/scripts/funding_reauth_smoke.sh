@@ -9,8 +9,13 @@
 # funding_smoke.sh state).
 #
 # Prerequisites:
-#   1. PLAID_WEBHOOK_URL set on the backend (Railway staging shared vars)
-#   2. uv run python scripts/seed_funding_sandbox.py  (one-time, mints JWT)
+#   1. PLAID_WEBHOOK_URL set on the backend AND in the shell that runs this
+#      script. Must be the same URL — the script attaches it to the sandbox
+#      item via `options.webhook` so Plaid knows where to deliver. Sandbox
+#      bypasses the link-token flow, so the server's link-token webhook is
+#      never seen by the test item.
+#   2. uv run python scripts/seed_funding_sandbox.py  (one-time, mints JWT;
+#      writes PLAID_WEBHOOK_URL from .env into .funding_smoke_env if set)
 #   3. source scripts/.funding_smoke_env
 #
 # Usage:
@@ -35,6 +40,7 @@ done
 : "${JWT:?Source scripts/.funding_smoke_env first}"
 : "${PLAID_CLIENT_ID:?}"
 : "${PLAID_SECRET:?}"
+: "${PLAID_WEBHOOK_URL:?Set PLAID_WEBHOOK_URL (must match the running backend) — without it the linked item has no webhook URL and Plaid never delivers}"
 : "${BACKEND_URL:=http://localhost:8000}"
 
 AUTH_HEADERS=(-H "Authorization: Bearer $JWT")
@@ -54,7 +60,7 @@ fail()  { red "FAIL: $*"; exit 1; }
 blue "1. Plaid sandbox: mint + exchange + reissue public_token"
 curl -sS -X POST https://sandbox.plaid.com/sandbox/public_token/create \
   -H "Content-Type: application/json" \
-  -d "{\"client_id\":\"$PLAID_CLIENT_ID\",\"secret\":\"$PLAID_SECRET\",\"institution_id\":\"ins_109508\",\"initial_products\":[\"auth\"]}" \
+  -d "{\"client_id\":\"$PLAID_CLIENT_ID\",\"secret\":\"$PLAID_SECRET\",\"institution_id\":\"ins_109508\",\"initial_products\":[\"auth\"],\"options\":{\"webhook\":\"$PLAID_WEBHOOK_URL\"}}" \
   > "$TMP/sandbox.json"
 PT=$(python3 -c "import json; print(json.load(open('$TMP/sandbox.json'))['public_token'])")
 

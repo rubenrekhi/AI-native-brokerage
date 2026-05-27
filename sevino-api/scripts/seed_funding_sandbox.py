@@ -281,6 +281,7 @@ async def main() -> int:
         f"export PLAID_SECRET='{plaid_secret}'\n"
         f"export API_KEY='{env.get('API_KEY', '')}'\n"
         f"export BACKEND_URL='http://localhost:8000'\n"
+        f"export PLAID_WEBHOOK_URL='{env.get('PLAID_WEBHOOK_URL', '')}'\n"
     )
     out_path.chmod(0o600)
     print(f"✓ wrote {out_path}")
