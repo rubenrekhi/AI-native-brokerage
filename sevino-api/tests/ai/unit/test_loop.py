@@ -3103,3 +3103,121 @@ class TestShieldedFinalize:
         await drain_task
 
         repo_mocks["complete_agent_turn"].assert_awaited_once()
+
+
+# ---------- finalize_turn_row exception swallow ----------
+
+
+class TestFinalizeRowExceptionSwallow:
+    # ``finalize_turn_row`` wraps the assistant-message append and
+    # ``complete_agent_turn`` in ``try/except Exception`` and logs
+    # rather than re-raising. By the time finalize runs, the only
+    # signal the agent_turn row can give is its terminal_state — if
+    # finalize itself raised, the loop's outer finally would have no
+    # downstream catch and the failure would surface as a 500 to the
+    # client. The swallow is intentional, but it carries the cost of
+    # silent compound failures: a successful assistant-message append
+    # followed by a failing complete_agent_turn leaves an orphan row
+    # with only a log line as a signal.
+
+    async def test_complete_agent_turn_failure_does_not_propagate(
+        self, repo_mocks, monkeypatch
+    ):
+        # Loop returns the normal ``AgentTurnResult`` even though the
+        # final commit failed. Operators see the log; the caller does
+        # not see an exception. This is the contract — any regression
+        # that propagates would change a recoverable mid-turn failure
+        # into a HTTP 500.
+        repo_mocks["complete_agent_turn"].side_effect = RuntimeError(
+            "db gone"
+        )
+
+        warnings_captured: list[tuple[str, dict[str, Any]]] = []
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger,
+            "exception",
+            lambda event, **kw: warnings_captured.append((event, kw)),
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # The result is the normal end_turn result — no propagation.
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 1
+
+        # The compound-failure path MUST log loudly so operators see
+        # the orphan turn row signal.
+        finalize_errors = [
+            (name, kw)
+            for (name, kw) in warnings_captured
+            if name == "agent_turn_finalize_failed"
+        ]
+        assert len(finalize_errors) == 1
+        _, log_kwargs = finalize_errors[0]
+        assert log_kwargs["terminal_state"] == "end_turn"
+        assert "turn_id" in log_kwargs
+
+    async def test_append_assistant_message_failure_does_not_propagate(
+        self, repo_mocks, monkeypatch
+    ):
+        # The first DB write inside finalize. If this raises, the
+        # ``complete_agent_turn`` call never happens — the agent_turn
+        # row stays non-terminal. The log line is operators' only
+        # signal.
+        repo_mocks["append_assistant_message"].side_effect = RuntimeError(
+            "db gone"
+        )
+
+        warnings_captured: list[tuple[str, dict[str, Any]]] = []
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger,
+            "exception",
+            lambda event, **kw: warnings_captured.append((event, kw)),
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # The loop returns normally even though the assistant message
+        # never persisted.
+        assert result.terminal_state == "end_turn"
+        # ``complete_agent_turn`` was never called — the exception in
+        # append_assistant_message aborted the rest of finalize.
+        repo_mocks["complete_agent_turn"].assert_not_awaited()
+        # But the log fired.
+        assert any(
+            name == "agent_turn_finalize_failed"
+            for (name, _kw) in warnings_captured
+        )
+
+    async def test_orphan_assistant_message_when_complete_agent_turn_fails(
+        self, repo_mocks, monkeypatch
+    ):
+        # The compound-failure case the audit flagged: assistant
+        # message persists, but the turn-row link never lands. iOS
+        # would see a TurnCompleted (loop succeeds) while the DB shows
+        # a non-terminal agent_turn pointing at a freshly-persisted
+        # message. Only the log connects the two.
+        repo_mocks["complete_agent_turn"].side_effect = RuntimeError("db")
+
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger, "exception", lambda *a, **kw: None
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # Assistant message DID land.
+        repo_mocks["append_assistant_message"].assert_awaited_once()
+        # complete_agent_turn was attempted and raised.
+        repo_mocks["complete_agent_turn"].assert_awaited_once()
+        # Loop returned normally — the orphan state is invisible
+        # to the caller.
+        assert result.terminal_state == "end_turn"
