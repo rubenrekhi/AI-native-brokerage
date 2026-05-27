@@ -3032,3 +3032,74 @@ class TestBlockIdFallback:
         assert log_kwargs["iteration_index"] == 0
         assert log_kwargs["response_index"] == 0
         assert log_kwargs["streamed_indices"] == []
+
+
+# ---------- shielded finalize ----------
+
+
+class TestShieldedFinalize:
+    # The outer finally wraps ``finalize_turn_row`` in ``asyncio.shield``
+    # specifically because sse-starlette re-cancels tasks during teardown.
+    # Without the shield, ``complete_agent_turn`` would be cancelled
+    # mid-COMMIT and the row would never close. This test forces the
+    # exact race: the loop enters finalize → COMMIT is in flight → the
+    # task is cancelled. With the shield, COMMIT lands; without it, the
+    # mock is never fully awaited.
+
+    async def test_cancel_during_finalize_does_not_truncate_commit(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+
+        in_finalize = asyncio.Event()
+        finalize_done = asyncio.Event()
+
+        async def slow_complete(*args: Any, **kwargs: Any) -> None:
+            in_finalize.set()
+            # ``shield`` masks the parent cancellation while this sleeps.
+            # Without the shield, this sleep would raise CancelledError
+            # and the row would never close.
+            await asyncio.sleep(0.05)
+            finalize_done.set()
+
+        repo_mocks["complete_agent_turn"].side_effect = slow_complete
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+
+        kwargs: dict[str, Any] = {
+            "user_id": uuid.uuid4(),
+            "conversation_id": uuid.uuid4(),
+            "user_message": "hello",
+            "anthropic_client": client,
+            "db_factory": _make_db_factory(),
+            "tool_registry": EMPTY_REGISTRY,
+            "http_clients": ToolHttpClients(),
+            "system_prompt": SYSTEM_PROMPT,
+            "model_config": ModelConfig(model_id=MODEL_ID),
+            "hard_caps": HardCaps(),
+            "langfuse": _NoopLangfuse(),
+            "environment": "test",
+            "sse_emitter": em,
+        }
+        loop_task = asyncio.create_task(run_agent_turn(**kwargs))
+
+        # Wait for the loop to enter ``complete_agent_turn``.
+        await asyncio.wait_for(in_finalize.wait(), timeout=2.0)
+
+        # Cancel the loop task RIGHT NOW — while ``complete_agent_turn``
+        # is mid-await. The shield must keep the awaitable alive until
+        # it returns; only then should ``CancelledError`` propagate.
+        loop_task.cancel()
+
+        # ``finalize_done`` setting is the proof that the COMMIT
+        # actually completed despite the cancel landing during it.
+        await asyncio.wait_for(finalize_done.wait(), timeout=2.0)
+
+        with pytest.raises(asyncio.CancelledError):
+            await loop_task
+
+        await em.close()
+        await drain_task
+
+        repo_mocks["complete_agent_turn"].assert_awaited_once()
