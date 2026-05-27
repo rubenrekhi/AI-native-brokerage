@@ -23,8 +23,10 @@ from __future__ import annotations
 
 from app.ai.runtime.anthropic_io import (
     INPUT_FIELDS_BY_BLOCK_TYPE,
+    estimate_thinking_tokens,
     scrub_block,
     scrub_blocks,
+    to_anthropic_content,
 )
 
 
@@ -229,3 +231,214 @@ class TestRealCapturedPayloadRegression:
         assert cleaned[1].get("citations") is None
         assert cleaned[2]["input"] == {"ticker": "BADTKR123"}
         assert cleaned[2]["caller"] == {"type": "direct"}
+
+
+class TestToAnthropicContentText:
+    def test_passes_text_block_through_with_only_text_field(self):
+        # Drops ``block_id`` (Sevino-only iOS-correlation field) — Anthropic
+        # 400s on unknown text-block keys.
+        converted = to_anthropic_content(
+            [
+                {
+                    "type": "text",
+                    "block_id": "01HXYZ",
+                    "text": "hello",
+                }
+            ]
+        )
+        assert converted == [{"type": "text", "text": "hello"}]
+
+    def test_missing_text_defaults_to_empty_string(self):
+        # The loop should never emit a textless block but the helper is
+        # defensive — exercise the ``.get("text", "")`` fallback.
+        converted = to_anthropic_content([{"type": "text", "block_id": "x"}])
+        assert converted == [{"type": "text", "text": ""}]
+
+
+class TestToAnthropicContentContext:
+    # The synthesized wrapper prefix is the model's only signal that the
+    # JSON payload is user-supplied modal context. A typo or behavior
+    # change here silently corrupts every turn that uses ``user_context``.
+    _EXPECTED_PREFIX = (
+        "[Attached context from the user's open modal — "
+        "use this data to inform your response]\n"
+    )
+
+    def test_wraps_context_data_with_attached_prefix(self):
+        converted = to_anthropic_content(
+            [
+                {
+                    "type": "context",
+                    "block_id": "01HXYZ",
+                    "data": {"symbol": "AAPL", "price": "150.00"},
+                }
+            ]
+        )
+
+        assert len(converted) == 1
+        assert converted[0]["type"] == "text"
+        assert converted[0]["text"].startswith(self._EXPECTED_PREFIX)
+
+    def test_json_encodes_data_payload_compactly(self):
+        # ``json.dumps(..., separators=(",", ":"))`` — no whitespace, so
+        # cache hits on the prompt prefix line up byte-for-byte across
+        # turns.
+        converted = to_anthropic_content(
+            [
+                {
+                    "type": "context",
+                    "data": {"a": 1, "b": 2},
+                }
+            ]
+        )
+
+        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
+        assert body == '{"a":1,"b":2}'
+
+    def test_non_serializable_values_fall_through_via_default_str(self):
+        # ``default=str`` means non-JSON-serializable types (Decimal,
+        # datetime, UUID) render via ``str()`` rather than raising.
+        import uuid
+        from decimal import Decimal
+
+        uid = uuid.UUID("12345678-1234-5678-1234-567812345678")
+        converted = to_anthropic_content(
+            [
+                {
+                    "type": "context",
+                    "data": {"price": Decimal("150.50"), "id": uid},
+                }
+            ]
+        )
+
+        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
+        assert '"price":"150.50"' in body
+        assert f'"id":"{uid}"' in body
+
+    def test_missing_data_field_falls_back_to_empty_dict(self):
+        # Defensive — the loop always supplies ``data``, but the helper
+        # should not raise if it's absent.
+        converted = to_anthropic_content([{"type": "context", "block_id": "x"}])
+        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
+        assert body == "{}"
+
+    def test_mixed_text_and_context_preserve_order(self):
+        # Reload renders user text + context block in author order. The
+        # adapter must not reorder them or the model sees a different
+        # narrative.
+        converted = to_anthropic_content(
+            [
+                {"type": "text", "block_id": "a", "text": "what's AAPL?"},
+                {"type": "context", "block_id": "b", "data": {"x": 1}},
+            ]
+        )
+
+        assert len(converted) == 2
+        assert converted[0] == {"type": "text", "text": "what's AAPL?"}
+        assert converted[1]["type"] == "text"
+        assert converted[1]["text"].startswith(self._EXPECTED_PREFIX)
+
+
+class TestToAnthropicContentDropsUiBlocks:
+    # Anthropic 400s on unknown ``type`` values. ``to_anthropic_content``
+    # should keep only ``text`` and ``context`` and drop UI-only variants
+    # (``status``, ``thinking``, ``stock_card``) before sending history
+    # back. Tool-use context is intentionally lost across turns; the
+    # assistant text is sufficient continuity.
+
+    def test_drops_status_block(self):
+        converted = to_anthropic_content(
+            [
+                {"type": "text", "text": "hi"},
+                {"type": "status", "block_id": "s", "label": "x", "state": "active"},
+            ]
+        )
+        assert converted == [{"type": "text", "text": "hi"}]
+
+    def test_drops_thinking_block(self):
+        converted = to_anthropic_content(
+            [
+                {"type": "thinking", "block_id": "t", "text": "musing"},
+                {"type": "text", "text": "answer"},
+            ]
+        )
+        assert converted == [{"type": "text", "text": "answer"}]
+
+    def test_drops_stock_card_block(self):
+        converted = to_anthropic_content(
+            [
+                {"type": "stock_card", "block_id": "sc", "symbol": "AAPL"},
+                {"type": "text", "text": "look"},
+            ]
+        )
+        assert converted == [{"type": "text", "text": "look"}]
+
+    def test_drops_tool_use_and_tool_result(self):
+        # Anthropic accepts these block types but the loop intentionally
+        # drops them — see the docstring comment "Tool-use context is
+        # lost across turns; the assistant text is sufficient continuity".
+        converted = to_anthropic_content(
+            [
+                {"type": "tool_use", "id": "t1", "name": "x", "input": {}},
+                {"type": "tool_result", "tool_use_id": "t1", "content": "ok"},
+                {"type": "text", "text": "final"},
+            ]
+        )
+        assert converted == [{"type": "text", "text": "final"}]
+
+    def test_empty_input_returns_empty_list(self):
+        assert to_anthropic_content([]) == []
+
+
+class TestEstimateThinkingTokens:
+    # Heuristic divides total ``thinking`` text characters by 4 — Anthropic
+    # doesn't expose per-block token counts. Redacted blocks contribute
+    # zero (no plaintext to measure).
+
+    def test_sums_chars_over_four(self):
+        blocks = [{"type": "thinking", "thinking": "x" * 100}]
+        assert estimate_thinking_tokens(blocks) == 25
+
+    def test_redacted_thinking_contributes_zero(self):
+        # The block type is ``redacted_thinking`` (no plaintext field).
+        # Even if it carried a "thinking" key, the type filter excludes
+        # it from the sum.
+        blocks = [{"type": "redacted_thinking", "data": "<encrypted-blob>"}]
+        assert estimate_thinking_tokens(blocks) == 0
+
+    def test_redacted_thinking_with_thinking_field_still_zero(self):
+        # Defensive: even if a hypothetical SDK leaked a ``thinking`` key
+        # onto a redacted block, the type-filter must still exclude it
+        # — billing/audit accuracy depends on it.
+        blocks = [
+            {
+                "type": "redacted_thinking",
+                "data": "blob",
+                "thinking": "should not count",
+            }
+        ]
+        assert estimate_thinking_tokens(blocks) == 0
+
+    def test_none_thinking_treated_as_empty(self):
+        blocks = [{"type": "thinking", "thinking": None}]
+        assert estimate_thinking_tokens(blocks) == 0
+
+    def test_non_string_thinking_treated_as_empty(self):
+        # The ``isinstance(text, str)`` guard prevents type confusion if
+        # the SDK ever returned a structured payload here.
+        blocks = [{"type": "thinking", "thinking": {"odd": "shape"}}]
+        assert estimate_thinking_tokens(blocks) == 0
+
+    def test_sums_across_multiple_blocks(self):
+        blocks = [
+            {"type": "thinking", "thinking": "x" * 8},
+            {"type": "text", "text": "ignored"},
+            {"type": "thinking", "thinking": "y" * 12},
+        ]
+        assert estimate_thinking_tokens(blocks) == 2 + 3
+
+    def test_no_thinking_blocks_returns_zero(self):
+        assert estimate_thinking_tokens([{"type": "text", "text": "hi"}]) == 0
+
+    def test_empty_input_returns_zero(self):
+        assert estimate_thinking_tokens([]) == 0
