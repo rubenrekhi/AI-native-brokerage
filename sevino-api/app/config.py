@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     plaid_secret: str
     plaid_env: str
     plaid_fernet_key: str
+    # Per-environment webhook URL Plaid posts item state changes to. Unset in
+    # dev (no public ingress); set to `https://<host>/v1/plaid/webhooks` in
+    # staging/prod. Unset disables webhook delivery for newly-linked items.
+    plaid_webhook_url: str | None = None
     anthropic_api_key: str
     sentry_dsn: str = ""
     railway_environment_name: str = ""

@@ -53,6 +53,40 @@ class TestCreateLinkToken:
 
         assert token == fixture["link_token"]
 
+    async def test_includes_webhook_when_configured(
+        self, service: PlaidService, monkeypatch
+    ):
+        from app.services import plaid as plaid_module
+
+        monkeypatch.setattr(
+            plaid_module.settings,
+            "plaid_webhook_url",
+            "https://staging.sevino.ai/v1/plaid/webhooks",
+        )
+        service._client.link_token_create.return_value = _mock_response(
+            _load("plaid_link_token.json")
+        )
+
+        await service.create_link_token(user_id="user-123")
+
+        body = service._client.link_token_create.call_args[0][0].to_dict()
+        assert body["webhook"] == "https://staging.sevino.ai/v1/plaid/webhooks"
+
+    async def test_omits_webhook_when_unset(
+        self, service: PlaidService, monkeypatch
+    ):
+        from app.services import plaid as plaid_module
+
+        monkeypatch.setattr(plaid_module.settings, "plaid_webhook_url", None)
+        service._client.link_token_create.return_value = _mock_response(
+            _load("plaid_link_token.json")
+        )
+
+        await service.create_link_token(user_id="user-123")
+
+        body = service._client.link_token_create.call_args[0][0].to_dict()
+        assert "webhook" not in body
+
 
 class TestExchangePublicToken:
     async def test_sends_expected_payload(self, service: PlaidService):
@@ -139,6 +173,44 @@ class TestCreateUpdateLinkToken:
         )
 
         assert token == fixture["link_token"]
+
+    async def test_includes_webhook_when_configured(
+        self, service: PlaidService, monkeypatch
+    ):
+        from app.services import plaid as plaid_module
+
+        monkeypatch.setattr(
+            plaid_module.settings,
+            "plaid_webhook_url",
+            "https://staging.sevino.ai/v1/plaid/webhooks",
+        )
+        service._client.link_token_create.return_value = _mock_response(
+            _load("plaid_link_token.json")
+        )
+
+        await service.create_update_link_token(
+            user_id="user-123", access_token="access-sandbox-abc"
+        )
+
+        body = service._client.link_token_create.call_args[0][0].to_dict()
+        assert body["webhook"] == "https://staging.sevino.ai/v1/plaid/webhooks"
+
+    async def test_omits_webhook_when_unset(
+        self, service: PlaidService, monkeypatch
+    ):
+        from app.services import plaid as plaid_module
+
+        monkeypatch.setattr(plaid_module.settings, "plaid_webhook_url", None)
+        service._client.link_token_create.return_value = _mock_response(
+            _load("plaid_link_token.json")
+        )
+
+        await service.create_update_link_token(
+            user_id="user-123", access_token="access-sandbox-abc"
+        )
+
+        body = service._client.link_token_create.call_args[0][0].to_dict()
+        assert "webhook" not in body
 
 
 class TestGetWebhookVerificationKey:
