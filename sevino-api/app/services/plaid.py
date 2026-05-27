@@ -78,6 +78,7 @@ class PlaidService:
             country_codes=[CountryCode("US")],
             language="en",
             user=LinkTokenCreateRequestUser(client_user_id=user_id),
+            **_webhook_kwargs(),
         )
         response = await self._call(self._client.link_token_create, request)
         return response["link_token"]
@@ -115,6 +116,7 @@ class PlaidService:
             language="en",
             user=LinkTokenCreateRequestUser(client_user_id=user_id),
             access_token=access_token,
+            **_webhook_kwargs(),
         )
         response = await self._call(self._client.link_token_create, request)
         return response["link_token"]
@@ -133,6 +135,17 @@ class PlaidService:
         except plaid.ApiException as exc:
             raise _map_plaid_exception(exc) from exc
         return result.to_dict() if hasattr(result, "to_dict") else dict(result)
+
+
+def _webhook_kwargs() -> dict[str, str]:
+    """Conditional `webhook=` for `LinkTokenCreateRequest`. Passing
+    `webhook=None` would serialize as `"webhook": null` which Plaid rejects;
+    omitting the key entirely keeps any existing Dashboard default in place.
+    Item webhooks (ITEM_LOGIN_REQUIRED etc.) only fire if the URL is set
+    here at link time — modern Plaid has no Dashboard-level default."""
+    if settings.plaid_webhook_url:
+        return {"webhook": settings.plaid_webhook_url}
+    return {}
 
 
 def _map_plaid_exception(exc: plaid.ApiException) -> PlaidServiceError:
