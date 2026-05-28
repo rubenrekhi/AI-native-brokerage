@@ -342,7 +342,11 @@ Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py` from 
 async def cache_get_or_set(client: aioredis.Redis, key: str, ttl: int, fetcher: ...): ...
 ```
 
-Caches the **serialized response dict**, not the raw Alpaca response — so transformations (decimal quantization, sorting, asset-name joins) are computed once per TTL window. Malformed cache entries fall back to the fetcher (see `#506`). No invalidation on writes; the 30–60s TTL is the SLA. If we later wire SSE order fills, invalidate `portfolio:holdings:{user_id}` + `portfolio:snapshot:{user_id}` on each `fill` event.
+Caches the **serialized response dict**, not the raw Alpaca response — so transformations (decimal quantization, sorting, asset-name joins) are computed once per TTL window. Malformed cache entries fall back to the fetcher (see `#506`).
+
+**Invalidation.** Transfer-status SSE events (`/v2/events/funding/status`, filtered to `entity_type == "Transfer"`) delete `portfolio:snapshot:{user_id}`, `portfolio:holdings:{user_id}`, and every `portfolio:history:{user_id}:{range}` key for the affected user so the iOS app sees fresh balances on the next read after a deposit/withdrawal. The 30–60s TTL is the safety net if the SSE connection drops and an event is missed. **Future:** wire SSE order fills the same way on each `fill` event.
+
+> The v1 endpoint `/v1/events/transfers/status` is deprecated for new broker partners (returns HTTP 410). Sevino uses the v2 funding-status stream, which multiplexes Transfer/BankRelationship/WireBank events and exposes `event_id` as a ULID on the top-level field (resumed with `?since_id=<ulid>`).
 
 **Do not add a background job that pre-warms these keys.** Refresh is pull-based from the iOS client.
 

@@ -446,9 +446,9 @@ Redis sits between the API and Alpaca for frequently accessed data. Cache keys f
 
 | Data | Cache Key Pattern | TTL | Invalidation |
 |---|---|---|---|
-| Portfolio snapshot (equity, cash, buying power, daily change) | `portfolio:snapshot:{user_id}` | 30s | TTL only (post-MVP: SSE invalidation on transfer/fill) |
-| Holdings (positions + cash + total) | `portfolio:holdings:{user_id}` | 30s | TTL only (post-MVP: SSE invalidation on fills) |
-| Portfolio history (charts) | `portfolio:history:{user_id}:{range}` | 60s | TTL only |
+| Portfolio snapshot (equity, cash, buying power, daily change) | `portfolio:snapshot:{user_id}` | 30s | TTL + SSE invalidation on transfer events (post-MVP: also on fills) |
+| Holdings (positions + cash + total) | `portfolio:holdings:{user_id}` | 30s | TTL + SSE invalidation on transfer events (post-MVP: also on fills) |
+| Portfolio history (charts) | `portfolio:history:{user_id}:{range}` | 60s | TTL + SSE invalidation on transfer events |
 | Stock quotes (planned) | `market:quote:{symbol}` | 15s | TTL only (ambient market data) |
 
 The portfolio cache helper is `cache_get_or_set()` in `app/cache.py` — it caches the **serialized response dict** (already transformed: decimal-as-string, sorted, with asset-name joins) so a cache miss recomputation is idempotent. Malformed cache entries silently fall back to the fetcher. Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py`.
