@@ -3,6 +3,7 @@ import logging
 import signal
 import time
 
+import redis.asyncio as aioredis
 import sentry_sdk
 import structlog
 from arq import worker as arq_worker
@@ -44,7 +45,7 @@ _LISTENER_SHUTDOWN_TIMEOUT_SECONDS = 10.0
 # asyncio.CancelledError is NOT swallowed — it means the event loop itself
 # is asking the coroutine to stop, and silently catching it can cause the
 # outer supervisor (tests, timeouts, arq's signal handler) to hang.
-_SHUTDOWN_CLEANUP_ERRORS = (
+SHUTDOWN_CLEANUP_ERRORS = (
     TimeoutError,
     ConnectionError,
     RedisTimeoutError,
@@ -69,7 +70,7 @@ async def _safe_close(self: arq_worker.Worker) -> None:
             duration_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         raise
-    except _SHUTDOWN_CLEANUP_ERRORS as exc:
+    except SHUTDOWN_CLEANUP_ERRORS as exc:
         logger.warning(
             "arq_health_check_cleanup_skipped",
             exc_type=type(exc).__name__,
@@ -89,7 +90,7 @@ async def _safe_close(self: arq_worker.Worker) -> None:
             duration_ms=round((time.perf_counter() - start) * 1000, 1),
         )
         raise
-    except _SHUTDOWN_CLEANUP_ERRORS as exc:
+    except SHUTDOWN_CLEANUP_ERRORS as exc:
         logger.warning(
             "arq_pool_close_skipped",
             exc_type=type(exc).__name__,
@@ -134,13 +135,22 @@ async def startup(ctx: dict) -> None:
         sentry_sdk.set_tag("process", "worker")
 
     broker = AlpacaBrokerService()
-    listeners = build_listeners(broker)
+    # Separate client from ARQ's pool: cache reads/writes assume
+    # decode_responses=True (strings, not bytes), and the listener's
+    # lifecycle is independent of the job-queue connection.
+    cache_redis = aioredis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+        encoding="utf-8",
+    )
+    listeners = build_listeners(broker, redis=cache_redis)
     listener_tasks = [
         asyncio.create_task(listener.run(), name=f"sse-{listener.stream_name}")
         for listener in listeners
     ]
 
     ctx["alpaca"] = broker
+    ctx["cache_redis"] = cache_redis
     ctx["listeners"] = listeners
     ctx["listener_tasks"] = listener_tasks
 
@@ -186,6 +196,19 @@ async def shutdown(ctx: dict) -> None:
             await broker.close()
         except Exception as exc:
             logger.warning("worker_alpaca_close_failed", error=str(exc))
+
+    cache_redis: aioredis.Redis | None = ctx.get("cache_redis")
+    if cache_redis is not None:
+        try:
+            await cache_redis.aclose()
+        except SHUTDOWN_CLEANUP_ERRORS as exc:
+            # Railway's SIGTERM races socket teardown; predictable network
+            # errors during close aren't actionable — log and move on.
+            logger.warning(
+                "worker_cache_redis_close_failed",
+                exc_type=type(exc).__name__,
+                error=str(exc),
+            )
 
 
 class WorkerSettings:

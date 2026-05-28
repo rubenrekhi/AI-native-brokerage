@@ -165,12 +165,17 @@ class TestWorkerStartup:
         self, monkeypatch
     ):
         """Happy path: startup creates an AlpacaBrokerService, calls
-        build_listeners, spawns one task per listener, and stashes all three
-        on ctx."""
+        build_listeners, spawns one task per listener, and stashes all
+        shared resources on ctx."""
         fake_broker = AsyncMock()
+        fake_cache_redis = AsyncMock()
         monkeypatch.setattr(
             "app.worker.AlpacaBrokerService",
             MagicMock(return_value=fake_broker),
+        )
+        monkeypatch.setattr(
+            "app.worker.aioredis.from_url",
+            MagicMock(return_value=fake_cache_redis),
         )
         monkeypatch.setattr(
             "app.worker.build_listeners", MagicMock(return_value=[])
@@ -182,8 +187,57 @@ class TestWorkerStartup:
         await app_worker.startup(ctx)
 
         assert ctx["alpaca"] is fake_broker
+        assert ctx["cache_redis"] is fake_cache_redis
         assert ctx["listeners"] == []
         assert ctx["listener_tasks"] == []
+
+    async def test_startup_creates_cache_redis_with_decode_responses(
+        self, monkeypatch
+    ):
+        """The cache redis client must be constructed with
+        ``decode_responses=True`` — otherwise cache_invalidate writes bytes
+        keys and the listener handler's f-string keys never match."""
+        from_url = MagicMock(return_value=AsyncMock())
+        monkeypatch.setattr("app.worker.aioredis.from_url", from_url)
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.build_listeners", MagicMock(return_value=[])
+        )
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+
+        await app_worker.startup({})
+
+        from_url.assert_called_once()
+        kwargs = from_url.call_args.kwargs
+        assert kwargs["decode_responses"] is True
+
+    async def test_startup_passes_cache_redis_to_build_listeners(
+        self, monkeypatch
+    ):
+        """The redis client must thread through build_listeners as the
+        kwarg-only ``redis`` argument — otherwise TransferStatusListener
+        receives None and the listener's cache invalidation crashes at
+        runtime."""
+        fake_cache_redis = AsyncMock()
+        build = MagicMock(return_value=[])
+        monkeypatch.setattr(
+            "app.worker.aioredis.from_url",
+            MagicMock(return_value=fake_cache_redis),
+        )
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr("app.worker.build_listeners", build)
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+
+        await app_worker.startup({})
+
+        build.assert_called_once()
+        assert build.call_args.kwargs["redis"] is fake_cache_redis
 
     @pytest.mark.parametrize(
         "env_setting,railway_env,expected",
@@ -347,6 +401,37 @@ class TestWorkerShutdown:
         # Must not raise.
         await app_worker.shutdown(ctx)
         broker.close.assert_awaited_once()
+
+    async def test_shutdown_closes_cache_redis(self):
+        """Cache redis client is created in startup and must be closed in
+        shutdown so the connection doesn't leak into the next deploy."""
+        cache_redis = AsyncMock()
+        ctx = {"cache_redis": cache_redis, "listener_tasks": []}
+
+        await app_worker.shutdown(ctx)
+
+        cache_redis.aclose.assert_awaited_once()
+
+    @pytest.mark.parametrize(
+        "exc",
+        [
+            TimeoutError("socket timed out"),
+            ConnectionError("connection reset"),
+            RedisTimeoutError("server gone"),
+            RedisConnectionError("upstream closed"),
+        ],
+    )
+    async def test_shutdown_swallows_cache_redis_close_errors(self, exc):
+        """Railway's SIGTERM races socket teardown; predictable network
+        errors during cache_redis.aclose() are not actionable and must not
+        propagate (otherwise they block redeploys)."""
+        cache_redis = AsyncMock()
+        cache_redis.aclose.side_effect = exc
+        ctx = {"cache_redis": cache_redis, "listener_tasks": []}
+
+        # Must not raise.
+        await app_worker.shutdown(ctx)
+        cache_redis.aclose.assert_awaited_once()
 
     async def test_shutdown_handles_missing_ctx_keys(self):
         """If startup errored before populating ctx, shutdown must still

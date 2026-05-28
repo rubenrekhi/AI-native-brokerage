@@ -106,7 +106,7 @@ def test_listener_registered_in_build_listeners():
     from app.listeners.registry import build_listeners
 
     broker = AlpacaBrokerService.__new__(AlpacaBrokerService)
-    listeners = build_listeners(broker)
+    listeners = build_listeners(broker, redis=AsyncMock())
 
     assert any(
         isinstance(listener, TradeEventsListener) for listener in listeners
