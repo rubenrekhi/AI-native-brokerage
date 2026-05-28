@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 import redis.asyncio as aioredis
 
-from app.cache import cache_get_or_set
+from app.cache import cache_get_or_set, cache_invalidate
 
 
 @pytest.fixture
@@ -12,6 +12,7 @@ def redis_mock():
     mock = AsyncMock()
     mock.get = AsyncMock()
     mock.setex = AsyncMock()
+    mock.delete = AsyncMock()
     return mock
 
 
@@ -82,3 +83,23 @@ async def test_second_call_uses_cache(redis_mock):
     assert second == {"v": "first"}
     fetcher.assert_awaited_once()
     redis_mock.setex.assert_awaited_once()
+
+
+async def test_cache_invalidate_empty_list_is_no_op(redis_mock):
+    await cache_invalidate(redis_mock, [])
+
+    redis_mock.delete.assert_not_awaited()
+
+
+async def test_cache_invalidate_calls_delete_with_all_keys(redis_mock):
+    await cache_invalidate(redis_mock, ["a", "b", "c"])
+
+    redis_mock.delete.assert_awaited_once_with("a", "b", "c")
+
+
+async def test_cache_invalidate_swallows_redis_error(redis_mock):
+    redis_mock.delete.side_effect = aioredis.RedisError("boom")
+
+    await cache_invalidate(redis_mock, ["k"])
+
+    redis_mock.delete.assert_awaited_once_with("k")
