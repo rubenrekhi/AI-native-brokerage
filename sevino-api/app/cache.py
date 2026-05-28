@@ -43,3 +43,18 @@ async def cache_get_or_set(
     except aioredis.RedisError:
         logger.warning("cache_set_failed", key=key, exc_info=True)
     return value
+
+
+async def cache_invalidate(client: aioredis.Redis, keys: list[str]) -> None:
+    """Best-effort DELETE of one or more cache keys.
+
+    Empty list is a no-op (Redis ``DEL`` rejects zero args). ``RedisError``
+    is logged and swallowed — callers (SSE listeners, etc.) shouldn't crash
+    on a transient Redis blip; cache items live to their TTL.
+    """
+    if not keys:
+        return
+    try:
+        await client.delete(*keys)
+    except aioredis.RedisError:
+        logger.warning("cache_invalidate_failed", keys=keys, exc_info=True)
