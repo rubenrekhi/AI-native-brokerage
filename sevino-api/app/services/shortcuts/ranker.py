@@ -14,9 +14,9 @@ def rank(rules: dict[str, list[Shortcut]]) -> list[Shortcut]:
 
     A non-empty ``first_time`` list takes precedence and leads the feed,
     padded with ``quiet_state``. Otherwise categories stack in priority
-    order — ``portfolio_state`` (sorted by magnitude) first, then
-    ``quiet_state`` fills the rest. Further categories join this ladder as
-    later stages add them.
+    order — ``portfolio_state`` then ``market_state`` (each sorted by
+    magnitude), then ``quiet_state`` fills the rest. Further categories join
+    this ladder as later stages add them.
     """
     first_time = rules.get("first_time", [])
     quiet_state = rules.get("quiet_state", [])
@@ -26,6 +26,9 @@ def rank(rules: dict[str, list[Shortcut]]) -> list[Shortcut]:
     ranked: list[Shortcut] = []
     ranked += sorted(
         rules.get("portfolio_state", []), key=lambda s: -s.magnitude
+    )
+    ranked += sorted(
+        rules.get("market_state", []), key=lambda s: -s.magnitude
     )
     ranked += quiet_state
     return ranked[:MAX_ITEMS]

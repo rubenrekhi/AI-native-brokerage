@@ -18,6 +18,7 @@ from app.services.shortcuts import ranker
 from app.services.shortcuts.context import ShortcutContext
 from app.services.shortcuts.rules import (
     first_time,
+    market_state,
     portfolio_state,
     quiet_state,
 )
@@ -54,6 +55,9 @@ class ShortcutsService:
             "first_time": first_time.evaluate(ctx),
             "portfolio_state": await portfolio_state.evaluate(
                 ctx, self._db, self._alpaca
+            ),
+            "market_state": await market_state.evaluate(
+                ctx, self._db, self._alpaca, self._market_data
             ),
             "quiet_state": quiet_state.evaluate(ctx),
         }
