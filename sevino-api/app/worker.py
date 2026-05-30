@@ -16,6 +16,7 @@ from app.sentry_config import before_send as sentry_before_send
 from app.listeners.registry import build_listeners
 from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
+from app.services.fmp import FmpClient
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
 from app.tasks.reconcile_funding import reconcile_funding
@@ -153,6 +154,10 @@ async def startup(ctx: dict) -> None:
     ctx["cache_redis"] = cache_redis
     ctx["listeners"] = listeners
     ctx["listener_tasks"] = listener_tasks
+    # sync_assets enriches the catalog from FMP only when this client is
+    # present. Skip when no key is configured (e.g. dev) so the rest of the
+    # worker still boots.
+    ctx["fmp"] = FmpClient(api_key=settings.fmp_api_key) if settings.fmp_api_key else None
 
     logger.info("worker_listeners_started", count=len(listeners))
 
@@ -196,6 +201,13 @@ async def shutdown(ctx: dict) -> None:
             await broker.close()
         except Exception as exc:
             logger.warning("worker_alpaca_close_failed", error=str(exc))
+
+    fmp: FmpClient | None = ctx.get("fmp")
+    if fmp is not None:
+        try:
+            await fmp.close()
+        except Exception as exc:
+            logger.warning("worker_fmp_close_failed", error=str(exc))
 
     cache_redis: aioredis.Redis | None = ctx.get("cache_redis")
     if cache_redis is not None:

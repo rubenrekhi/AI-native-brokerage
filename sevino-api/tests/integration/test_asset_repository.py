@@ -1,5 +1,7 @@
 """Integration tests for AssetRepository against real local Postgres."""
 
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -348,3 +350,139 @@ class TestGetNamesBySymbols:
         )
 
         assert names == {"OLD": "Delisted Co"}
+
+
+async def _seed_enriched(
+    db_session: AsyncSession, rows: list[dict]
+) -> None:
+    """Insert assets with enrichment columns set, for radar/enrichment tests."""
+    for row in rows:
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO assets
+                    (symbol, name, tradeable, sector, enriched_at)
+                VALUES
+                    (:symbol, :name, :tradeable, :sector, :enriched_at)
+                """
+            ),
+            {
+                "symbol": row["symbol"],
+                "name": row.get("name", "Co"),
+                "tradeable": row.get("tradeable", True),
+                "sector": row.get("sector"),
+                "enriched_at": row.get("enriched_at"),
+            },
+        )
+    await db_session.flush()
+
+
+def _days_ago(n: int) -> datetime:
+    return datetime.now(timezone.utc) - timedelta(days=n)
+
+
+class TestListSymbolsNeedingEnrichment:
+    async def test_includes_never_and_stale_excludes_fresh(
+        self, db_session: AsyncSession
+    ):
+        await _seed_enriched(
+            db_session,
+            [
+                {"symbol": "NEVER", "enriched_at": None},
+                {"symbol": "STALE", "enriched_at": _days_ago(40)},
+                {"symbol": "FRESH", "enriched_at": _days_ago(5)},
+            ],
+        )
+
+        symbols = await AssetRepository.list_symbols_needing_enrichment(
+            db_session, limit=10, stale_days=30
+        )
+
+        assert set(symbols) == {"NEVER", "STALE"}
+
+    async def test_prioritizes_never_then_oldest(
+        self, db_session: AsyncSession
+    ):
+        await _seed_enriched(
+            db_session,
+            [
+                {"symbol": "OLDER", "enriched_at": _days_ago(50)},
+                {"symbol": "NEVER", "enriched_at": None},
+                {"symbol": "OLD", "enriched_at": _days_ago(40)},
+            ],
+        )
+
+        symbols = await AssetRepository.list_symbols_needing_enrichment(
+            db_session, limit=10, stale_days=30
+        )
+
+        # NULL first, then oldest enriched_at ascending.
+        assert symbols == ["NEVER", "OLDER", "OLD"]
+
+    async def test_respects_limit(self, db_session: AsyncSession):
+        await _seed_enriched(
+            db_session,
+            [{"symbol": f"S{i:02d}", "enriched_at": None} for i in range(10)],
+        )
+
+        symbols = await AssetRepository.list_symbols_needing_enrichment(
+            db_session, limit=3, stale_days=30
+        )
+
+        assert len(symbols) == 3
+
+
+class TestListEligibleForRadar:
+    async def test_filters_out_non_enriched_rows(
+        self, db_session: AsyncSession
+    ):
+        await _seed_enriched(
+            db_session,
+            [
+                {"symbol": "ENR1", "enriched_at": _days_ago(1)},
+                {"symbol": "ENR2", "enriched_at": _days_ago(2)},
+                {"symbol": "RAW", "enriched_at": None},
+            ],
+        )
+
+        eligible = await AssetRepository.list_eligible_for_radar(db_session)
+
+        assert {a.symbol for a in eligible} == {"ENR1", "ENR2"}
+
+
+class TestSectorsForSymbols:
+    async def test_returns_distinct_non_null_sectors(
+        self, db_session: AsyncSession
+    ):
+        await _seed_enriched(
+            db_session,
+            [
+                {"symbol": "AAPL", "sector": "Technology", "enriched_at": _days_ago(1)},
+                {"symbol": "MSFT", "sector": "Technology", "enriched_at": _days_ago(1)},
+                {"symbol": "JPM", "sector": "Financials", "enriched_at": _days_ago(1)},
+                {"symbol": "XYZ", "sector": None, "enriched_at": _days_ago(1)},
+            ],
+        )
+
+        sectors = await AssetRepository.sectors_for_symbols(
+            db_session, {"AAPL", "MSFT", "JPM", "XYZ"}
+        )
+
+        assert sectors == {"Technology", "Financials"}
+
+    async def test_uppercases_input_symbols(self, db_session: AsyncSession):
+        await _seed_enriched(
+            db_session,
+            [{"symbol": "AAPL", "sector": "Technology", "enriched_at": _days_ago(1)}],
+        )
+
+        sectors = await AssetRepository.sectors_for_symbols(
+            db_session, {"aapl"}
+        )
+
+        assert sectors == {"Technology"}
+
+    async def test_empty_input_returns_empty_set(
+        self, db_session: AsyncSession
+    ):
+        assert await AssetRepository.sectors_for_symbols(db_session, set()) == set()

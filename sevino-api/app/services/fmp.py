@@ -1,3 +1,4 @@
+from datetime import date
 from typing import Any, ClassVar
 
 import httpx
@@ -184,6 +185,34 @@ class FmpClient:
         if not data:
             return {}
         return data[0] if isinstance(data, list) else data
+
+    async def earnings_calendar(
+        self, from_date: date, to_date: date
+    ) -> list[dict[str, Any]]:
+        """Earnings events between two dates (inclusive). Raw FMP rows.
+
+        An empty window legitimately returns ``[]`` (no upcoming earnings),
+        so — unlike the per-symbol endpoints — an empty payload is not an
+        error.
+        """
+        data = await self._request(
+            "/earnings-calendar",
+            {"from": from_date.isoformat(), "to": to_date.isoformat()},
+        )
+        return data or []
+
+    async def dividend_calendar(
+        self, from_date: date, to_date: date
+    ) -> list[dict[str, Any]]:
+        """Dividend events between two dates (inclusive). Raw FMP rows.
+
+        Like :meth:`earnings_calendar`, an empty window returns ``[]``.
+        """
+        data = await self._request(
+            "/dividends-calendar",
+            {"from": from_date.isoformat(), "to": to_date.isoformat()},
+        )
+        return data or []
 
 
 def project_quote(raw: dict[str, Any]) -> dict[str, Any]:

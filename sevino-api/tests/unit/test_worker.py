@@ -314,6 +314,57 @@ class TestWorkerStartup:
         with pytest.raises(asyncio.CancelledError):
             await task
 
+    async def test_startup_stashes_fmp_client_when_key_present(
+        self, monkeypatch
+    ):
+        """sync_assets only enriches when ctx carries an FMP client, so
+        startup must construct one whenever a key is configured."""
+        fake_fmp = AsyncMock()
+        fmp_factory = MagicMock(return_value=fake_fmp)
+        monkeypatch.setattr("app.worker.FmpClient", fmp_factory)
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.aioredis.from_url", MagicMock(return_value=AsyncMock())
+        )
+        monkeypatch.setattr(
+            "app.worker.build_listeners", MagicMock(return_value=[])
+        )
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+        monkeypatch.setattr(app_worker.settings, "fmp_api_key", "key-123")
+
+        ctx: dict = {}
+        await app_worker.startup(ctx)
+
+        fmp_factory.assert_called_once_with(api_key="key-123")
+        assert ctx["fmp"] is fake_fmp
+
+    async def test_startup_sets_fmp_none_when_key_missing(self, monkeypatch):
+        """No FMP key (e.g. dev) → ctx['fmp'] is None and the rest of the
+        worker still boots; enrichment simply no-ops."""
+        fmp_factory = MagicMock()
+        monkeypatch.setattr("app.worker.FmpClient", fmp_factory)
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.aioredis.from_url", MagicMock(return_value=AsyncMock())
+        )
+        monkeypatch.setattr(
+            "app.worker.build_listeners", MagicMock(return_value=[])
+        )
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+        monkeypatch.setattr(app_worker.settings, "fmp_api_key", "")
+
+        ctx: dict = {}
+        await app_worker.startup(ctx)
+
+        fmp_factory.assert_not_called()
+        assert ctx["fmp"] is None
+
 
 class TestWorkerShutdown:
     """The shutdown hook cancels listener tasks, gracefully waits for them
@@ -411,6 +462,26 @@ class TestWorkerShutdown:
         await app_worker.shutdown(ctx)
 
         cache_redis.aclose.assert_awaited_once()
+
+    async def test_shutdown_closes_fmp(self):
+        """The FMP client created in startup must be closed so its httpx
+        connection doesn't leak into the next deploy."""
+        fmp = AsyncMock()
+        ctx = {"fmp": fmp, "listener_tasks": []}
+
+        await app_worker.shutdown(ctx)
+
+        fmp.close.assert_awaited_once()
+
+    async def test_shutdown_swallows_fmp_close_failures(self):
+        """A failing fmp.close must not raise out of shutdown — a flaky
+        socket teardown shouldn't wedge the worker mid-deploy."""
+        fmp = AsyncMock()
+        fmp.close.side_effect = RuntimeError("httpx client already gone")
+        ctx = {"fmp": fmp, "listener_tasks": []}
+
+        await app_worker.shutdown(ctx)  # must not raise
+        fmp.close.assert_awaited_once()
 
     @pytest.mark.parametrize(
         "exc",

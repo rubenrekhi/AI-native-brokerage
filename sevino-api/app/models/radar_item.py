@@ -35,5 +35,6 @@ class RadarItem(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     expires_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    bucket: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     user: Mapped[UserProfile] = relationship(back_populates="radar_items")

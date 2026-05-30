@@ -4,8 +4,16 @@ Alpaca is the source of truth for which symbols our users can trade. We
 pull the full active US-equity list once per day, construct an FMP logo
 URL from each symbol, and upsert into the local ``assets`` table that
 powers the ticker search typeahead.
+
+After the upsert, when an FMP client is available on ``ctx``, we enrich a
+capped batch of assets with sector/industry/market_cap/ipo_date/country/
+asset_type from FMP's profile endpoint. Enrichment is staggered (each
+asset re-checked at most every 30 days) and rate-limited, so a full
+backfill of the ~12k catalog spans a few daily runs.
 """
 
+import asyncio
+from datetime import date
 from typing import Any
 
 import sentry_sdk
@@ -13,16 +21,26 @@ import structlog
 from sqlalchemy import select
 
 from app.database import async_session
-from app.models.asset import Asset
+from app.exceptions import (
+    MarketDataError,
+    MarketDataUnavailableError,
+    MarketDataUpstreamError,
+)
+from app.models.asset import Asset, AssetType
 from app.repositories.asset import AssetRepository
 from app.services.alpaca_broker import (
     AlpacaBrokerService,
     AlpacaBrokerUnavailableError,
 )
+from app.services.fmp import FmpClient, none_if_blank
 
 logger = structlog.get_logger(__name__)
 
 FMP_LOGO_URL_TEMPLATE = "https://financialmodelingprep.com/image-stock/{symbol}.png"
+
+ENRICHMENT_BATCH_LIMIT = 500
+ENRICHMENT_CONCURRENCY = 10
+ENRICHMENT_STALE_DAYS = 30
 
 
 def _to_asset_row(alpaca_asset: dict[str, Any]) -> dict[str, Any] | None:
@@ -45,6 +63,103 @@ def _to_asset_row(alpaca_asset: dict[str, Any]) -> dict[str, Any] | None:
         "logo_url": FMP_LOGO_URL_TEMPLATE.format(symbol=symbol),
         "alpaca_asset_id": alpaca_asset.get("id"),
     }
+
+
+def _to_bigint(value: Any) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def _asset_type(raw: dict[str, Any]) -> str:
+    if raw.get("isEtf"):
+        return AssetType.ETF
+    if raw.get("isFund"):
+        return AssetType.FUND
+    return AssetType.STOCK
+
+
+def _profile_to_enrichment(raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "sector": none_if_blank(raw.get("sector")),
+        "industry": none_if_blank(raw.get("industry")),
+        "market_cap": _to_bigint(raw.get("marketCap")),
+        "ipo_date": _parse_iso_date(raw.get("ipoDate")),
+        "asset_type": _asset_type(raw),
+        "country": none_if_blank(raw.get("country")),
+    }
+
+
+async def _enrich_assets(fmp: FmpClient) -> dict[str, int]:
+    """Enrich a capped batch of stale/never-enriched assets from FMP.
+
+    Returns counts of enriched / no-data / failed for observability.
+    `MarketDataError` (402 = not in tier, or empty profile) is a permanent
+    per-ticker gap: we stamp `enriched_at` anyway so the stagger doesn't
+    keep retrying it. Transient upstream errors leave `enriched_at` NULL so
+    the next run picks the symbol back up.
+    """
+    # Don't hold a pooled connection across the FMP fetch batch — it can run
+    # tens of seconds at this concurrency. Read the symbol list, release the
+    # session, fetch, then reopen only for the writes.
+    async with async_session() as session:
+        symbols = await AssetRepository.list_symbols_needing_enrichment(
+            session,
+            limit=ENRICHMENT_BATCH_LIMIT,
+            stale_days=ENRICHMENT_STALE_DAYS,
+        )
+    if not symbols:
+        return {"enriched": 0, "no_data": 0, "failed": 0}
+
+    semaphore = asyncio.Semaphore(ENRICHMENT_CONCURRENCY)
+
+    async def _fetch(symbol: str) -> tuple[str, dict[str, Any] | None, bool]:
+        async with semaphore:
+            try:
+                raw = await fmp.profile(symbol)
+            except MarketDataError:
+                return symbol, None, True
+            except (MarketDataUnavailableError, MarketDataUpstreamError):
+                return symbol, None, False
+            return symbol, _profile_to_enrichment(raw), True
+
+    results = await asyncio.gather(*(_fetch(s) for s in symbols))
+
+    enriched_rows: list[dict[str, Any]] = []
+    no_data_symbols: list[str] = []
+    failed = 0
+    for symbol, mapped, stamp in results:
+        if mapped is not None:
+            enriched_rows.append({"symbol": symbol, **mapped})
+        elif stamp:
+            no_data_symbols.append(symbol)
+        else:
+            failed += 1
+
+    async with async_session() as session:
+        await AssetRepository.apply_enrichment(session, enriched_rows)
+        await AssetRepository.mark_enriched(session, no_data_symbols)
+        await session.commit()
+
+    counts = {
+        "enriched": len(enriched_rows),
+        "no_data": len(no_data_symbols),
+        "failed": failed,
+    }
+    logger.info("assets_enriched", **counts)
+    return counts
 
 
 def _capture_with_scope(exc: Exception, *, failure_stage: str) -> None:
@@ -143,6 +258,18 @@ async def sync_assets(ctx: dict) -> dict:
             "deactivated": deactivated,
         }
         logger.info("assets_synced", **summary)
+
+        # Enrichment runs only when the worker supplied an FMP client on
+        # ctx; it's a best-effort enhancement, so its failures must never
+        # roll back or mask the catalog sync above.
+        fmp: FmpClient | None = ctx.get("fmp")
+        if fmp is not None:
+            try:
+                summary["enrichment"] = await _enrich_assets(fmp)
+            except Exception as exc:
+                logger.error("assets_enrichment_failed", error=str(exc))
+                _capture_with_scope(exc, failure_stage="fmp_enrichment")
+
         return summary
     finally:
         if owns_broker:
