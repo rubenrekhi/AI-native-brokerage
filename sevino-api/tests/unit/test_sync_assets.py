@@ -18,6 +18,7 @@ def _alpaca_asset(
     name: str,
     exchange: str = "NASDAQ",
     asset_id: str | None = None,
+    fractionable: bool = True,
 ) -> dict:
     return {
         "id": asset_id or f"alp_{symbol.lower()}",
@@ -26,6 +27,7 @@ def _alpaca_asset(
         "exchange": exchange,
         "status": "active",
         "tradable": True,
+        "fractionable": fractionable,
     }
 
 
@@ -109,6 +111,7 @@ class TestSyncAssetsUpsert:
                 "name": "Apple Inc",
                 "exchange": "NASDAQ",
                 "tradeable": True,
+                "fractionable": True,
                 "logo_url": (
                     "https://financialmodelingprep.com/image-stock/AAPL.png"
                 ),
@@ -129,6 +132,86 @@ class TestSyncAssetsUpsert:
         broker.list_assets.assert_awaited_once_with(
             status="active", asset_class="us_equity"
         )
+
+
+class TestSyncAssetsFractionable:
+    async def test_captures_fractionable_true(self, monkeypatch):
+        broker = MagicMock()
+        broker.list_assets = AsyncMock(
+            return_value=[
+                _alpaca_asset(symbol="AAPL", name="Apple Inc", fractionable=True),
+            ]
+        )
+        _install_fake_session(monkeypatch, existing=[])
+        captured_rows: list[dict] = []
+
+        async def _capture(session, rows):
+            captured_rows.extend(rows)
+
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "bulk_upsert", _capture
+        )
+
+        await sync_assets({"alpaca": broker})
+
+        assert captured_rows[0]["fractionable"] is True
+
+    async def test_captures_fractionable_false(self, monkeypatch):
+        broker = MagicMock()
+        broker.list_assets = AsyncMock(
+            return_value=[
+                _alpaca_asset(
+                    symbol="ILLQ", name="Illiquid Co", fractionable=False
+                ),
+            ]
+        )
+        _install_fake_session(monkeypatch, existing=[])
+        captured_rows: list[dict] = []
+
+        async def _capture(session, rows):
+            captured_rows.extend(rows)
+
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "bulk_upsert", _capture
+        )
+
+        await sync_assets({"alpaca": broker})
+
+        assert captured_rows[0]["fractionable"] is False
+
+    async def test_defaults_fractionable_true_when_field_missing(
+        self, monkeypatch
+    ):
+        # Defensive: Alpaca has always included the field, but a future
+        # response shape change shouldn't crash the sync — match the column
+        # default so existing "let Alpaca decide" behavior is preserved.
+        broker = MagicMock()
+        broker.list_assets = AsyncMock(
+            return_value=[
+                {
+                    "id": "alp_xyz",
+                    "symbol": "XYZ",
+                    "name": "Xyz Corp",
+                    "exchange": "NASDAQ",
+                    "status": "active",
+                    "tradable": True,
+                    # fractionable intentionally omitted
+                },
+            ]
+        )
+        _install_fake_session(monkeypatch, existing=[])
+        captured_rows: list[dict] = []
+
+        async def _capture(session, rows):
+            captured_rows.extend(rows)
+
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "bulk_upsert", _capture
+        )
+
+        await sync_assets({"alpaca": broker})
+
+        assert captured_rows[0]["fractionable"] is True
 
 
 class TestSyncAssetsSummary:

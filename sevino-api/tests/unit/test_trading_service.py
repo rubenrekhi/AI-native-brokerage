@@ -44,7 +44,7 @@ def db():
 
 @pytest.fixture
 def asset():
-    return SimpleNamespace(symbol="TSLA", tradeable=True)
+    return SimpleNamespace(symbol="TSLA", tradeable=True, fractionable=True)
 
 
 @pytest.fixture
@@ -289,6 +289,85 @@ class TestPlaceOrderRules:
             )
         assert info.value.code == "INSUFFICIENT_POSITION"
         assert info.value.detail["held_qty"] == "3"
+        alpaca.create_order.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# place_order — fractional / notional pre-validation
+# ---------------------------------------------------------------------------
+
+
+class TestPlaceOrderFractionable:
+    async def test_fractionable_asset_allows_fractional_qty(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Schema only rejects fractional qty on limit orders, so a market
+        # order with qty="0.5" reaches this validator.
+        request = PlaceOrderRequest(
+            symbol="TSLA", side="buy", type="market", qty="0.5"
+        )
+
+        await TradingService.place_order(
+            db, alpaca=alpaca, user_id=user_id, data=request
+        )
+
+        alpaca.create_order.assert_awaited_once()
+        payload = alpaca.create_order.call_args.args[1]
+        assert payload["qty"] == "0.5"
+
+    async def test_non_fractionable_blocks_fractional_qty(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        patch_repos.get_asset.return_value = SimpleNamespace(
+            symbol="ILLQ", tradeable=True, fractionable=False
+        )
+
+        request = PlaceOrderRequest(
+            symbol="ILLQ", side="buy", type="market", qty="0.5"
+        )
+        with pytest.raises(ConflictError) as info:
+            await TradingService.place_order(
+                db, alpaca=alpaca, user_id=user_id, data=request
+            )
+
+        assert info.value.code == "ASSET_NOT_FRACTIONABLE"
+        assert info.value.detail == {"symbol": "ILLQ"}
+        alpaca.create_order.assert_not_called()
+
+    async def test_non_fractionable_allows_whole_qty(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        patch_repos.get_asset.return_value = SimpleNamespace(
+            symbol="ILLQ", tradeable=True, fractionable=False
+        )
+
+        request = PlaceOrderRequest(
+            symbol="ILLQ", side="buy", type="market", qty="10"
+        )
+        await TradingService.place_order(
+            db, alpaca=alpaca, user_id=user_id, data=request
+        )
+
+        alpaca.create_order.assert_awaited_once()
+
+    async def test_non_fractionable_blocks_notional_order(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Notional orders always produce fractional shares, so a
+        # whole-shares-only asset must reject them regardless of amount.
+        patch_repos.get_asset.return_value = SimpleNamespace(
+            symbol="ILLQ", tradeable=True, fractionable=False
+        )
+
+        request = PlaceOrderRequest(
+            symbol="ILLQ", side="buy", type="market", notional="100.00"
+        )
+        with pytest.raises(ConflictError) as info:
+            await TradingService.place_order(
+                db, alpaca=alpaca, user_id=user_id, data=request
+            )
+
+        assert info.value.code == "ASSET_NOT_FRACTIONABLE"
         alpaca.create_order.assert_not_called()
 
 

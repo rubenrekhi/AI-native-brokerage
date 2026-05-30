@@ -224,6 +224,60 @@ class TestBulkUpsert:
         )
         assert [row[0] for row in result.all()] == ["TSLA"]
 
+    async def test_persists_fractionable_flag_on_insert(
+        self, db_session: AsyncSession
+    ):
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [
+                {"symbol": "TSLA", "name": "Tesla", "fractionable": True},
+                {"symbol": "ILLQ", "name": "Illiquid Co", "fractionable": False},
+            ],
+        )
+
+        result = await db_session.execute(
+            text(
+                "SELECT symbol, fractionable FROM assets ORDER BY symbol"
+            )
+        )
+        rows = {sym: frac for sym, frac in result.all()}
+        assert rows == {"ILLQ": False, "TSLA": True}
+
+    async def test_updates_fractionable_flag_on_re_sync(
+        self, db_session: AsyncSession
+    ):
+        # Asset starts fractionable; Alpaca later flips it to whole-shares-only
+        # (e.g. after a delisting event). bulk_upsert must reflect the change.
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [{"symbol": "TSLA", "name": "Tesla", "fractionable": True}],
+        )
+
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [{"symbol": "TSLA", "name": "Tesla", "fractionable": False}],
+        )
+
+        result = await db_session.execute(
+            text("SELECT fractionable FROM assets WHERE symbol = 'TSLA'")
+        )
+        assert result.scalar_one() is False
+
+    async def test_defaults_fractionable_true_when_field_missing(
+        self, db_session: AsyncSession
+    ):
+        # Mirrors the column default — older callers that don't pass
+        # `fractionable` should land on True so behavior is unchanged.
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [{"symbol": "TSLA", "name": "Tesla"}],
+        )
+
+        result = await db_session.execute(
+            text("SELECT fractionable FROM assets WHERE symbol = 'TSLA'")
+        )
+        assert result.scalar_one() is True
+
 
 class TestSearchWildcardEscaping:
     async def test_percent_in_query_is_literal(

@@ -94,6 +94,25 @@ async def tradeable_asset(db_session: AsyncSession):
     await db_session.flush()
 
 
+@pytest.fixture
+async def non_fractionable_asset(db_session: AsyncSession):
+    """Insert a tradeable-but-not-fractionable asset (whole shares only)."""
+    await db_session.execute(
+        text(
+            """
+            INSERT INTO assets (
+                symbol, name, exchange, tradeable, fractionable, synced_at
+            ) VALUES (
+                'ILLQ', 'Illiquid Co', 'NASDAQ', TRUE, FALSE, now()
+            )
+            ON CONFLICT (symbol) DO UPDATE
+            SET tradeable = TRUE, fractionable = FALSE
+            """
+        )
+    )
+    await db_session.flush()
+
+
 # ---------------------------------------------------------------------------
 # POST /v1/trading/orders
 # ---------------------------------------------------------------------------
@@ -197,6 +216,29 @@ class TestPlaceOrderRoute:
 
         assert response.status_code == 409
         assert response.json()["code"] == "ACCOUNT_NOT_ACTIVE"
+
+    async def test_non_fractionable_asset_returns_409(
+        self,
+        authenticated_db_client,
+        active_brokerage,
+        non_fractionable_asset,
+        alpaca_mock,
+    ):
+        response = await authenticated_db_client.post(
+            "/v1/trading/orders",
+            json={
+                "symbol": "ILLQ",
+                "side": "buy",
+                "type": "market",
+                "qty": "0.5",
+            },
+        )
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "ASSET_NOT_FRACTIONABLE"
+        assert body["detail"] == {"symbol": "ILLQ"}
+        alpaca_mock.create_order.assert_not_called()
 
     async def test_validation_error_returns_422(
         self, authenticated_db_client
