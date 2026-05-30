@@ -86,8 +86,9 @@ class AssetRepository:
 
         - Inserts symbols not yet in the table.
         - Updates existing rows to match the input feed (name, exchange,
-          tradeable, logo_url, alpaca_asset_id). A symbol reappearing in
-          the feed after a prior soft-deactivate is reactivated here.
+          tradeable, fractionable, logo_url, alpaca_asset_id). A symbol
+          reappearing in the feed after a prior soft-deactivate is
+          reactivated here.
         - `synced_at` is refreshed for every row present in the input so
           it reflects "last time we saw this symbol in the feed."
         - Flips `tradeable` to False for symbols in the DB but absent from
@@ -104,6 +105,7 @@ class AssetRepository:
                 "name": a["name"],
                 "exchange": a.get("exchange"),
                 "tradeable": a.get("tradeable", True),
+                "fractionable": a.get("fractionable", True),
                 "logo_url": a.get("logo_url"),
                 "alpaca_asset_id": a.get("alpaca_asset_id"),
             }
@@ -112,10 +114,10 @@ class AssetRepository:
         if not rows:
             return
 
-        # asyncpg caps prepared-statement parameters at 32,767. With 6
+        # asyncpg caps prepared-statement parameters at 32,767. With 7
         # columns per row the live Alpaca feed (~12k symbols) overflows a
         # single INSERT, so chunk conservatively.
-        _COLS_PER_ROW = 6
+        _COLS_PER_ROW = 7
         chunk_size = 32_000 // _COLS_PER_ROW
         for start in range(0, len(rows), chunk_size):
             chunk = rows[start : start + chunk_size]
@@ -127,6 +129,7 @@ class AssetRepository:
                     "name": excluded.name,
                     "exchange": excluded.exchange,
                     "tradeable": excluded.tradeable,
+                    "fractionable": excluded.fractionable,
                     "logo_url": excluded.logo_url,
                     "alpaca_asset_id": excluded.alpaca_asset_id,
                     "synced_at": func.now(),

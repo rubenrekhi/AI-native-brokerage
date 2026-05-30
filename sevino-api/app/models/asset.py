@@ -16,6 +16,9 @@ class Asset(Base, TimestampMixin):
     tradeable: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default="true"
     )
+    fractionable: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="true"
+    )
     logo_url: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     alpaca_asset_id: Mapped[Optional[str]] = mapped_column(
         Text, unique=True, nullable=True

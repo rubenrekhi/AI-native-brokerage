@@ -38,6 +38,10 @@ def _to_asset_row(alpaca_asset: dict[str, Any]) -> dict[str, Any] | None:
         "name": name,
         "exchange": alpaca_asset.get("exchange"),
         "tradeable": True,
+        # Default to True if Alpaca omits the field — matches the column
+        # default and keeps the legacy "forward and let Alpaca decide" path
+        # for any asset whose flag we can't determine.
+        "fractionable": bool(alpaca_asset.get("fractionable", True)),
         "logo_url": FMP_LOGO_URL_TEMPLATE.format(symbol=symbol),
         "alpaca_asset_id": alpaca_asset.get("id"),
     }

@@ -56,6 +56,7 @@ class TradingService:
             symbol=data.symbol,
             side=data.side,
             qty=data.qty,
+            notional=data.notional,
         )
 
         time_in_force = time_in_force_for(data.type)
@@ -223,6 +224,7 @@ async def validate_trade_prerequisites(
     symbol: str,
     side: Literal["buy", "sell"],
     qty: str | None = None,
+    notional: str | None = None,
 ) -> tuple[BrokerageAccount, Asset]:
     """Reusable pre-trade validation. Raises domain errors on failure.
 
@@ -233,7 +235,9 @@ async def validate_trade_prerequisites(
 
     1. User has an ACTIVE brokerage account
     2. Symbol exists in the assets table and is tradeable
-    3. For sells: user holds the symbol, and qty (if provided) doesn't
+    3. Symbol supports the requested share granularity (whole-shares-only
+       assets reject fractional qty and any notional order)
+    4. For sells: user holds the symbol, and qty (if provided) doesn't
        exceed position
 
     Returns (brokerage, asset) on success so callers can reuse them
@@ -255,6 +259,13 @@ async def validate_trade_prerequisites(
             detail={"symbol": normalized_symbol},
         )
 
+    _require_fractionable_if_needed(
+        user_id=user_id,
+        asset=asset,
+        qty=qty,
+        notional=notional,
+    )
+
     if side == "sell":
         await _verify_sufficient_position(
             alpaca=alpaca,
@@ -264,6 +275,49 @@ async def validate_trade_prerequisites(
         )
 
     return brokerage, asset
+
+
+def _require_fractionable_if_needed(
+    *,
+    user_id: uuid.UUID,
+    asset: Asset,
+    qty: str | None,
+    notional: str | None,
+) -> None:
+    # Alpaca already rejects whole-shares-only orders that ask for
+    # fractional quantities, just with a slow round-trip and a generic
+    # 422. Short-circuit locally so iOS can surface a sharp message
+    # without the network hop.
+    if asset.fractionable:
+        return
+    needs_fractional = notional is not None
+    if not needs_fractional and qty is not None:
+        # Mirrors `_verify_sufficient_position`'s defensive parse: schema
+        # validates qty in the place_order flow, but the helper is reusable
+        # so we keep INVALID_QTY consistent across pre-trade checks.
+        try:
+            qty_decimal = Decimal(qty)
+        except InvalidOperation as exc:
+            raise ConflictError(
+                "Order quantity must be a valid decimal number.",
+                code="INVALID_QTY",
+                detail={"qty": qty},
+            ) from exc
+        needs_fractional = qty_decimal != qty_decimal.to_integral_value()
+    if not needs_fractional:
+        return
+    logger.warning(
+        "order_blocked_asset_not_fractionable",
+        user_id=str(user_id),
+        symbol=asset.symbol,
+        qty=qty,
+        notional=notional,
+    )
+    raise ConflictError(
+        f"{asset.symbol} does not support fractional shares.",
+        code="ASSET_NOT_FRACTIONABLE",
+        detail={"symbol": asset.symbol},
+    )
 
 
 async def _verify_sufficient_position(
