@@ -38,7 +38,8 @@ func mapHoldings(_ dto: HoldingsDTO) -> [Holding] {
         unrealizedPlpc: nil,
         changeToday: nil,
         changeTodayPercent: nil,
-        avgEntryPrice: nil
+        avgEntryPrice: nil,
+        buyingPower: dto.buyingPower
     )
 
     let positionRows = dto.positions.map { p in
@@ -51,7 +52,8 @@ func mapHoldings(_ dto: HoldingsDTO) -> [Holding] {
             unrealizedPlpc: p.unrealizedPlpc,
             changeToday: p.changeToday,
             changeTodayPercent: p.changeTodayPercent,
-            avgEntryPrice: p.avgEntryPrice
+            avgEntryPrice: p.avgEntryPrice,
+            buyingPower: nil
         )
     }
 

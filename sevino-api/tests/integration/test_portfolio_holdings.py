@@ -48,7 +48,11 @@ class _FakeRedis:
 
 
 def _account(**overrides) -> dict:
-    base = {"cash": "40291.92", "currency": "USD"}
+    base = {
+        "cash": "40291.92",
+        "buying_power": "39800.00",
+        "currency": "USD",
+    }
     base.update(overrides)
     return base
 
@@ -139,6 +143,7 @@ class TestHoldingsHappyPath:
         assert body["account_status"] == "ACTIVE"
         assert body["currency"] == "USD"
         assert body["cash"] == "40291.92"
+        assert body["buying_power"] == "39800.00"
         assert body["total_market_value"] == "1700.00"
         symbols = [p["symbol"] for p in body["positions"]]
         assert symbols == ["TSLA", "AMD"]

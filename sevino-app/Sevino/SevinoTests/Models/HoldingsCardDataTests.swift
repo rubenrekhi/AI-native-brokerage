@@ -13,7 +13,8 @@ final class HoldingsCardDataTests: XCTestCase {
             unrealizedPlpc: Decimal(string: "0.0708")!,
             changeToday: Decimal(string: "12.30")!,
             changeTodayPercent: Decimal(string: "0.0068")!,
-            avgEntryPrice: Decimal(string: "170.00")!
+            avgEntryPrice: Decimal(string: "170.00")!,
+            buyingPower: nil
         )
 
         XCTAssertEqual(holding.id, holding.ticker)
@@ -30,7 +31,8 @@ final class HoldingsCardDataTests: XCTestCase {
             unrealizedPlpc: Decimal(string: "0.25")!,
             changeToday: Decimal(string: "25.00")!,
             changeTodayPercent: Decimal(string: "0.0204")!,
-            avgEntryPrice: Decimal(string: "200.00")!
+            avgEntryPrice: Decimal(string: "200.00")!,
+            buyingPower: nil
         )
         let b = a
 

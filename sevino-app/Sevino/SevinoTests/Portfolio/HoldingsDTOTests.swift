@@ -16,6 +16,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "500.00",
+          "buying_power": "450.00",
           "total_market_value": "12000.00",
           "positions": [
             {
@@ -67,6 +68,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "500.00",
+          "buying_power": "450.00",
           "total_market_value": "800.00",
           "positions": [
             {
@@ -98,6 +100,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "0",
+          "buying_power": "0",
           "total_market_value": "31.25",
           "positions": [
             {
@@ -130,6 +133,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "100.00",
+          "buying_power": "100.00",
           "total_market_value": "100.00",
           "positions": [
             {
@@ -159,6 +163,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "1000.00",
+          "buying_power": "1000.00",
           "total_market_value": "0",
           "positions": []
         }
@@ -174,6 +179,7 @@ final class HoldingsDTOTests: XCTestCase {
           "account_status": "APPROVAL_PENDING",
           "currency": "USD",
           "cash": "0",
+          "buying_power": "0",
           "total_market_value": "0",
           "positions": []
         }
@@ -181,5 +187,21 @@ final class HoldingsDTOTests: XCTestCase {
         let dto = try makeDecoder().decode(HoldingsDTO.self, from: Data(json.utf8))
         XCTAssertEqual(dto.accountStatus, "APPROVAL_PENDING")
         XCTAssertEqual(dto.cash, Decimal(0))
+    }
+
+    func test_decodesBuyingPowerDistinctFromCash() throws {
+        let json = #"""
+        {
+          "account_status": "ACTIVE",
+          "currency": "USD",
+          "cash": "2450.00",
+          "buying_power": "1980.00",
+          "total_market_value": "0",
+          "positions": []
+        }
+        """#
+        let dto = try makeDecoder().decode(HoldingsDTO.self, from: Data(json.utf8))
+        XCTAssertEqual(dto.cash, Decimal(string: "2450.00"))
+        XCTAssertEqual(dto.buyingPower, Decimal(string: "1980.00"))
     }
 }
