@@ -28,6 +28,7 @@ from app.routes.plaid_webhooks import router as plaid_webhooks_router
 from app.routes.portfolio import router as portfolio_router
 from app.routes.radar import router as radar_router
 from app.routes.settings import router as settings_router
+from app.routes.shortcuts import router as shortcuts_router
 from app.routes.trading import router as trading_router
 
 configure_logging(settings.environment)
@@ -119,6 +120,7 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(brokerage_router, prefix="/v1/brokerage", tags=["brokerage"])
     app.include_router(portfolio_router, prefix="/v1/portfolio", tags=["portfolio"])
     app.include_router(settings_router, prefix="/v1/settings", tags=["settings"])
+    app.include_router(shortcuts_router, prefix="/v1/shortcuts", tags=["shortcuts"])
     app.include_router(trading_router, prefix="/v1/trading", tags=["trading"])
     app.include_router(
         market_data_router, prefix="/v1/market-data", tags=["market-data"]
