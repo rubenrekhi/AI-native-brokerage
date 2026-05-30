@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 ShortcutCategory = Literal[
     "first_time",
@@ -25,9 +25,19 @@ class Shortcut(BaseModel):
     id: uuid.UUID
     text: str
     category: ShortcutCategory
+    # Internal sort key for within-category ranking, normalized to a
+    # comparable 0–1 scale across rules; excluded from the wire format
+    # (the ranker has already applied it by the time we serialize).
+    magnitude: float = Field(default=0.0, exclude=True)
 
     @classmethod
-    def create(cls, *, text: str, category: ShortcutCategory) -> "Shortcut":
+    def create(
+        cls,
+        *,
+        text: str,
+        category: ShortcutCategory,
+        magnitude: float = 0.0,
+    ) -> "Shortcut":
         """Build a shortcut with a stable id derived from category + text.
 
         A deterministic id (uuid5) keeps a suggestion identity-stable across
@@ -37,6 +47,7 @@ class Shortcut(BaseModel):
             id=uuid.uuid5(_SHORTCUT_NAMESPACE, f"{category}:{text}"),
             text=text,
             category=category,
+            magnitude=magnitude,
         )
 
 

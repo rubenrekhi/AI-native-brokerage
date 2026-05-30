@@ -30,8 +30,8 @@ _CACHE_TTL = 30
 
 
 def _get_alpaca(request: Request) -> AlpacaBrokerService | None:
-    # Read leniently: the current rule set ignores it, and shortcuts must
-    # still serve if the broker/market-data singletons aren't wired.
+    # Read leniently: shortcuts must still serve (portfolio_state just stays
+    # empty) if the broker/market-data singletons aren't wired.
     return getattr(request.app.state, "alpaca", None)
 
 

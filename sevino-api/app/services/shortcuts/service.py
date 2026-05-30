@@ -16,7 +16,11 @@ from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.market_data import MarketDataService
 from app.services.shortcuts import ranker
 from app.services.shortcuts.context import ShortcutContext
-from app.services.shortcuts.rules import first_time, quiet_state
+from app.services.shortcuts.rules import (
+    first_time,
+    portfolio_state,
+    quiet_state,
+)
 from app.services.shortcuts.time_buckets import ET, current_bucket
 
 logger = structlog.get_logger(__name__)
@@ -48,6 +52,9 @@ class ShortcutsService:
         )
         rules = {
             "first_time": first_time.evaluate(ctx),
+            "portfolio_state": await portfolio_state.evaluate(
+                ctx, self._db, self._alpaca
+            ),
             "quiet_state": quiet_state.evaluate(ctx),
         }
         return ShortcutsResponse(items=ranker.rank(rules))

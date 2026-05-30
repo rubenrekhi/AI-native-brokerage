@@ -13,11 +13,19 @@ def rank(rules: dict[str, list[Shortcut]]) -> list[Shortcut]:
     """Merge category lists into the final ordered feed, capped at MAX_ITEMS.
 
     A non-empty ``first_time`` list takes precedence and leads the feed,
-    padded with ``quiet_state``; otherwise ``quiet_state`` fills the feed.
-    Further categories join this policy as later stages add them.
+    padded with ``quiet_state``. Otherwise categories stack in priority
+    order — ``portfolio_state`` (sorted by magnitude) first, then
+    ``quiet_state`` fills the rest. Further categories join this ladder as
+    later stages add them.
     """
     first_time = rules.get("first_time", [])
     quiet_state = rules.get("quiet_state", [])
     if first_time:
         return (first_time + quiet_state)[:MAX_ITEMS]
-    return quiet_state[:MAX_ITEMS]
+
+    ranked: list[Shortcut] = []
+    ranked += sorted(
+        rules.get("portfolio_state", []), key=lambda s: -s.magnitude
+    )
+    ranked += quiet_state
+    return ranked[:MAX_ITEMS]
