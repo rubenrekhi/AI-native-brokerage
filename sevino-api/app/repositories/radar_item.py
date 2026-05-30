@@ -56,6 +56,22 @@ class RadarItemRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_all_symbols(
+        db: AsyncSession, user_id: uuid.UUID
+    ) -> set[str]:
+        """Every symbol on the user's radar, ignoring expiry.
+
+        Unlike `list_for_user`, this includes expired-but-not-yet-swept rows.
+        The candidate sourcer excludes these from the pool so a new batch can
+        never re-pick a symbol that still has a row under the
+        `(user_id, symbol)` unique constraint.
+        """
+        result = await db.execute(
+            select(RadarItem.symbol).where(RadarItem.user_id == user_id)
+        )
+        return set(result.scalars().all())
+
+    @staticmethod
     async def get_by_id_for_user(
         db: AsyncSession, item_id: uuid.UUID, user_id: uuid.UUID
     ) -> RadarItem | None:

@@ -1,8 +1,8 @@
 """Integration tests for the radar_items table and RadarItemRepository.
 
 Covers the unique constraint and the read-side repository methods
-(`list_for_user`, `get_by_id_for_user`) including sort order and the
-read-time expiry filter.
+(`list_for_user`, `list_all_symbols`, `get_by_id_for_user`) including sort
+order and the read-time expiry filter.
 """
 
 import uuid
@@ -98,6 +98,33 @@ async def test_list_for_user_does_not_return_other_users_items(
 
     rows = await RadarItemRepository.list_for_user(db_session, test_user)
     assert [r.symbol for r in rows] == ["MINE"]
+
+
+async def test_list_all_symbols_includes_expired_rows_and_scopes_to_user(
+    db_session, test_user, make_extra_user
+):
+    other_user = await make_extra_user()
+    now = datetime.now(timezone.utc)
+    db_session.add(RadarItem(
+        user_id=test_user, symbol="EXPIRED",
+        source="ai_generated", is_favorited=False,
+        expires_at=now - timedelta(days=1),
+    ))
+    db_session.add(RadarItem(user_id=test_user, symbol="LIVE", expires_at=None))
+    db_session.add(RadarItem(user_id=other_user, symbol="THEIRS"))
+    await db_session.flush()
+
+    # list_for_user hides EXPIRED; list_all_symbols must still surface it so a
+    # new batch never re-picks a symbol that still holds a row.
+    visible = {
+        r.symbol
+        for r in await RadarItemRepository.list_for_user(db_session, test_user)
+    }
+    assert "EXPIRED" not in visible
+
+    assert await RadarItemRepository.list_all_symbols(
+        db_session, test_user
+    ) == {"EXPIRED", "LIVE"}
 
 
 async def test_get_by_id_for_user_returns_row_when_owned(
