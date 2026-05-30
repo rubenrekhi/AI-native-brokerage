@@ -671,6 +671,31 @@ class TestValidateTradePrerequisites:
 
         assert info.value.code == "INVALID_QTY"
 
+    async def test_invalid_qty_string_in_fractionable_check_raises_typed_conflict(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        # Mirrors the sell-side INVALID_QTY case for the fractionability
+        # branch: a non-fractionable asset + junk qty must surface a typed
+        # ConflictError rather than a bare decimal.InvalidOperation.
+        # Reachable when the helper is called outside the schema-validated
+        # place_order flow.
+        patch_repos.get_asset.return_value = SimpleNamespace(
+            symbol="ILLQ", tradeable=True, fractionable=False
+        )
+
+        with pytest.raises(ConflictError) as info:
+            await validate_trade_prerequisites(
+                db,
+                alpaca=alpaca,
+                user_id=user_id,
+                symbol="ILLQ",
+                side="buy",
+                qty="not-a-number",
+            )
+
+        assert info.value.code == "INVALID_QTY"
+        assert info.value.detail == {"qty": "not-a-number"}
+
 
 # ---------------------------------------------------------------------------
 # place_order — time_in_force round-trip auditing
