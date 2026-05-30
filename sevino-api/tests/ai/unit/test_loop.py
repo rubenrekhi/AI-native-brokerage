@@ -324,6 +324,7 @@ async def _run(
     hard_caps: HardCaps | None = None,
     tool_registry: ToolRegistry | None = None,
     user_message: str = "hello",
+    user_context: dict[str, Any] | None = None,
     langfuse: Any = None,
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
@@ -356,6 +357,8 @@ async def _run(
     }
     if server_tools_config is not None:
         kwargs["server_tools_config"] = server_tools_config
+    if user_context is not None:
+        kwargs["user_context"] = user_context
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -2516,7 +2519,7 @@ class TestAnthropicServerTools:
             return outcome
 
         monkeypatch.setattr(
-            "app.ai.runtime.loop._dispatch_tool_uses", _stub_dispatch
+            "app.ai.runtime.flow.iteration.dispatch_tool_uses", _stub_dispatch
         )
 
         client = _make_client([iter0, iter1])
@@ -2752,3 +2755,469 @@ class TestAnthropicServerTools:
         ]
         assert len(status_blocks) == 1
         assert status_blocks[0]["state"] == "failed"
+
+
+# ---------- user_context end-to-end ----------
+
+
+class TestUserContext:
+    # ``user_context`` flows: caller passes a dict → ``initialize_turn``
+    # persists a ``context`` block alongside the user-text block → on a
+    # follow-up turn ``to_anthropic_content`` synthesises a wrapper text
+    # block from the persisted JSON. The wrapper prefix is the model's
+    # only signal that the JSON is contextual — any drift here silently
+    # corrupts model reasoning.
+
+    async def test_persists_context_block_after_text_block(self, repo_mocks):
+        client = _make_client(_make_response())
+        ctx = {"symbol": "AAPL", "modal": "ticker_detail"}
+
+        await _run(
+            client, repo_mocks, user_message="what's this?", user_context=ctx
+        )
+
+        kwargs = repo_mocks["append_user_message"].call_args.kwargs
+        blocks = kwargs["content_blocks"]
+        assert len(blocks) == 2
+        assert blocks[0]["type"] == "text"
+        assert blocks[0]["text"] == "what's this?"
+        # Context block carries the raw payload — wrapping happens on
+        # reload via ``to_anthropic_content``, not at persist time.
+        assert blocks[1]["type"] == "context"
+        assert blocks[1]["data"] == ctx
+        # Both blocks must carry server-minted ULIDs so iOS resume can
+        # correlate them with later streamed events.
+        assert isinstance(blocks[0]["block_id"], str) and blocks[0]["block_id"]
+        assert isinstance(blocks[1]["block_id"], str) and blocks[1]["block_id"]
+        assert blocks[0]["block_id"] != blocks[1]["block_id"]
+
+    async def test_no_context_block_when_user_context_none(self, repo_mocks):
+        # The default path mints only the text block. Regression guard
+        # against accidentally appending an empty context block.
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks, user_message="hello")
+
+        kwargs = repo_mocks["append_user_message"].call_args.kwargs
+        blocks = kwargs["content_blocks"]
+        assert len(blocks) == 1
+        assert blocks[0]["type"] == "text"
+
+    async def test_no_context_block_when_user_context_empty_dict(
+        self, repo_mocks
+    ):
+        # ``if user_context:`` falsiness guard — empty dict shouldn't
+        # persist a context block, since the wrapper would attach a "{}"
+        # payload that confuses the model.
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks, user_message="hello", user_context={})
+
+        kwargs = repo_mocks["append_user_message"].call_args.kwargs
+        blocks = kwargs["content_blocks"]
+        assert len(blocks) == 1
+
+    async def test_history_reload_wraps_context_with_attached_prefix(
+        self, repo_mocks
+    ):
+        # When a prior turn's ``context`` block is reloaded from history,
+        # the loop synthesises a wrapper text block with the canonical
+        # "[Attached context from the user's open modal — use this data
+        # to inform your response]" prefix. The model receives this in
+        # ``messages``; anything other than the exact prefix would change
+        # its instructions.
+        prior_user = type(
+            "M",
+            (),
+            {
+                "role": "user",
+                "content_blocks": [
+                    {"type": "text", "block_id": "x", "text": "what's AAPL"},
+                    {
+                        "type": "context",
+                        "block_id": "y",
+                        "data": {"symbol": "AAPL"},
+                    },
+                ],
+            },
+        )()
+        repo_mocks["load_history"].return_value = [prior_user]
+        client = _make_client(_make_response())
+
+        # Snapshot ``messages`` at call time — the loop appends the
+        # assistant response after the call returns, so the post-call
+        # reference would show 2 messages instead of 1.
+        captured: dict[str, Any] = {}
+        original_stream = client.messages.stream
+
+        def capture_messages(**kwargs: Any) -> Any:
+            captured["messages"] = [dict(m) for m in kwargs["messages"]]
+            return original_stream(**kwargs)
+
+        client.messages.stream = MagicMock(side_effect=capture_messages)
+
+        await _run(client, repo_mocks)
+
+        # First Anthropic call sees the wrapped context as a text block.
+        history_messages = captured["messages"]
+        assert len(history_messages) == 1
+        user_blocks = history_messages[0]["content"]
+        assert len(user_blocks) == 2
+        assert user_blocks[0] == {"type": "text", "text": "what's AAPL"}
+        # The wrapped context block carries the exact prefix.
+        assert user_blocks[1]["type"] == "text"
+        expected_prefix = (
+            "[Attached context from the user's open modal — "
+            "use this data to inform your response]\n"
+        )
+        assert user_blocks[1]["text"].startswith(expected_prefix)
+        # Body is compact JSON of the data dict.
+        body = user_blocks[1]["text"][len(expected_prefix):]
+        assert body == '{"symbol":"AAPL"}'
+
+
+# ---------- non-error terminal stop reasons ----------
+
+
+class TestStopReasonRoutingNonError:
+    # The catch-all branch in ``_decide_after_response`` records
+    # ``stop_reason`` verbatim into ``terminal_state`` with no error code.
+    # This means refusal, stop_sequence, and unknown future values flow
+    # through as ``TurnCompleted`` (not ``Error``) — which can mask
+    # safety incidents from monitoring.
+
+    async def test_refusal_records_terminal_state_without_error_code(
+        self, repo_mocks
+    ):
+        # Anthropic's safety-refusal stop_reason. The loop currently
+        # treats it as a normal completion (no error_code), so iOS sees
+        # ``TurnCompleted``. If a future change wants to route this as
+        # an ``Error``, this test must be updated alongside it.
+        client = _make_client(_make_response(stop_reason="refusal"))
+
+        result, events = await _run(client, repo_mocks)
+
+        assert result.terminal_state == "refusal"
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "refusal"
+        assert kwargs["error_code"] is None
+        # iOS sees ``TurnCompleted`` — not ``Error``. This is the
+        # documented (if surprising) current behavior.
+        terminal_events = [
+            e for e in events if isinstance(e, (TurnCompleted, Error))
+        ]
+        assert len(terminal_events) == 1
+        assert isinstance(terminal_events[0], TurnCompleted)
+        assert terminal_events[0].terminal_state == "refusal"
+
+    async def test_stop_sequence_records_terminal_state_without_error_code(
+        self, repo_mocks
+    ):
+        # User-defined stop sequence hit. Same routing as refusal.
+        client = _make_client(_make_response(stop_reason="stop_sequence"))
+
+        result, events = await _run(client, repo_mocks)
+
+        assert result.terminal_state == "stop_sequence"
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["error_code"] is None
+        terminal_events = [
+            e for e in events if isinstance(e, (TurnCompleted, Error))
+        ]
+        assert len(terminal_events) == 1
+        assert isinstance(terminal_events[0], TurnCompleted)
+
+    async def test_none_stop_reason_falls_back_to_unknown(self, repo_mocks):
+        # Defensive ``or "unknown"`` branch — a None stop_reason should
+        # never reach us from a real API call, but the fallback prevents
+        # ``terminal_state=None`` from corrupting the row.
+        response = Message(
+            id="msg_no_stop",
+            content=[TextBlock(text="hi", type="text")],
+            model=MODEL_ID,
+            role="assistant",
+            stop_reason=None,
+            type="message",
+            usage=Usage(input_tokens=5, output_tokens=2),
+        )
+        client = _make_client(response)
+
+        result, _events = await _run(client, repo_mocks)
+
+        assert result.terminal_state == "unknown"
+        kwargs = repo_mocks["complete_agent_turn"].call_args.kwargs
+        assert kwargs["terminal_state"] == "unknown"
+        assert kwargs["error_code"] is None
+
+
+# ---------- block_id correlation fallback ----------
+
+
+class TestBlockIdFallback:
+    # The streamed ``content_block_start`` mints the ULID that iOS uses to
+    # correlate every subsequent ``text_delta`` and ``block_end`` event
+    # back to the persisted assistant block. If a text block lands in
+    # ``response.content`` without a matching ``content_block_start``
+    # (SDK glitch / partial stream / race), the loop mints a *new* ULID
+    # for persistence — diverging from the wire. iOS correlation breaks.
+    # This is the primary documented failure mode for resume.
+
+    async def test_missing_stream_event_mints_fallback_block_id(
+        self, repo_mocks, monkeypatch
+    ):
+        # Build a client whose stream emits NO content_block_start events
+        # but whose final_message DOES contain a text block. This is the
+        # exact SDK-drift case the fallback is defending against.
+        text_content = "hello"
+        final_message = Message(
+            id="msg_drift",
+            content=[TextBlock(text=text_content, type="text")],
+            model=MODEL_ID,
+            role="assistant",
+            stop_reason="end_turn",
+            type="message",
+            usage=Usage(input_tokens=5, output_tokens=2),
+        )
+
+        client = MagicMock(spec=anthropic.AsyncAnthropic)
+        # Empty event list → ``open_text_blocks`` stays empty during
+        # streaming. ``get_final_message`` still returns the block.
+        client.messages.stream = MagicMock(
+            return_value=_FakeStreamManager(_FakeStream([], final_message))
+        )
+
+        warnings: list[tuple[str, dict[str, Any]]] = []
+        from app.ai.runtime.flow import iteration as iteration_module
+
+        original_warning = iteration_module.logger.warning
+
+        def capture_warning(event: str, **kwargs: Any) -> None:
+            warnings.append((event, kwargs))
+            original_warning(event, **kwargs)
+
+        monkeypatch.setattr(
+            iteration_module.logger, "warning", capture_warning
+        )
+
+        result, events = await _run(client, repo_mocks)
+
+        # The persisted assistant block has a freshly-minted ULID, NOT
+        # whatever (none) was streamed.
+        assert len(result.assistant_message_blocks) == 1
+        persisted_block = result.assistant_message_blocks[0]
+        assert persisted_block["type"] == "text"
+        assert persisted_block["text"] == text_content
+        persisted_block_id = persisted_block["block_id"]
+        assert isinstance(persisted_block_id, str) and persisted_block_id
+
+        # iOS never received a ``BlockStart`` for the fallback id, so
+        # the assertion is: no streamed event uses the persisted id.
+        streamed_block_starts = [
+            e for e in events if isinstance(e, BlockStart)
+        ]
+        for event in streamed_block_starts:
+            assert event.block.get("block_id") != persisted_block_id
+
+        # The fallback path MUST log loudly. If this warning ever stops
+        # firing, operators lose the only signal that correlation broke.
+        fallback_warnings = [
+            (name, kw)
+            for (name, kw) in warnings
+            if name == "loop_text_block_id_fallback"
+        ]
+        assert len(fallback_warnings) == 1
+        _, log_kwargs = fallback_warnings[0]
+        # Tags carry the debugging context we'd need to diagnose.
+        assert "turn_id" in log_kwargs
+        assert log_kwargs["iteration_index"] == 0
+        assert log_kwargs["response_index"] == 0
+        assert log_kwargs["streamed_indices"] == []
+
+
+# ---------- shielded finalize ----------
+
+
+class TestShieldedFinalize:
+    # The outer finally wraps ``finalize_turn_row`` in ``asyncio.shield``
+    # specifically because sse-starlette re-cancels tasks during teardown.
+    # Without the shield, ``complete_agent_turn`` would be cancelled
+    # mid-COMMIT and the row would never close. This test forces the
+    # exact race: the loop enters finalize → COMMIT is in flight → the
+    # task is cancelled. With the shield, COMMIT lands; without it, the
+    # mock is never fully awaited.
+
+    async def test_cancel_during_finalize_does_not_truncate_commit(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+
+        in_finalize = asyncio.Event()
+        finalize_done = asyncio.Event()
+
+        async def slow_complete(*args: Any, **kwargs: Any) -> None:
+            in_finalize.set()
+            # ``shield`` masks the parent cancellation while this sleeps.
+            # Without the shield, this sleep would raise CancelledError
+            # and the row would never close.
+            await asyncio.sleep(0.05)
+            finalize_done.set()
+
+        repo_mocks["complete_agent_turn"].side_effect = slow_complete
+
+        em = SSEEmitter()
+        drain_task = asyncio.create_task(_drain(em))
+
+        kwargs: dict[str, Any] = {
+            "user_id": uuid.uuid4(),
+            "conversation_id": uuid.uuid4(),
+            "user_message": "hello",
+            "anthropic_client": client,
+            "db_factory": _make_db_factory(),
+            "tool_registry": EMPTY_REGISTRY,
+            "http_clients": ToolHttpClients(),
+            "system_prompt": SYSTEM_PROMPT,
+            "model_config": ModelConfig(model_id=MODEL_ID),
+            "hard_caps": HardCaps(),
+            "langfuse": _NoopLangfuse(),
+            "environment": "test",
+            "sse_emitter": em,
+        }
+        loop_task = asyncio.create_task(run_agent_turn(**kwargs))
+
+        # Wait for the loop to enter ``complete_agent_turn``.
+        await asyncio.wait_for(in_finalize.wait(), timeout=2.0)
+
+        # Cancel the loop task RIGHT NOW — while ``complete_agent_turn``
+        # is mid-await. The shield must keep the awaitable alive until
+        # it returns; only then should ``CancelledError`` propagate.
+        loop_task.cancel()
+
+        # ``finalize_done`` setting is the proof that the COMMIT
+        # actually completed despite the cancel landing during it.
+        await asyncio.wait_for(finalize_done.wait(), timeout=2.0)
+
+        with pytest.raises(asyncio.CancelledError):
+            await loop_task
+
+        await em.close()
+        await drain_task
+
+        repo_mocks["complete_agent_turn"].assert_awaited_once()
+
+
+# ---------- finalize_turn_row exception swallow ----------
+
+
+class TestFinalizeRowExceptionSwallow:
+    # ``finalize_turn_row`` wraps the assistant-message append and
+    # ``complete_agent_turn`` in ``try/except Exception`` and logs
+    # rather than re-raising. By the time finalize runs, the only
+    # signal the agent_turn row can give is its terminal_state — if
+    # finalize itself raised, the loop's outer finally would have no
+    # downstream catch and the failure would surface as a 500 to the
+    # client. The swallow is intentional, but it carries the cost of
+    # silent compound failures: a successful assistant-message append
+    # followed by a failing complete_agent_turn leaves an orphan row
+    # with only a log line as a signal.
+
+    async def test_complete_agent_turn_failure_does_not_propagate(
+        self, repo_mocks, monkeypatch
+    ):
+        # Loop returns the normal ``AgentTurnResult`` even though the
+        # final commit failed. Operators see the log; the caller does
+        # not see an exception. This is the contract — any regression
+        # that propagates would change a recoverable mid-turn failure
+        # into a HTTP 500.
+        repo_mocks["complete_agent_turn"].side_effect = RuntimeError(
+            "db gone"
+        )
+
+        warnings_captured: list[tuple[str, dict[str, Any]]] = []
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger,
+            "exception",
+            lambda event, **kw: warnings_captured.append((event, kw)),
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # The result is the normal end_turn result — no propagation.
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 1
+
+        # The compound-failure path MUST log loudly so operators see
+        # the orphan turn row signal.
+        finalize_errors = [
+            (name, kw)
+            for (name, kw) in warnings_captured
+            if name == "agent_turn_finalize_failed"
+        ]
+        assert len(finalize_errors) == 1
+        _, log_kwargs = finalize_errors[0]
+        assert log_kwargs["terminal_state"] == "end_turn"
+        assert "turn_id" in log_kwargs
+
+    async def test_append_assistant_message_failure_does_not_propagate(
+        self, repo_mocks, monkeypatch
+    ):
+        # The first DB write inside finalize. If this raises, the
+        # ``complete_agent_turn`` call never happens — the agent_turn
+        # row stays non-terminal. The log line is operators' only
+        # signal.
+        repo_mocks["append_assistant_message"].side_effect = RuntimeError(
+            "db gone"
+        )
+
+        warnings_captured: list[tuple[str, dict[str, Any]]] = []
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger,
+            "exception",
+            lambda event, **kw: warnings_captured.append((event, kw)),
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # The loop returns normally even though the assistant message
+        # never persisted.
+        assert result.terminal_state == "end_turn"
+        # ``complete_agent_turn`` was never called — the exception in
+        # append_assistant_message aborted the rest of finalize.
+        repo_mocks["complete_agent_turn"].assert_not_awaited()
+        # But the log fired.
+        assert any(
+            name == "agent_turn_finalize_failed"
+            for (name, _kw) in warnings_captured
+        )
+
+    async def test_orphan_assistant_message_when_complete_agent_turn_fails(
+        self, repo_mocks, monkeypatch
+    ):
+        # The compound-failure case the audit flagged: assistant
+        # message persists, but the turn-row link never lands. iOS
+        # would see a TurnCompleted (loop succeeds) while the DB shows
+        # a non-terminal agent_turn pointing at a freshly-persisted
+        # message. Only the log connects the two.
+        repo_mocks["complete_agent_turn"].side_effect = RuntimeError("db")
+
+        from app.ai.runtime.flow import turn_lifecycle
+
+        monkeypatch.setattr(
+            turn_lifecycle.logger, "exception", lambda *a, **kw: None
+        )
+
+        client = _make_client(_make_response())
+        result, _events = await _run(client, repo_mocks)
+
+        # Assistant message DID land.
+        repo_mocks["append_assistant_message"].assert_awaited_once()
+        # complete_agent_turn was attempted and raised.
+        repo_mocks["complete_agent_turn"].assert_awaited_once()
+        # Loop returned normally — the orphan state is invisible
+        # to the caller.
+        assert result.terminal_state == "end_turn"
