@@ -79,6 +79,32 @@ def _render_digest_card_system_context(digest_card: dict[str, Any]) -> str:
     return "The user is currently viewing this digest card:\n" + payload
 
 
+def _digest_card_context_source(
+    digest_card: dict[str, Any] | None,
+) -> dict[str, str | None] | None:
+    if digest_card is None:
+        return None
+
+    kind = digest_card.get("kind")
+    if not isinstance(kind, str) or not kind:
+        return None
+
+    symbol: str | None = None
+    related_symbols = digest_card.get("related_symbols") or digest_card.get(
+        "relatedSymbols"
+    )
+    if isinstance(related_symbols, list) and related_symbols:
+        first_symbol = related_symbols[0]
+        if isinstance(first_symbol, str) and first_symbol:
+            symbol = first_symbol
+    if symbol is None:
+        raw_symbol = digest_card.get("symbol")
+        if isinstance(raw_symbol, str) and raw_symbol:
+            symbol = raw_symbol
+
+    return {"symbol": symbol, "kind": kind}
+
+
 async def run_agent_turn(
     *,
     user_id: uuid.UUID,
@@ -152,7 +178,11 @@ async def run_agent_turn(
         # this await still leaves ``turn_id`` set in the outer scope —
         # the outer finally relies on it to finalise the row.
         await sse_emitter.emit(
-            TurnStarted(turn_id=turn_id, conversation_id=conversation_id)
+            TurnStarted(
+                turn_id=turn_id,
+                conversation_id=conversation_id,
+                card_context_source=_digest_card_context_source(digest_card),
+            )
         )
 
         # Mark the system block as a cache breakpoint so Anthropic reuses

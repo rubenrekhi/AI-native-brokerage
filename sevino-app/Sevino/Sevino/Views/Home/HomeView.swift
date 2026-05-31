@@ -362,7 +362,8 @@ struct HomeView: View {
             DigestStackView(
                 scale: scale,
                 viewModel: digestViewModel,
-                onRouteToChat: routeToChatFromDigest
+                onRouteToChat: routeToChatFromDigest,
+                onSubmitChat: sendDigestMessage
             )
         }
     }
@@ -547,6 +548,20 @@ struct HomeView: View {
         dismissAllModals()
         shortcutsExpanded = false
         tickerMentionViewModel.requestFocus()
+    }
+
+    private func sendDigestMessage(text: String, digestCard: ChatDigestCard) {
+        dismissAllModals()
+        shortcutsExpanded = false
+        tickerMentionViewModel.clear()
+        Task {
+            do {
+                try await viewModel.send(text: text, digestCard: digestCard)
+            } catch {
+                // Failure is already reflected in the conversation store's
+                // turn state; user-facing surfacing of send errors is post-v0.
+            }
+        }
     }
 
     private func toggleSidebar() {

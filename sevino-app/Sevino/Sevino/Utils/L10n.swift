@@ -347,7 +347,9 @@ enum L10n {
 
     enum Digest {
         static let title = String(localized: "digest.title")
+        static let chatPlaceholder = String(localized: "digest.chat_placeholder")
         static let dismissAccessibility = String(localized: "digest.dismiss_accessibility")
+        static let sendAccessibility = String(localized: "digest.send_accessibility")
         static let earningsEpsActual = String(localized: "digest.earnings_eps_actual")
         static let earningsEpsEstimate = String(localized: "digest.earnings_eps_estimate")
         static let earningsRevenueActual = String(localized: "digest.earnings_revenue_actual")
@@ -527,6 +529,14 @@ enum L10n {
     }
 
     enum Chat {
+        static func cardContextSourceWithSymbol(_ symbol: String, _ kind: String) -> String {
+            String(format: String(localized: "chat.card_context_source_with_symbol"), symbol, kind)
+        }
+        static func cardContextSourceWithoutSymbol(_ kind: String) -> String {
+            String(format: String(localized: "chat.card_context_source_without_symbol"), kind)
+        }
+        static let cardKindEarnings = String(localized: "chat.card_kind_earnings")
+        static let cardKindOrderActivity = String(localized: "chat.card_kind_order_activity")
         static let statusInProgress = String(localized: "chat.status_in_progress")
         static let statusComplete = String(localized: "chat.status_complete")
         static let statusFailed = String(localized: "chat.status_failed")

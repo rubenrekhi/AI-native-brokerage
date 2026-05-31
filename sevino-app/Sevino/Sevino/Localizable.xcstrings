@@ -26,6 +26,16 @@
         }
       }
     },
+    "digest.chat_placeholder" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask about this card"
+          }
+        }
+      }
+    },
     "digest.dismiss_accessibility" : {
       "localizations" : {
         "en" : {
@@ -202,6 +212,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld of %lld"
+          }
+        }
+      }
+    },
+    "digest.send_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ask about this digest card"
           }
         }
       }
@@ -778,6 +798,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Don't have an account? Sign up"
+          }
+        }
+      }
+    },
+    "chat.card_context_source_with_symbol" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "from your %1$@ %2$@ card"
+          }
+        }
+      }
+    },
+    "chat.card_context_source_without_symbol" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "from your %@ card"
+          }
+        }
+      }
+    },
+    "chat.card_kind_earnings" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "earnings"
+          }
+        }
+      }
+    },
+    "chat.card_kind_order_activity" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "order activity"
           }
         }
       }

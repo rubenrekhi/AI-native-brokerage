@@ -75,6 +75,7 @@ final class ConversationStore {
     /// stray pre-`turn_started` event can't accidentally mutate the user's
     /// optimistic message.
     private var currentAssistantMessageId: UUID?
+    private var pendingCardContextSource: CardContextSource?
 
     private static let logger = Logger(subsystem: "ai.sevino.Sevino", category: "ConversationStore")
 
@@ -185,6 +186,8 @@ final class ConversationStore {
         )
         messages.append(userMessage)
 
+        pendingCardContextSource = digestCard.flatMap(CardContextSource.init)
+
         let request = try buildRequest(
             message: text,
             context: context,
@@ -197,6 +200,7 @@ final class ConversationStore {
         defer {
             currentAssistantMessageId = nil
             currentTurnId = nil
+            pendingCardContextSource = nil
         }
 
         do {
@@ -235,7 +239,12 @@ final class ConversationStore {
             currentTurnId = payload.turnId
             let id = UUID()
             currentAssistantMessageId = id
-            messages.append(Message(id: id, role: .assistant, blocks: []))
+            messages.append(Message(
+                id: id,
+                role: .assistant,
+                blocks: [],
+                cardContextSource: payload.cardContextSource ?? pendingCardContextSource
+            ))
 
         case .status:
             // Turn-level status notes are reserved for future use; v0 renders

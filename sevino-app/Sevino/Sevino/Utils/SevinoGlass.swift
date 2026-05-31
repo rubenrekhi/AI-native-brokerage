@@ -14,6 +14,10 @@ enum SevinoGlass {
     static let navCircleClear = NavCircleClearGlass()
     static let navPillClear = NavPillClearGlass()
 
+    static func card(cornerRadius: CGFloat) -> CardGlass {
+        CardGlass(cornerRadius: cornerRadius)
+    }
+
     static func tintedButton(tint: Color) -> TintedButtonGlass {
         TintedButtonGlass(tint: tint)
     }
@@ -52,15 +56,21 @@ struct SevinoGlassContainer<Content: View>: View {
 struct CardGlass: ViewModifier {
     static let cornerRadius: CGFloat = 28
 
+    private let radius: CGFloat
+
+    init(cornerRadius: CGFloat = Self.cornerRadius) {
+        self.radius = cornerRadius
+    }
+
     func body(content: Content) -> some View {
         if #available(iOS 26, *) {
             content
-                .glassEffect(.regular, in: .rect(cornerRadius: Self.cornerRadius))
+                .glassEffect(.regular, in: .rect(cornerRadius: radius))
         } else {
             content
                 .background(
                     .ultraThinMaterial,
-                    in: RoundedRectangle(cornerRadius: Self.cornerRadius)
+                    in: RoundedRectangle(cornerRadius: radius)
                 )
         }
     }

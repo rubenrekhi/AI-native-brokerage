@@ -13,7 +13,8 @@ final class SSEEventTests: XCTestCase {
             "id": "01HX0000000000000000000001",
             "type": "turn_started",
             "turn_id": "11111111-2222-3333-4444-555555555555",
-            "conversation_id": "66666666-7777-8888-9999-AAAAAAAAAAAA"
+            "conversation_id": "66666666-7777-8888-9999-AAAAAAAAAAAA",
+            "card_context_source": {"symbol": "AAPL", "kind": "earnings_result"}
         }
         """.utf8)
 
@@ -26,7 +27,24 @@ final class SSEEventTests: XCTestCase {
         XCTAssertEqual(payload.id, "01HX0000000000000000000001")
         XCTAssertEqual(payload.turnId, UUID(uuidString: "11111111-2222-3333-4444-555555555555"))
         XCTAssertEqual(payload.conversationId, UUID(uuidString: "66666666-7777-8888-9999-AAAAAAAAAAAA"))
+        XCTAssertEqual(payload.cardContextSource, CardContextSource(symbol: "AAPL", kind: "earnings_result"))
         XCTAssertEqual(event.wireType, "turn_started")
+    }
+
+    func testDecodesTurnStartedWithoutCardContextSource() throws {
+        let json = Data("""
+        {
+            "id": "01HX0000000000000000000001",
+            "type": "turn_started",
+            "turn_id": "11111111-2222-3333-4444-555555555555",
+            "conversation_id": "66666666-7777-8888-9999-AAAAAAAAAAAA"
+        }
+        """.utf8)
+
+        guard case let .turnStarted(payload) = try SSEEvent.decode(from: json) else {
+            return XCTFail("expected .turnStarted")
+        }
+        XCTAssertNil(payload.cardContextSource)
     }
 
     func testDecodesStatus() throws {

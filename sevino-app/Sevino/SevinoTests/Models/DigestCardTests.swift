@@ -42,4 +42,37 @@ final class DigestCardTests: XCTestCase {
         XCTAssertEqual(card.payload["kind"], .string("canonical-kind"))
         XCTAssertEqual(card.payload["headline"], .string("AMD moved 5%"))
     }
+
+    func testBuildsFromConcreteDigestCardWithSnakeCaseFields() throws {
+        let id = UUID()
+        let digestCard = DigestCard.upcomingEarnings(UpcomingEarningsDigestCard(
+            id: id,
+            priority: 4,
+            relatedSymbols: ["AAPL"],
+            cardContext: ["source": .string("test")],
+            symbol: "AAPL",
+            name: "Apple",
+            reportsAt: Date(timeIntervalSince1970: 1_780_000_000),
+            relativeLabel: "tomorrow"
+        ))
+
+        let chatCard = try ChatDigestCard(digestCard: digestCard)
+
+        XCTAssertEqual(chatCard.payload["id"], .string(id.uuidString))
+        XCTAssertEqual(chatCard.payload["kind"], .string("upcoming_earnings"))
+        XCTAssertEqual(chatCard.payload["related_symbols"], .array([.string("AAPL")]))
+        XCTAssertNotNil(chatCard.payload["reports_at"])
+    }
+
+    func testCardContextSourceFormatsEarningsChipText() {
+        let card = ChatDigestCard(
+            id: "digest-1",
+            kind: "earnings_result",
+            fields: ["related_symbols": .array([.string("AAPL")])]
+        )
+
+        let source = CardContextSource(digestCard: card)
+
+        XCTAssertEqual(source?.displayText, "from your AAPL earnings card")
+    }
 }

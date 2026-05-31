@@ -37,11 +37,13 @@ extension SSEEvent {
         let id: String
         let turnId: UUID
         let conversationId: UUID
+        let cardContextSource: CardContextSource?
 
         private enum CodingKeys: String, CodingKey {
             case id
             case turnId = "turn_id"
             case conversationId = "conversation_id"
+            case cardContextSource = "card_context_source"
         }
     }
 

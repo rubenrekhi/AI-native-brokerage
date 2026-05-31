@@ -52,6 +52,7 @@ class TurnStarted(_BaseEvent):
     type: Literal["turn_started"] = "turn_started"
     turn_id: UUID
     conversation_id: UUID
+    card_context_source: dict[str, str | None] | None = None
 
 
 class Status(_BaseEvent):

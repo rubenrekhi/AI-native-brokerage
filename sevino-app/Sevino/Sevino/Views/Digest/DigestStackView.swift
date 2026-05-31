@@ -1,9 +1,13 @@
 import SwiftUI
+#if canImport(UIKit)
+import UIKit
+#endif
 
 struct DigestStackView: View {
     let scale: CGFloat
     @Bindable var viewModel: DigestViewModel
     let onRouteToChat: () -> Void
+    let onSubmitChat: (String, ChatDigestCard) -> Void
 
     @Environment(\.dismiss) private var dismiss
     @State private var dragOffset: CGFloat = 0
@@ -40,9 +44,19 @@ struct DigestStackView: View {
                     currentCardIndex: viewModel.currentCardIndex,
                     scale: scale
                 )
-                .padding(.bottom, 20 * scale)
+                .padding(.bottom, 96 * scale)
             }
         }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            DigestChatInputBar(
+                scale: scale,
+                viewModel: viewModel,
+                onSubmit: { Task { await submitChat() } }
+            )
+            .padding(.horizontal, 16 * scale)
+            .padding(.bottom, 10 * scale)
+        }
+        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
     }
 
     private func stackOffset(cardWidth: CGFloat) -> CGFloat {
@@ -79,6 +93,26 @@ struct DigestStackView: View {
         await viewModel.dismissToPeek()
         dismiss()
         onRouteToChat()
+    }
+
+    private func submitChat() async {
+        let text = viewModel.chatText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, let card = viewModel.currentChatDigestCard() else { return }
+        viewModel.clearChatText()
+        await viewModel.dismissToPeek()
+        dismiss()
+        onSubmitChat(text, card)
+    }
+
+    private func dismissKeyboard() {
+        #if canImport(UIKit)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder),
+            to: nil,
+            from: nil,
+            for: nil
+        )
+        #endif
     }
 }
 
@@ -182,6 +216,11 @@ private struct DigestCardBody: View {
 
 #Preview {
     let viewModel = DigestViewModel(client: PlaceholderDigestAPIClient())
-    return DigestStackView(scale: 1, viewModel: viewModel, onRouteToChat: {})
+    return DigestStackView(
+        scale: 1,
+        viewModel: viewModel,
+        onRouteToChat: {},
+        onSubmitChat: { _, _ in }
+    )
         .task { await viewModel.refreshForForeground() }
 }

@@ -70,6 +70,30 @@ final class DigestViewModelTests: XCTestCase {
         XCTAssertEqual(client.dismissDigestCallCount, 1)
     }
 
+    func testChatTextSurvivesCardSwipes() async {
+        client.todayResponse = makeResponse(cards: [makeCard(), makeCard()], dismissedAt: nil)
+        await viewModel.refreshForForeground()
+        viewModel.chatText = "Explain this"
+
+        XCTAssertTrue(viewModel.showNextCard())
+
+        XCTAssertEqual(viewModel.chatText, "Explain this")
+    }
+
+    func testCurrentChatDigestCardCapturesCardInView() async throws {
+        let firstCard = makeCard(symbol: "AAPL")
+        let secondCard = makeCard(symbol: "MSFT")
+        client.todayResponse = makeResponse(cards: [firstCard, secondCard], dismissedAt: nil)
+        await viewModel.refreshForForeground()
+        XCTAssertTrue(viewModel.showNextCard())
+
+        let chatCard = try XCTUnwrap(viewModel.currentChatDigestCard())
+
+        XCTAssertEqual(chatCard.payload["id"], .string(secondCard.id.uuidString))
+        XCTAssertEqual(chatCard.payload["kind"], .string("market_context"))
+        XCTAssertEqual(chatCard.payload["related_symbols"], .array([.string("MSFT")]))
+    }
+
     private func makeResponse(cards: [DigestCard], dismissedAt: Date?) -> DigestTodayResponseDTO {
         DigestTodayResponseDTO(
             snapshot: DigestSnapshotDTO(
@@ -84,11 +108,11 @@ final class DigestViewModelTests: XCTestCase {
         )
     }
 
-    private func makeCard() -> DigestCard {
+    private func makeCard(symbol: String? = nil) -> DigestCard {
         .marketContext(MarketContextDigestCard(
             id: UUID(),
             priority: 0,
-            relatedSymbols: [],
+            relatedSymbols: symbol.map { [$0] } ?? [],
             cardContext: [:],
             direction: "mixed",
             sp500ChangePct: 0.004,

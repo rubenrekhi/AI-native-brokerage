@@ -49,8 +49,18 @@ final class HomeViewModel {
             conversationStoreFactory ?? { ConversationStore(conversationId: $0) }
     }
 
-    func send(text: String, context: [String: JSONValue]? = nil, attachedContext: AttachedContext? = nil) async throws {
-        try await conversationStore.send(text: text, context: context, attachedContext: attachedContext)
+    func send(
+        text: String,
+        context: [String: JSONValue]? = nil,
+        digestCard: ChatDigestCard? = nil,
+        attachedContext: AttachedContext? = nil
+    ) async throws {
+        try await conversationStore.send(
+            text: text,
+            context: context,
+            digestCard: digestCard,
+            attachedContext: attachedContext
+        )
     }
 
     /**

@@ -43,6 +43,9 @@ struct MessageRowView: View {
         let ordinals = textBlockOrdinals(in: message.blocks)
         let lastTextOrdinal = ordinals.values.max() ?? -1
         VStack(alignment: .leading, spacing: 8 * scale) {
+            if let source = message.cardContextSource {
+                CardContextSourceChip(source: source, scale: scale)
+            }
             ForEach(message.blocks) { block in
                 blockView(block, ordinals: ordinals, lastTextOrdinal: lastTextOrdinal)
             }
@@ -83,6 +86,27 @@ struct MessageRowView: View {
         case .thinking(let tb):
             ThinkingBlockView(block: tb, scale: scale)
         }
+    }
+}
+
+private struct CardContextSourceChip: View {
+    let source: CardContextSource
+    let scale: CGFloat
+
+    var body: some View {
+        HStack(spacing: 6 * scale) {
+            Image(systemName: "doc.text.magnifyingglass")
+                .font(.system(size: 11 * scale, weight: .semibold))
+            Text(source.displayText)
+                .font(.system(size: 12 * scale, weight: .medium))
+                .lineLimit(1)
+                .minimumScaleFactor(0.86)
+        }
+        .foregroundStyle(Color.sevinoSecondary.opacity(0.72))
+        .padding(.horizontal, 10 * scale)
+        .padding(.vertical, 6 * scale)
+        .background(Color.sevinoSecondary.opacity(0.08), in: .capsule)
+        .accessibilityLabel(source.displayText)
     }
 }
 

@@ -310,6 +310,22 @@ struct ChatDigestCard: Codable, Equatable, Sendable {
         self.payload = payload
     }
 
+    init(digestCard: DigestCard) throws {
+        let encoder = JSONEncoder.sevino()
+        encoder.dateEncodingStrategy = .iso8601
+        let data = try encoder.encode(digestCard)
+        let value = try JSONDecoder().decode(JSONValue.self, from: data)
+        guard case .object(let payload) = value else {
+            throw DecodingError.dataCorrupted(
+                DecodingError.Context(
+                    codingPath: [],
+                    debugDescription: "DigestCard encoded as non-object JSON"
+                )
+            )
+        }
+        self.payload = payload
+    }
+
     init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
         payload = try container.decode([String: JSONValue].self)

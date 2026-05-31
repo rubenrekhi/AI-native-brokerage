@@ -369,6 +369,49 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(context["headline"] as? String, "AMD moved 5%")
     }
 
+    func testDigestCardAddsSourceToAssistantMessage() async throws {
+        let client = MockSSEClient(script: [
+            .yield(makeRaw(json: turnStartedJSON())),
+            .yield(makeRaw(json: blockStartTextJSON(blockId: "b1"))),
+            .yield(makeRaw(json: textDeltaJSON(blockId: "b1", text: "Reading the card."))),
+            .yield(makeRaw(json: blockEndJSON(blockId: "b1"))),
+            .yield(makeRaw(json: turnCompletedJSON())),
+        ])
+        let store = makeStore(client: client)
+        let digestCard = ChatDigestCard(
+            id: "digest-1",
+            kind: "earnings_result",
+            fields: ["related_symbols": .array([.string("AAPL")])]
+        )
+
+        try await store.send(text: "what matters?", digestCard: digestCard)
+
+        XCTAssertEqual(
+            store.messages[1].cardContextSource,
+            CardContextSource(symbol: "AAPL", kind: "earnings_result")
+        )
+    }
+
+    func testTurnStartedCardContextSourceOverridesDigestFallback() async throws {
+        let client = MockSSEClient(script: [
+            .yield(makeRaw(json: turnStartedJSON(cardContextSource: #"{"symbol":"MSFT","kind":"news"}"#))),
+            .yield(makeRaw(json: turnCompletedJSON())),
+        ])
+        let store = makeStore(client: client)
+        let digestCard = ChatDigestCard(
+            id: "digest-1",
+            kind: "earnings_result",
+            fields: ["related_symbols": .array([.string("AAPL")])]
+        )
+
+        try await store.send(text: "what matters?", digestCard: digestCard)
+
+        XCTAssertEqual(
+            store.messages[1].cardContextSource,
+            CardContextSource(symbol: "MSFT", kind: "news")
+        )
+    }
+
     func testExplicitIdempotencyKeyOverridesFactory() async throws {
         // Retry callers pass an explicit key so the backend's idempotency slot
         // replays the persisted result. Verify the override beats the factory.
@@ -429,10 +472,11 @@ final class ConversationStoreTests: XCTestCase {
 
     // MARK: - JSON fixtures
 
-    private func turnStartedJSON(turnId: UUID? = nil) -> String {
+    private func turnStartedJSON(turnId: UUID? = nil, cardContextSource: String? = nil) -> String {
         let id = turnId ?? self.turnId
+        let source = cardContextSource.map { #","card_context_source":"# + $0 } ?? ""
         return """
-        {"id":"01TS","type":"turn_started","turn_id":"\(id.uuidString)","conversation_id":"\(conversationId.uuidString)"}
+        {"id":"01TS","type":"turn_started","turn_id":"\(id.uuidString)","conversation_id":"\(conversationId.uuidString)"\(source)}
         """
     }
 

@@ -463,7 +463,7 @@ class TestHappyPath:
             "card_context": {"headline": "AMD moved 5%"},
         }
 
-        await _run(client, repo_mocks, digest_card=digest_card)
+        _, events = await _run(client, repo_mocks, digest_card=digest_card)
 
         kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
         assert kwargs["request_system"] == [
@@ -489,6 +489,12 @@ class TestHappyPath:
                 ),
             },
         ]
+        started = events[0]
+        assert isinstance(started, TurnStarted)
+        assert started.card_context_source == {
+            "symbol": "AMD",
+            "kind": "big_move",
+        }
 
     async def test_completes_agent_turn_with_totals_and_assistant_link(
         self, repo_mocks

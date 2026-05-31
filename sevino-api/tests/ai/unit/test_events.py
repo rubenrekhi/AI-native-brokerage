@@ -156,6 +156,24 @@ class TestSerialize:
         assert payload["turn_id"] == str(turn_id)
         assert payload["conversation_id"] == str(conv_id)
 
+    def test_turn_started_serialises_card_context_source(self):
+        turn_id = uuid.uuid4()
+        conv_id = uuid.uuid4()
+        frame = serialize(
+            TurnStarted(
+                turn_id=turn_id,
+                conversation_id=conv_id,
+                card_context_source={"symbol": "AAPL", "kind": "earnings_result"},
+            )
+        )
+
+        data_line = next(line for line in frame.splitlines() if line.startswith("data: "))
+        payload = json.loads(data_line.removeprefix("data: "))
+        assert payload["card_context_source"] == {
+            "symbol": "AAPL",
+            "kind": "earnings_result",
+        }
+
     def test_error_event_serialises_error_code_value(self):
         # iOS branches on the enum's wire value — make sure the *value*
         # (e.g. "model_rate_limit") goes on the wire, not the Python enum
