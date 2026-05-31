@@ -59,6 +59,7 @@ class LinkedAccountSummary(BaseModel):
     account_type: str | None = None
     nickname: str | None = None
     status: str
+    requires_reauth: bool = False
 
 
 class SettingsProfileResponse(BaseModel):

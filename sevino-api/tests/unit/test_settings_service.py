@@ -250,6 +250,7 @@ class TestGetProfile:
         assert result.brokerage.account_number == "SEV123456"
         assert len(result.linked_accounts) == 1
         assert result.linked_accounts[0].alpaca_relationship_id == "rel_1"
+        assert result.linked_accounts[0].requires_reauth is False
         assert result.member_since == profile.created_at
 
     async def test_handles_missing_financial(self, db, mocker):
