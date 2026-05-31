@@ -443,6 +443,21 @@ class AlpacaBrokerService:
             params={"account_id": account_id},
         )
 
+    async def get_dividend_activities(
+        self, *, account_id: str
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/activities/DIV — dividend activity history.
+
+        Returns all DIV activities (regular cash dividends, capital gains
+        distributions, withholdings, ADR fees, etc.). Filtering by
+        `activity_sub_type` or `net_amount` is the caller's responsibility.
+        """
+        return await self._request(
+            "GET",
+            "/v1/accounts/activities/DIV",
+            params={"account_id": account_id},
+        )
+
     async def _request(
         self,
         method: str,

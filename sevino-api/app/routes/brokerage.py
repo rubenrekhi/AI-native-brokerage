@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.schemas.brokerage import OrderListResponse, PositionListResponse
+from app.schemas.brokerage import (
+    DividendListResponse,
+    OrderListResponse,
+    PositionListResponse,
+)
 from app.schemas.cash_interest import CashInterestResponse
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.brokerage import BrokerageService
@@ -76,4 +80,27 @@ async def get_cash_interest(
     """Aggregated cash sweep snapshot: balance, APY, accrued and realized interest."""
     return await CashInterestService.get_cash_interest(
         db, alpaca=alpaca, user_id=uuid.UUID(user_id)
+    )
+
+
+@router.get("/dividends", response_model=DividendListResponse)
+async def list_dividends(
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> DividendListResponse:
+    """List dividend payments for the authenticated user's brokerage account.
+
+    Filters Alpaca's DIV activity bucket to positive-amount payments —
+    excludes withholdings (DIVNRA/DIVTAX) and ADR pass-through fees (DIVFEE).
+    Status is raw from Alpaca; iOS buckets it.
+    """
+    return await BrokerageService.list_dividends(
+        db,
+        alpaca=alpaca,
+        user_id=uuid.UUID(user_id),
+        limit=limit,
+        offset=offset,
     )
