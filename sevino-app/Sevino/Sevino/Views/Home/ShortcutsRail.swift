@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Owns the shortcuts view model and overflow-sheet state so `HomeView` swaps a
 /// single call site. The inline top-3 list renders via `HomeChatSuggestions`;
-/// the overflow sheet body is wired in S6.
+/// the rest surface in `ShortcutsOverflowSheet` behind the "More" pill.
 struct ShortcutsRail: View {
     let scale: CGFloat
     let onSelect: (String) -> Void
@@ -20,7 +20,11 @@ struct ShortcutsRail: View {
         )
         .task { await viewModel.load() }
         .sheet(isPresented: $showOverflow) {
-            EmptyView()
+            ShortcutsOverflowSheet(
+                scale: scale,
+                shortcuts: viewModel.overflowShortcuts,
+                onSelect: onSelect
+            )
         }
     }
 }

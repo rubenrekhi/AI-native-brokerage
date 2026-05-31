@@ -6,6 +6,7 @@ enum L10n {
     enum General {
         static let appName = String(localized: "general.app_name")
         static let back = String(localized: "general.back")
+        static let done = String(localized: "general.done")
         static let submit = String(localized: "general.submit")
         static let errorTitle = String(localized: "general.error_title")
         static let ok = String(localized: "general.ok")
@@ -381,6 +382,7 @@ enum L10n {
         static let exploreButton = String(localized: "home.explore_button")
         static let dismissExploreAccessibility = String(localized: "home.dismiss_explore_accessibility")
         static let shortcutMore = String(localized: "home.shortcut_more")
+        static let shortcutOverflowTitle = String(localized: "home.shortcut_overflow_title")
         static let sidebarAccessibility = String(localized: "home.sidebar_accessibility")
         static let portfolioAccessibility = String(localized: "home.portfolio_accessibility")
         static let fundingAccessibility = String(localized: "home.funding_accessibility")

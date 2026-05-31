@@ -786,6 +786,16 @@
         }
       }
     },
+    "general.done" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Done"
+          }
+        }
+      }
+    },
     "general.error_title" : {
       "localizations" : {
         "en" : {
@@ -1862,6 +1872,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "More"
+          }
+        }
+      }
+    },
+    "home.shortcut_overflow_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More questions"
           }
         }
       }
