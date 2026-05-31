@@ -94,9 +94,10 @@ class _FmpNewsItem(BaseModel):
     url: str
     published_at: datetime = Field(alias="publishedDate")
     summary: str | None = Field(default=None, alias="text")
+    body: str | None = None
     image_url: str | None = Field(default=None, alias="image")
 
-    @field_validator("source", "summary", "image_url", mode="before")
+    @field_validator("source", "summary", "body", "image_url", mode="before")
     @classmethod
     def _none_if_blank(cls, value: Any) -> Any:
         return none_if_blank(value)

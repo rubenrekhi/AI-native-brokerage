@@ -11,6 +11,7 @@ from app.services.digest.generators.earnings_results import (
     EarningsResultsGenerator,
 )
 from app.services.digest.generators.market_context import MarketContextGenerator
+from app.services.digest.generators.news import NewsGenerator
 from app.services.digest.generators.pending_orders import PendingOrdersGenerator
 from app.services.digest.generators.radar_refresh import RadarRefreshGenerator
 from app.services.digest.generators.upcoming_earnings import (
@@ -36,12 +37,14 @@ PRICE_MOVE_GENERATORS = (
     WatchlistMovesGenerator,
     MarketContextGenerator,
 )
-EARNINGS_GENERATORS: Sequence[_FmpGeneratorFactory] = (
+FMP_GENERATORS: Sequence[_FmpGeneratorFactory] = (
     EarningsResultsGenerator,
     UpcomingEarningsGenerator,
+    NewsGenerator,
 )
+EARNINGS_GENERATORS = FMP_GENERATORS[:2]
 KNOWN_GENERATORS = (
-    ACTIVITY_GENERATORS + PRICE_MOVE_GENERATORS + tuple(EARNINGS_GENERATORS)
+    ACTIVITY_GENERATORS + PRICE_MOVE_GENERATORS + tuple(FMP_GENERATORS)
 )
 
 
@@ -59,7 +62,7 @@ def create_known_generators(
         )
     if fmp is not None:
         generators.extend(
-            generator_cls(fmp=fmp) for generator_cls in EARNINGS_GENERATORS
+            generator_cls(fmp=fmp) for generator_cls in FMP_GENERATORS
         )
     return generators
 
@@ -77,6 +80,7 @@ __all__ = (
     "DividendsGenerator",
     "EarningsResultsGenerator",
     "MarketContextGenerator",
+    "NewsGenerator",
     "PendingOrdersGenerator",
     "RadarRefreshGenerator",
     "UpcomingEarningsGenerator",
@@ -84,6 +88,7 @@ __all__ = (
     "ACTIVITY_GENERATORS",
     "PRICE_MOVE_GENERATORS",
     "EARNINGS_GENERATORS",
+    "FMP_GENERATORS",
     "KNOWN_GENERATORS",
     "create_known_generators",
     "build_known_generators",

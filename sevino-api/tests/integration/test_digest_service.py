@@ -1,8 +1,8 @@
-"""Integration tests for DigestService.generate_for_user (SEV-631 / T1).
+"""Integration tests for DigestService.generate_for_user.
 
-The generator set is empty in T1, so generation ships an empty card stack
-end-to-end. A user with no ACTIVE brokerage account never reaches Alpaca
-(``build_context`` short-circuits), so a stub client is sufficient.
+A user with no ACTIVE brokerage account never reaches Alpaca
+(``build_context`` short-circuits), so a stub client is sufficient. The
+default generator set is empty unless managed provider clients are injected.
 """
 
 from unittest.mock import AsyncMock
