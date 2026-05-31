@@ -468,7 +468,7 @@ class TestGetStockInfo:
         assert first["valuation"]["sector_pe"] == "50.0"
         assert second["valuation"]["sector_pe"] == "50.0"
         assert snapshot_calls == 1
-        assert "market:sector_pe:NASDAQ" in redis.store
+        assert "market:valuation_pe:NASDAQ" in redis.store
 
     async def test_sector_benchmark_walks_back_to_last_session(self):
         """Empty snapshot on the first date(s) walks back to a session with data."""
@@ -505,6 +505,9 @@ class TestGetStockInfo:
         assert result["valuation"]["sector_pe"] == "50.0"
         assert result["valuation"]["as_of_date"] == dates_tried[1]
         assert len(dates_tried) >= 2
+        # The industry snapshot returned no rows in this handler, so its
+        # benchmark degrades to null independently of the sector result.
+        assert result["valuation"]["industry_pe"] is None
 
     async def test_benchmark_failure_degrades_only_sector_fields(self):
         """A failing snapshot leaves the company P/E and history intact."""
@@ -543,6 +546,42 @@ class TestGetStockInfo:
         # ...but the company P/E and own-history range still populate.
         assert valuation["pe"] == "25.0"
         assert valuation["pe_5y_low"] == "30.0"
+
+    async def test_one_failing_snapshot_keeps_the_other(self):
+        """Sector 5xx must not discard a successful industry snapshot."""
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200,
+                    json=[{"companyName": "Apple", "exchange": "NASDAQ",
+                           "sector": "Technology",
+                           "industry": "Consumer Electronics"}],
+                )
+            if path.endswith("/sector-pe-snapshot"):
+                return httpx.Response(500, text="boom")
+            if path.endswith("/industry-pe-snapshot"):
+                return httpx.Response(
+                    200,
+                    json=[{"industry": "Consumer Electronics",
+                           "exchange": "NASDAQ", "pe": 40.0}],
+                )
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{"priceToEarningsRatioTTM": 25.0}])
+            return httpx.Response(200, json=[])
+
+        service, redis = _service(fmp_handler=fmp_handler)
+
+        result = await service.get_stock_info("AAPL")
+
+        valuation = result["valuation"]
+        assert valuation["sector_pe"] is None
+        assert valuation["industry_pe"] == "40.0"
+        # A partial-with-error result is not cached, so the next request retries.
+        assert "market:valuation_pe:NASDAQ" not in redis.store
 
     async def test_missing_exchange_skips_benchmark_fetch(self):
         """No exchange on the profile → no snapshot call, sector fields null."""

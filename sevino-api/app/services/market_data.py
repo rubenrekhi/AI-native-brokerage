@@ -380,47 +380,48 @@ class MarketDataService:
     async def _get_sector_pe_cached(
         self, exchange: str
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
-        sector_key = f"market:sector_pe:{exchange}"
-        industry_key = f"market:industry_pe:{exchange}"
-        sector_cached = await self._cache_get(sector_key)
-        industry_cached = await self._cache_get(industry_key)
-        if sector_cached is not None and industry_cached is not None:
-            logger.info("market_data_cache_hit", key=sector_key)
+        # One key for both snapshots so they share a single atomic expiry
+        # rather than drifting out of sync under independent eviction.
+        cache_key = f"market:valuation_pe:{exchange}"
+        cached = await self._cache_get(cache_key)
+        if cached is not None:
+            logger.info("market_data_cache_hit", key=cache_key)
             return (
-                sector_cached.get("rows", []),
-                industry_cached.get("rows", []),
-                sector_cached.get("as_of_date"),
+                cached.get("sector_rows", []),
+                cached.get("industry_rows", []),
+                cached.get("as_of_date"),
             )
 
-        logger.info("market_data_cache_miss", key=sector_key)
-        try:
-            # The headline `as_of_date` is the sector snapshot's resolved
-            # session. Both endpoints publish on the same per-exchange cadence,
-            # so the industry walk-back lands on the same day in practice; its
-            # date is discarded rather than tracked separately.
-            (sector_rows, as_of_date), (industry_rows, _) = await asyncio.gather(
-                self._snapshot_with_fallback(self._fmp.sector_pe, exchange),
-                self._snapshot_with_fallback(self._fmp.industry_pe, exchange),
-            )
-        except _FMP_FETCH_ERRORS as exc:
-            logger.warning(
-                "market_data_sector_pe_unavailable",
-                exchange=exchange,
-                error=str(exc),
-                exc_type=type(exc).__name__,
-            )
-            return [], [], None
+        logger.info("market_data_cache_miss", key=cache_key)
+        # Resolve the two snapshots independently: a failure in one must not
+        # discard a successful result from the other, so exceptions are
+        # captured per-coroutine instead of unwinding the whole gather.
+        sector_result, industry_result = await asyncio.gather(
+            self._snapshot_with_fallback(self._fmp.sector_pe, exchange),
+            self._snapshot_with_fallback(self._fmp.industry_pe, exchange),
+            return_exceptions=True,
+        )
+        sector_rows, sector_date, sector_ok = _unwrap_snapshot(
+            sector_result, exchange, "sector"
+        )
+        industry_rows, industry_date, industry_ok = _unwrap_snapshot(
+            industry_result, exchange, "industry"
+        )
+        as_of_date = sector_date or industry_date
 
-        await self._cache_set(
-            sector_key,
-            {"rows": sector_rows, "as_of_date": as_of_date},
-            _SECTOR_PE_TTL,
-        )
-        await self._cache_set(
-            industry_key,
-            {"rows": industry_rows, "as_of_date": as_of_date},
-            _SECTOR_PE_TTL,
-        )
+        # Cache only when neither side hit a transient error: a clean empty
+        # result (an exchange FMP doesn't cover) is worth caching so we don't
+        # re-walk the date window every request, but a 5xx should be retried.
+        if sector_ok and industry_ok:
+            await self._cache_set(
+                cache_key,
+                {
+                    "sector_rows": sector_rows,
+                    "industry_rows": industry_rows,
+                    "as_of_date": as_of_date,
+                },
+                _SECTOR_PE_TTL,
+            )
         return sector_rows, industry_rows, as_of_date
 
     async def _snapshot_with_fallback(
@@ -611,6 +612,28 @@ def _empty_valuation() -> dict[str, Any]:
     return project_valuation(
         {}, [], [], [], sector=None, industry=None, exchange=None, as_of_date=None
     )
+
+
+def _unwrap_snapshot(
+    result: Any, exchange: str, label: str
+) -> tuple[list[dict[str, Any]], str | None, bool]:
+    """Split a `gather(return_exceptions=True)` snapshot result.
+
+    Returns ``(rows, as_of_date, ok)`` where ``ok`` is False when the fetch
+    raised, so the caller can keep a successful sibling but skip caching a
+    transient failure.
+    """
+    if isinstance(result, BaseException):
+        logger.warning(
+            "market_data_sector_pe_unavailable",
+            exchange=exchange,
+            snapshot=label,
+            error=str(result),
+            exc_type=type(result).__name__,
+        )
+        return [], None, False
+    rows, on_date = result
+    return rows, on_date, True
 
 
 def _normalize_symbol(symbol: str) -> str:

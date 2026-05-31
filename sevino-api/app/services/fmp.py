@@ -708,7 +708,6 @@ def _pe_premium(company_pe: float | None, benchmark_pe: float | None) -> float |
 
 
 def _match_pe(rows: list[dict[str, Any]], key: str, value: str | None) -> float | None:
-    """P/E of the snapshot row whose ``key`` (sector/industry) equals ``value``."""
     if not value:
         return None
     for row in rows:
