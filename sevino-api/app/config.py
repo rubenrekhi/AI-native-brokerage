@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     sentry_dsn: str = ""
     railway_environment_name: str = ""
     anthropic_model_main: str = "claude-sonnet-4-6"
+    radar_llm_model: str = "claude-sonnet-4-6"
     anthropic_enable_web_search: bool = False
     anthropic_enable_web_fetch: bool = False
     anthropic_enable_code_execution: bool = False
