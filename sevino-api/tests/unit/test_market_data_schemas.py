@@ -9,9 +9,11 @@ from app.schemas.market_data import (
     BatchQuoteResponse,
     ChartResponse,
     ChartTimeframe,
+    FinancialTrendPoint,
     MarketStatusResponse,
     PriceBar,
     StockAnalyst,
+    StockFinancials,
     StockInfoResponse,
     StockProfile,
     StockQuote,
@@ -174,6 +176,43 @@ class TestStockAnalyst:
         assert result.sell == 2
 
 
+class TestStockFinancials:
+    def test_empty_dict_yields_all_none_and_empty_trend(self):
+        result = StockFinancials.model_validate({})
+
+        assert result.revenue is None
+        assert result.net_debt is None
+        assert result.revenue_growth_yoy is None
+        assert result.annual_trend == []
+
+    def test_partial_fields_validate(self):
+        result = StockFinancials.model_validate(
+            {
+                "revenue": "400000000000",
+                "total_debt": "110000000000",
+                "fiscal_period": "TTM through 2026-03-28",
+            }
+        )
+
+        assert result.revenue == "400000000000"
+        assert result.total_debt == "110000000000"
+        assert result.fiscal_period == "TTM through 2026-03-28"
+
+    def test_annual_trend_points_validate(self):
+        result = StockFinancials.model_validate(
+            {
+                "annual_trend": [
+                    {"fiscal_year": "2025", "revenue": "400000000000"},
+                    {"fiscal_year": "2024", "revenue": "380000000000"},
+                ]
+            }
+        )
+
+        assert len(result.annual_trend) == 2
+        assert isinstance(result.annual_trend[0], FinancialTrendPoint)
+        assert result.annual_trend[0].fiscal_year == "2025"
+
+
 class TestStockInfoResponse:
     def test_well_formed_dict_validates(self):
         data = {
@@ -187,6 +226,32 @@ class TestStockInfoResponse:
 
         assert result.quote.symbol == "AAPL"
         assert result.profile.name == "Apple Inc."
+
+    def test_financials_defaults_to_empty_block_when_omitted(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert isinstance(result.financials, StockFinancials)
+        assert result.financials.revenue is None
+
+    def test_financials_block_validates_when_present(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "financials": {"revenue": "400000000000"},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert result.financials.revenue == "400000000000"
 
     @pytest.mark.parametrize(
         "field", ["quote", "profile", "ratios", "analyst"]
