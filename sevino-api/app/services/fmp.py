@@ -186,6 +186,36 @@ class FmpClient:
             return {}
         return data[0] if isinstance(data, list) else data
 
+    async def income_statement_ttm(self, symbol: str) -> dict[str, Any]:
+        data = await self._request("/income-statement-ttm", {"symbol": symbol})
+        if not data:
+            return {}
+        return data[0] if isinstance(data, list) else data
+
+    async def balance_sheet_ttm(self, symbol: str) -> dict[str, Any]:
+        data = await self._request(
+            "/balance-sheet-statement-ttm", {"symbol": symbol}
+        )
+        if not data:
+            return {}
+        return data[0] if isinstance(data, list) else data
+
+    async def cash_flow_ttm(self, symbol: str) -> dict[str, Any]:
+        data = await self._request("/cash-flow-statement-ttm", {"symbol": symbol})
+        if not data:
+            return {}
+        return data[0] if isinstance(data, list) else data
+
+    async def income_statement_annual(
+        self, symbol: str, *, limit: int = 4
+    ) -> list[dict[str, Any]]:
+        """Annual income statements, newest first. Empty payload returns ``[]``."""
+        data = await self._request(
+            "/income-statement",
+            {"symbol": symbol, "period": "annual", "limit": limit},
+        )
+        return data or []
+
     async def earnings_calendar(
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]:
@@ -289,4 +319,114 @@ def project_analyst(
         "hold": ratings.get("hold"),
         "sell": ratings.get("sell"),
         "strong_sell": ratings.get("strongSell"),
+    }
+
+
+def _as_number(value: Any) -> float | None:
+    """Coerce an FMP numeric field to float, or None if missing/non-numeric.
+
+    Rejects bool: ``isinstance(True, int)`` is True in Python, but a bool is
+    never a valid financial figure.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value)
+        except ValueError:
+            return None
+    return None
+
+
+def _growth(current: Any, prior: Any) -> float | None:
+    """Year-over-year growth as a decimal ratio (0.06 == +6%).
+
+    Returns None when either value is missing or the prior value is not
+    strictly positive — a non-positive base makes a growth percentage
+    meaningless (e.g. swinging out of a loss), so we omit it rather than
+    emit a misleading number.
+    """
+    cur = _as_number(current)
+    prev = _as_number(prior)
+    if cur is None or prev is None or prev <= 0:
+        return None
+    return round((cur - prev) / prev, 4)
+
+
+def _build_annual_trend(
+    annual_income: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "fiscal_year": str_or_none(row.get("fiscalYear")),
+            "period_end_date": none_if_blank(row.get("date")),
+            "revenue": str_or_none(row.get("revenue")),
+            "net_income": str_or_none(row.get("netIncome")),
+            "eps_diluted": str_or_none(row.get("epsDiluted")),
+        }
+        for row in annual_income
+    ]
+
+
+def _ttm_period_label(income_ttm: dict[str, Any]) -> str | None:
+    end = none_if_blank(income_ttm.get("date"))
+    if end is None:
+        return None
+    return f"TTM through {end}"
+
+
+def project_financials(
+    income_ttm: dict[str, Any],
+    balance_ttm: dict[str, Any],
+    cash_flow_ttm: dict[str, Any],
+    annual_income: list[dict[str, Any]],
+) -> dict[str, Any]:
+    latest = annual_income[0] if annual_income else {}
+    prior = annual_income[1] if len(annual_income) > 1 else {}
+    return {
+        "revenue": str_or_none(income_ttm.get("revenue")),
+        "gross_profit": str_or_none(income_ttm.get("grossProfit")),
+        "operating_income": str_or_none(income_ttm.get("operatingIncome")),
+        "ebitda": str_or_none(income_ttm.get("ebitda")),
+        "net_income": str_or_none(income_ttm.get("netIncome")),
+        "eps_diluted": str_or_none(income_ttm.get("epsDiluted")),
+        "research_and_development": str_or_none(
+            income_ttm.get("researchAndDevelopmentExpenses")
+        ),
+        "interest_expense": str_or_none(income_ttm.get("interestExpense")),
+        "shares_outstanding_diluted": str_or_none(
+            income_ttm.get("weightedAverageShsOutDil")
+        ),
+        "cash_and_short_term_investments": str_or_none(
+            balance_ttm.get("cashAndShortTermInvestments")
+        ),
+        "total_debt": str_or_none(balance_ttm.get("totalDebt")),
+        "net_debt": str_or_none(balance_ttm.get("netDebt")),
+        "total_assets": str_or_none(balance_ttm.get("totalAssets")),
+        "total_liabilities": str_or_none(balance_ttm.get("totalLiabilities")),
+        "total_stockholders_equity": str_or_none(
+            balance_ttm.get("totalStockholdersEquity")
+        ),
+        "operating_cash_flow": str_or_none(
+            cash_flow_ttm.get("operatingCashFlow")
+        ),
+        "free_cash_flow": str_or_none(cash_flow_ttm.get("freeCashFlow")),
+        "capital_expenditure": str_or_none(
+            cash_flow_ttm.get("capitalExpenditure")
+        ),
+        "revenue_growth_yoy": str_or_none(
+            _growth(latest.get("revenue"), prior.get("revenue"))
+        ),
+        "net_income_growth_yoy": str_or_none(
+            _growth(latest.get("netIncome"), prior.get("netIncome"))
+        ),
+        "eps_growth_yoy": str_or_none(
+            _growth(latest.get("epsDiluted"), prior.get("epsDiluted"))
+        ),
+        "annual_trend": _build_annual_trend(annual_income),
+        "fiscal_period": _ttm_period_label(income_ttm),
+        "period_end_date": none_if_blank(income_ttm.get("date")),
+        "reported_currency": none_if_blank(income_ttm.get("reportedCurrency")),
     }

@@ -13,6 +13,7 @@ from app.services.fmp import (
     int_or_zero,
     none_if_blank,
     project_analyst,
+    project_financials,
     project_profile,
     project_quote,
     project_ratios,
@@ -351,6 +352,65 @@ class TestGradesConsensus:
         assert result == {}
 
 
+class TestStatementEndpoints:
+    async def test_income_statement_ttm_returns_first_element(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/stable/income-statement-ttm"
+            assert request.url.params["symbol"] == "AAPL"
+            return httpx.Response(200, json=[{"revenue": 400}, {"revenue": 1}])
+
+        client = _make_client(handler)
+        result = await client.income_statement_ttm("AAPL")
+
+        assert result == {"revenue": 400}
+
+    async def test_income_statement_ttm_empty_returns_empty_dict(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.income_statement_ttm("AAPL") == {}
+
+    async def test_balance_sheet_ttm_hits_path(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/stable/balance-sheet-statement-ttm"
+            return httpx.Response(200, json=[{"totalDebt": 5}])
+
+        client = _make_client(handler)
+        assert await client.balance_sheet_ttm("AAPL") == {"totalDebt": 5}
+
+    async def test_cash_flow_ttm_hits_path(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/stable/cash-flow-statement-ttm"
+            return httpx.Response(200, json=[{"freeCashFlow": 9}])
+
+        client = _make_client(handler)
+        assert await client.cash_flow_ttm("AAPL") == {"freeCashFlow": 9}
+
+    async def test_income_statement_annual_passes_period_and_limit(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[{"fiscalYear": 2025}])
+
+        client = _make_client(handler)
+        result = await client.income_statement_annual("AAPL", limit=4)
+
+        assert captured["path"] == "/stable/income-statement"
+        assert captured["params"]["period"] == "annual"
+        assert captured["params"]["limit"] == "4"
+        assert result == [{"fiscalYear": 2025}]
+
+    async def test_income_statement_annual_empty_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.income_statement_annual("AAPL") == []
+
+
 class TestProjectQuote:
     def test_full_mapping(self):
         raw = {
@@ -580,6 +640,136 @@ class TestProjectAnalyst:
             "sell": None,
             "strong_sell": None,
         }
+
+
+class TestProjectFinancials:
+    def _income_ttm(self) -> dict:
+        return {
+            "revenue": 400000000000,
+            "grossProfit": 180000000000,
+            "operatingIncome": 120000000000,
+            "ebitda": 130000000000,
+            "netIncome": 100000000000,
+            "epsDiluted": 6.42,
+            "researchAndDevelopmentExpenses": 30000000000,
+            "interestExpense": 3000000000,
+            "weightedAverageShsOutDil": 15500000000,
+            "date": "2026-03-28",
+            "reportedCurrency": "USD",
+        }
+
+    def test_maps_ttm_income_fields(self):
+        result = project_financials(self._income_ttm(), {}, {}, [])
+
+        assert result["revenue"] == "400000000000"
+        assert result["gross_profit"] == "180000000000"
+        assert result["operating_income"] == "120000000000"
+        assert result["ebitda"] == "130000000000"
+        assert result["net_income"] == "100000000000"
+        assert result["eps_diluted"] == "6.42"
+        assert result["research_and_development"] == "30000000000"
+        assert result["interest_expense"] == "3000000000"
+        assert result["shares_outstanding_diluted"] == "15500000000"
+        assert result["fiscal_period"] == "TTM through 2026-03-28"
+        assert result["period_end_date"] == "2026-03-28"
+        assert result["reported_currency"] == "USD"
+
+    def test_maps_balance_and_cash_flow_fields(self):
+        balance = {
+            "cashAndShortTermInvestments": 60000000000,
+            "totalDebt": 110000000000,
+            "netDebt": 50000000000,
+            "totalAssets": 350000000000,
+            "totalLiabilities": 280000000000,
+            "totalStockholdersEquity": 70000000000,
+        }
+        cash_flow = {
+            "operatingCashFlow": 115000000000,
+            "freeCashFlow": 95000000000,
+            "capitalExpenditure": -20000000000,
+        }
+
+        result = project_financials({}, balance, cash_flow, [])
+
+        assert result["cash_and_short_term_investments"] == "60000000000"
+        assert result["total_debt"] == "110000000000"
+        assert result["net_debt"] == "50000000000"
+        assert result["total_assets"] == "350000000000"
+        assert result["total_liabilities"] == "280000000000"
+        assert result["total_stockholders_equity"] == "70000000000"
+        assert result["operating_cash_flow"] == "115000000000"
+        assert result["free_cash_flow"] == "95000000000"
+        assert result["capital_expenditure"] == "-20000000000"
+
+    def test_empty_inputs_yield_all_none_and_empty_trend(self):
+        result = project_financials({}, {}, {}, [])
+
+        scalar = {k: v for k, v in result.items() if k != "annual_trend"}
+        assert all(v is None for v in scalar.values())
+        assert result["annual_trend"] == []
+
+    def test_builds_annual_trend_newest_first(self):
+        annual = [
+            {
+                "fiscalYear": 2025,
+                "date": "2025-09-27",
+                "revenue": 400000000000,
+                "netIncome": 100000000000,
+                "epsDiluted": 6.42,
+            },
+            {
+                "fiscalYear": 2024,
+                "date": "2024-09-28",
+                "revenue": 380000000000,
+                "netIncome": 95000000000,
+                "epsDiluted": 6.10,
+            },
+        ]
+
+        trend = project_financials({}, {}, {}, annual)["annual_trend"]
+
+        assert [p["fiscal_year"] for p in trend] == ["2025", "2024"]
+        assert trend[0]["revenue"] == "400000000000"
+        assert trend[0]["period_end_date"] == "2025-09-27"
+
+    def test_growth_computed_from_latest_two_annual_years(self):
+        annual = [
+            {"revenue": 110, "netIncome": 22, "epsDiluted": 2.2},
+            {"revenue": 100, "netIncome": 20, "epsDiluted": 2.0},
+        ]
+
+        result = project_financials({}, {}, {}, annual)
+
+        assert result["revenue_growth_yoy"] == "0.1"
+        assert result["net_income_growth_yoy"] == "0.1"
+        assert result["eps_growth_yoy"] == "0.1"
+
+    def test_growth_is_none_when_prior_not_positive(self):
+        # Net income swinging out of a loss has no meaningful growth %.
+        annual = [
+            {"revenue": 100, "netIncome": 20},
+            {"revenue": 90, "netIncome": -5},
+        ]
+
+        result = project_financials({}, {}, {}, annual)
+
+        assert result["net_income_growth_yoy"] is None
+        # Revenue base is positive, so revenue growth still computes.
+        assert result["revenue_growth_yoy"] is not None
+
+    def test_growth_is_none_with_single_year(self):
+        result = project_financials({}, {}, {}, [{"revenue": 100}])
+
+        assert result["revenue_growth_yoy"] is None
+        assert len(result["annual_trend"]) == 1
+
+    def test_growth_is_none_when_field_missing(self):
+        annual = [{"revenue": 110}, {"revenue": 100}]
+
+        result = project_financials({}, {}, {}, annual)
+
+        assert result["net_income_growth_yoy"] is None
+        assert result["eps_growth_yoy"] is None
 
 
 class TestStrOrNone:
