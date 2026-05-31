@@ -1,8 +1,7 @@
 """Integration tests for DigestService.generate_for_user.
 
 A user with no ACTIVE brokerage account never reaches Alpaca
-(``build_context`` short-circuits), so a stub client is sufficient. The
-default generator set is empty unless managed provider clients are injected.
+(``build_context`` short-circuits), so a stub client is sufficient.
 """
 
 from unittest.mock import AsyncMock
@@ -18,16 +17,26 @@ pytestmark = pytest.mark.skipif(
 )
 
 
+class _MarketData:
+    async def get_stock_bars(self, *_args, **_kwargs):
+        return []
+
+
 def _service(db_session) -> DigestService:
-    return DigestService(db_session, alpaca=AsyncMock(spec=AlpacaBrokerService))
+    return DigestService(
+        db_session,
+        alpaca=AsyncMock(spec=AlpacaBrokerService),
+        market_data=_MarketData(),
+        fmp=AsyncMock(),
+    )
 
 
-async def test_generate_for_user_persists_empty_digest(db_session, test_user):
+async def test_generate_for_user_persists_digest(db_session, test_user):
     service = _service(db_session)
 
     snapshot = await service.generate_for_user(test_user)
 
-    assert snapshot.cards == []
+    assert [card["kind"] for card in snapshot.cards] == ["market_context"]
     assert snapshot.generated_at is not None
     today = await service.get_today(test_user)
     assert today is not None
@@ -49,7 +58,12 @@ async def test_generate_does_not_call_alpaca_without_active_account(
     db_session, test_user
 ):
     alpaca = AsyncMock(spec=AlpacaBrokerService)
-    service = DigestService(db_session, alpaca=alpaca)
+    service = DigestService(
+        db_session,
+        alpaca=alpaca,
+        market_data=_MarketData(),
+        fmp=AsyncMock(),
+    )
 
     await service.generate_for_user(test_user)
 
