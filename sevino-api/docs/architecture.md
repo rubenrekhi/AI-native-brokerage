@@ -426,13 +426,13 @@ All handlers UPDATE existing rows, not INSERT new ones. The operation is always 
 4. Invalidate relevant cache keys.
 
 **Transfer status:**
-1. Invalidate balance/account cache so the next app read sees updated funds.
+1. Invalidate every `portfolio:history:{user_id}:{range}` key so the chart reflects the deposit/withdrawal. Snapshot + holdings are uncached, so no balance keys need invalidating (SEV-626).
 2. Future: send push notification to user.
 
 **Trade events:**
 1. Look up `order_events` by `alpaca_order_id`.
 2. Update `status`, `filled_avg_price`, `filled_qty`, `filled_at`.
-3. Invalidate positions/account cache.
+3. Invalidate every `portfolio:history:{user_id}:{range}` key. Snapshot + holdings are uncached — no balance/positions invalidation needed.
 
 A single SSE connection per stream delivers events sequentially, so events always arrive in order and duplicates are not a concern. Handlers are UPDATE-idempotent regardless — writing the same status/fill data twice produces the same result — so replay after reconnect (via `since_ulid`) is safe.
 

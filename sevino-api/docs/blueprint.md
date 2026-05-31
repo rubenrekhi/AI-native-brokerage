@@ -578,8 +578,8 @@ Credentials are stored as `ALPACA_API_KEY` (client ID) and `ALPACA_SECRET_KEY` (
 | SSE Stream | Endpoint | Events | Backend Action |
 |---|---|---|---|
 | Account status | `GET /v1/events/accounts/status` | SUBMITTED → ACTIVE, ACTION_REQUIRED, REJECTED | Update `brokerage_accounts.account_status`, trigger FDIC sweep enrollment on ACTIVE |
-| Transfer status | `GET /v1/events/transfers/status` | QUEUED → PENDING → COMPLETE, REJECTED, RETURNED | Invalidate account balance cache, push notification to user |
-| Trade events | `GET /v2/events/trades` | Order fills, cancels, rejects | Update `order_events` status, invalidate positions/account cache |
+| Transfer status | `GET /v1/events/transfers/status` | QUEUED → PENDING → COMPLETE, REJECTED, RETURNED | Invalidate `portfolio:history:{user_id}:{range}` keys, push notification to user |
+| Trade events | `GET /v2/events/trades` | Order fills, cancels, rejects | Update `order_events` status, invalidate `portfolio:history:{user_id}:{range}` keys |
 
 Reconnection strategy: track last received event ID (ULID), reconnect with `since_ulid` / `since_id` parameter to replay missed events, exponential backoff on connection failures.
 
@@ -824,7 +824,7 @@ Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
 5. API calls Alpaca: `POST /v1/accounts/{id}/transfers` with `{transfer_type: "ach", relationship_id, amount, direction: INCOMING|OUTGOING}`.
 6. Alpaca returns transfer object with `status: QUEUED`. API returns status to client.
 7. Transfer progresses asynchronously: QUEUED → PENDING → COMPLETE (or REJECTED/RETURNED). Status updates arrive via the SSE transfer stream (§4.4).
-8. SSE worker receives COMPLETE event → invalidates account balance cache (§3.4) → pushes notification to user.
+8. SSE worker receives COMPLETE event → invalidates the portfolio history cache (§3.4) → pushes notification to user. Snapshot + holdings are uncached, so the next read reflects the new cash balance directly from Alpaca.
 9. iOS displays status and expected settlement time (1–3 business days for ACH).
 
 **Key decisions:**
@@ -874,7 +874,7 @@ Phase 2 — KYC / Alpaca Account Creation (screens 19–28, ~4 min):
 8. iOS sends confirmation → API creates `order_events` row with `status: pending`, `submitted_at: now()`, and `conversation_id` (links trade to the chat thread).
 9. API submits to Alpaca: `POST /v1/trading/accounts/{id}/orders`.
 10. Alpaca returns order object with `status: new|accepted`. API updates `order_events` with `alpaca_order_id`.
-11. Trade events SSE listener (§4.4) receives fill/cancel/reject event → updates `order_events.status`, `filled_avg_price`, `filled_qty`, `filled_at`. Invalidates positions and account cache (§3.4).
+11. Trade events SSE listener (§4.4) receives fill/cancel/reject event → updates `order_events.status`, `filled_avg_price`, `filled_qty`, `filled_at`. Invalidates the portfolio history cache (§3.4); snapshot + holdings are uncached and pick up the new positions/buying_power on the next read.
 12. API pushes status update to iOS → Trade Execution Card renders with fill details (FR-8.12) or error (FR-8.13).
 
 **Logging — `order_events` table:**
@@ -941,7 +941,7 @@ The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. Tri
 - Money / qty / percentage fields are JSON **strings** end-to-end (`MoneyStr` / `QtyStr` / `PctStr` in `app/schemas/_types.py`; `@DecimalString` on iOS). Avoids float drift across the wire.
 - Non-`ACTIVE` short-circuits prevent calling Alpaca for `SUBMITTED` / `APPROVAL_PENDING` / `ACTION_REQUIRED` / `REJECTED` accounts — iOS uses `account_status` to render onboarding/review copy instead of misleading `$0.00`.
 - The `snapshot` endpoint is the most efficient call for Stock Info Cards — bundles everything needed in one response.
-- Cache TTLs are short (30–60s) because invalidation isn't wired yet. Once SSE order-fill / transfer-complete listeners ship, they can `DEL` the matching `portfolio:*` keys for instant freshness.
+- Snapshot + holdings are uncached so they reflect post-trade state without an invalidation step; history is cached at 60s (ambient, with transfer-SSE invalidation) per SEV-626.
 - Future option: Alpaca's Market Data WebSocket (`wss://stream.data.alpaca.markets/v2/{feed}`) is available if a future feature requires continuous price streaming. Not needed for MVP.
 
 ---

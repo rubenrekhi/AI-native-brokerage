@@ -21,8 +21,8 @@ async def handle_transfer_status_change(
     status_to: str,
     event_time: datetime | None,
 ) -> None:
-    """Invalidate the affected user's portfolio cache in response to an
-    Alpaca transfer-status SSE event.
+    """Invalidate the affected user's portfolio history cache in response
+    to an Alpaca transfer-status SSE event.
 
     Idempotent by construction: cache invalidation is a no-op if the keys
     don't exist, so replays of the same event (after a reconnect with

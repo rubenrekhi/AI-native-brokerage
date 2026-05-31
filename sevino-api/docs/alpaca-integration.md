@@ -435,7 +435,7 @@ User taps a button → app calls Alpaca REST API → renders result with brief l
 
 **Caching strategy:**
 
-- **Backend:** Redis cache, 30–60 second TTL per user per endpoint
+- **Backend:** Redis cache, 60s TTL, history endpoint only — snapshot + holdings call Alpaca on every request so post-trade balances are always fresh (SEV-626).
 - **Frontend:** In-memory cache so navigation back to a previously viewed modal feels instant while fresh data loads in background
 
 | User Action | Alpaca Endpoint(s) | Data Returned |
@@ -865,7 +865,7 @@ Replace on-demand REST for price data if a future feature requires continuously 
 
 | Layer | TTL | Scope |
 |---|---|---|
-| Backend Redis | 30–60 seconds | Per user per endpoint |
+| Backend Redis | 60 seconds | Portfolio history only (snapshot + holdings uncached) |
 | Frontend in-memory | Until next navigation or explicit refresh | Per modal/screen |
 
 ### Background Jobs
@@ -878,6 +878,5 @@ Replace on-demand REST for price data if a future feature requires continuously 
 
 ### Rate Limit Protection
 
-- All Alpaca REST calls go through backend Redis cache (30–60s TTL)
+- Portfolio history is cached in Redis (60s); snapshot, holdings, and write paths call Alpaca directly. Frontend in-memory cache absorbs duplicate reads on rapid navigation.
 - On `429` response: exponential backoff with retry
-- Frontend in-memory cache prevents duplicate requests on rapid navigation
