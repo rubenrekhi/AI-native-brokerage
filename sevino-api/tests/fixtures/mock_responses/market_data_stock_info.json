@@ -111,6 +111,40 @@
       {"fiscal_year": "2024", "pe": "37.29", "ps": "8.90", "pb": "48.00"}
     ]
   },
+  "earnings": {
+    "next_period_end": "2026-09-28",
+    "revenue_estimate_avg": "102000000000",
+    "revenue_estimate_low": "98000000000",
+    "revenue_estimate_high": "106000000000",
+    "eps_estimate_avg": "1.55",
+    "eps_estimate_low": "1.45",
+    "eps_estimate_high": "1.65",
+    "num_analysts": 12,
+    "quarterly": [
+      {
+        "report_date": "2026-04-30",
+        "eps_actual": "2.01",
+        "eps_estimated": "1.95",
+        "eps_surprise_pct": "0.0308",
+        "revenue_actual": "111184000000",
+        "revenue_estimated": "109457600000",
+        "revenue_surprise_pct": "0.0158",
+        "price_move_pct": "0.032"
+      },
+      {
+        "report_date": "2026-01-29",
+        "eps_actual": "2.85",
+        "eps_estimated": "2.67",
+        "eps_surprise_pct": "0.0674",
+        "revenue_actual": "143756000000",
+        "revenue_estimated": "138391000000",
+        "revenue_surprise_pct": "0.0388",
+        "price_move_pct": "-0.041"
+      }
+    ],
+    "avg_post_earnings_move_pct": "0.0365",
+    "events_measured": 8
+  },
   "analyst": {
     "target_high": "230.00",
     "target_low": "150.00",

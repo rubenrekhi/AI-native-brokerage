@@ -12,7 +12,9 @@ from app.schemas.market_data import (
     FinancialTrendPoint,
     MarketStatusResponse,
     PriceBar,
+    QuarterlyEarning,
     StockAnalyst,
+    StockEarnings,
     StockFinancials,
     StockInfoResponse,
     StockProfile,
@@ -255,6 +257,49 @@ class TestStockValuation:
         assert result.valuation_history[0].pb == "50.0"
 
 
+class TestStockEarnings:
+    def test_empty_dict_yields_all_none_and_empty_quarterly(self):
+        result = StockEarnings.model_validate({})
+
+        assert result.next_period_end is None
+        assert result.eps_estimate_avg is None
+        assert result.num_analysts is None
+        assert result.avg_post_earnings_move_pct is None
+        assert result.events_measured is None
+        assert result.quarterly == []
+
+    def test_partial_fields_validate(self):
+        result = StockEarnings.model_validate(
+            {
+                "next_period_end": "2026-09-28",
+                "eps_estimate_avg": "1.5",
+                "num_analysts": 12,
+                "events_measured": 8,
+            }
+        )
+
+        assert result.next_period_end == "2026-09-28"
+        assert result.eps_estimate_avg == "1.5"
+        assert result.num_analysts == 12
+        assert result.events_measured == 8
+
+    def test_quarterly_points_validate(self):
+        result = StockEarnings.model_validate(
+            {
+                "quarterly": [
+                    {"report_date": "2026-04-30", "eps_actual": "2.01",
+                     "eps_surprise_pct": "0.0308", "price_move_pct": "0.05"},
+                    {"report_date": "2026-01-29"},
+                ]
+            }
+        )
+
+        assert len(result.quarterly) == 2
+        assert isinstance(result.quarterly[0], QuarterlyEarning)
+        assert result.quarterly[0].eps_surprise_pct == "0.0308"
+        assert result.quarterly[1].eps_actual is None
+
+
 class TestStockInfoResponse:
     def test_well_formed_dict_validates(self):
         data = {
@@ -321,6 +366,33 @@ class TestStockInfoResponse:
 
         assert result.valuation.pe == "25.0"
         assert result.valuation.sector_pe == "50.0"
+
+    def test_earnings_defaults_to_empty_block_when_omitted(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert isinstance(result.earnings, StockEarnings)
+        assert result.earnings.next_period_end is None
+
+    def test_earnings_block_validates_when_present(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "earnings": {"next_period_end": "2026-09-28", "num_analysts": 12},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert result.earnings.next_period_end == "2026-09-28"
+        assert result.earnings.num_analysts == 12
 
     @pytest.mark.parametrize(
         "field", ["quote", "profile", "ratios", "analyst"]

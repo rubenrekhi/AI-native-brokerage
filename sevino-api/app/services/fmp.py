@@ -371,6 +371,31 @@ class FmpClient:
         )
         return data or []
 
+    async def earnings(
+        self, symbol: str, *, limit: int = 8
+    ) -> list[dict[str, Any]]:
+        """Per-symbol earnings actuals + estimates, newest first. Empty → ``[]``.
+
+        Future quarters carry null ``epsActual``/``revenueActual``. FMP exposes
+        no pre-/post-market timing on this endpoint.
+        """
+        data = await self._request("/earnings", {"symbol": symbol, "limit": limit})
+        return data or []
+
+    async def analyst_estimates(
+        self, symbol: str, *, period: str = "quarter", limit: int = 16
+    ) -> list[dict[str, Any]]:
+        """Analyst revenue/EPS estimates by period, newest first. Empty → ``[]``.
+
+        Rows are returned newest-first and span several years out, so callers
+        select the nearest upcoming period rather than slicing by ``limit``.
+        """
+        data = await self._request(
+            "/analyst-estimates",
+            {"symbol": symbol, "period": period, "limit": limit},
+        )
+        return data or []
+
     async def earnings_calendar(
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]:
@@ -775,4 +800,135 @@ def project_valuation(
         "pe_5y_high": str_or_none(max(pe_series)) if pe_series else None,
         "pe_5y_median": str_or_none(_median(pe_series)),
         "valuation_history": _build_valuation_history(annual_ratios),
+    }
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    """Parse an FMP/Alpaca date or ISO timestamp to a ``date`` (date part only)."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return date.fromisoformat(value[:10])
+    except ValueError:
+        return None
+
+
+def _surprise_pct(actual: Any, estimated: Any) -> float | None:
+    """Beat/miss as a decimal: ``(actual − estimated) / |estimated|``.
+
+    None when either side is missing or the estimate is zero (no meaningful
+    base to divide by).
+    """
+    act = _as_number(actual)
+    est = _as_number(estimated)
+    if act is None or est is None or est == 0:
+        return None
+    return round((act - est) / abs(est), 4)
+
+
+def compute_earnings_reactions(
+    report_dates: list[date], daily_bars: list[dict[str, Any]]
+) -> dict[date, float]:
+    """Signed 1-session price move per report date, keyed by report date.
+
+    The window is prev-session close → first-session-on-or-after-report close
+    (FMP gives no pre-/post-market timing, so a fixed window is used). ``daily_bars``
+    are Alpaca daily bars in ascending order with ``timestamp`` and ``close``.
+    Events without a bar on both sides, or with a non-positive prior close, are
+    omitted so the caller degrades those fields to null rather than emitting a
+    bogus move.
+    """
+    closes: list[tuple[date, float]] = []
+    for bar in daily_bars:
+        bar_date = _parse_iso_date(bar.get("timestamp"))
+        close = _as_number(bar.get("close"))
+        if bar_date is not None and close is not None:
+            closes.append((bar_date, close))
+    closes.sort(key=lambda item: item[0])
+
+    reactions: dict[date, float] = {}
+    for report_date in report_dates:
+        prev_close: float | None = None
+        post_close: float | None = None
+        for bar_date, close in closes:
+            if bar_date < report_date:
+                prev_close = close
+            elif post_close is None:
+                post_close = close
+                break
+        if prev_close is None or post_close is None or prev_close <= 0:
+            continue
+        reactions[report_date] = round((post_close - prev_close) / prev_close, 4)
+    return reactions
+
+
+def _select_next_estimate(
+    estimate_rows: list[dict[str, Any]], as_of: date
+) -> dict[str, Any] | None:
+    """Nearest upcoming estimate row (min date on or after ``as_of``).
+
+    FMP returns rows newest-first spanning years, so the upcoming period is
+    selected by date rather than by position.
+    """
+    upcoming = [
+        (parsed, row)
+        for row in estimate_rows
+        if (parsed := _parse_iso_date(row.get("date"))) is not None
+        and parsed >= as_of
+    ]
+    if not upcoming:
+        return None
+    return min(upcoming, key=lambda item: item[0])[1]
+
+
+def project_earnings(
+    earnings_rows: list[dict[str, Any]],
+    estimate_rows: list[dict[str, Any]],
+    reactions: dict[date, float],
+    *,
+    as_of: date,
+    actuals_limit: int = 4,
+) -> dict[str, Any]:
+    next_estimate = _select_next_estimate(estimate_rows, as_of) or {}
+
+    reported = [row for row in earnings_rows if row.get("epsActual") is not None]
+    quarterly: list[dict[str, Any]] = []
+    for row in reported[:actuals_limit]:
+        report_date = _parse_iso_date(row.get("date"))
+        move = reactions.get(report_date) if report_date is not None else None
+        quarterly.append(
+            {
+                "report_date": none_if_blank(row.get("date")),
+                "eps_actual": str_or_none(row.get("epsActual")),
+                "eps_estimated": str_or_none(row.get("epsEstimated")),
+                "eps_surprise_pct": str_or_none(
+                    _surprise_pct(row.get("epsActual"), row.get("epsEstimated"))
+                ),
+                "revenue_actual": str_or_none(row.get("revenueActual")),
+                "revenue_estimated": str_or_none(row.get("revenueEstimated")),
+                "revenue_surprise_pct": str_or_none(
+                    _surprise_pct(
+                        row.get("revenueActual"), row.get("revenueEstimated")
+                    )
+                ),
+                "price_move_pct": str_or_none(move),
+            }
+        )
+
+    moves = list(reactions.values())
+    avg_move = (
+        round(sum(abs(m) for m in moves) / len(moves), 4) if moves else None
+    )
+    return {
+        "next_period_end": none_if_blank(next_estimate.get("date")),
+        "revenue_estimate_avg": str_or_none(next_estimate.get("revenueAvg")),
+        "revenue_estimate_low": str_or_none(next_estimate.get("revenueLow")),
+        "revenue_estimate_high": str_or_none(next_estimate.get("revenueHigh")),
+        "eps_estimate_avg": str_or_none(next_estimate.get("epsAvg")),
+        "eps_estimate_low": str_or_none(next_estimate.get("epsLow")),
+        "eps_estimate_high": str_or_none(next_estimate.get("epsHigh")),
+        "num_analysts": next_estimate.get("numAnalystsEps"),
+        "quarterly": quarterly,
+        "avg_post_earnings_move_pct": str_or_none(avg_move),
+        "events_measured": len(moves) if moves else None,
     }

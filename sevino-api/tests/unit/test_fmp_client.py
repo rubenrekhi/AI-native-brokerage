@@ -1,5 +1,7 @@
 """Unit tests for app.services.fmp."""
 
+from datetime import date
+
 import httpx
 import pytest
 
@@ -10,9 +12,11 @@ from app.exceptions import (
 )
 from app.services.fmp import (
     FmpClient,
+    compute_earnings_reactions,
     int_or_zero,
     none_if_blank,
     project_analyst,
+    project_earnings,
     project_financials,
     project_profile,
     project_quote,
@@ -1169,3 +1173,201 @@ class TestApiKeyRedaction:
 
         assert api_key not in logged["kwargs"]["body"]
         assert "***" in logged["kwargs"]["body"]
+
+
+class TestEarnings:
+    async def test_passes_symbol_and_limit(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[{"date": "2026-04-30"}])
+
+        client = _make_client(handler)
+        result = await client.earnings("AAPL", limit=8)
+
+        assert captured["path"] == "/stable/earnings"
+        assert captured["params"]["symbol"] == "AAPL"
+        assert captured["params"]["limit"] == "8"
+        assert result == [{"date": "2026-04-30"}]
+
+    async def test_empty_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.earnings("AAPL") == []
+
+
+class TestAnalystEstimates:
+    async def test_passes_symbol_period_and_limit(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[{"date": "2026-09-28"}])
+
+        client = _make_client(handler)
+        result = await client.analyst_estimates("AAPL", period="quarter", limit=16)
+
+        assert captured["path"] == "/stable/analyst-estimates"
+        assert captured["params"]["symbol"] == "AAPL"
+        assert captured["params"]["period"] == "quarter"
+        assert captured["params"]["limit"] == "16"
+        assert result == [{"date": "2026-09-28"}]
+
+    async def test_empty_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.analyst_estimates("AAPL") == []
+
+
+def _bar(timestamp: str, close: float) -> dict:
+    return {"timestamp": timestamp, "close": str(close)}
+
+
+class TestComputeEarningsReactions:
+    def test_prev_close_to_first_session_on_or_after_report(self):
+        bars = [
+            _bar("2026-04-29T04:00:00Z", 100.0),  # prev close
+            _bar("2026-04-30T04:00:00Z", 110.0),  # first close on/after report
+            _bar("2026-05-01T04:00:00Z", 120.0),
+        ]
+        reactions = compute_earnings_reactions([date(2026, 4, 30)], bars)
+
+        # (110 - 100) / 100 = +0.10
+        assert reactions == {date(2026, 4, 30): 0.1}
+
+    def test_report_on_non_trading_day_uses_next_session(self):
+        # Report dated on a weekend with no bar of its own; the first bar
+        # on/after the date is the next session.
+        bars = [
+            _bar("2026-05-01T04:00:00Z", 100.0),
+            _bar("2026-05-04T04:00:00Z", 90.0),
+        ]
+        reactions = compute_earnings_reactions([date(2026, 5, 2)], bars)
+
+        # (90 - 100) / 100 = -0.10
+        assert reactions[date(2026, 5, 2)] == -0.1
+
+    def test_skips_event_without_prior_bar(self):
+        bars = [_bar("2026-04-30T04:00:00Z", 110.0)]
+        assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
+
+    def test_skips_event_without_on_or_after_bar(self):
+        bars = [_bar("2026-04-29T04:00:00Z", 100.0)]
+        assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
+
+    def test_skips_when_prev_close_non_positive(self):
+        bars = [
+            _bar("2026-04-29T04:00:00Z", 0.0),
+            _bar("2026-04-30T04:00:00Z", 110.0),
+        ]
+        assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
+
+    def test_unsorted_bars_are_handled(self):
+        bars = [
+            _bar("2026-04-30T04:00:00Z", 110.0),
+            _bar("2026-04-29T04:00:00Z", 100.0),
+        ]
+        reactions = compute_earnings_reactions([date(2026, 4, 30)], bars)
+        assert reactions[date(2026, 4, 30)] == 0.1
+
+
+class TestProjectEarnings:
+    AS_OF = date(2026, 5, 31)
+
+    def _estimates(self) -> list[dict]:
+        # Newest-first, spanning past and future like the real endpoint.
+        return [
+            {"date": "2028-09-28", "revenueAvg": 130, "epsAvg": 2.45,
+             "numAnalystsEps": 9},
+            {"date": "2026-09-28", "revenueAvg": 100, "revenueLow": 95,
+             "revenueHigh": 105, "epsAvg": 1.5, "epsLow": 1.4, "epsHigh": 1.6,
+             "numAnalystsEps": 12},
+            {"date": "2026-03-28", "revenueAvg": 90, "epsAvg": 1.3,
+             "numAnalystsEps": 11},
+        ]
+
+    def _earnings(self) -> list[dict]:
+        return [
+            {"date": "2026-07-30", "epsActual": None, "epsEstimated": 1.86,
+             "revenueActual": None, "revenueEstimated": 108},  # future, dropped
+            {"date": "2026-04-30", "epsActual": 2.01, "epsEstimated": 1.95,
+             "revenueActual": 111, "revenueEstimated": 109},
+            {"date": "2026-01-29", "epsActual": 2.85, "epsEstimated": 2.67,
+             "revenueActual": 143, "revenueEstimated": 138},
+        ]
+
+    def test_selects_nearest_upcoming_estimate(self):
+        result = project_earnings(self._earnings(), self._estimates(), {},
+                                  as_of=self.AS_OF)
+
+        # 2026-09-28 is the nearest future period, not 2028-09-28.
+        assert result["next_period_end"] == "2026-09-28"
+        assert result["revenue_estimate_avg"] == "100"
+        assert result["revenue_estimate_low"] == "95"
+        assert result["revenue_estimate_high"] == "105"
+        assert result["eps_estimate_avg"] == "1.5"
+        assert result["num_analysts"] == 12
+
+    def test_actuals_drop_future_rows_and_compute_surprise(self):
+        result = project_earnings(self._earnings(), [], {}, as_of=self.AS_OF)
+
+        # Only reported quarters surface, newest first.
+        assert [q["report_date"] for q in result["quarterly"]] == [
+            "2026-04-30", "2026-01-29"
+        ]
+        first = result["quarterly"][0]
+        # (2.01 - 1.95) / 1.95 = 0.0308
+        assert first["eps_surprise_pct"] == "0.0308"
+        # (111 - 109) / 109 = 0.0183
+        assert first["revenue_surprise_pct"] == "0.0183"
+
+    def test_actuals_limit_respected(self):
+        rows = [
+            {"date": f"2026-0{i}-15", "epsActual": 1.0, "epsEstimated": 1.0}
+            for i in range(1, 6)
+        ]
+        result = project_earnings(rows, [], {}, as_of=self.AS_OF, actuals_limit=4)
+        assert len(result["quarterly"]) == 4
+
+    def test_surprise_none_when_estimate_missing_or_zero(self):
+        rows = [
+            {"date": "2026-04-30", "epsActual": 2.0, "epsEstimated": 0,
+             "revenueActual": 100, "revenueEstimated": None},
+        ]
+        result = project_earnings(rows, [], {}, as_of=self.AS_OF)
+        q = result["quarterly"][0]
+        assert q["eps_surprise_pct"] is None
+        assert q["revenue_surprise_pct"] is None
+
+    def test_reaction_wired_per_event_and_averaged(self):
+        reactions = {date(2026, 4, 30): 0.05, date(2026, 1, 29): -0.03}
+        result = project_earnings(self._earnings(), [], reactions, as_of=self.AS_OF)
+
+        assert result["quarterly"][0]["price_move_pct"] == "0.05"
+        assert result["quarterly"][1]["price_move_pct"] == "-0.03"
+        # Average of absolute moves: (0.05 + 0.03) / 2 = 0.04
+        assert result["avg_post_earnings_move_pct"] == "0.04"
+        assert result["events_measured"] == 2
+
+    def test_no_future_estimate_yields_null_estimate_fields(self):
+        past_only = [{"date": "2020-01-01", "revenueAvg": 50, "epsAvg": 1.0}]
+        result = project_earnings(self._earnings(), past_only, {}, as_of=self.AS_OF)
+
+        assert result["next_period_end"] is None
+        assert result["revenue_estimate_avg"] is None
+        assert result["num_analysts"] is None
+
+    def test_empty_inputs_degrade_to_all_none(self):
+        result = project_earnings([], [], {}, as_of=self.AS_OF)
+
+        assert result["next_period_end"] is None
+        assert result["quarterly"] == []
+        assert result["avg_post_earnings_move_pct"] is None
+        assert result["events_measured"] is None
