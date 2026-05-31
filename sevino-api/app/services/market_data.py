@@ -24,6 +24,7 @@ from app.services.alpaca_broker import (
 from app.services.fmp import (
     FmpClient,
     project_analyst,
+    project_financials,
     project_profile,
     project_quote,
     project_ratios,
@@ -59,6 +60,7 @@ _INTRADAY_TIMEFRAMES = frozenset({"5Min", "30Min", "1Hour"})
 _QUOTE_TTL = 15
 _QUOTE_TTL_CLOSED = 1800
 _FUNDAMENTALS_TTL = 43200
+_ANNUAL_TREND_YEARS = 4
 _CHART_TTL_INTRADAY = 60
 _CHART_TTL_DAILY = 3600
 _MARKET_STATUS_TTL = 60
@@ -127,6 +129,7 @@ class MarketDataService:
             "quote": quote,
             "profile": fundamentals["profile"],
             "ratios": fundamentals["ratios"],
+            "financials": fundamentals["financials"],
             "analyst": analyst,
         }
 
@@ -219,19 +222,59 @@ class MarketDataService:
         cached = await self._cache_get(cache_key)
         if cached is not None:
             logger.info("market_data_cache_hit", key=cache_key)
+            # Entries written before financials existed lack the key; backfill
+            # an empty block so the response shape stays stable until the
+            # 12h TTL rolls the entry over.
+            cached.setdefault("financials", _empty_financials())
             return cached
 
         logger.info("market_data_cache_miss", key=cache_key)
-        profile_raw, ratios_raw = await asyncio.gather(
+        profile_raw, ratios_raw, financials = await asyncio.gather(
             self._fmp.profile(symbol),
             self._fmp.ratios_ttm(symbol),
+            self._fetch_financials(symbol),
         )
         fundamentals = {
             "profile": project_profile(profile_raw),
             "ratios": project_ratios(ratios_raw),
+            "financials": financials,
         }
         await self._cache_set(cache_key, fundamentals, _FUNDAMENTALS_TTL)
         return fundamentals
+
+    async def _fetch_financials(self, symbol: str) -> dict[str, Any]:
+        """Fetch the three TTM statements plus annual history and project them.
+
+        Best-effort: each statement is fetched independently and a failure
+        degrades only the affected fields to null. This never raises into
+        ``get_stock_info`` — quote/profile/ratios/analyst must still return
+        when a statement endpoint is slow or a company lacks filings.
+        """
+        results = await asyncio.gather(
+            self._fmp.income_statement_ttm(symbol),
+            self._fmp.balance_sheet_ttm(symbol),
+            self._fmp.cash_flow_ttm(symbol),
+            self._fmp.income_statement_annual(symbol, limit=_ANNUAL_TREND_YEARS),
+            return_exceptions=True,
+        )
+        labels = ("income_ttm", "balance_ttm", "cash_flow_ttm", "annual_income")
+        cleaned: list[Any] = []
+        for label, result in zip(labels, results):
+            if isinstance(result, BaseException):
+                logger.warning(
+                    "market_data_financials_unavailable",
+                    symbol=symbol,
+                    statement=label,
+                    error=str(result),
+                    exc_type=type(result).__name__,
+                )
+                cleaned.append([] if label == "annual_income" else {})
+            else:
+                cleaned.append(result)
+        income_ttm, balance_ttm, cash_flow_ttm, annual_income = cleaned
+        return project_financials(
+            income_ttm, balance_ttm, cash_flow_ttm, annual_income
+        )
 
     async def _get_analyst_cached(self, symbol: str) -> dict[str, Any]:
         cache_key = f"market:analyst:{symbol}"
@@ -387,6 +430,10 @@ class MarketDataService:
             status_code=response.status_code,
         )
         return response.json()
+
+
+def _empty_financials() -> dict[str, Any]:
+    return project_financials({}, {}, {}, [])
 
 
 def _normalize_symbol(symbol: str) -> str:
