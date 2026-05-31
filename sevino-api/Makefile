@@ -13,6 +13,11 @@ server:
 worker:
 	uv run arq app.worker.WorkerSettings
 
+# Run full digest generation for a user without writing a snapshot
+digest-dry-run:
+	@test -n "$(USER_EMAIL)" || (echo "USER_EMAIL is required, e.g. make digest-dry-run USER_EMAIL=user@example.com" >&2; exit 2)
+	@uv run python scripts/digest_dry_run.py --user-email "$(USER_EMAIL)"
+
 # Run all tests
 test:
 	uv run pytest

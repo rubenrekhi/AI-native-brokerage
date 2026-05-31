@@ -74,7 +74,9 @@ async def _generate_for_user(
                 service = DigestService(
                     db,
                     alpaca=ctx["alpaca"],
+                    market_data=ctx.get("market_data"),
                     fmp=ctx.get("fmp"),
+                    anthropic=ctx.get("anthropic"),
                 )
                 await service.generate_for_user(user_id)
                 await db.commit()

@@ -15,7 +15,6 @@ final class DigestViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
     private(set) var currentCardIndex = 0
-    var chatText = ""
 
     var cards: [DigestCard] {
         snapshot?.cards ?? []
@@ -88,10 +87,6 @@ final class DigestViewModel {
 
     func clearError() {
         error = nil
-    }
-
-    func clearChatText() {
-        chatText = ""
     }
 
     func currentChatDigestCard() -> ChatDigestCard? {

@@ -4,298 +4,6 @@
     "" : {
 
     },
-    "digest.cards_ready" : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld card ready"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld cards ready"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "digest.chat_placeholder" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ask about this card"
-          }
-        }
-      }
-    },
-    "digest.dismiss_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dismiss digest"
-          }
-        }
-      }
-    },
-    "digest.earnings_eps_actual" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPS actual"
-          }
-        }
-      }
-    },
-    "digest.earnings_eps_estimate" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "EPS estimate"
-          }
-        }
-      }
-    },
-    "digest.earnings_revenue_actual" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Revenue actual"
-          }
-        }
-      }
-    },
-    "digest.earnings_revenue_estimate" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Revenue estimate"
-          }
-        }
-      }
-    },
-    "digest.earnings_stock_reaction" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Stock reaction %@"
-          }
-        }
-      }
-    },
-    "digest.market_direction_down" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Major indexes lower"
-          }
-        }
-      }
-    },
-    "digest.market_direction_mixed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Major indexes mixed"
-          }
-        }
-      }
-    },
-    "digest.market_direction_up" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Major indexes higher"
-          }
-        }
-      }
-    },
-    "digest.news_open_story" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open story"
-          }
-        }
-      }
-    },
-    "digest.pending_filled_empty" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No filled orders"
-          }
-        }
-      }
-    },
-    "digest.pending_filled_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Filled"
-          }
-        }
-      }
-    },
-    "digest.pending_recurring_executed_empty" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No recurring orders executed"
-          }
-        }
-      }
-    },
-    "digest.pending_recurring_executed_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recurring executed"
-          }
-        }
-      }
-    },
-    "digest.pending_recurring_skipped_empty" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No skipped recurring orders"
-          }
-        }
-      }
-    },
-    "digest.pending_recurring_skipped_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skipped"
-          }
-        }
-      }
-    },
-    "digest.pending_shares" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "shares"
-          }
-        }
-      }
-    },
-    "digest.progress_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld of %lld"
-          }
-        }
-      }
-    },
-    "digest.send_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ask about this digest card"
-          }
-        }
-      }
-    },
-    "digest.radar_new" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New"
-          }
-        }
-      }
-    },
-    "digest.radar_refreshed_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your Radar refreshed"
-          }
-        }
-      }
-    },
-    "digest.radar_removed" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Removed"
-          }
-        }
-      }
-    },
-    "digest.radar_updated" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Updated %@"
-          }
-        }
-      }
-    },
-    "digest.title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Today's Digest"
-          }
-        }
-      }
-    },
-    "digest.upcoming_reports" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reports %@"
-          }
-        }
-      }
-    },
-    "digest.watchlist_badge" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "From your watchlist"
-          }
-        }
-      }
-    },
     "%@ (%@)" : {
       "comment" : "A sublabel within a holding row that shows the unrealized profit or loss (P/L) and its percentage. Both values are suffixed with their respective currency symbols.",
       "isCommentAutoGenerated" : true,
@@ -1085,6 +793,390 @@
     "Close" : {
       "comment" : "The label of a button that closes a screen.",
       "isCommentAutoGenerated" : true
+    },
+    "digest.cards_ready" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld card ready"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld cards ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "digest.daily_digest_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DAILY DIGEST"
+          }
+        }
+      }
+    },
+    "digest.dismiss_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dismiss digest"
+          }
+        }
+      }
+    },
+    "digest.market_direction_down" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes lower"
+          }
+        }
+      }
+    },
+    "digest.market_direction_mixed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes mixed"
+          }
+        }
+      }
+    },
+    "digest.market_direction_up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes higher"
+          }
+        }
+      }
+    },
+    "digest.progress_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld of %lld"
+          }
+        }
+      }
+    },
+    "digest.story_big_move_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "BIG MOVE · %@"
+          }
+        }
+      }
+    },
+    "digest.story_dividends_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "DIVIDENDS"
+          }
+        }
+      }
+    },
+    "digest.story_dividends_summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent payments came from %@."
+          }
+        }
+      }
+    },
+    "digest.story_dividends_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dividends landed %@"
+          }
+        }
+      }
+    },
+    "digest.story_earnings_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EARNINGS · %@"
+          }
+        }
+      }
+    },
+    "digest.story_earnings_reaction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reaction %@"
+          }
+        }
+      }
+    },
+    "digest.story_earnings_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ reported earnings"
+          }
+        }
+      }
+    },
+    "digest.story_market_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MARKET CONTEXT"
+          }
+        }
+      }
+    },
+    "digest.story_move_summary_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ moved from %2$@ to %3$@."
+          }
+        }
+      }
+    },
+    "digest.story_move_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ moved %2$@"
+          }
+        }
+      }
+    },
+    "digest.story_nasdaq_accent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QQQ %@"
+          }
+        }
+      }
+    },
+    "digest.story_news_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEWS"
+          }
+        }
+      }
+    },
+    "digest.story_news_eyebrow_symbol" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "NEWS · %@"
+          }
+        }
+      }
+    },
+    "digest.story_orders_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ORDERS"
+          }
+        }
+      }
+    },
+    "digest.story_orders_summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recent activity touched %@."
+          }
+        }
+      }
+    },
+    "digest.story_orders_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Order activity since the last close"
+          }
+        }
+      }
+    },
+    "digest.story_orders_unit_one" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "update"
+          }
+        }
+      }
+    },
+    "digest.story_orders_unit_other" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "updates"
+          }
+        }
+      }
+    },
+    "digest.story_payments_count" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld payment"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld payments"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "digest.story_radar_accent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "new"
+          }
+        }
+      }
+    },
+    "digest.story_radar_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "RADAR"
+          }
+        }
+      }
+    },
+    "digest.story_radar_summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ were added in the latest radar refresh."
+          }
+        }
+      }
+    },
+    "digest.story_radar_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New radar ideas are ready"
+          }
+        }
+      }
+    },
+    "digest.story_symbols_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "your portfolio"
+          }
+        }
+      }
+    },
+    "digest.story_upcoming_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UPCOMING · %@"
+          }
+        }
+      }
+    },
+    "digest.story_upcoming_summary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The next earnings report is scheduled for %@."
+          }
+        }
+      }
+    },
+    "digest.story_upcoming_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ reports %2$@"
+          }
+        }
+      }
+    },
+    "digest.story_watchlist_eyebrow" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WATCHLIST · %@"
+          }
+        }
+      }
+    },
+    "digest.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Today's Digest"
+          }
+        }
+      }
     },
     "dividend.status_failed" : {
       "localizations" : {

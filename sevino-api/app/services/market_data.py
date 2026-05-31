@@ -10,6 +10,7 @@ import structlog
 from fastapi import Request
 from redis.asyncio import Redis
 
+from app.config import settings
 from app.exceptions import (
     MarketDataError,
     MarketDataInvalidInputError,
@@ -38,6 +39,7 @@ __all__ = [
     "MarketDataUnavailableError",
     "MarketDataUpstreamError",
     "MarketDataService",
+    "build_market_data_service",
     "get_market_data_service",
 ]
 
@@ -433,6 +435,21 @@ def _normalize_symbol(symbol: str) -> str:
             f"Invalid symbol: {symbol}", symbol=symbol
         )
     return cleaned
+
+
+def build_market_data_service(
+    *,
+    fmp: FmpClient,
+    alpaca_broker: AccessTokenProvider,
+    redis: Redis,
+) -> MarketDataService:
+    return MarketDataService(
+        fmp=fmp,
+        alpaca_broker=alpaca_broker,
+        redis=redis,
+        alpaca_data_url=settings.alpaca_data_base_url,
+        alpaca_broker_url=settings.alpaca_base_url,
+    )
 
 
 def get_market_data_service(request: Request) -> MarketDataService:

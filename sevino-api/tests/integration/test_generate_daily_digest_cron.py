@@ -70,7 +70,11 @@ async def test_cron_generates_for_active_users_and_is_idempotent(
     second = await generate_daily_digest({"alpaca": object()})
 
     count = (
-        await db_session.execute(select(func.count()).select_from(DigestSnapshot))
+        await db_session.execute(
+            select(func.count())
+            .select_from(DigestSnapshot)
+            .where(DigestSnapshot.user_id == test_user)
+        )
     ).scalar_one()
     assert first["generated_count"] == 1
     assert second["generated_count"] == 0

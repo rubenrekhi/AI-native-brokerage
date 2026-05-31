@@ -13,6 +13,7 @@ import asyncio
 import uuid
 from datetime import datetime, time, timedelta, timezone
 from decimal import Decimal, InvalidOperation
+from time import perf_counter
 
 import sentry_sdk
 import structlog
@@ -35,6 +36,7 @@ from app.services.digest.reranker import (
     SHORTLIST_LIMIT,
     AnthropicClient,
     DigestReranker,
+    Reranker,
 )
 from app.services.digest.types import CardCandidate, DigestContext, Generator
 from app.services.fmp import FmpClient
@@ -58,7 +60,7 @@ class DigestService:
         fmp: FmpClient | None = None,
         generators: list[Generator] | None = None,
         anthropic: AnthropicClient | None = None,
-        reranker: DigestReranker | None = None,
+        reranker: Reranker | None = None,
     ) -> None:
         self._db = db
         self._alpaca = alpaca
@@ -77,20 +79,30 @@ class DigestService:
         Idempotent per `(user_id, ny_local_date)`: re-running refreshes the
         cards in place (see `DigestRepository.upsert`).
         """
+        return await self._generate_snapshot(user_id, persist=True)
+
+    async def preview_for_user(self, user_id: uuid.UUID) -> DigestSnapshot:
+        """Run the full generation pipeline without writing a snapshot."""
+        return await self._generate_snapshot(user_id, persist=False)
+
+    async def _generate_snapshot(
+        self, user_id: uuid.UUID, *, persist: bool
+    ) -> DigestSnapshot:
         if self._alpaca is None:
             raise RuntimeError("generate_for_user requires an Alpaca client")
 
+        started = perf_counter()
         now = datetime.now(timezone.utc)
         ctx = await build_context(user_id, self._db, self._alpaca)
         candidates = await self._gather_candidates(ctx)
         await self._enrich_candidates(ctx, candidates)
         heuristic_order = _heuristic_shortlist(ctx, candidates)
         reranker = self._reranker or DigestReranker(self._anthropic)
-        ordered_ids = await reranker.rank(
+        rerank = await reranker.rank_with_metadata(
             heuristic_order, ctx, fallback_order=heuristic_order
         )
         by_id = {candidate.card.id: candidate.card for candidate in heuristic_order}
-        cards = [by_id[card_id] for card_id in ordered_ids if card_id in by_id]
+        cards = [by_id[card_id] for card_id in rerank.ordered_ids if card_id in by_id]
         for priority, card in enumerate(cards, start=1):
             card.priority = priority
 
@@ -100,14 +112,21 @@ class DigestService:
             cards=[card.model_dump(mode="json") for card in cards],
             generated_at=now,
         )
-        persisted = await DigestRepository.upsert(self._db, snapshot)
-        logger.info(
-            "digest_generated",
-            user_id=str(user_id),
-            card_count=len(cards),
-            ny_local_date=persisted.ny_local_date.isoformat(),
+        result = (
+            await DigestRepository.upsert(self._db, snapshot) if persist else snapshot
         )
-        return persisted
+        logger.info(
+            "digest.generation.completed",
+            user_id=str(user_id),
+            total_latency_ms=round((perf_counter() - started) * 1000, 1),
+            final_card_count=len(cards),
+            reranker_fallback=rerank.used_fallback,
+            reranker_fallback_reason=rerank.fallback_reason,
+            card_kinds=[card.kind for card in cards],
+            ny_local_date=result.ny_local_date.isoformat(),
+            persisted=persist,
+        )
+        return result
 
     async def rollback(self) -> None:
         """Rollback the underlying session after a cancelled generation."""
@@ -165,28 +184,44 @@ class DigestService:
     ) -> list[CardCandidate]:
         if self._alpaca is None:
             raise RuntimeError("digest generators require an Alpaca client")
+        name = generator.__class__.__name__
+        started = perf_counter()
+        candidate_count = 0
+        error: str | None = None
         try:
-            return await generator.generate(ctx, self._db, self._alpaca)
+            candidates = await generator.generate(ctx, self._db, self._alpaca)
+            candidate_count = len(candidates)
+            return candidates
         except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"
             logger.warning(
                 "digest_generator_failed",
                 user_id=str(ctx.user_id),
-                generator=generator.__class__.__name__,
+                generator=name,
                 error_type=type(exc).__name__,
                 error=str(exc),
             )
             with sentry_sdk.new_scope() as scope:
                 scope.set_tag("digest_component", "generator")
-                scope.set_tag("digest_generator", generator.__class__.__name__)
+                scope.set_tag("digest_generator", name)
                 scope.set_context(
                     "digest_generator",
                     {
                         "user_id": str(ctx.user_id),
-                        "generator": generator.__class__.__name__,
+                        "generator": name,
                     },
                 )
                 sentry_sdk.capture_exception(exc)
             return []
+        finally:
+            logger.info(
+                "digest.generator.completed",
+                user_id=str(ctx.user_id),
+                name=name,
+                latency_ms=round((perf_counter() - started) * 1000, 1),
+                candidate_count=candidate_count,
+                error=error,
+            )
 
     async def _enrich_candidates(
         self, ctx: DigestContext, candidates: list[CardCandidate]

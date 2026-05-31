@@ -207,6 +207,9 @@ class TestWorkerStartup:
             "app.worker.build_listeners", MagicMock(return_value=[])
         )
         monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+        # No FMP key → only the cache-redis client is built (the market-data
+        # client is a second from_url call gated on fmp_api_key).
+        monkeypatch.setattr(app_worker.settings, "fmp_api_key", "")
 
         await app_worker.startup({})
 
@@ -365,6 +368,36 @@ class TestWorkerStartup:
         fmp_factory.assert_not_called()
         assert ctx["fmp"] is None
 
+    async def test_startup_creates_market_data_redis_on_db_index_1(
+        self, monkeypatch
+    ):
+        """When FMP is configured, the market-data client gets its own Redis
+        on db index 1 so a market-data cache flush can't wipe ARQ job state
+        on db 0."""
+        cache_client = AsyncMock()
+        market_data_client = AsyncMock()
+        from_url = MagicMock(side_effect=[cache_client, market_data_client])
+        monkeypatch.setattr("app.worker.aioredis.from_url", from_url)
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.build_listeners", MagicMock(return_value=[])
+        )
+        monkeypatch.setattr("app.worker.FmpClient", MagicMock())
+        monkeypatch.setattr("app.worker.MarketDataService", MagicMock())
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+        monkeypatch.setattr(app_worker.settings, "fmp_api_key", "key-123")
+
+        ctx: dict = {}
+        await app_worker.startup(ctx)
+
+        assert app_worker.settings.market_data_redis_url.endswith("/1")
+        from_url.assert_any_call(app_worker.settings.market_data_redis_url)
+        assert ctx["market_data_redis"] is market_data_client
+        assert ctx["market_data"] is not None
+
 
 class TestWorkerShutdown:
     """The shutdown hook cancels listener tasks, gracefully waits for them
@@ -472,6 +505,22 @@ class TestWorkerShutdown:
         await app_worker.shutdown(ctx)
 
         fmp.close.assert_awaited_once()
+
+    async def test_shutdown_closes_market_data_redis(self):
+        """The market-data Redis client (db 1) created in startup must be
+        closed so its connection doesn't leak into the next deploy."""
+        market_data = AsyncMock()
+        market_data_redis = AsyncMock()
+        ctx = {
+            "market_data": market_data,
+            "market_data_redis": market_data_redis,
+            "listener_tasks": [],
+        }
+
+        await app_worker.shutdown(ctx)
+
+        market_data.close.assert_awaited_once()
+        market_data_redis.aclose.assert_awaited_once()
 
     async def test_shutdown_swallows_fmp_close_failures(self):
         """A failing fmp.close must not raise out of shutdown — a flaky

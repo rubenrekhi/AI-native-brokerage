@@ -347,42 +347,81 @@ enum L10n {
 
     enum Digest {
         static let title = String(localized: "digest.title")
-        static let chatPlaceholder = String(localized: "digest.chat_placeholder")
+        static let dailyDigestEyebrow = String(localized: "digest.daily_digest_eyebrow")
         static let dismissAccessibility = String(localized: "digest.dismiss_accessibility")
-        static let sendAccessibility = String(localized: "digest.send_accessibility")
-        static let earningsEpsActual = String(localized: "digest.earnings_eps_actual")
-        static let earningsEpsEstimate = String(localized: "digest.earnings_eps_estimate")
-        static let earningsRevenueActual = String(localized: "digest.earnings_revenue_actual")
-        static let earningsRevenueEstimate = String(localized: "digest.earnings_revenue_estimate")
         static let marketDirectionMixed = String(localized: "digest.market_direction_mixed")
         static let marketDirectionDown = String(localized: "digest.market_direction_down")
         static let marketDirectionUp = String(localized: "digest.market_direction_up")
-        static let newsOpenStory = String(localized: "digest.news_open_story")
-        static let pendingFilledTitle = String(localized: "digest.pending_filled_title")
-        static let pendingFilledEmpty = String(localized: "digest.pending_filled_empty")
-        static let pendingRecurringExecutedTitle = String(localized: "digest.pending_recurring_executed_title")
-        static let pendingRecurringExecutedEmpty = String(localized: "digest.pending_recurring_executed_empty")
-        static let pendingRecurringSkippedTitle = String(localized: "digest.pending_recurring_skipped_title")
-        static let pendingRecurringSkippedEmpty = String(localized: "digest.pending_recurring_skipped_empty")
-        static let pendingShares = String(localized: "digest.pending_shares")
-        static let radarNew = String(localized: "digest.radar_new")
-        static let radarRefreshedTitle = String(localized: "digest.radar_refreshed_title")
-        static let radarRemoved = String(localized: "digest.radar_removed")
-        static let watchlistBadge = String(localized: "digest.watchlist_badge")
+        static let storyDividendsEyebrow = String(localized: "digest.story_dividends_eyebrow")
+        static let storyOrdersEyebrow = String(localized: "digest.story_orders_eyebrow")
+        static let storyOrdersTitle = String(localized: "digest.story_orders_title")
+        static let storyMarketEyebrow = String(localized: "digest.story_market_eyebrow")
+        static let storyRadarEyebrow = String(localized: "digest.story_radar_eyebrow")
+        static let storyRadarTitle = String(localized: "digest.story_radar_title")
+        static let storyRadarAccent = String(localized: "digest.story_radar_accent")
+        static let storyNewsEyebrow = String(localized: "digest.story_news_eyebrow")
+        static let storySymbolsFallback = String(localized: "digest.story_symbols_fallback")
         static func cardsReady(_ count: Int) -> String {
             String(format: String(localized: "digest.cards_ready"), count)
-        }
-        static func earningsStockReaction(_ reaction: String) -> String {
-            String(format: String(localized: "digest.earnings_stock_reaction"), reaction)
         }
         static func progressAccessibility(_ current: Int, _ total: Int) -> String {
             String(format: String(localized: "digest.progress_accessibility"), current, total)
         }
-        static func radarUpdated(_ date: String) -> String {
-            String(format: String(localized: "digest.radar_updated"), date)
+        static func storyDividendsTitle(_ period: String) -> String {
+            String(format: String(localized: "digest.story_dividends_title"), period)
         }
-        static func upcomingReports(_ date: String) -> String {
-            String(format: String(localized: "digest.upcoming_reports"), date)
+        static func storyDividendsSummary(_ symbols: String) -> String {
+            String(format: String(localized: "digest.story_dividends_summary"), symbols)
+        }
+        static func storyPaymentsCount(_ count: Int) -> String {
+            String(format: String(localized: "digest.story_payments_count"), count)
+        }
+        static func storyOrdersUnit(_ count: Int) -> String {
+            count == 1
+                ? String(localized: "digest.story_orders_unit_one")
+                : String(localized: "digest.story_orders_unit_other")
+        }
+        static func storyOrdersSummary(_ symbols: String) -> String {
+            String(format: String(localized: "digest.story_orders_summary"), symbols)
+        }
+        static func storyBigMoveEyebrow(_ symbol: String) -> String {
+            String(format: String(localized: "digest.story_big_move_eyebrow"), symbol)
+        }
+        static func storyWatchlistEyebrow(_ symbol: String) -> String {
+            String(format: String(localized: "digest.story_watchlist_eyebrow"), symbol)
+        }
+        static func storyMoveTitle(_ name: String, _ changePct: String) -> String {
+            String(format: String(localized: "digest.story_move_title"), name, changePct)
+        }
+        static func storyMoveSummaryFallback(_ symbol: String, _ prevClose: String, _ current: String) -> String {
+            String(format: String(localized: "digest.story_move_summary_fallback"), symbol, prevClose, current)
+        }
+        static func storyNasdaqAccent(_ changePct: String) -> String {
+            String(format: String(localized: "digest.story_nasdaq_accent"), changePct)
+        }
+        static func storyRadarSummary(_ symbols: String) -> String {
+            String(format: String(localized: "digest.story_radar_summary"), symbols)
+        }
+        static func storyEarningsEyebrow(_ symbol: String) -> String {
+            String(format: String(localized: "digest.story_earnings_eyebrow"), symbol)
+        }
+        static func storyEarningsTitle(_ name: String) -> String {
+            String(format: String(localized: "digest.story_earnings_title"), name)
+        }
+        static func storyEarningsReaction(_ reaction: String) -> String {
+            String(format: String(localized: "digest.story_earnings_reaction"), reaction)
+        }
+        static func storyUpcomingEyebrow(_ symbol: String) -> String {
+            String(format: String(localized: "digest.story_upcoming_eyebrow"), symbol)
+        }
+        static func storyUpcomingTitle(_ name: String, _ relative: String) -> String {
+            String(format: String(localized: "digest.story_upcoming_title"), name, relative)
+        }
+        static func storyUpcomingSummary(_ date: String) -> String {
+            String(format: String(localized: "digest.story_upcoming_summary"), date)
+        }
+        static func storyNewsEyebrowSymbol(_ symbol: String) -> String {
+            String(format: String(localized: "digest.story_news_eyebrow_symbol"), symbol)
         }
     }
 

@@ -138,8 +138,7 @@ struct DigestUITestHostView: View {
             DigestStackView(
                 scale: 1,
                 viewModel: viewModel,
-                onRouteToChat: { routedToChat = true },
-                onSubmitChat: { _, _ in routedToChat = true }
+                onRouteToChat: { routedToChat = true }
             )
         }
     }

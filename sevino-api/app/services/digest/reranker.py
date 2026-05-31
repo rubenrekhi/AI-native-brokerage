@@ -10,11 +10,13 @@ from __future__ import annotations
 import json
 import re
 import uuid
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
 from anthropic import APIError
+import sentry_sdk
 
 from app.config import settings
 from app.services.digest.cards import DigestCard
@@ -53,6 +55,10 @@ _USER_COPY_KEYS = frozenset(
         "summary",
     }
 )
+# Fallback reasons that are normal operation, not failures: too few cards to
+# rerank, or no Anthropic client configured (dev). These stay breadcrumb-only
+# so they don't generate Sentry noise; every other reason is an AI misbehaving.
+_BENIGN_FALLBACK_REASONS = frozenset({"too_few_candidates", "anthropic_unavailable"})
 
 
 class AnthropicMessagesClient(Protocol):
@@ -61,6 +67,23 @@ class AnthropicMessagesClient(Protocol):
 
 class AnthropicClient(Protocol):
     messages: AnthropicMessagesClient
+
+
+@dataclass(frozen=True)
+class RerankResult:
+    ordered_ids: list[uuid.UUID]
+    used_fallback: bool
+    fallback_reason: str | None = None
+
+
+class Reranker(Protocol):
+    async def rank_with_metadata(
+        self,
+        candidates: list[CardCandidate],
+        ctx: DigestContext,
+        *,
+        fallback_order: list[CardCandidate] | None = None,
+    ) -> RerankResult: ...
 
 
 class DigestReranker:
@@ -80,6 +103,18 @@ class DigestReranker:
         *,
         fallback_order: list[CardCandidate] | None = None,
     ) -> list[uuid.UUID]:
+        result = await self.rank_with_metadata(
+            candidates, ctx, fallback_order=fallback_order
+        )
+        return result.ordered_ids
+
+    async def rank_with_metadata(
+        self,
+        candidates: list[CardCandidate],
+        ctx: DigestContext,
+        *,
+        fallback_order: list[CardCandidate] | None = None,
+    ) -> RerankResult:
         """Return ordered card IDs, falling back to the heuristic order.
 
         Anthropic output must be a JSON array of candidate IDs. Candidate
@@ -95,7 +130,12 @@ class DigestReranker:
         ]
         fallback = _fallback_ids(clean_fallback)
         if len(clean_candidates) < MIN_RERANKED_CARDS or self._anthropic is None:
-            return fallback
+            reason = (
+                "too_few_candidates"
+                if len(clean_candidates) < MIN_RERANKED_CARDS
+                else "anthropic_unavailable"
+            )
+            return _fallback_result(fallback, reason, ctx)
 
         candidate_ids = {str(candidate.card.id) for candidate in clean_candidates}
         try:
@@ -111,19 +151,24 @@ class DigestReranker:
                     }
                 ],
             )
-        except APIError:
-            return fallback
+        except APIError as exc:
+            return _fallback_result(
+                fallback, f"anthropic_api_error:{type(exc).__name__}", ctx
+            )
 
         ordered = _parse_ordered_ids(response)
         if ordered is None:
-            return fallback
+            return _fallback_result(fallback, "invalid_json", ctx)
         if not MIN_RERANKED_CARDS <= len(ordered) <= MAX_RERANKED_CARDS:
-            return fallback
+            return _fallback_result(fallback, "invalid_card_count", ctx)
         if len(set(ordered)) != len(ordered):
-            return fallback
+            return _fallback_result(fallback, "duplicate_card_ids", ctx)
         if any(card_id not in candidate_ids for card_id in ordered):
-            return fallback
-        return [uuid.UUID(card_id) for card_id in ordered]
+            return _fallback_result(fallback, "unknown_card_id", ctx)
+        return RerankResult(
+            ordered_ids=[uuid.UUID(card_id) for card_id in ordered],
+            used_fallback=False,
+        )
 
 
 def validate_non_prescriptive_cards(cards: list[DigestCard]) -> bool:
@@ -145,6 +190,40 @@ def _fallback_ids(candidates: list[CardCandidate]) -> list[uuid.UUID]:
         candidate.card.id
         for candidate in candidates[: min(MAX_RERANKED_CARDS, len(candidates))]
     ]
+
+
+def _fallback_result(
+    ids: list[uuid.UUID], reason: str, ctx: DigestContext
+) -> RerankResult:
+    sentry_sdk.add_breadcrumb(
+        category="digest.reranker",
+        message="fallback_to_heuristic_order",
+        level="warning",
+        data={"reason": reason},
+    )
+    if reason not in _BENIGN_FALLBACK_REASONS:
+        # Anomalous fallbacks (Anthropic API errors, malformed/invalid output)
+        # mean every digest is silently degrading to heuristic order. A
+        # breadcrumb never surfaces without a later capture in the same scope,
+        # so escalate to an alert ops can see.
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("digest_component", "reranker")
+            scope.set_tag("alert_type", "digest_reranker_fallback")
+            scope.set_tag("fallback_reason", reason)
+            scope.set_tag("user_id", str(ctx.user_id))
+            scope.set_tag(
+                "ny_local_date",
+                ctx.market_state.as_of.astimezone(_ET).date().isoformat(),
+            )
+            sentry_sdk.capture_message(
+                "digest_reranker_fallback",
+                level="warning",
+            )
+    return RerankResult(
+        ordered_ids=ids,
+        used_fallback=True,
+        fallback_reason=reason,
+    )
 
 
 def _parse_ordered_ids(response: Any) -> list[str] | None:

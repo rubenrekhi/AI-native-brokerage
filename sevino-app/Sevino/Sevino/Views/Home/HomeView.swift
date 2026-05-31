@@ -39,17 +39,6 @@ struct HomeView: View {
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
 
-    private var digestCoverPresented: Binding<Bool> {
-        Binding(
-            get: { digestViewModel.presentationState == .full },
-            set: { isPresented in
-                if !isPresented && digestViewModel.presentationState == .full {
-                    Task { await digestViewModel.dismissToPeek() }
-                }
-            }
-        )
-    }
-
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
         return colorScheme == .light ? -0.3 : -0.2
@@ -83,7 +72,8 @@ struct HomeView: View {
     var body: some View {
         SevinoGlassContainer {
             ZStack {
-                if !viewModel.isConversationActive && !shortcutsExpanded {
+                if !viewModel.isConversationActive && !shortcutsExpanded
+                    && digestViewModel.presentationState != .full {
                     HomeGreetingSection(
                         scale: scale,
                         greeting: viewModel.greeting,
@@ -212,6 +202,7 @@ struct HomeView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
         }
+        .overlay { digestFullOverlay }
         .overlay(alignment: .bottom) { digestPeekOverlay }
         .overlay(alignment: .bottom) { quickCommandsOverlay }
         .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
@@ -307,20 +298,7 @@ struct HomeView: View {
         } message: { message in
             Text(message)
         }
-        .alert(
-            L10n.Home.fundingLoadErrorTitle,
-            isPresented: Binding(
-                get: { fundingViewModel.error != nil },
-                set: { if !$0 { fundingViewModel.clearError() } }
-            ),
-            presenting: fundingViewModel.error
-        ) { _ in
-            Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
-                fundingViewModel.clearError()
-            }
-        } message: { message in
-            Text(message)
-        }
+        .modifier(FundingErrorAlert(viewModel: fundingViewModel))
         .modifier(ResumeErrorAlert(viewModel: viewModel))
         .modifier(TransferSheetPresenter(
             transferViewModel: transferViewModel,
@@ -358,14 +336,21 @@ struct HomeView: View {
         } message: { message in
             Text(message)
         }
-        .fullScreenCover(isPresented: digestCoverPresented) {
-            DigestStackView(
-                scale: scale,
-                viewModel: digestViewModel,
-                onRouteToChat: routeToChatFromDigest,
-                onSubmitChat: sendDigestMessage
-            )
+    }
+
+    private var digestFullOverlay: some View {
+        Group {
+            if digestViewModel.presentationState == .full {
+                DigestStackView(
+                    scale: scale,
+                    viewModel: digestViewModel,
+                    onRouteToChat: routeToChatFromDigest
+                )
+                .padding(.bottom, chatInputHeight + 16 * scale)
+                .transition(.opacity.combined(with: .scale(scale: 0.98)))
+            }
         }
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: digestViewModel.presentationState)
     }
 
     // TODO(SEV-567): replace this string collapse with structured ticker
@@ -391,6 +376,12 @@ struct HomeView: View {
             }
         }.joined()
         guard !text.isEmpty else { return }
+
+        if digestViewModel.presentationState == .full,
+           let digestCard = digestViewModel.currentChatDigestCard() {
+            sendDigestMessage(text: text, digestCard: digestCard)
+            return
+        }
 
         let attached = captureAttachedContext()
         if anyModalOpen {
@@ -556,6 +547,7 @@ struct HomeView: View {
         tickerMentionViewModel.clear()
         Task {
             do {
+                await digestViewModel.dismissToPeek()
                 try await viewModel.send(text: text, digestCard: digestCard)
             } catch {
                 // Failure is already reflected in the conversation store's
@@ -697,16 +689,18 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                ShortcutsRail(
-                    scale: scale,
-                    isExpanded: $shortcutsExpanded,
-                    onSelect: { tickerMentionViewModel.updateText($0) }
-                )
-                    .padding(.bottom, chatInputHeight + 20 * scale)
-                    .padding(.horizontal, 16 * scale)
-                    .blur(radius: anyModalOpen ? 10 : 0)
-                    .brightness(modalDimBrightness(when: anyModalOpen))
-                    .allowsHitTesting(!anyModalOpen)
+                if digestViewModel.presentationState != .full {
+                    ShortcutsRail(
+                        scale: scale,
+                        isExpanded: $shortcutsExpanded,
+                        onSelect: { tickerMentionViewModel.updateText($0) }
+                    )
+                        .padding(.bottom, chatInputHeight + 20 * scale)
+                        .padding(.horizontal, 16 * scale)
+                        .blur(radius: anyModalOpen ? 10 : 0)
+                        .brightness(modalDimBrightness(when: anyModalOpen))
+                        .allowsHitTesting(!anyModalOpen)
+                }
             }
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
@@ -782,6 +776,27 @@ private struct PortfolioAutoRefresh: ViewModifier {
                     Task { await refresh() }
                 }
             }
+    }
+}
+
+private struct FundingErrorAlert: ViewModifier {
+    @Bindable var viewModel: FundingViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Home.fundingLoadErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.fundingLoadErrorDismiss, role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
     }
 }
 

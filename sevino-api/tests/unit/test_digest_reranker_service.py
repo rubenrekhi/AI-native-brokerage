@@ -14,7 +14,7 @@ from app.services.digest.cards import (
     MarketContextCard,
     NewsCard,
 )
-from app.services.digest.reranker import DigestReranker
+from app.services.digest.reranker import DigestReranker, RerankResult
 from app.services.digest.service import DigestService
 from app.services.digest.types import CardCandidate, DigestContext, MarketState
 
@@ -180,6 +180,34 @@ async def test_reranker_falls_back_to_heuristic_order_on_invalid_output():
     assert ranked == [candidate.card.id for candidate in heuristic]
 
 
+async def test_reranker_metadata_marks_fallback_and_adds_breadcrumb(monkeypatch):
+    candidates = [_market_card(index, magnitude=float(index)) for index in range(5)]
+    heuristic = list(reversed(candidates))
+    anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+    anthropic.messages.create.return_value = _anthropic_response("not json")
+    breadcrumbs = []
+    monkeypatch.setattr(
+        "app.services.digest.reranker.sentry_sdk.add_breadcrumb",
+        lambda **kwargs: breadcrumbs.append(kwargs),
+    )
+
+    result = await DigestReranker(anthropic).rank_with_metadata(
+        candidates, _ctx(), fallback_order=heuristic
+    )
+
+    assert result.ordered_ids == [candidate.card.id for candidate in heuristic]
+    assert result.used_fallback is True
+    assert result.fallback_reason == "invalid_json"
+    assert breadcrumbs == [
+        {
+            "category": "digest.reranker",
+            "message": "fallback_to_heuristic_order",
+            "level": "warning",
+            "data": {"reason": "invalid_json"},
+        }
+    ]
+
+
 async def test_reranker_fallback_excludes_prescriptive_card_copy():
     candidates = [_market_card(index) for index in range(3)]
     candidates[0].card.summary = "You should buy more AAPL."
@@ -226,6 +254,90 @@ async def test_generate_for_user_continues_after_generator_failure(monkeypatch):
     assert snapshot.cards[0]["priority"] == 1
 
 
+async def test_generate_for_user_emits_generator_and_overall_logs(monkeypatch):
+    ctx = _ctx()
+    events = []
+
+    class FakeLogger:
+        def info(self, event, **kwargs):
+            events.append((event, kwargs))
+
+        def warning(self, event, **kwargs):
+            events.append((event, kwargs))
+
+    class WorkingGenerator:
+        async def generate(self, *_args):
+            return [_market_card(1)]
+
+    async def fake_build_context(*_args):
+        return ctx
+
+    async def fake_upsert(_db, snapshot):
+        return snapshot
+
+    monkeypatch.setattr("app.services.digest.service.logger", FakeLogger())
+    monkeypatch.setattr(
+        "app.services.digest.service.build_context", fake_build_context
+    )
+    monkeypatch.setattr(
+        "app.services.digest.service.DigestRepository.upsert", fake_upsert
+    )
+
+    service = DigestService(
+        AsyncMock(),
+        alpaca=AsyncMock(),
+        generators=[WorkingGenerator()],
+    )
+
+    await service.generate_for_user(ctx.user_id)
+
+    generator_log = next(
+        kwargs for event, kwargs in events if event == "digest.generator.completed"
+    )
+    overall_log = next(
+        kwargs for event, kwargs in events if event == "digest.generation.completed"
+    )
+    assert generator_log["name"] == "WorkingGenerator"
+    assert generator_log["candidate_count"] == 1
+    assert generator_log["error"] is None
+    assert overall_log["user_id"] == str(ctx.user_id)
+    assert overall_log["final_card_count"] == 1
+    assert overall_log["card_kinds"] == ["market_context"]
+    assert overall_log["persisted"] is True
+
+
+async def test_preview_for_user_runs_pipeline_without_upsert(monkeypatch):
+    ctx = _ctx()
+
+    class WorkingGenerator:
+        async def generate(self, *_args):
+            return [_market_card(1)]
+
+    async def fake_build_context(*_args):
+        return ctx
+
+    async def fail_upsert(*_args):
+        raise AssertionError("preview_for_user must not persist")
+
+    monkeypatch.setattr(
+        "app.services.digest.service.build_context", fake_build_context
+    )
+    monkeypatch.setattr(
+        "app.services.digest.service.DigestRepository.upsert", fail_upsert
+    )
+
+    service = DigestService(
+        AsyncMock(),
+        alpaca=AsyncMock(),
+        generators=[WorkingGenerator()],
+    )
+
+    snapshot = await service.preview_for_user(ctx.user_id)
+
+    assert [card["kind"] for card in snapshot.cards] == ["market_context"]
+    assert snapshot.id is None
+
+
 async def test_generate_for_user_requires_provider_clients_without_injected_generators(
     monkeypatch,
 ):
@@ -259,8 +371,11 @@ async def test_cross_generator_enrichment_populates_reason_and_reaction(monkeypa
             return [big_move, news, earnings]
 
     class OrderedReranker:
-        async def rank(self, candidates, *_args, **_kwargs):
-            return [candidate.card.id for candidate in candidates]
+        async def rank_with_metadata(self, candidates, *_args, **_kwargs):
+            return RerankResult(
+                ordered_ids=[candidate.card.id for candidate in candidates],
+                used_fallback=False,
+            )
 
     async def fake_build_context(*_args):
         return ctx

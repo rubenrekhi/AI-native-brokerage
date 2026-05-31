@@ -70,16 +70,6 @@ final class DigestViewModelTests: XCTestCase {
         XCTAssertEqual(client.dismissDigestCallCount, 1)
     }
 
-    func testChatTextSurvivesCardSwipes() async {
-        client.todayResponse = makeResponse(cards: [makeCard(), makeCard()], dismissedAt: nil)
-        await viewModel.refreshForForeground()
-        viewModel.chatText = "Explain this"
-
-        XCTAssertTrue(viewModel.showNextCard())
-
-        XCTAssertEqual(viewModel.chatText, "Explain this")
-    }
-
     func testCurrentChatDigestCardCapturesCardInView() async throws {
         let firstCard = makeCard(symbol: "AAPL")
         let secondCard = makeCard(symbol: "MSFT")

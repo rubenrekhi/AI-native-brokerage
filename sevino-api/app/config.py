@@ -1,5 +1,6 @@
 import ssl as _ssl
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 from arq.connections import RedisSettings
 from pydantic import field_validator, model_validator
@@ -78,6 +79,14 @@ class Settings(BaseSettings):
     @property
     def plaid_fernet_keys(self) -> list[str]:
         return [k.strip() for k in self.plaid_fernet_key.split(",") if k.strip()]
+
+    @property
+    def market_data_redis_url(self) -> str:
+        # MarketDataService runs on Redis db index 1 so a market-data cache
+        # flush can't wipe ARQ job state on db 0. `Redis.from_url(url, db=1)`
+        # does NOT override a path-encoded db in the URL, so rewrite the path.
+        parsed = urlparse(self.redis_url)
+        return urlunparse(parsed._replace(path="/1"))
 
     @property
     def is_pr_preview(self) -> bool:

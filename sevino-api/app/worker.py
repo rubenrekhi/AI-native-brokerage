@@ -11,12 +11,14 @@ from arq.cron import cron
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
+from app.ai.anthropic_client import create_anthropic_client
 from app.config import get_redis_settings, settings
 from app.sentry_config import before_send as sentry_before_send
 from app.listeners.registry import build_listeners
 from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.fmp import FmpClient
+from app.services.market_data import MarketDataService, build_market_data_service
 from app.tasks.generate_daily_digest import generate_daily_digest
 from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
@@ -158,10 +160,22 @@ async def startup(ctx: dict) -> None:
     ctx["cache_redis"] = cache_redis
     ctx["listeners"] = listeners
     ctx["listener_tasks"] = listener_tasks
+    ctx["anthropic"] = create_anthropic_client()
     # sync_assets enriches the catalog from FMP only when this client is
     # present. Skip when no key is configured (e.g. dev) so the rest of the
     # worker still boots.
     ctx["fmp"] = FmpClient(api_key=settings.fmp_api_key) if settings.fmp_api_key else None
+    if ctx["fmp"] is not None:
+        market_data_redis = aioredis.from_url(settings.market_data_redis_url)
+        ctx["market_data_redis"] = market_data_redis
+        ctx["market_data"] = build_market_data_service(
+            fmp=ctx["fmp"],
+            alpaca_broker=broker,
+            redis=market_data_redis,
+        )
+    else:
+        ctx["market_data_redis"] = None
+        ctx["market_data"] = None
 
     logger.info("worker_listeners_started", count=len(listeners))
 
@@ -207,11 +221,24 @@ async def shutdown(ctx: dict) -> None:
             logger.warning("worker_alpaca_close_failed", error=str(exc))
 
     fmp: FmpClient | None = ctx.get("fmp")
-    if fmp is not None:
+    market_data: MarketDataService | None = ctx.get("market_data")
+    if market_data is not None:
+        try:
+            await market_data.close()
+        except Exception as exc:
+            logger.warning("worker_market_data_close_failed", error=str(exc))
+    elif fmp is not None:
         try:
             await fmp.close()
         except Exception as exc:
             logger.warning("worker_fmp_close_failed", error=str(exc))
+
+    anthropic = ctx.get("anthropic")
+    if anthropic is not None:
+        try:
+            await anthropic.close()
+        except Exception as exc:
+            logger.warning("worker_anthropic_close_failed", error=str(exc))
 
     cache_redis: aioredis.Redis | None = ctx.get("cache_redis")
     if cache_redis is not None:
@@ -222,6 +249,17 @@ async def shutdown(ctx: dict) -> None:
             # errors during close aren't actionable — log and move on.
             logger.warning(
                 "worker_cache_redis_close_failed",
+                exc_type=type(exc).__name__,
+                error=str(exc),
+            )
+
+    market_data_redis: aioredis.Redis | None = ctx.get("market_data_redis")
+    if market_data_redis is not None:
+        try:
+            await market_data_redis.aclose()
+        except SHUTDOWN_CLEANUP_ERRORS as exc:
+            logger.warning(
+                "worker_market_data_redis_close_failed",
                 exc_type=type(exc).__name__,
                 error=str(exc),
             )

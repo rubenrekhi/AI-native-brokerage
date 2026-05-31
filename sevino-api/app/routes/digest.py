@@ -55,6 +55,7 @@ async def _digest_service(
             alpaca=alpaca,
             market_data=getattr(request.app.state, "market_data", None),
             fmp=getattr(request.app.state, "fmp", None),
+            anthropic=getattr(request.app.state, "anthropic", None),
         )
     finally:
         if close_alpaca:
@@ -78,6 +79,7 @@ async def get_today(
     user_uuid = uuid.UUID(user_id)
     snapshot = await service.get_today(user_uuid)
     if snapshot is None and _after_digest_release(_now_utc()):
+        logger.info("digest.lazy_fallback.hit", user_id=user_id)
         try:
             snapshot = await asyncio.wait_for(
                 service.generate_for_user(user_uuid),
