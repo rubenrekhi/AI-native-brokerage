@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Protocol
 
+from app.services.digest.generators.beginner_market import BeginnerMarketGenerator
 from app.services.digest.generators.big_moves import BigMovesGenerator
 from app.services.digest.generators.dividends import DividendsGenerator
 from app.services.digest.generators.earnings_results import (
@@ -64,6 +65,8 @@ def create_known_generators(
         generators.extend(
             generator_cls(fmp=fmp) for generator_cls in FMP_GENERATORS
         )
+    if market_data is not None and fmp is not None:
+        generators.append(BeginnerMarketGenerator(market_data, fmp=fmp))
     return generators
 
 
@@ -76,6 +79,7 @@ def build_known_generators(
 
 
 __all__ = (
+    "BeginnerMarketGenerator",
     "BigMovesGenerator",
     "DividendsGenerator",
     "EarningsResultsGenerator",

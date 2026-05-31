@@ -102,6 +102,14 @@ class _FmpNewsItem(BaseModel):
     def _none_if_blank(cls, value: Any) -> Any:
         return none_if_blank(value)
 
+    @field_validator("published_at", mode="after")
+    @classmethod
+    def _ensure_utc(cls, value: datetime) -> datetime:
+        # FMP returns naive timestamps; anchor to UTC so the iOS strict ISO 8601 decoder accepts them.
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
+
 
 class StockNewsItem(_FmpNewsItem):
     symbol: str
@@ -157,7 +165,6 @@ class FmpClient:
     """
 
     DEFAULT_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/stable"
-    DEFAULT_V3_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/api/v3"
     BATCH_QUOTE_MAX_SYMBOLS: ClassVar[int] = 100
 
     def __init__(
@@ -185,14 +192,6 @@ class FmpClient:
         symbol_for_errors: str | None = None,
     ) -> Any:
         resolved_base_url = (base_url or self._base_url).rstrip("/")
-        if (
-            base_url is None
-            and resolved_base_url.endswith("/stable")
-            and (path.startswith("/api/v3/") or path.startswith("/api/v4/"))
-        ):
-            # FMP's legacy news endpoints live under /api/v3 and /api/v4,
-            # while this client defaults to the newer /stable base path.
-            resolved_base_url = resolved_base_url.removesuffix("/stable")
         url = f"{resolved_base_url}{path}"
         query: dict[str, Any] = {"apikey": self._api_key}
         if params:
@@ -389,15 +388,14 @@ class FmpClient:
     async def get_earnings_calendar(
         self, from_date: date, to_date: date
     ) -> list[EarningsCalendarItem]:
-        """Legacy v3 earnings calendar rows, validated into schema objects.
+        """Earnings calendar rows, validated into schema objects.
 
-        This intentionally coexists with `earnings_calendar`, which uses the
-        stable API and returns raw rows for the radar event ingester.
+        This intentionally coexists with `earnings_calendar`, which returns
+        raw rows for the radar event ingester.
         """
         data = await self._request(
-            "/earning_calendar",
+            "/earnings-calendar",
             {"from": from_date.isoformat(), "to": to_date.isoformat()},
-            base_url=self.DEFAULT_V3_BASE_URL,
         )
         items = _validate_fmp_rows(
             data,
@@ -417,8 +415,8 @@ class FmpClient:
             return []
 
         data = await self._request(
-            f"/historical/earning_calendar/{symbol}",
-            base_url=self.DEFAULT_V3_BASE_URL,
+            "/earnings",
+            {"symbol": symbol},
             symbol_for_errors=symbol,
         )
         items = _validate_fmp_rows(
@@ -457,9 +455,9 @@ class FmpClient:
             return []
 
         data = await self._request(
-            "/api/v3/stock_news",
+            "/news/stock",
             {
-                "tickers": ",".join(tickers),
+                "symbols": ",".join(tickers),
                 "from": _fmp_news_from_date(since),
                 "limit": _fmp_news_request_limit(since, limit),
             },
@@ -484,7 +482,7 @@ class FmpClient:
             return []
 
         data = await self._request(
-            "/api/v4/general_news",
+            "/news/general-latest",
             {
                 "from": _fmp_news_from_date(since),
                 "limit": _fmp_news_request_limit(since, limit),

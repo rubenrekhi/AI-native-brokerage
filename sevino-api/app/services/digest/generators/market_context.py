@@ -42,6 +42,8 @@ class MarketContextGenerator:
         )
         spy = moves.get(_SPY, _ZERO_MOVE)
         qqq = moves.get(_QQQ, _ZERO_MOVE)
+        if max(abs(spy.change_pct), abs(qqq.change_pct)) < INDEX_MOVE_PCT:
+            return []
         direction = _direction(spy.change_pct, qqq.change_pct)
         card = MarketContextCard(
             direction=direction,

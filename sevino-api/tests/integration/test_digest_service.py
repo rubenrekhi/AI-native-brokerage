@@ -36,7 +36,7 @@ async def test_generate_for_user_persists_digest(db_session, test_user):
 
     snapshot = await service.generate_for_user(test_user)
 
-    assert [card["kind"] for card in snapshot.cards] == ["market_context"]
+    assert snapshot.cards == []
     assert snapshot.generated_at is not None
     today = await service.get_today(test_user)
     assert today is not None

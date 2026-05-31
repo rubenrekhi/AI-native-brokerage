@@ -15,6 +15,7 @@ final class DigestViewModel {
     private(set) var isLoading = false
     private(set) var error: String?
     private(set) var currentCardIndex = 0
+    private var dismissalPersisted = false
 
     var cards: [DigestCard] {
         snapshot?.cards ?? []
@@ -46,6 +47,7 @@ final class DigestViewModel {
             snapshot = response.snapshot
             currentCardIndex = min(currentCardIndex, max(response.snapshot.cards.count - 1, 0))
             presentationState = response.snapshot.dismissedAt == nil ? .full : .peek
+            dismissalPersisted = response.snapshot.dismissedAt != nil
         } catch let caughtError {
             error = caughtError.localizedDescription
         }
@@ -70,17 +72,27 @@ final class DigestViewModel {
     }
 
     func dismissToPeek() async {
+        collapseToPeek()
+        await persistPeekDismissal()
+    }
+
+    func collapseToPeek() {
         guard !cards.isEmpty else {
             presentationState = .hidden
             currentCardIndex = 0
             return
         }
-
         presentationState = .peek
         currentCardIndex = 0
+    }
+
+    func persistPeekDismissal() async {
+        guard !cards.isEmpty, !dismissalPersisted else { return }
+        dismissalPersisted = true
         do {
             try await client.dismissDigest()
         } catch let caughtError {
+            dismissalPersisted = false
             error = caughtError.localizedDescription
         }
     }

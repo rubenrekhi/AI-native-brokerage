@@ -164,7 +164,7 @@ async def test_watchlist_magnitude_ignores_position_size(monkeypatch):
     assert [candidate.card.symbol for candidate in candidates] == ["AMD", "SNOW"]
 
 
-async def test_market_context_always_emits_low_magnitude_on_quiet_day(monkeypatch):
+async def test_market_context_drops_noise_below_index_threshold(monkeypatch):
     async def fake_detect(symbols, market_data, *, now=None):
         assert symbols == ["SPY", "QQQ"]
         assert now == datetime(2026, 5, 29, 13, 0, tzinfo=timezone.utc)
@@ -179,11 +179,7 @@ async def test_market_context_always_emits_low_magnitude_on_quiet_day(monkeypatc
         _ctx(), object(), object()
     )
 
-    assert len(candidates) == 1
-    assert candidates[0].card.kind == "market_context"
-    assert candidates[0].card.direction == "mixed"
-    assert candidates[0].card.summary == "S&P 500 up 0.1%, Nasdaq down 0.2%"
-    assert candidates[0].magnitude_score < 1
+    assert candidates == []
 
 
 async def test_market_context_magnitude_rises_for_index_moves(monkeypatch):
@@ -222,6 +218,23 @@ def test_known_generators_include_registered_generator_groups():
         "EarningsResultsGenerator",
         "UpcomingEarningsGenerator",
         "NewsGenerator",
+    ]
+
+
+def test_create_known_generators_adds_beginner_when_both_clients_present():
+    generators = create_known_generators(_MarketData(), fmp=_Fmp())
+
+    assert [generator.__class__.__name__ for generator in generators] == [
+        "DividendsGenerator",
+        "PendingOrdersGenerator",
+        "RadarRefreshGenerator",
+        "BigMovesGenerator",
+        "WatchlistMovesGenerator",
+        "MarketContextGenerator",
+        "EarningsResultsGenerator",
+        "UpcomingEarningsGenerator",
+        "NewsGenerator",
+        "BeginnerMarketGenerator",
     ]
 
 

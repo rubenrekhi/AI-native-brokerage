@@ -16,7 +16,7 @@ struct HomeView: View {
     @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
-    @State private var showExplore = true
+    @State private var showDailyDigestPrompt = true
     @State private var showPortfolio = false
     @State private var showFunding = false
     @State private var showHoldings = false
@@ -38,6 +38,7 @@ struct HomeView: View {
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
+    private var isDigestFull: Bool { digestViewModel.presentationState == .full }
 
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
@@ -71,126 +72,10 @@ struct HomeView: View {
 
     var body: some View {
         SevinoGlassContainer {
-            ZStack {
-                if !viewModel.isConversationActive && !shortcutsExpanded
-                    && digestViewModel.presentationState != .full {
-                    HomeGreetingSection(
-                        scale: scale,
-                        greeting: viewModel.greeting,
-                        showExplore: $showExplore,
-                        isHidden: anyModalOpen
-                    )
-                    .offset(y: -60 * scale)
-                    .allowsHitTesting(!anyModalOpen)
-                    .accessibilityHidden(anyModalOpen)
-                    .blur(radius: anyModalOpen ? 10 : 0)
-                    .brightness(modalDimBrightness(when: anyModalOpen))
-                    .transition(.opacity.combined(with: .offset(y: 20)))
-                }
-
-                chatContentLayer
-
-                Button(action: dismissTopLayer) {
-                    Color.sevinoPrimary
-                        .opacity(anyModalOpen ? 0.4 : 0)
-                        .ignoresSafeArea()
-                }
-                .buttonStyle(.plain)
-                .contentShape(Rectangle())
-                .accessibilityLabel(L10n.Home.dismissAccessibility)
-                .accessibilityHidden(!anyDismissableLayerOpen)
-                .allowsHitTesting(anyDismissableLayerOpen)
-
-                VStack(spacing: 0) {
-                    HStack(spacing: 8 * scale) {
-                        if anyModalOpen {
-                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                        } else {
-                            navSidebarButton
-                        }
-                        Color.clear.frame(width: 120 * scale, height: 44 * scale)
-                        Spacer()
-                        HStack(spacing: 8 * scale) {
-                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                            Color.clear.frame(width: 44 * scale, height: 44 * scale)
-                        }
-                    }
-                    .padding(.horizontal, 16 * scale)
-                    .padding(.top, 4 * scale)
-
-                    Spacer()
-                }
-                .blur(radius: anyModalOpen ? 10 : 0)
-                .brightness(modalDimBrightness(when: anyModalOpen))
-                .allowsHitTesting(!anyModalOpen)
-
-                PortfolioMorphingView(
-                    scale: scale,
-                    isExpanded: showPortfolio,
-                    isHidden: showFunding || showHoldings || showRadar,
-                    viewModel: portfolioViewModel,
-                    onTap: togglePortfolio
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 4) * scale)
-                .padding(.trailing, showPortfolio ? 16 * scale : 0)
-                .padding(.top, 4 * scale)
-                .ignoresSafeArea(.keyboard)
-                .refreshOnPresent(showPortfolio) { await portfolioViewModel.loadPortfolio() }
-
-                FundingMorphingView(
-                    scale: scale,
-                    isExpanded: showFunding,
-                    isHidden: showPortfolio || showHoldings || showRadar,
-                    viewModel: fundingViewModel,
-                    onTap: toggleFunding,
-                    onDismiss: dismissFunding,
-                    onDeposit: { startTransfer(.deposit) },
-                    onWithdraw: { startTransfer(.withdraw) }
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 44) * scale)
-                .padding(.leading, showFunding ? 16 * scale : 0)
-                .padding(.top, 4 * scale)
-                .ignoresSafeArea(.keyboard)
-
-                HoldingsMorphingView(
-                    scale: scale,
-                    isExpanded: showHoldings,
-                    isHidden: showPortfolio || showFunding || showRadar,
-                    viewModel: holdingsViewModel,
-                    showFilter: $showHoldingsFilter,
-                    onTap: toggleHoldings,
-                    onDismiss: dismissHoldings
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showHoldings ? 16 * scale : 16 * scale)
-                .padding(.leading, showHoldings ? 16 * scale : 0)
-                .padding(.top, 4 * scale)
-                .ignoresSafeArea(.keyboard)
-                .refreshOnPresent(showHoldings) { await holdingsViewModel.loadHoldings() }
-
-                RadarMorphingView(
-                    scale: scale,
-                    isExpanded: showRadar,
-                    isHidden: showPortfolio || showFunding || showHoldings,
-                    viewModel: radarViewModel,
-                    onTap: toggleRadar,
-                    onDismiss: dismissRadar
-                )
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                .padding(.trailing, showRadar ? 16 * scale : (16 + 44) * scale)
-                .padding(.leading, showRadar ? 16 * scale : 0)
-                .padding(.top, 4 * scale)
-                .ignoresSafeArea(.keyboard)
-
-                tickerPopupDismissButton
-
-                inputBarLayer
-            }
+            mainStack
         }
         .animation(.spring(duration: 0.4, bounce: 0.1), value: viewModel.isConversationActive)
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: digestViewModel.presentationState)
         .overlay(alignment: .bottom) {
             if tickerMentionViewModel.isShowingPopup && !anyModalOpen {
                 TickerMentionPopup(
@@ -203,7 +88,6 @@ struct HomeView: View {
             }
         }
         .overlay { digestFullOverlay }
-        .overlay(alignment: .bottom) { digestPeekOverlay }
         .overlay(alignment: .bottom) { quickCommandsOverlay }
         .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .overlay(alignment: .topTrailing) { holdingsFilterOverlay }
@@ -281,61 +165,146 @@ struct HomeView: View {
             timer: portfolioRefreshTimer,
             refresh: { await portfolioViewModel.loadSnapshot() }
         ))
-        .alert(
-            L10n.Home.portfolioLoadErrorTitle,
-            isPresented: Binding(
-                get: { portfolioViewModel.error != nil },
-                set: { if !$0 { portfolioViewModel.clearError() } }
-            ),
-            presenting: portfolioViewModel.error
-        ) { _ in
-            Button(L10n.Home.portfolioLoadErrorRetry) {
-                Task { await portfolioViewModel.loadPortfolio() }
-            }
-            Button(L10n.Home.portfolioLoadErrorDismiss, role: .cancel) {
-                portfolioViewModel.clearError()
-            }
-        } message: { message in
-            Text(message)
-        }
+        .modifier(PortfolioLoadErrorAlert(viewModel: portfolioViewModel))
         .modifier(FundingErrorAlert(viewModel: fundingViewModel))
+        .modifier(DigestErrorAlert(viewModel: digestViewModel))
         .modifier(ResumeErrorAlert(viewModel: viewModel))
         .modifier(TransferSheetPresenter(
             transferViewModel: transferViewModel,
             fundingViewModel: fundingViewModel,
             scale: scale
         ))
-        .alert(
-            L10n.Home.radarLoadErrorTitle,
-            isPresented: radarErrorAlertPresented,
-            presenting: radarViewModel.error
-        ) { _ in
-            Button(L10n.Home.radarLoadErrorRetry) {
-                Task { await radarViewModel.loadRadar() }
+        .modifier(RadarLoadErrorAlert(viewModel: radarViewModel, presented: radarErrorAlertPresented))
+        .modifier(HomeLoadErrorAlert(viewModel: viewModel))
+    }
+
+    @ViewBuilder
+    private var mainStack: some View {
+        ZStack {
+            if !viewModel.isConversationActive && !shortcutsExpanded
+                && digestViewModel.presentationState != .full {
+                HomeGreetingSection(
+                    scale: scale,
+                    greeting: viewModel.greeting,
+                    isHidden: anyModalOpen,
+                    digestAvailable: !digestViewModel.cards.isEmpty,
+                    onTapDigest: digestViewModel.reopenDigest,
+                    showDailyDigestPrompt: $showDailyDigestPrompt
+                )
+                .offset(y: -60 * scale)
+                .allowsHitTesting(!anyModalOpen)
+                .accessibilityHidden(anyModalOpen)
+                .blur(radius: anyModalOpen ? 10 : 0)
+                .brightness(modalDimBrightness(when: anyModalOpen))
+                .transition(.opacity.combined(with: .offset(y: 20)))
             }
-            Button(L10n.Home.radarLoadErrorDismiss, role: .cancel) {
-                radarViewModel.clearError()
+
+            chatContentLayer
+
+            Button(action: dismissTopLayer) {
+                Color.sevinoPrimary
+                    .opacity(anyModalOpen ? 0.4 : 0)
+                    .ignoresSafeArea()
             }
-        } message: { message in
-            Text(message)
+            .buttonStyle(.plain)
+            .contentShape(Rectangle())
+            .accessibilityLabel(L10n.Home.dismissAccessibility)
+            .accessibilityHidden(!anyDismissableLayerOpen)
+            .allowsHitTesting(anyDismissableLayerOpen)
+
+            navBarRow
+
+            PortfolioMorphingView(
+                scale: scale,
+                isExpanded: showPortfolio,
+                isHidden: showFunding || showHoldings || showRadar,
+                viewModel: portfolioViewModel,
+                onTap: togglePortfolio
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.leading, showPortfolio ? 16 * scale : (16 + 44 + 4) * scale)
+            .padding(.trailing, showPortfolio ? 16 * scale : 0)
+            .padding(.top, 4 * scale)
+            .ignoresSafeArea(.keyboard)
+            .refreshOnPresent(showPortfolio) { await portfolioViewModel.loadPortfolio() }
+
+            FundingMorphingView(
+                scale: scale,
+                isExpanded: showFunding,
+                isHidden: showPortfolio || showHoldings || showRadar,
+                viewModel: fundingViewModel,
+                onTap: toggleFunding,
+                onDismiss: dismissFunding,
+                onDeposit: { startTransfer(.deposit) },
+                onWithdraw: { startTransfer(.withdraw) }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.trailing, showFunding ? 16 * scale : (16 + 44 + 44) * scale)
+            .padding(.leading, showFunding ? 16 * scale : 0)
+            .padding(.top, 4 * scale)
+            .ignoresSafeArea(.keyboard)
+
+            HoldingsMorphingView(
+                scale: scale,
+                isExpanded: showHoldings,
+                isHidden: showPortfolio || showFunding || showRadar,
+                viewModel: holdingsViewModel,
+                showFilter: $showHoldingsFilter,
+                onTap: toggleHoldings,
+                onDismiss: dismissHoldings
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.trailing, showHoldings ? 16 * scale : 16 * scale)
+            .padding(.leading, showHoldings ? 16 * scale : 0)
+            .padding(.top, 4 * scale)
+            .ignoresSafeArea(.keyboard)
+            .refreshOnPresent(showHoldings) { await holdingsViewModel.loadHoldings() }
+
+            RadarMorphingView(
+                scale: scale,
+                isExpanded: showRadar,
+                isHidden: showPortfolio || showFunding || showHoldings,
+                viewModel: radarViewModel,
+                onTap: toggleRadar,
+                onDismiss: dismissRadar
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+            .padding(.trailing, showRadar ? 16 * scale : (16 + 44) * scale)
+            .padding(.leading, showRadar ? 16 * scale : 0)
+            .padding(.top, 4 * scale)
+            .ignoresSafeArea(.keyboard)
+
+            tickerPopupDismissButton
+
+            inputBarLayer
         }
-        .alert(
-            L10n.Home.homeLoadErrorTitle,
-            isPresented: Binding(
-                get: { viewModel.error != nil },
-                set: { if !$0 { viewModel.clearError() } }
-            ),
-            presenting: viewModel.error
-        ) { _ in
-            Button(L10n.Home.homeLoadErrorRetry) {
-                Task { await viewModel.load() }
+    }
+
+    @ViewBuilder
+    private var navBarRow: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 8 * scale) {
+                if anyModalOpen {
+                    Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                } else {
+                    navSidebarButton
+                }
+                Color.clear.frame(width: 120 * scale, height: 44 * scale)
+                Spacer()
+                HStack(spacing: 8 * scale) {
+                    Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                    Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                    Color.clear.frame(width: 44 * scale, height: 44 * scale)
+                }
             }
-            Button(L10n.Home.homeLoadErrorDismiss, role: .cancel) {
-                viewModel.clearError()
-            }
-        } message: { message in
-            Text(message)
+            .padding(.horizontal, 16 * scale)
+            .padding(.top, 4 * scale)
+
+            Spacer()
         }
+        .blur(radius: anyModalOpen ? 10 : 0)
+        .brightness(modalDimBrightness(when: anyModalOpen))
+        .allowsHitTesting(!anyModalOpen)
     }
 
     private var digestFullOverlay: some View {
@@ -467,18 +436,29 @@ struct HomeView: View {
         dismissQuickCommands()
     }
 
+    private func collapseDigestIfFull() {
+        guard isDigestFull else { return }
+        digestViewModel.collapseToPeek()
+    }
+
     private func togglePortfolio() {
+        let opening = !showPortfolio
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            if opening { collapseDigestIfFull() }
             showPortfolio.toggle()
             showHoldingsFilter = false
         }
+        if opening { Task { await digestViewModel.persistPeekDismissal() } }
     }
 
     private func toggleFunding() {
+        let opening = !showFunding
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            if opening { collapseDigestIfFull() }
             showFunding.toggle()
             showHoldingsFilter = false
         }
+        if opening { Task { await digestViewModel.persistPeekDismissal() } }
     }
 
     private func dismissFunding() {
@@ -499,10 +479,13 @@ struct HomeView: View {
     }
 
     private func toggleHoldings() {
+        let opening = !showHoldings
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            if opening { collapseDigestIfFull() }
             showHoldings.toggle()
             if !showHoldings { showHoldingsFilter = false }
         }
+        if opening { Task { await digestViewModel.persistPeekDismissal() } }
     }
 
     private func dismissHoldings() {
@@ -513,10 +496,13 @@ struct HomeView: View {
     }
 
     private func toggleRadar() {
+        let opening = !showRadar
         withAnimation(.spring(duration: 0.5, bounce: 0.15)) {
+            if opening { collapseDigestIfFull() }
             showRadar.toggle()
             showHoldingsFilter = false
         }
+        if opening { Task { await digestViewModel.persistPeekDismissal() } }
     }
 
     private func dismissRadar() {
@@ -656,20 +642,6 @@ struct HomeView: View {
     }
 
     @ViewBuilder
-    private var digestPeekOverlay: some View {
-        if digestViewModel.presentationState == .peek && !anyModalOpen && !showQuickCommands {
-            PeekCardView(
-                scale: scale,
-                cardCount: digestViewModel.cards.count,
-                onTap: digestViewModel.reopenDigest
-            )
-            .padding(.horizontal, 16 * scale)
-            .padding(.bottom, chatInputHeight + 16 * scale)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    @ViewBuilder
     private var chatContentLayer: some View {
         if viewModel.isConversationActive {
             MessageListView(
@@ -682,25 +654,26 @@ struct HomeView: View {
             .safeAreaPadding(.bottom, chatInputHeight + 48 * scale)
             .blur(radius: anyModalOpen ? 10 : 0)
             .brightness(modalDimBrightness(when: anyModalOpen))
-            .allowsHitTesting(!anyModalOpen)
-            .accessibilityHidden(anyModalOpen)
+            .opacity(isDigestFull ? 0 : 1)
+            .allowsHitTesting(!anyModalOpen && !isDigestFull)
+            .accessibilityHidden(anyModalOpen || isDigestFull)
             .transition(.opacity)
         } else {
             VStack(spacing: 0) {
                 Spacer()
 
-                if digestViewModel.presentationState != .full {
-                    ShortcutsRail(
-                        scale: scale,
-                        isExpanded: $shortcutsExpanded,
-                        onSelect: { tickerMentionViewModel.updateText($0) }
-                    )
-                        .padding(.bottom, chatInputHeight + 20 * scale)
-                        .padding(.horizontal, 16 * scale)
-                        .blur(radius: anyModalOpen ? 10 : 0)
-                        .brightness(modalDimBrightness(when: anyModalOpen))
-                        .allowsHitTesting(!anyModalOpen)
-                }
+                ShortcutsRail(
+                    scale: scale,
+                    isExpanded: $shortcutsExpanded,
+                    onSelect: { tickerMentionViewModel.updateText($0) }
+                )
+                .padding(.bottom, chatInputHeight + 20 * scale)
+                .padding(.horizontal, 16 * scale)
+                .blur(radius: anyModalOpen ? 10 : 0)
+                .brightness(modalDimBrightness(when: anyModalOpen))
+                .opacity(isDigestFull ? 0 : 1)
+                .allowsHitTesting(!anyModalOpen && !isDigestFull)
+                .accessibilityHidden(isDigestFull)
             }
             .transition(.opacity.combined(with: .move(edge: .bottom)))
         }
@@ -800,9 +773,97 @@ private struct FundingErrorAlert: ViewModifier {
     }
 }
 
-/// Extracts the resume-failure alert from `HomeView` so the parent body
-/// type-checks within the compiler's budget — the surrounding view already
-/// stacks half a dozen modal alerts and was breaching the threshold.
+private struct PortfolioLoadErrorAlert: ViewModifier {
+    @Bindable var viewModel: PortfolioViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Home.portfolioLoadErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.portfolioLoadErrorRetry) {
+                Task { await viewModel.loadPortfolio() }
+            }
+            Button(L10n.Home.portfolioLoadErrorDismiss, role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
+private struct RadarLoadErrorAlert: ViewModifier {
+    @Bindable var viewModel: RadarViewModel
+    let presented: Binding<Bool>
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Home.radarLoadErrorTitle,
+            isPresented: presented,
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.radarLoadErrorRetry) {
+                Task { await viewModel.loadRadar() }
+            }
+            Button(L10n.Home.radarLoadErrorDismiss, role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
+private struct HomeLoadErrorAlert: ViewModifier {
+    @Bindable var viewModel: HomeViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Home.homeLoadErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.homeLoadErrorRetry) {
+                Task { await viewModel.load() }
+            }
+            Button(L10n.Home.homeLoadErrorDismiss, role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
+private struct DigestErrorAlert: ViewModifier {
+    @Bindable var viewModel: DigestViewModel
+
+    func body(content: Content) -> some View {
+        content.alert(
+            L10n.Home.digestErrorTitle,
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.clearError() } }
+            ),
+            presenting: viewModel.error
+        ) { _ in
+            Button(L10n.Home.digestErrorDismiss, role: .cancel) {
+                viewModel.clearError()
+            }
+        } message: { message in
+            Text(message)
+        }
+    }
+}
+
 private struct ResumeErrorAlert: ViewModifier {
     @Bindable var viewModel: HomeViewModel
 

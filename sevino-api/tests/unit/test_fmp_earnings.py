@@ -28,7 +28,7 @@ def _make_client(handler) -> FmpClient:
 
 
 class TestGetEarningsCalendar:
-    async def test_hits_v3_path_with_from_and_to(self):
+    async def test_hits_stable_earnings_calendar_path_with_from_and_to(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -39,7 +39,7 @@ class TestGetEarningsCalendar:
         client = _make_client(handler)
         await client.get_earnings_calendar(date(2026, 7, 1), date(2026, 7, 31))
 
-        assert captured["path"] == "/api/v3/earning_calendar"
+        assert captured["path"] == "/stable/earnings-calendar"
         assert captured["params"]["from"] == "2026-07-01"
         assert captured["params"]["to"] == "2026-07-31"
         assert captured["params"]["apikey"] == "test-api-key"
@@ -143,7 +143,7 @@ class TestGetEarningsCalendar:
 
 
 class TestGetHistoricalEarnings:
-    async def test_hits_v3_historical_path(self):
+    async def test_hits_stable_earnings_path_with_symbol(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -154,7 +154,8 @@ class TestGetHistoricalEarnings:
         client = _make_client(handler)
         await client.get_historical_earnings("AAPL")
 
-        assert captured["path"] == "/api/v3/historical/earning_calendar/AAPL"
+        assert captured["path"] == "/stable/earnings"
+        assert captured["params"]["symbol"] == "AAPL"
         assert captured["params"]["apikey"] == "test-api-key"
 
     async def test_returns_most_recent_entries_newest_first(self):

@@ -1468,7 +1468,37 @@
         }
       }
     },
-    "home.dismiss_explore_accessibility" : {
+    "home.daily_digest_button" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily Digest"
+          }
+        }
+      }
+    },
+    "home.digest_error_dismiss" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "home.digest_error_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't update digest"
+          }
+        }
+      }
+    },
+    "home.dismiss_daily_digest_accessibility" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -1484,16 +1514,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Earning %@ APY"
-          }
-        }
-      }
-    },
-    "home.explore_button" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Explore what's in Sevino"
           }
         }
       }

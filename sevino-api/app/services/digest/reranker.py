@@ -1,8 +1,14 @@
-"""Anthropic-backed ordering for Daily Digest candidates.
+"""Anthropic-backed curation for Daily Digest candidates.
 
-The reranker only chooses from the candidate set. It never rewrites cards,
-which keeps the "descriptive, never prescriptive" guardrail enforceable on
-the persisted card payloads and makes fallback deterministic.
+The curator both filters (drops noise / confusing-for-beginner cards) and
+orders the survivors. It never rewrites cards, which keeps the "descriptive,
+never prescriptive" guardrail enforceable on the persisted card payloads and
+makes fallback deterministic.
+
+Output contract: the model returns an ordered JSON array of objects of the
+form ``{"id": "...", "reason": "..."}``. ``ordered_ids`` and a parallel
+``reasons`` map flow out via ``RerankResult``; reasons are persisted onto
+``card.card_context["gate_reason"]`` for operator review.
 """
 
 from __future__ import annotations
@@ -10,7 +16,7 @@ from __future__ import annotations
 import json
 import re
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
@@ -22,10 +28,9 @@ from app.config import settings
 from app.services.digest.cards import DigestCard
 from app.services.digest.types import CardCandidate, DigestContext
 
-MIN_RERANKED_CARDS = 3
 MAX_RERANKED_CARDS = 7
 SHORTLIST_LIMIT = 15
-MAX_OUTPUT_TOKENS = 512
+MAX_OUTPUT_TOKENS = 1024
 _ET = ZoneInfo("America/New_York")
 
 _PRESCRIPTIVE_RE = re.compile(
@@ -58,7 +63,7 @@ _USER_COPY_KEYS = frozenset(
 # Fallback reasons that are normal operation, not failures: too few cards to
 # rerank, or no Anthropic client configured (dev). These stay breadcrumb-only
 # so they don't generate Sentry noise; every other reason is an AI misbehaving.
-_BENIGN_FALLBACK_REASONS = frozenset({"too_few_candidates", "anthropic_unavailable"})
+_BENIGN_FALLBACK_REASONS = frozenset({"no_candidates", "anthropic_unavailable"})
 
 
 class AnthropicMessagesClient(Protocol):
@@ -74,6 +79,7 @@ class RerankResult:
     ordered_ids: list[uuid.UUID]
     used_fallback: bool
     fallback_reason: str | None = None
+    reasons: dict[uuid.UUID, str] = field(default_factory=dict)
 
 
 class Reranker(Protocol):
@@ -115,11 +121,13 @@ class DigestReranker:
         *,
         fallback_order: list[CardCandidate] | None = None,
     ) -> RerankResult:
-        """Return ordered card IDs, falling back to the heuristic order.
+        """Return ordered + filtered card IDs with curator reasons.
 
-        Anthropic output must be a JSON array of candidate IDs. Candidate
-        payloads are scanned before the model call so prescriptive generator
-        copy cannot be used as ranking context.
+        Anthropic output must be a JSON array of ``{"id", "reason"}``
+        objects. The model both *drops* noise/confusing cards and orders
+        the survivors — output length is 0 .. MAX_RERANKED_CARDS. Card
+        payloads are scanned before the model call so prescriptive
+        generator copy cannot be used as ranking context.
         """
         clean_candidates = _non_prescriptive_candidates(candidates)
         clean_ids = {candidate.card.id for candidate in clean_candidates}
@@ -129,10 +137,10 @@ class DigestReranker:
             if candidate.card.id in clean_ids
         ]
         fallback = _fallback_ids(clean_fallback)
-        if len(clean_candidates) < MIN_RERANKED_CARDS or self._anthropic is None:
+        if not clean_candidates or self._anthropic is None:
             reason = (
-                "too_few_candidates"
-                if len(clean_candidates) < MIN_RERANKED_CARDS
+                "no_candidates"
+                if not clean_candidates
                 else "anthropic_unavailable"
             )
             return _fallback_result(fallback, reason, ctx)
@@ -156,18 +164,22 @@ class DigestReranker:
                 fallback, f"anthropic_api_error:{type(exc).__name__}", ctx
             )
 
-        ordered = _parse_ordered_ids(response)
-        if ordered is None:
+        parsed = _parse_curator_output(response)
+        if parsed is None:
             return _fallback_result(fallback, "invalid_json", ctx)
-        if not MIN_RERANKED_CARDS <= len(ordered) <= MAX_RERANKED_CARDS:
+        if len(parsed) > MAX_RERANKED_CARDS:
             return _fallback_result(fallback, "invalid_card_count", ctx)
-        if len(set(ordered)) != len(ordered):
+        ordered_ids_str = [item[0] for item in parsed]
+        if len(set(ordered_ids_str)) != len(ordered_ids_str):
             return _fallback_result(fallback, "duplicate_card_ids", ctx)
-        if any(card_id not in candidate_ids for card_id in ordered):
+        if any(card_id not in candidate_ids for card_id in ordered_ids_str):
             return _fallback_result(fallback, "unknown_card_id", ctx)
+        ordered = [uuid.UUID(card_id) for card_id in ordered_ids_str]
+        reasons = {uuid.UUID(card_id): reason for card_id, reason in parsed}
         return RerankResult(
-            ordered_ids=[uuid.UUID(card_id) for card_id in ordered],
+            ordered_ids=ordered,
             used_fallback=False,
+            reasons=reasons,
         )
 
 
@@ -226,7 +238,11 @@ def _fallback_result(
     )
 
 
-def _parse_ordered_ids(response: Any) -> list[str] | None:
+def _parse_curator_output(response: Any) -> list[tuple[str, str]] | None:
+    """Parse the curator response. Returns None on any structural failure.
+
+    Expects a JSON array of ``{"id": str, "reason": str}`` objects.
+    """
     text = _response_text(response).strip()
     if text.startswith("```"):
         text = _strip_code_fence(text)
@@ -234,9 +250,18 @@ def _parse_ordered_ids(response: Any) -> list[str] | None:
         raw = json.loads(text)
     except json.JSONDecodeError:
         return None
-    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+    if not isinstance(raw, list):
         return None
-    return raw
+    parsed: list[tuple[str, str]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            return None
+        card_id = item.get("id")
+        reason = item.get("reason")
+        if not isinstance(card_id, str) or not isinstance(reason, str):
+            return None
+        parsed.append((card_id, reason))
+    return parsed
 
 
 def _response_text(response: Any) -> str:
@@ -389,11 +414,39 @@ def _financial_profile(ctx: DigestContext) -> dict[str, Any] | None:
     }
 
 
-_SYSTEM_PROMPT = """You order Daily Digest cards for Sevino.
+_SYSTEM_PROMPT = """You curate Sevino's Daily Digest.
 
-Return only an ordered JSON array of card IDs from the candidate set.
-Select 3 to 7 entries.
-Cards must remain descriptive, never prescriptive.
-Use portfolio composition, event magnitude, and user-stated preferences from
-the financial profile. A 10% move on the user's biggest holding outranks the
-same move on a small holding. Put the most important card first."""
+Pick the cards from the candidate set that are genuinely useful for the user
+to read today, then order them most-important first.
+
+Return ONLY a JSON array of objects:
+[{"id": "<card-id>", "reason": "<one short sentence>"}, ...]
+
+- Output length is 0 to 7. If nothing is useful, return [].
+- Each id must come from the candidate set; no duplicates.
+- "reason" is a short, internal note (one sentence) explaining why this card
+  belongs in today's digest. It is for operators, not end users.
+- Order matters — first = most important.
+
+Drop cards when:
+- The event is noise (e.g. a small move with no news driver).
+- The card duplicates information already in another kept card.
+
+Keep cards when:
+- A holding, watchlist symbol, or index moved meaningfully with a clear driver.
+- An earnings, dividend, or order event is relevant to the user's positions.
+- News explains a real market or company event worth knowing about.
+
+Cards must remain descriptive, never prescriptive — never tell users what to
+do. Use portfolio composition, event magnitude, and the financial profile to
+weight importance. A 10% move on the user's biggest holding outranks the same
+move on a small holding.
+
+BEGINNER MODE: if the user has no holdings (top_10_holdings is empty):
+- ALWAYS keep RadarRefresh cards when present. The radar is the primary
+  discovery surface for someone without a portfolio — it's how they find
+  their first stock. The fact that the radar may list niche tickers is fine:
+  it's a discovery list, not editorial content.
+- For news, big_move, and other editorial cards, prefer well-known mega-cap
+  names and explanatory market context. Drop news about niche or speculative
+  tickers since beginners won't recognize them and can't act on them yet."""

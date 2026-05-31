@@ -43,6 +43,9 @@ from app.services.fmp import FmpClient
 
 logger = structlog.get_logger(__name__)
 
+_GATE_REASON_MAX_CHARS = 200
+_GATE_REASON_LOG_CHARS = 80
+
 
 class DigestService:
     """Generate, read, and dismiss a user's daily digest.
@@ -105,6 +108,12 @@ class DigestService:
         cards = [by_id[card_id] for card_id in rerank.ordered_ids if card_id in by_id]
         for priority, card in enumerate(cards, start=1):
             card.priority = priority
+            reason = rerank.reasons.get(card.id)
+            if reason:
+                card.card_context = {
+                    **card.card_context,
+                    "gate_reason": reason[:_GATE_REASON_MAX_CHARS],
+                }
 
         snapshot = DigestSnapshot(
             user_id=user_id,
@@ -115,14 +124,25 @@ class DigestService:
         result = (
             await DigestRepository.upsert(self._db, snapshot) if persist else snapshot
         )
+        dropped_count = len(heuristic_order) - len(cards)
         logger.info(
             "digest.generation.completed",
             user_id=str(user_id),
             total_latency_ms=round((perf_counter() - started) * 1000, 1),
             final_card_count=len(cards),
+            shortlist_count=len(heuristic_order),
+            dropped_count=dropped_count,
             reranker_fallback=rerank.used_fallback,
             reranker_fallback_reason=rerank.fallback_reason,
             card_kinds=[card.kind for card in cards],
+            kept_reasons=(
+                ["<fallback>"] * len(cards)
+                if rerank.used_fallback
+                else [
+                    rerank.reasons.get(card.id, "")[:_GATE_REASON_LOG_CHARS]
+                    for card in cards
+                ]
+            ),
             ny_local_date=result.ny_local_date.isoformat(),
             persisted=persist,
         )

@@ -28,7 +28,7 @@ def _make_client(handler) -> FmpClient:
 
 
 class TestStockNews:
-    async def test_hits_legacy_v3_path_with_tickers_from_and_limit(self):
+    async def test_hits_stable_news_path_with_symbols_from_and_limit(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -43,13 +43,13 @@ class TestStockNews:
             limit=2,
         )
 
-        assert captured["path"] == "/api/v3/stock_news"
-        assert captured["params"]["tickers"] == "AAPL,MSFT"
+        assert captured["path"] == "/stable/news/stock"
+        assert captured["params"]["symbols"] == "AAPL,MSFT"
         assert captured["params"]["from"] == "2026-05-30"
         assert captured["params"]["limit"] == "2"
         assert captured["params"]["apikey"] == "test-api-key"
 
-    async def test_strips_stable_base_for_legacy_v3_path(self):
+    async def test_news_path_uses_configured_base(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -69,8 +69,8 @@ class TestStockNews:
             datetime(2026, 5, 30, 0, 0, tzinfo=timezone.utc),
         )
 
-        assert captured["url"].startswith("https://example.test/api/v3/stock_news")
-        assert captured["path"] == "/api/v3/stock_news"
+        assert captured["url"].startswith("https://example.test/stable/news/stock")
+        assert captured["path"] == "/stable/news/stock"
 
     async def test_returns_typed_items_filtered_by_since_and_limit(self):
         def handler(request: httpx.Request) -> httpx.Response:
@@ -88,6 +88,32 @@ class TestStockNews:
         assert result[0].symbol == "AAPL"
         assert result[0].headline == "Apple shares rise after product update"
         assert result[0].source == "Reuters"
+
+    async def test_naive_published_dates_get_anchored_to_utc(self):
+        rows = [
+            {
+                "symbol": "AAPL",
+                "publishedDate": "2026-05-31T14:12:00",
+                "title": "Naive timestamp from FMP stable endpoint",
+                "site": "Wire",
+                "url": "https://example.com/aapl",
+                "text": "summary",
+            }
+        ]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=rows)
+
+        client = _make_client(handler)
+        result = await client.get_stock_news(
+            ["AAPL"],
+            datetime(2026, 5, 30, 0, 0, tzinfo=timezone.utc),
+        )
+
+        assert len(result) == 1
+        assert result[0].published_at.tzinfo is timezone.utc
+        dumped = result[0].model_dump(mode="json")
+        assert dumped["published_at"].endswith(("+00:00", "Z"))
 
     async def test_requests_headroom_for_intraday_since_before_filtering(self):
         captured: dict = {}
@@ -169,7 +195,7 @@ class TestStockNews:
 
 
 class TestGeneralNews:
-    async def test_hits_legacy_v4_path_with_from_and_limit(self):
+    async def test_hits_stable_general_news_path_with_from_and_limit(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -183,11 +209,11 @@ class TestGeneralNews:
             limit=2,
         )
 
-        assert captured["path"] == "/api/v4/general_news"
+        assert captured["path"] == "/stable/news/general-latest"
         assert captured["params"]["from"] == "2026-05-30"
         assert captured["params"]["limit"] == "2"
 
-    async def test_strips_stable_base_for_legacy_v4_path(self):
+    async def test_general_news_uses_configured_base(self):
         captured: dict = {}
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -206,8 +232,10 @@ class TestGeneralNews:
             datetime(2026, 5, 30, 0, 0, tzinfo=timezone.utc),
         )
 
-        assert captured["url"].startswith("https://example.test/api/v4/general_news")
-        assert captured["path"] == "/api/v4/general_news"
+        assert captured["url"].startswith(
+            "https://example.test/stable/news/general-latest"
+        )
+        assert captured["path"] == "/stable/news/general-latest"
 
     async def test_returns_typed_items_filtered_by_since_and_limit(self):
         def handler(request: httpx.Request) -> httpx.Response:

@@ -112,7 +112,18 @@ def _anthropic_response(ids: list[uuid.UUID] | str) -> SimpleNamespace:
     text = (
         ids
         if isinstance(ids, str)
-        else json.dumps([str(card_id) for card_id in ids])
+        else json.dumps(
+            [{"id": str(card_id), "reason": "test reason"} for card_id in ids]
+        )
+    )
+    return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
+
+
+def _anthropic_curator_response(
+    entries: list[tuple[uuid.UUID, str]],
+) -> SimpleNamespace:
+    text = json.dumps(
+        [{"id": str(card_id), "reason": reason} for card_id, reason in entries]
     )
     return SimpleNamespace(content=[SimpleNamespace(type="text", text=text)])
 
@@ -130,7 +141,7 @@ async def test_reranker_returns_llm_ordered_card_ids():
     assert ranked == expected
     kwargs = anthropic.messages.create.await_args.kwargs
     assert kwargs["model"] == "test-model"
-    assert "ordered JSON array" in kwargs["system"]
+    assert "curate" in kwargs["system"].lower()
 
 
 async def test_reranker_prompt_sends_top_holdings_sorted_with_pct_weights():
@@ -208,14 +219,29 @@ async def test_reranker_metadata_marks_fallback_and_adds_breadcrumb(monkeypatch)
     ]
 
 
-async def test_reranker_fallback_excludes_prescriptive_card_copy():
+async def test_reranker_excludes_prescriptive_card_copy_from_llm_payload():
     candidates = [_market_card(index) for index in range(3)]
     candidates[0].card.summary = "You should buy more AAPL."
     anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+    anthropic.messages.create.return_value = _anthropic_response(
+        [candidate.card.id for candidate in candidates[1:]]
+    )
 
     ranked = await DigestReranker(anthropic).rank(candidates, _ctx())
 
     assert ranked == [candidate.card.id for candidate in candidates[1:]]
+    payload = anthropic.messages.create.await_args.kwargs["messages"][0]["content"]
+    assert str(candidates[0].card.id) not in payload
+
+
+async def test_reranker_skips_llm_when_no_candidates():
+    anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+
+    result = await DigestReranker(anthropic).rank_with_metadata([], _ctx())
+
+    assert result.used_fallback is True
+    assert result.fallback_reason == "no_candidates"
+    assert result.ordered_ids == []
     anthropic.messages.create.assert_not_called()
 
 
@@ -402,4 +428,88 @@ async def test_cross_generator_enrichment_populates_reason_and_reaction(monkeypa
     assert cards["big_move"]["reason"] == "AAPL launches new chip"
     assert Decimal(cards["earnings_result"]["stock_reaction_pct"]) == Decimal(
         "0.05"
+    )
+
+
+async def test_curator_drops_cards_not_in_response():
+    candidates = [_market_card(index) for index in range(5)]
+    kept = [(candidates[0].card.id, "meaningful market move with driver")]
+    anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+    anthropic.messages.create.return_value = _anthropic_curator_response(kept)
+
+    result = await DigestReranker(anthropic).rank_with_metadata(candidates, _ctx())
+
+    assert result.ordered_ids == [candidates[0].card.id]
+    assert result.used_fallback is False
+    assert (
+        result.reasons[candidates[0].card.id]
+        == "meaningful market move with driver"
+    )
+
+
+async def test_curator_allows_empty_output():
+    candidates = [_market_card(index) for index in range(3)]
+    anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+    anthropic.messages.create.return_value = _anthropic_curator_response([])
+
+    result = await DigestReranker(anthropic).rank_with_metadata(candidates, _ctx())
+
+    assert result.ordered_ids == []
+    assert result.used_fallback is False
+    assert result.reasons == {}
+
+
+async def test_curator_falls_back_when_output_exceeds_max():
+    candidates = [_market_card(index) for index in range(10)]
+    too_many = [(candidate.card.id, "x") for candidate in candidates[:8]]
+    anthropic = SimpleNamespace(messages=SimpleNamespace(create=AsyncMock()))
+    anthropic.messages.create.return_value = _anthropic_curator_response(too_many)
+
+    result = await DigestReranker(anthropic).rank_with_metadata(candidates, _ctx())
+
+    assert result.used_fallback is True
+    assert result.fallback_reason == "invalid_card_count"
+
+
+async def test_curator_reasons_persisted_to_card_context(monkeypatch):
+    ctx = _ctx()
+    candidate = _market_card(0)
+
+    class Gen:
+        async def generate(self, *_args):
+            return [candidate, _market_card(1)]
+
+    class GatingReranker:
+        async def rank_with_metadata(self, candidates, *_args, **_kwargs):
+            return RerankResult(
+                ordered_ids=[candidate.card.id],
+                used_fallback=False,
+                reasons={candidate.card.id: "kept because meaningful"},
+            )
+
+    async def fake_build_context(*_args):
+        return ctx
+
+    async def fake_upsert(_db, snapshot):
+        return snapshot
+
+    monkeypatch.setattr(
+        "app.services.digest.service.build_context", fake_build_context
+    )
+    monkeypatch.setattr(
+        "app.services.digest.service.DigestRepository.upsert", fake_upsert
+    )
+
+    service = DigestService(
+        AsyncMock(),
+        alpaca=AsyncMock(),
+        generators=[Gen()],
+        reranker=GatingReranker(),
+    )
+    snapshot = await service.generate_for_user(ctx.user_id)
+
+    assert len(snapshot.cards) == 1
+    assert (
+        snapshot.cards[0]["card_context"]["gate_reason"]
+        == "kept because meaningful"
     )

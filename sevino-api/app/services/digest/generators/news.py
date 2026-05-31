@@ -24,9 +24,9 @@ from app.services.fmp import StockNewsItem
 
 logger = structlog.get_logger(__name__)
 
+NEWS_RECENCY_WINDOW = timedelta(hours=24)
 _NEWS_LIMIT = 100
 _CARD_LIMIT = 5
-_RECENCY_WINDOW = timedelta(hours=24)
 _DEDUPE_THRESHOLD = 0.6
 _MIN_RECENCY_DECAY = Decimal("0.3")
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
@@ -62,7 +62,7 @@ class NewsGenerator:
             return []
 
         now = _as_utc(self._now())
-        cutoff = now - _RECENCY_WINDOW
+        cutoff = now - NEWS_RECENCY_WINDOW
         try:
             items = await self._fmp.get_stock_news(
                 holding_symbols, since=cutoff, limit=_NEWS_LIMIT

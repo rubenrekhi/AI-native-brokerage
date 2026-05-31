@@ -23,6 +23,7 @@ ET = ZoneInfo("America/New_York")
 HOLDING_MOVE_PCT = Decimal("0.02")
 WATCHLIST_MOVE_PCT = Decimal("0.03")
 INDEX_MOVE_PCT = Decimal("0.0075")
+BEGINNER_MOVE_PCT = Decimal("0.01")
 
 _DAILY_LOOKBACK = timedelta(days=10)
 _ZERO = Decimal("0")
