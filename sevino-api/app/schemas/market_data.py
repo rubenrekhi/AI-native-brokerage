@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChartTimeframe(str, Enum):
@@ -70,6 +70,60 @@ class StockRatios(BaseModel):
     peg_ratio: str | None = None
 
 
+class FinancialTrendPoint(BaseModel):
+    fiscal_year: str | None = None
+    period_end_date: str | None = None
+    revenue: str | None = None
+    net_income: str | None = None
+    eps_diluted: str | None = None
+
+
+class StockFinancials(BaseModel):
+    """Absolute company financials from FMP.
+
+    The snapshot figures (income statement, cash flow) are trailing-twelve-month
+    (TTM); balance-sheet figures are the latest reported point-in-time (FMP's
+    balance-sheet TTM endpoint returns the latest snapshot, not a summed
+    window, since a balance sheet is a stock not a flow). The
+    ``annual_trend`` and ``*_growth_yoy`` fields are derived from the most recent
+    annual filings (latest fiscal year vs. prior), so growth is reported on an
+    annual basis even though the headline figures are TTM. Every field is null
+    when FMP omits it or returns too few periods to compute it, so the block
+    degrades cleanly rather than failing the lookup.
+    """
+
+    revenue: str | None = None
+    gross_profit: str | None = None
+    operating_income: str | None = None
+    ebitda: str | None = None
+    net_income: str | None = None
+    eps_diluted: str | None = None
+    research_and_development: str | None = None
+    interest_expense: str | None = None
+    shares_outstanding_diluted: str | None = None
+
+    cash_and_short_term_investments: str | None = None
+    total_debt: str | None = None
+    net_debt: str | None = None
+    total_assets: str | None = None
+    total_liabilities: str | None = None
+    total_stockholders_equity: str | None = None
+
+    operating_cash_flow: str | None = None
+    free_cash_flow: str | None = None
+    capital_expenditure: str | None = None
+
+    revenue_growth_yoy: str | None = None
+    net_income_growth_yoy: str | None = None
+    eps_growth_yoy: str | None = None
+
+    annual_trend: list[FinancialTrendPoint] = Field(default_factory=list)
+
+    fiscal_period: str | None = None
+    period_end_date: str | None = None
+    reported_currency: str | None = None
+
+
 class StockAnalyst(BaseModel):
     target_high: str | None = None
     target_low: str | None = None
@@ -86,6 +140,7 @@ class StockInfoResponse(BaseModel):
     quote: StockQuote
     profile: StockProfile
     ratios: StockRatios
+    financials: StockFinancials = Field(default_factory=StockFinancials)
     analyst: StockAnalyst
 
 

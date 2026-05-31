@@ -49,6 +49,8 @@ class TestGetStockInfoRoute:
         assert body["quote"]["symbol"] == "AAPL"
         assert body["profile"]["name"] == "Apple Inc."
         assert body["ratios"]["roe"] == "1.50"
+        assert body["financials"]["revenue"] == "400000000000"
+        assert body["financials"]["annual_trend"][0]["fiscal_year"] == "2025"
         assert body["analyst"]["target_consensus"] == "200.00"
         market_data_mock.get_stock_info.assert_awaited_once_with("AAPL")
 

@@ -242,18 +242,57 @@ class TestGetStockInfo:
                 return httpx.Response(200, json=[{"targetConsensus": 200}])
             if path.endswith("/grades-consensus"):
                 return httpx.Response(200, json=[{"strongBuy": 12}])
+            if path.endswith("/income-statement-ttm"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "revenue": 400000000000,
+                            "netIncome": 100000000000,
+                            "epsDiluted": 6.4,
+                            "date": "2026-03-28",
+                            "reportedCurrency": "USD",
+                        }
+                    ],
+                )
+            if path.endswith("/balance-sheet-statement-ttm"):
+                return httpx.Response(200, json=[{"totalDebt": 110000000000}])
+            if path.endswith("/cash-flow-statement-ttm"):
+                return httpx.Response(200, json=[{"freeCashFlow": 90000000000}])
+            if path.endswith("/income-statement"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"fiscalYear": 2025, "revenue": 400000000000},
+                        {"fiscalYear": 2024, "revenue": 380000000000},
+                    ],
+                )
             return httpx.Response(404)
 
         service, _ = _service(fmp_handler=fmp_handler)
 
         result = await service.get_stock_info("AAPL")
 
-        assert set(result.keys()) == {"quote", "profile", "ratios", "analyst"}
+        assert set(result.keys()) == {
+            "quote",
+            "profile",
+            "ratios",
+            "financials",
+            "analyst",
+        }
         assert result["quote"]["symbol"] == "AAPL"
         assert result["profile"]["name"] == "Apple Inc."
         assert result["ratios"]["dividend_yield"] == "0.005"
         assert result["analyst"]["target_consensus"] == "200"
         assert result["analyst"]["strong_buy"] == 12
+        financials = result["financials"]
+        assert financials["revenue"] == "400000000000"
+        assert financials["total_debt"] == "110000000000"
+        assert financials["free_cash_flow"] == "90000000000"
+        assert financials["fiscal_period"] == "TTM through 2026-03-28"
+        # Growth derived from the two annual rows: (400 - 380) / 380.
+        assert financials["revenue_growth_yoy"] == "0.0526"
+        assert len(financials["annual_trend"]) == 2
 
     async def test_cache_hits_skip_provider(self):
         called = False
@@ -267,7 +306,11 @@ class TestGetStockInfo:
         # Seed all three caches.
         redis.store["market:quote:AAPL"] = json.dumps({"symbol": "AAPL"})
         redis.store["market:fundamentals:AAPL"] = json.dumps(
-            {"profile": {"name": "Apple"}, "ratios": {"roe": "1.5"}}
+            {
+                "profile": {"name": "Apple"},
+                "ratios": {"roe": "1.5"},
+                "financials": {"revenue": "400000000000"},
+            }
         )
         redis.store["market:analyst:AAPL"] = json.dumps({"target_consensus": "200"})
 
@@ -278,8 +321,64 @@ class TestGetStockInfo:
             "quote": {"symbol": "AAPL"},
             "profile": {"name": "Apple"},
             "ratios": {"roe": "1.5"},
+            "financials": {"revenue": "400000000000"},
             "analyst": {"target_consensus": "200"},
         }
+
+    async def test_cache_hit_without_financials_backfills_empty_block(self):
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        service, redis = _service(fmp_handler=fmp_handler)
+        redis.store["market:quote:AAPL"] = json.dumps({"symbol": "AAPL"})
+        # Pre-financials cache entry: no "financials" key.
+        redis.store["market:fundamentals:AAPL"] = json.dumps(
+            {"profile": {"name": "Apple"}, "ratios": {"roe": "1.5"}}
+        )
+        redis.store["market:analyst:AAPL"] = json.dumps({"target_consensus": "200"})
+
+        result = await service.get_stock_info("AAPL")
+
+        # Backfilled to a valid, all-null financials block — never KeyError.
+        assert result["financials"]["revenue"] is None
+        assert result["financials"]["annual_trend"] == []
+
+    async def test_one_failing_statement_degrades_only_its_fields(self):
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200, json=[{"companyName": "Apple", "exchangeShortName": "NASDAQ"}]
+                )
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{}])
+            if path.endswith("/price-target-consensus"):
+                return httpx.Response(200, json=[{}])
+            if path.endswith("/grades-consensus"):
+                return httpx.Response(200, json=[{}])
+            if path.endswith("/income-statement-ttm"):
+                # Premium-gate / upstream failure for this one statement.
+                return httpx.Response(402, text="Restricted Endpoint")
+            if path.endswith("/balance-sheet-statement-ttm"):
+                return httpx.Response(200, json=[{"totalDebt": 110000000000}])
+            if path.endswith("/cash-flow-statement-ttm"):
+                return httpx.Response(200, json=[{"freeCashFlow": 90000000000}])
+            if path.endswith("/income-statement"):
+                return httpx.Response(200, json=[])
+            return httpx.Response(404)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        result = await service.get_stock_info("AAPL")
+
+        financials = result["financials"]
+        # Income statement failed → its fields null.
+        assert financials["revenue"] is None
+        # Other statements still populated.
+        assert financials["total_debt"] == "110000000000"
+        assert financials["free_cash_flow"] == "90000000000"
 
 
 # ── get_batch_quotes ───────────────────────────────────────
