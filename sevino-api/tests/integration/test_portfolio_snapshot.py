@@ -1,15 +1,18 @@
 """Integration tests for GET /v1/portfolio/snapshot.
 
-End-to-end behavior: auth → account-context dep → cache → Alpaca → response
-shape. Uses real local Postgres (via `authenticated_db_client`) but injects
-mock Alpaca + an in-memory fake Redis through FastAPI `dependency_overrides`
-so the test doesn't need a live broker or Redis. Auto-skipped when Postgres
-on :54322 is down.
+End-to-end behavior: auth → account-context dep → Alpaca → response
+shape. Uses real local Postgres (via `authenticated_db_client`) but
+injects a mock Alpaca + in-memory fake Redis through FastAPI
+`dependency_overrides` so the test doesn't need a live broker or Redis.
+Auto-skipped when Postgres on :54322 is down.
+
+Redis is still required by the service constructor (history caches
+through it), so the fake stays — it just no longer participates in the
+snapshot path.
 """
 
 from __future__ import annotations
 
-import json
 from unittest.mock import AsyncMock
 
 import pytest
@@ -31,11 +34,7 @@ pytestmark = pytest.mark.skipif(
 
 
 class _FakeRedis:
-    """Tiny in-memory stand-in for redis.asyncio.Redis.
-
-    Supports the two methods `cache_get_or_set` actually calls (`get`, `setex`)
-    so the cache-hit path can be exercised without a live Redis.
-    """
+    """Tiny in-memory stand-in for redis.asyncio.Redis."""
 
     def __init__(self) -> None:
         self._store: dict[str, str] = {}
@@ -165,14 +164,14 @@ class TestSnapshotAlpacaErrors:
         assert response.json()["code"] == "ALPACA_UNAVAILABLE"
 
 
-class TestSnapshotCaching:
-    async def test_second_call_within_ttl_skips_alpaca(
+class TestSnapshotNoCache:
+    async def test_two_sequential_calls_hit_alpaca_twice(
         self,
         authenticated_db_client,
         test_brokerage_account,
         portfolio_deps,
     ):
-        alpaca_mock, fake_redis = portfolio_deps
+        alpaca_mock, _ = portfolio_deps
 
         first = await authenticated_db_client.get("/v1/portfolio/snapshot")
         second = await authenticated_db_client.get("/v1/portfolio/snapshot")
@@ -180,12 +179,7 @@ class TestSnapshotCaching:
         assert first.status_code == 200
         assert second.status_code == 200
         assert first.json() == second.json()
-        assert alpaca_mock.get_trading_account.call_count == 1
-
-        cache_key = f"portfolio:snapshot:{test_brokerage_account['user_id']}"
-        cached_raw = await fake_redis.get(cache_key)
-        assert cached_raw is not None
-        assert json.loads(cached_raw)["equity"] == "1084.92"
+        assert alpaca_mock.get_trading_account.call_count == 2
 
 
 class TestSnapshotAuth:

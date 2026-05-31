@@ -27,7 +27,7 @@ def _make_account(user_id: uuid.UUID | None = None):
     return account
 
 
-async def test_invalidates_snapshot_holdings_and_every_history_range(
+async def test_invalidates_every_history_range(
     session, redis_mock, monkeypatch
 ):
     account = _make_account()
@@ -48,14 +48,12 @@ async def test_invalidates_snapshot_holdings_and_every_history_range(
 
     user_id = account.user_id
     expected_keys = [
-        f"portfolio:snapshot:{user_id}",
-        f"portfolio:holdings:{user_id}",
-        *[f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange],
+        f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange
     ]
     redis_mock.delete.assert_awaited_once_with(*expected_keys)
     # Regression guard — if anyone adds a value to PortfolioRange, this
     # number bumps and forces a deliberate re-look here.
-    assert len(expected_keys) == 2 + len(PortfolioRange)
+    assert len(expected_keys) == len(PortfolioRange)
 
 
 async def test_unknown_account_skips_cache_invalidation(

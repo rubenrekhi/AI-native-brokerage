@@ -1,11 +1,10 @@
-import json
 import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 from app.dependencies.portfolio import AlpacaAccountContext
-from app.services.portfolio import HOLDINGS_TTL, PortfolioService
+from app.services.portfolio import PortfolioService
 
 
 @pytest.fixture
@@ -98,11 +97,8 @@ class TestHoldingsHappyPath:
         assert dumped["positions"][0]["name"] == "Tesla, Inc."
         assert dumped["positions"][1]["name"] == "Apple Inc."
 
-        redis.setex.assert_awaited_once()
-        args, _ = redis.setex.call_args
-        key, ttl, _payload = args
-        assert key == f"portfolio:holdings:{_ctx().user_id}"
-        assert ttl == HOLDINGS_TTL
+        redis.get.assert_not_awaited()
+        redis.setex.assert_not_awaited()
 
     async def test_unknown_symbol_falls_back_to_symbol_as_name(
         self, service, alpaca
@@ -341,42 +337,21 @@ class TestHoldingsConcurrency:
         alpaca.list_positions.assert_awaited_once_with("alp_acc_1")
 
 
-class TestHoldingsCaching:
-    async def test_cache_hit_skips_alpaca_and_db(
-        self, service, alpaca, redis, db
+class TestHoldingsNoCache:
+    async def test_two_calls_hit_alpaca_and_db_each_time(
+        self, service, alpaca
     ):
-        cached_payload = {
-            "account_status": "ACTIVE",
-            "currency": "USD",
-            "cash": "100.00",
-            "buying_power": "80.00",
-            "total_market_value": "200.00",
-            "positions": [
-                {
-                    "symbol": "AAPL",
-                    "name": "Apple Inc.",
-                    "qty": "1",
-                    "avg_entry_price": "150.00",
-                    "current_price": "200.00",
-                    "market_value": "200.00",
-                    "cost_basis": "150.00",
-                    "unrealized_pl": "50.00",
-                    "unrealized_plpc": "0.3333",
-                    "change_today": "5.00",
-                    "change_today_percent": "0.0257",
-                }
-            ],
-        }
-        redis.get.return_value = json.dumps(cached_payload)
+        alpaca.get_trading_account.return_value = _account()
+        alpaca.list_positions.return_value = [_position("AAPL", "200.00")]
 
         with patch(
             "app.services.portfolio.AssetRepository.get_names_by_symbols",
             new_callable=AsyncMock,
+            return_value={"AAPL": "Apple Inc."},
         ) as get_names:
-            response = await service.get_holdings(_ctx())
+            await service.get_holdings(_ctx())
+            await service.get_holdings(_ctx())
 
-        assert response.model_dump(mode="json") == cached_payload
-        alpaca.get_trading_account.assert_not_awaited()
-        alpaca.list_positions.assert_not_awaited()
-        get_names.assert_not_awaited()
-        redis.setex.assert_not_awaited()
+        assert alpaca.get_trading_account.await_count == 2
+        assert alpaca.list_positions.await_count == 2
+        assert get_names.await_count == 2

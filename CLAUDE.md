@@ -64,7 +64,7 @@ iOS App → FastAPI (Railway) → Supabase Postgres (async SQLAlchemy + Alembic)
 - `schemas/onboarding.py` — Pydantic request/response models for onboarding endpoints
 - `tasks/` — ARQ background job definitions
 - `worker.py` — ARQ worker settings and cron job registration
-- `cache.py` — `cache_get_or_set(client, key, ttl, fetcher)` helper used by portfolio routes. Redis client lives on `app.state.redis` (initialized in `lifecycle.py`). Portfolio data (snapshot/holdings/history) flows through this cache with 30–60s TTL — **never add a background job to pre-warm it**; refresh is pull-based from the client. See `docs/alpaca-integration.md` §"Portfolio Read Endpoints".
+- `cache.py` — `cache_get_or_set(client, key, ttl, fetcher)` helper. Redis client lives on `app.state.redis` (initialized in `lifecycle.py`). Only `GET /v1/portfolio/history` flows through this cache (60s TTL); snapshot + holdings are uncached and go straight to Alpaca so they don't lie post-trade. **Never add a background job to pre-warm history**; refresh is pull-based from the client. See `docs/alpaca-integration.md` §"Portfolio Read Endpoints".
 - `schemas/_types.py` — `MoneyStr` / `QtyStr` / `PctStr` Pydantic aliases. Every money / quantity / percentage field on portfolio responses serializes as a JSON **string**, not a number, so iOS and Python share the same `Decimal` semantics across the wire. Never use plain `Decimal` on a portfolio schema.
 
 ### Error handling pattern

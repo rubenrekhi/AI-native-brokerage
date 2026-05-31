@@ -21,8 +21,8 @@ async def handle_transfer_status_change(
     status_to: str,
     event_time: datetime | None,
 ) -> None:
-    """Invalidate the affected user's portfolio cache in response to an
-    Alpaca transfer-status SSE event.
+    """Invalidate the affected user's portfolio history cache in response
+    to an Alpaca transfer-status SSE event.
 
     Idempotent by construction: cache invalidation is a no-op if the keys
     don't exist, so replays of the same event (after a reconnect with
@@ -48,13 +48,9 @@ async def handle_transfer_status_change(
         return
 
     user_id = account.user_id
-    keys = [
-        f"portfolio:snapshot:{user_id}",
-        f"portfolio:holdings:{user_id}",
-        # Drive from PortfolioRange so adding a range to the enum forces
-        # invalidation to follow — silent miss otherwise.
-        *[f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange],
-    ]
+    # Drive from PortfolioRange so adding a range to the enum forces
+    # invalidation to follow — silent miss otherwise.
+    keys = [f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange]
     await cache_invalidate(redis, keys)
 
     logger.info(

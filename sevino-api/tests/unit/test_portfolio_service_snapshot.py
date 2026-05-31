@@ -1,11 +1,10 @@
-import json
 import uuid
 from unittest.mock import AsyncMock
 
 import pytest
 
 from app.dependencies.portfolio import AlpacaAccountContext
-from app.services.portfolio import PortfolioService, SNAPSHOT_TTL
+from app.services.portfolio import PortfolioService
 
 
 @pytest.fixture
@@ -66,11 +65,22 @@ class TestSnapshotHappyPath:
         assert dumped["daily_change_pct"] == "0.2732"
 
         alpaca.get_trading_account.assert_awaited_once_with("alp_acc_1")
-        redis.setex.assert_awaited_once()
-        args, _ = redis.setex.call_args
-        key, ttl, _payload = args
-        assert key == f"portfolio:snapshot:{_ctx().user_id}"
-        assert ttl == SNAPSHOT_TTL
+        redis.get.assert_not_awaited()
+        redis.setex.assert_not_awaited()
+
+    async def test_two_calls_hit_alpaca_twice(self, service, alpaca):
+        alpaca.get_trading_account.return_value = {
+            "equity": "1.00",
+            "last_equity": "1.00",
+            "cash": "0",
+            "buying_power": "0",
+            "currency": "USD",
+        }
+
+        await service.get_snapshot(_ctx())
+        await service.get_snapshot(_ctx())
+
+        assert alpaca.get_trading_account.await_count == 2
 
 
 class TestSnapshotEdgeCases:
@@ -126,22 +136,3 @@ class TestSnapshotEdgeCases:
         assert dumped["currency"] == "USD"  # default when missing
 
 
-class TestSnapshotCaching:
-    async def test_cache_hit_skips_alpaca_call(self, service, alpaca, redis):
-        cached_payload = {
-            "account_status": "ACTIVE",
-            "currency": "USD",
-            "equity": "500.00",
-            "last_equity": "400.00",
-            "cash": "10.00",
-            "buying_power": "10.00",
-            "daily_change_abs": "100.00",
-            "daily_change_pct": "0.2500",
-        }
-        redis.get.return_value = json.dumps(cached_payload)
-
-        snapshot = await service.get_snapshot(_ctx())
-
-        assert snapshot.model_dump(mode="json") == cached_payload
-        alpaca.get_trading_account.assert_not_awaited()
-        redis.setex.assert_not_awaited()
