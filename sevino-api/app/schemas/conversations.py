@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
@@ -24,15 +25,42 @@ from pydantic import BaseModel, Field, model_validator
 _MAX_CONTEXT_BYTES = 10_000
 
 
+class ContextKind(str, Enum):
+    """Which modal the user had open when they attached context (SEV-615).
+
+    Strict-validated at the wire — an unknown kind 422s. The persisted
+    ``ContextBlock`` and its ``render_hint`` projection live in
+    ``app.ai.context_blocks``; iOS mirrors this enum in ``AttachedContext.swift``.
+    """
+
+    PORTFOLIO = "portfolio"
+    HOLDINGS = "holdings"
+    FUNDING = "funding"
+    RADAR = "radar"
+
+
+class AttachedContextRequest(BaseModel):
+    """Context the client attaches when sending a message with a modal open.
+
+    ``kind`` is strict (unknown values 422). ``data`` is opaque to the
+    backend — only iOS interprets each kind's shape, and the model never sees
+    it: the turn only projects ``kind`` to a short, screen-describing hint
+    (see the ``ContextBlock`` subclasses in ``app.ai.context_blocks``).
+    """
+
+    kind: ContextKind
+    data: dict[str, Any] = Field(default_factory=dict)
+
+
 class ChatTurnRequest(BaseModel):
     message: str = Field(..., min_length=1)
     idempotency_key: str = Field(..., min_length=1)
-    context: dict[str, Any] | None = Field(
+    context: AttachedContextRequest | None = Field(
         default=None,
-        description="Optional structured context attached by the client "
-        "(e.g. portfolio snapshot, holdings) when the user sends a message "
-        "while a data modal is open. Injected into the user message so the "
-        "AI can reference it. Max serialized size: 10 KB.",
+        description="Structured context attached by the client when the user "
+        "sends a message while a data modal is open (portfolio, holdings, "
+        "funding, radar). Persisted as a chip and projected to a short "
+        "model hint for the current turn only. Max serialized size: 10 KB.",
     )
     digest_card: dict[str, Any] | None = Field(
         default=None,
@@ -45,7 +73,7 @@ class ChatTurnRequest(BaseModel):
     @model_validator(mode="after")
     def _validate_context_size(self) -> "ChatTurnRequest":
         if self.context is not None:
-            if len(json.dumps(self.context, default=str)) > _MAX_CONTEXT_BYTES:
+            if len(self.context.model_dump_json()) > _MAX_CONTEXT_BYTES:
                 msg = f"context exceeds {_MAX_CONTEXT_BYTES} byte limit"
                 raise ValueError(msg)
         return self

@@ -439,3 +439,22 @@ class TestStockCardBlockShape:
         assert block.stats.exchange == "NASDAQ"
         assert block.stats.beta is None
         assert block.stats.eps is None
+
+
+class TestContextBlockNotInBlockUnion:
+    # SEV-615: context attachments are NOT members of the streamed ``Block``
+    # union (they live in ``app.ai.context_blocks``). The discriminated
+    # ``Block`` decoder must reject ``type: context`` — if it ever accepted
+    # it, the attachment could leak into the SSE / model path it is meant to
+    # stay out of.
+
+    def test_block_union_rejects_context_type(self):
+        with pytest.raises(ValidationError):
+            BlockAdapter.validate_python(
+                {
+                    "type": "context",
+                    "block_id": "blk",
+                    "kind": "portfolio",
+                    "data": {},
+                }
+            )

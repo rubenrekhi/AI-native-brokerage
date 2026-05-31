@@ -58,6 +58,7 @@ from app.ai.transport.events import TurnStarted
 from app.repositories.conversation import (  # noqa: F401  (patched class-wide via this module path)
     ConversationRepository,
 )
+from app.schemas.conversations import AttachedContextRequest
 
 __all__ = ["run_agent_turn"]
 
@@ -110,7 +111,7 @@ async def run_agent_turn(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_message: str,
-    user_context: dict[str, Any] | None = None,
+    user_context: AttachedContextRequest | None = None,
     digest_card: dict[str, Any] | None = None,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,

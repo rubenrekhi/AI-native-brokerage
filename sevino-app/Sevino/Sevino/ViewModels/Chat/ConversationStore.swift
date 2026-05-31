@@ -137,20 +137,31 @@ final class ConversationStore {
     /// still sees the rest of the transcript around the bad row.
     /// Reuses the cached `encoder`/`blockDecoder` from `self` so a 50-
     /// message resume doesn't allocate a hundred fresh coders.
+    ///
+    /// The persisted `ContextBlock` (`type: "context"`) is a user attachment,
+    /// not a streamed `Block` variant, so it's intercepted before the `Block`
+    /// decoder rejects it and mapped onto `Message.attachedContext` — that
+    /// re-renders the chip on resume (SEV-615). An unknown kind / malformed
+    /// payload leaves the chip nil but keeps the rest of the message.
     private func buildMessage(from dto: MessageDTO) -> Message {
         let role = Role(rawValue: dto.role) ?? .assistant
-        let blocks: [Block] = dto.contentBlocks.compactMap { raw in
+        var attachedContext: AttachedContext?
+        var blocks: [Block] = []
+        for raw in dto.contentBlocks {
+            if case .object(let obj) = raw, case .string("context")? = obj["type"] {
+                attachedContext = AttachedContext.fromPersisted(raw, encoder: encoder)
+                continue
+            }
             do {
                 let data = try encoder.encode(raw)
-                return try blockDecoder.decode(Block.self, from: data)
+                blocks.append(try blockDecoder.decode(Block.self, from: data))
             } catch {
                 #if DEBUG
                 Self.logger.error("resume: dropped malformed block: \(String(describing: error), privacy: .public)")
                 #endif
-                return nil
             }
         }
-        return Message(id: dto.id, role: role, blocks: blocks)
+        return Message(id: dto.id, role: role, blocks: blocks, attachedContext: attachedContext)
     }
 
     /**
