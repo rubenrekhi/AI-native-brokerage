@@ -44,7 +44,7 @@ struct HoldingRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(!hasDetails)
+        .allowsHitTesting(hasDetails)
     }
 
     private var holdingIcon: some View {
