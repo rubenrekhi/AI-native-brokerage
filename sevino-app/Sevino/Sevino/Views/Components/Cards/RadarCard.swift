@@ -3,7 +3,7 @@ import SwiftUI
 struct RadarCard: View {
     let data: RadarCardData
     var scale: CGFloat = 1
-    var onToggleStar: ((String) -> Void)?
+    var onToggleStar: ((UUID) -> Void)?
 
     var body: some View {
         LazyVStack(alignment: .leading, spacing: 12 * scale) {
@@ -65,7 +65,7 @@ private struct RadarCardEmptyState: View {
 private struct RadarItemRow: View {
     let item: RadarItem
     let scale: CGFloat
-    let onToggleStar: ((String) -> Void)?
+    let onToggleStar: ((UUID) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8 * scale) {
@@ -111,9 +111,11 @@ private struct RadarItemRow: View {
 
                 Spacer()
 
-                Text(L10n.Home.radarExpires(item.expiresIn))
-                    .font(.system(size: 11 * scale))
-                    .foregroundStyle(Color.sevinoGreyContrast)
+                if !item.expiresIn.isEmpty {
+                    Text(L10n.Home.radarExpires(item.expiresIn))
+                        .font(.system(size: 11 * scale))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                }
             }
             .padding(.leading, (28 + 10) * scale)
         }
@@ -126,20 +128,20 @@ private let radarCardMockItems: [RadarItem] = [
     RadarItem(
         ticker: "AAPL",
         description: "Apple earnings beat expectations",
+        isStarred: true,
         price: "$189.42",
         changePercent: "+1.24%",
         isPositive: true,
-        expiresIn: "2h",
-        isStarred: true
+        expiresIn: "2h"
     ),
     RadarItem(
         ticker: "TSLA",
         description: "Tesla deliveries miss guidance",
+        isStarred: false,
         price: "$242.10",
         changePercent: "-3.10%",
         isPositive: false,
-        expiresIn: "45m",
-        isStarred: false
+        expiresIn: "45m"
     )
 ]
 

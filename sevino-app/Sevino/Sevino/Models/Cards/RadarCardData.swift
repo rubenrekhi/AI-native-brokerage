@@ -1,5 +1,5 @@
 import Foundation
 
-struct RadarCardData: Codable {
+struct RadarCardData {
     let items: [RadarItem]
 }

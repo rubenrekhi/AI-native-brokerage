@@ -39,14 +39,14 @@ struct RadarMorphingView: View {
         RadarCard(
             data: RadarCardData(items: viewModel.radarItems),
             scale: scale,
-            onToggleStar: { id in viewModel.toggleStar(for: id) }
+            onToggleStar: { id in Task { await viewModel.toggleStar(itemId: id) } }
         )
         .transition(.asymmetric(insertion: .opacity, removal: .identity))
     }
 }
 
 private struct RadarMorphingPreview: View {
-    @State private var viewModel = RadarViewModel()
+    @State private var viewModel = RadarViewModel(client: PlaceholderRadarAPIClient())
 
     var body: some View {
         ZStack {

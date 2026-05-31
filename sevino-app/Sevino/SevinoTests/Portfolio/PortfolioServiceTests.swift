@@ -361,6 +361,7 @@ private final class PathKeyedAPIClient: APIClientProtocol, @unchecked Sendable {
     func post(_ path: String, body: some Encodable) async throws { fatalError("unused") }
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T { fatalError("unused") }
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T { fatalError("unused") }
+    func patchOptional<T: Decodable>(_ path: String, body: some Encodable) async throws -> T? { fatalError("unused") }
     func delete<T: Decodable>(_ path: String) async throws -> T { fatalError("unused") }
     func delete(_ path: String) async throws { fatalError("unused") }
     func delete(_ path: String, body: some Encodable) async throws { fatalError("unused") }

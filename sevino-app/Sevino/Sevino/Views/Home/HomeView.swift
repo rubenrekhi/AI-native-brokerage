@@ -36,6 +36,13 @@ struct HomeView: View {
         return colorScheme == .light ? -0.3 : -0.2
     }
 
+    private var radarErrorAlertPresented: Binding<Bool> {
+        Binding(
+            get: { radarViewModel.error != nil },
+            set: { if !$0 { radarViewModel.clearError() } }
+        )
+    }
+
     init(
         viewModel: HomeViewModel = HomeViewModel(),
         portfolioViewModel: PortfolioViewModel = PortfolioViewModel(),
@@ -287,10 +294,7 @@ struct HomeView: View {
         ))
         .alert(
             L10n.Home.radarLoadErrorTitle,
-            isPresented: Binding(
-                get: { radarViewModel.error != nil },
-                set: { if !$0 { radarViewModel.clearError() } }
-            ),
+            isPresented: radarErrorAlertPresented,
             presenting: radarViewModel.error
         ) { _ in
             Button(L10n.Home.radarLoadErrorRetry) {
@@ -705,7 +709,8 @@ private struct ResumeErrorAlert: ViewModifier {
     HomeView(
         viewModel: HomeViewModel(
             chatService: PlaceholderRecentChatsService.shared
-        )
+        ),
+        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient())
     )
     .preferredColorScheme(.dark)
 }
@@ -714,7 +719,8 @@ private struct ResumeErrorAlert: ViewModifier {
     HomeView(
         viewModel: HomeViewModel(
             chatService: PlaceholderRecentChatsService.shared
-        )
+        ),
+        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient())
     )
     .preferredColorScheme(.light)
 }

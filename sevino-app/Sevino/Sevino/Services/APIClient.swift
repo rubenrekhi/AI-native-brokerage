@@ -8,6 +8,7 @@ protocol APIClientProtocol: Sendable {
     func post(_ path: String, body: some Encodable) async throws
     func put<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T
+    func patchOptional<T: Decodable>(_ path: String, body: some Encodable) async throws -> T?
     func delete<T: Decodable>(_ path: String) async throws -> T
     func delete(_ path: String) async throws
     func delete(_ path: String, body: some Encodable) async throws
@@ -64,6 +65,12 @@ final class APIClient: APIClientProtocol {
 
     func patch<T: Decodable>(_ path: String, body: some Encodable) async throws -> T {
         try await request(path, method: "PATCH", body: body)
+    }
+
+    /// PATCH variant for endpoints that return 200 with a body OR 204 No Content.
+    /// Returns nil on 204 (the server deleted the row), the decoded body otherwise.
+    func patchOptional<T: Decodable>(_ path: String, body: some Encodable) async throws -> T? {
+        try await requestOptional(path, method: "PATCH", body: body)
     }
 
     func delete<T: Decodable>(_ path: String) async throws -> T {
@@ -160,6 +167,51 @@ final class APIClient: APIClientProtocol {
             throw APIError.unknown
         }
 
+        return try decoder.decode(T.self, from: data)
+    }
+
+    private func requestOptional<T: Decodable>(
+        _ path: String,
+        method: String,
+        body: (some Encodable)? = nil as Empty?
+    ) async throws -> T? {
+        guard let url = URL(string: baseURL + path) else {
+            throw URLError(.badURL)
+        }
+
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = method
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        let apiKey = AppConfig.apiKey
+        if !apiKey.isEmpty {
+            urlRequest.setValue(apiKey, forHTTPHeaderField: "X-API-Key")
+        }
+
+        if let token = await tokenProvider() {
+            urlRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        if let body {
+            urlRequest.httpBody = try encoder.encode(body)
+        }
+
+        let (data, response) = try await session.data(for: urlRequest)
+
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.unknown
+        }
+
+        guard (200...299).contains(httpResponse.statusCode) else {
+            if let apiError = try? decoder.decode(APIError.self, from: data) {
+                throw apiError
+            }
+            throw APIError.unknown
+        }
+
+        if httpResponse.statusCode == 204 || data.isEmpty {
+            return nil
+        }
         return try decoder.decode(T.self, from: data)
     }
 

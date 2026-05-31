@@ -68,6 +68,14 @@ final class MockAPIClient: APIClientProtocol, @unchecked Sendable {
         return try castResponse()
     }
 
+    func patchOptional<T: Decodable>(_ path: String, body: some Encodable) async throws -> T? {
+        lastPath = path
+        lastMethod = "PATCH"
+        lastBody = body
+        if let error = errorToThrow { throw error }
+        return responseToReturn as? T
+    }
+
     func delete<T: Decodable>(_ path: String) async throws -> T {
         lastPath = path
         lastMethod = "DELETE"
