@@ -114,6 +114,7 @@ async def run_agent_turn(
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
     system_prompt: SystemPrompt,
+    time_context: str | None = None,
     model_config: ModelConfig,
     hard_caps: HardCaps,
     langfuse: LangfuseClient,
@@ -124,6 +125,10 @@ async def run_agent_turn(
     server_tools_config: ServerToolsConfig = DISABLED_SERVER_TOOLS,
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
+
+    ``time_context``, when provided, is sent as a second system block after
+    the cached prompt — never folded into it — so its live clock value
+    doesn't invalidate the prompt cache breakpoint.
 
     Anthropic errors and cap breaches don't raise — they're persisted with
     ``terminal_state='error'``. ``CancelledError`` propagates after
@@ -202,6 +207,11 @@ async def run_agent_turn(
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+        # Live clock + market status, appended *after* the cache breakpoint
+        # so the per-turn timestamp never invalidates the cached prompt above.
+        if time_context:
+            request_system.append({"type": "text", "text": time_context})
 
         # ``turn_id.hex`` is the 32-char lowercase form W3C trace context
         # requires, so a Langfuse trace looks up directly by

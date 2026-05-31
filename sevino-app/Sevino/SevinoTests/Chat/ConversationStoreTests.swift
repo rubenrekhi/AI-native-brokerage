@@ -334,6 +334,8 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(decoded?["message"] as? String, "hello there")
         XCTAssertEqual(decoded?["idempotency_key"] as? String, "idem-fixed-key")
         XCTAssertNil(decoded?["context"])
+        XCTAssertNil(decoded?["digest_card"])
+        XCTAssertEqual(decoded?["client_timezone"] as? String, "America/New_York")
     }
 
     func testSendRoutesDigestCardThroughContext() async throws {
@@ -457,13 +459,15 @@ final class ConversationStoreTests: XCTestCase {
 
     private func makeStore(
         client: any SSEClientProtocol,
-        idempotencyKey: String = "k"
+        idempotencyKey: String = "k",
+        timeZoneIdentifier: String = "America/New_York"
     ) -> ConversationStore {
         ConversationStore(
             conversationId: conversationId,
             sseClient: client,
             baseURL: Self.testBaseURL,
-            idempotencyKeyFactory: { idempotencyKey }
+            idempotencyKeyFactory: { idempotencyKey },
+            timeZoneIdentifierProvider: { timeZoneIdentifier }
         )
     }
 

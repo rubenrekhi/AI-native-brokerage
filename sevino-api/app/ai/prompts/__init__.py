@@ -6,6 +6,12 @@ from typing import NamedTuple
 
 from app.ai.runtime.types import ServerToolsConfig
 
+__all__ = [
+    "SYSTEM_PROMPT_V1",
+    "SystemPrompt",
+    "system_prompt_for",
+]
+
 _PROMPTS_DIR = Path(__file__).parent
 
 

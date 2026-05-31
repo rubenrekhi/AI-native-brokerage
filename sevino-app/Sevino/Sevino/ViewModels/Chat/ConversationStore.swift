@@ -52,6 +52,7 @@ final class ConversationStore {
     let conversationId: UUID
     private let baseURL: String
     private let idempotencyKeyFactory: @Sendable () -> String
+    private let timeZoneIdentifierProvider: @Sendable () -> String
     private let apiClient: any APIClientProtocol
 
     /// Default `JSONDecoder` for `SSEEvent`. The event payload structs declare
@@ -86,12 +87,14 @@ final class ConversationStore {
         ),
         baseURL: String = AppConfig.apiBaseURL,
         idempotencyKeyFactory: @escaping @Sendable () -> String = { UUID().uuidString },
+        timeZoneIdentifierProvider: @escaping @Sendable () -> String = { TimeZone.current.identifier },
         apiClient: any APIClientProtocol = APIClient.shared
     ) {
         self.conversationId = conversationId
         self.sseClient = sseClient
         self.baseURL = baseURL
         self.idempotencyKeyFactory = idempotencyKeyFactory
+        self.timeZoneIdentifierProvider = timeZoneIdentifierProvider
         self.apiClient = apiClient
     }
 
@@ -404,7 +407,8 @@ final class ConversationStore {
         let body = TurnRequestBody(
             message: message,
             context: context,
-            idempotencyKey: idempotencyKey
+            idempotencyKey: idempotencyKey,
+            clientTimezone: timeZoneIdentifierProvider()
         )
         request.httpBody = try requestEncoder.encode(body)
         return request
@@ -418,10 +422,12 @@ private struct TurnRequestBody: Encodable {
     let message: String
     let context: [String: JSONValue]?
     let idempotencyKey: String
+    let clientTimezone: String?
 
     private enum CodingKeys: String, CodingKey {
         case message
         case context
         case idempotencyKey = "idempotency_key"
+        case clientTimezone = "client_timezone"
     }
 }

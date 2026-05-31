@@ -423,9 +423,12 @@ class TestHappyPath:
             assert invs[0].stop_reason == "end_turn"
 
         request_system = anthropic_stub.messages.stream.call_args.kwargs["system"]
-        assert len(request_system) == 1
+        assert len(request_system) == 2
         assert request_system[0]["type"] == "text"
         assert request_system[0]["cache_control"] == {"type": "ephemeral"}
+        assert request_system[1]["type"] == "text"
+        assert "US Eastern Time" in request_system[1]["text"]
+        assert "cache_control" not in request_system[1]
 
     async def test_digest_card_reaches_model_as_context_hint(
         self, fixture, chat_client
@@ -453,9 +456,14 @@ class TestHappyPath:
         )
 
         call = anthropic_stub.messages.stream.call_args.kwargs
-        # System prompt is untouched — digest is no longer injected there.
-        assert len(call["system"]) == 1
+        # System prompt is untouched by digest cards: only the cached prompt
+        # and the per-turn uncached time block are present.
+        assert len(call["system"]) == 2
         assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
+        system_text = "\n".join(block["text"] for block in call["system"])
+        assert "AMD moved 5%" not in system_text
+        assert "US Eastern Time" in call["system"][1]["text"]
+        assert "cache_control" not in call["system"][1]
         # The card content rides the user turn as a hint instead. (The loop
         # mutates ``messages`` in place, appending the assistant turn, so
         # target the user message explicitly rather than by position.)

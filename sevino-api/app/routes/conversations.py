@@ -39,8 +39,8 @@ import base64
 import binascii
 import json
 import uuid
-from datetime import datetime
-from typing import AsyncIterator
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator
 
 import sentry_sdk
 import structlog
@@ -78,6 +78,7 @@ from app.ai.transport.idempotency import (
     mark_complete,
     mark_failed,
 )
+from app.ai.utils.time_context import build_time_context
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
@@ -95,6 +96,13 @@ from app.schemas.conversations import (
     ConversationMessagesResponse,
     MessageItem,
 )
+from app.services.market_data import (
+    MarketDataError,
+    MarketDataInvalidInputError,
+    MarketDataService,
+    MarketDataUnavailableError,
+    MarketDataUpstreamError,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -107,6 +115,13 @@ _LIST_DEFAULT_LIMIT = 20
 _LIST_MAX_LIMIT = 100
 _MESSAGES_DEFAULT_LIMIT = 50
 _MESSAGES_MAX_LIMIT = 200
+
+_MARKET_DATA_ERRORS = (
+    MarketDataError,
+    MarketDataInvalidInputError,
+    MarketDataUnavailableError,
+    MarketDataUpstreamError,
+)
 
 
 def _encode_cursor(payload: dict[str, str]) -> str:
@@ -304,6 +319,26 @@ async def list_conversation_messages(
     return ConversationMessagesResponse(items=items, next_cursor=next_cursor)
 
 
+async def _build_turn_time_context(
+    market_data: MarketDataService | None,
+    client_timezone: str | None,
+) -> str:
+    """Live time + market-open status appended (uncached) to the system
+    prompt each turn. A clock outage degrades to time-only — context for the
+    model is best-effort and must never fail the turn. ``client_timezone``
+    adds the user's local time beside Eastern; an unusable value is ignored
+    downstream."""
+    status: dict[str, Any] | None = None
+    if market_data is not None:
+        try:
+            status = await market_data.get_market_status()
+        except _MARKET_DATA_ERRORS as exc:
+            logger.warning("chat_turn_market_status_failed", error=str(exc))
+    return build_time_context(
+        datetime.now(timezone.utc), status, client_timezone=client_timezone
+    )
+
+
 @router.post("/{conversation_id}/turns")
 @limiter.limit("30/minute")
 async def post_turn(
@@ -401,6 +436,15 @@ async def post_turn(
                 web_search_max_uses=settings.anthropic_web_search_max_uses,
                 web_fetch_max_uses=settings.anthropic_web_fetch_max_uses,
             )
+            # ``getattr`` — tests that boot a bare FastAPI app without the
+            # lifespan never populate the attribute; lifespan itself stores
+            # ``None`` when FMP_API_KEY is absent. Either way the tool and the
+            # time-context builder handle the missing service gracefully.
+            market_data = getattr(request.app.state, "market_data", None)
+            time_context = await _build_turn_time_context(
+                market_data, body.client_timezone
+            )
+
             result = await run_agent_turn(
                 user_id=user_uuid,
                 conversation_id=conversation_id,
@@ -409,17 +453,9 @@ async def post_turn(
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=DEFAULT_REGISTRY,
-                http_clients=ToolHttpClients(
-                    # ``getattr`` — tests that boot a bare FastAPI app
-                    # without the lifespan never populate the attribute;
-                    # lifespan itself stores ``None`` when FMP_API_KEY is
-                    # absent. Either way the tool handles the missing
-                    # service gracefully.
-                    market_data=getattr(
-                        request.app.state, "market_data", None
-                    ),
-                ),
+                http_clients=ToolHttpClients(market_data=market_data),
                 system_prompt=system_prompt_for(server_tools_config),
+                time_context=time_context,
                 model_config=model_config,
                 hard_caps=hard_caps,
                 langfuse=langfuse,
