@@ -68,6 +68,13 @@ class ChatTurnRequest(BaseModel):
         "and projected to a short model hint for the current turn only. Max "
         "serialized size: 10 KB.",
     )
+    client_timezone: str | None = Field(
+        default=None,
+        description="Device IANA timezone identifier (e.g. "
+        "'America/Los_Angeles'). Renders the user's local time alongside US "
+        "market time in the model's per-turn time context. Best-effort: an "
+        "unknown or malformed value is ignored, not rejected.",
+    )
 
     @model_validator(mode="after")
     def _validate_context_size(self) -> "ChatTurnRequest":

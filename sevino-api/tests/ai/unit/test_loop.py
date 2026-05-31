@@ -332,6 +332,7 @@ async def _run(
     conversation_id: uuid.UUID | None = None,
     emitter: SSEEmitter | None = None,
     server_tools_config: ServerToolsConfig | None = None,
+    time_context: str | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -361,6 +362,8 @@ async def _run(
         kwargs["server_tools_config"] = server_tools_config
     if user_context is not None:
         kwargs["user_context"] = user_context
+    if time_context is not None:
+        kwargs["time_context"] = time_context
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -515,6 +518,35 @@ class TestHappyPath:
             "symbol": "AMD",
             "kind": "big_move",
         }
+
+    async def test_time_context_appended_as_uncached_second_system_block(
+        self, repo_mocks
+    ):
+        # The live clock must sit *after* the cache breakpoint so it never
+        # invalidates the cached static prompt: a second block, no marker.
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks, time_context="It is 3:45 PM EDT.")
+
+        kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
+        assert kwargs["request_system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {"type": "text", "text": "It is 3:45 PM EDT."},
+        ]
+
+    async def test_no_time_context_keeps_single_cached_system_block(
+        self, repo_mocks
+    ):
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
+        assert len(kwargs["request_system"]) == 1
 
     async def test_completes_agent_turn_with_totals_and_assistant_link(
         self, repo_mocks
