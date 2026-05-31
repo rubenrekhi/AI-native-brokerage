@@ -17,6 +17,7 @@ from app.services.fmp import (
     project_profile,
     project_quote,
     project_ratios,
+    project_valuation,
     str_or_none,
 )
 
@@ -411,6 +412,79 @@ class TestStatementEndpoints:
         assert await client.income_statement_annual("AAPL") == []
 
 
+class TestRatiosAnnual:
+    async def test_passes_symbol_period_and_limit(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[{"priceToEarningsRatio": 34.0}])
+
+        client = _make_client(handler)
+        result = await client.ratios_annual("AAPL", limit=5)
+
+        assert captured["path"] == "/stable/ratios"
+        assert captured["params"]["symbol"] == "AAPL"
+        assert captured["params"]["period"] == "annual"
+        assert captured["params"]["limit"] == "5"
+        assert result == [{"priceToEarningsRatio": 34.0}]
+
+    async def test_empty_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.ratios_annual("AAPL") == []
+
+
+class TestSectorIndustryPe:
+    async def test_sector_pe_passes_date_and_exchange(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[{"sector": "Technology", "exchange": "NASDAQ", "pe": 58.6}],
+            )
+
+        client = _make_client(handler)
+        result = await client.sector_pe("NASDAQ", "2026-05-29")
+
+        assert captured["path"] == "/stable/sector-pe-snapshot"
+        assert captured["params"]["date"] == "2026-05-29"
+        assert captured["params"]["exchange"] == "NASDAQ"
+        assert result[0]["sector"] == "Technology"
+
+    async def test_industry_pe_passes_date_and_exchange(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[{"industry": "Consumer Electronics", "pe": 30.0}],
+            )
+
+        client = _make_client(handler)
+        result = await client.industry_pe("NASDAQ", "2026-05-29")
+
+        assert captured["path"] == "/stable/industry-pe-snapshot"
+        assert captured["params"]["exchange"] == "NASDAQ"
+        assert result[0]["industry"] == "Consumer Electronics"
+
+    async def test_empty_snapshot_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.sector_pe("NASDAQ", "2026-05-31") == []
+        assert await client.industry_pe("NASDAQ", "2026-05-31") == []
+
+
 class TestProjectQuote:
     def test_full_mapping(self):
         raw = {
@@ -770,6 +844,131 @@ class TestProjectFinancials:
 
         assert result["net_income_growth_yoy"] is None
         assert result["eps_growth_yoy"] is None
+
+
+class TestProjectValuation:
+    def _sector_rows(self) -> list[dict]:
+        return [
+            {"sector": "Technology", "exchange": "NASDAQ", "pe": 50.0},
+            {"sector": "Energy", "exchange": "NASDAQ", "pe": 12.0},
+        ]
+
+    def _industry_rows(self) -> list[dict]:
+        return [{"industry": "Consumer Electronics", "exchange": "NASDAQ", "pe": 40.0}]
+
+    def _annual(self) -> list[dict]:
+        return [
+            {"fiscalYear": "2025", "priceToEarningsRatio": 30.0,
+             "priceToSalesRatio": 9.0, "priceToBookRatio": 50.0},
+            {"fiscalYear": "2024", "priceToEarningsRatio": 20.0},
+            {"fiscalYear": "2023", "priceToEarningsRatio": 40.0},
+        ]
+
+    def test_full_mapping_and_premiums(self):
+        result = project_valuation(
+            {"priceToEarningsRatioTTM": 25.0},
+            self._sector_rows(),
+            self._industry_rows(),
+            self._annual(),
+            sector="Technology",
+            industry="Consumer Electronics",
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+        )
+
+        assert result["pe"] == "25.0"
+        assert result["sector_pe"] == "50.0"
+        assert result["industry_pe"] == "40.0"
+        # 25 / 50 - 1 = -0.5 (50% below sector); 25 / 40 - 1 = -0.375.
+        assert result["pe_vs_sector"] == "-0.5"
+        assert result["pe_vs_industry"] == "-0.375"
+        assert result["as_of_date"] == "2026-05-29"
+        assert result["exchange"] == "NASDAQ"
+
+    def test_history_range_from_positive_pes(self):
+        result = project_valuation(
+            {}, [], [], self._annual(),
+            sector=None, industry=None, exchange=None, as_of_date=None,
+        )
+
+        assert result["pe_5y_low"] == "20.0"
+        assert result["pe_5y_high"] == "40.0"
+        assert result["pe_5y_median"] == "30.0"
+        assert [p["fiscal_year"] for p in result["valuation_history"]] == [
+            "2025", "2024", "2023"
+        ]
+        assert result["valuation_history"][0]["ps"] == "9.0"
+
+    def test_non_positive_pe_excluded_from_range_but_kept_in_history(self):
+        annual = [
+            {"fiscalYear": "2025", "priceToEarningsRatio": 30.0},
+            {"fiscalYear": "2024", "priceToEarningsRatio": -5.0},
+        ]
+
+        result = project_valuation(
+            {}, [], [], annual,
+            sector=None, industry=None, exchange=None, as_of_date=None,
+        )
+
+        # The loss year is dropped from the range...
+        assert result["pe_5y_low"] == "30.0"
+        assert result["pe_5y_high"] == "30.0"
+        # ...but still appears in the raw history.
+        assert result["valuation_history"][1]["pe"] == "-5.0"
+
+    def test_unmatched_sector_yields_null_benchmark_and_no_as_of_date(self):
+        result = project_valuation(
+            {"priceToEarningsRatioTTM": 25.0},
+            self._sector_rows(),
+            self._industry_rows(),
+            [],
+            sector="Healthcare",  # not present in rows
+            industry="Biotech",  # not present in rows
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+        )
+
+        assert result["sector_pe"] is None
+        assert result["industry_pe"] is None
+        assert result["pe_vs_sector"] is None
+        # as_of_date is suppressed when no benchmark matched — it would be
+        # misleading to stamp a date on data we don't have.
+        assert result["as_of_date"] is None
+
+    def test_empty_inputs_degrade_to_all_none(self):
+        result = project_valuation(
+            {}, [], [], [],
+            sector=None, industry=None, exchange=None, as_of_date=None,
+        )
+
+        scalar = {k: v for k, v in result.items() if k != "valuation_history"}
+        assert all(v is None for v in scalar.values())
+        assert result["valuation_history"] == []
+
+    def test_premium_none_when_benchmark_non_positive(self):
+        result = project_valuation(
+            {"priceToEarningsRatioTTM": 25.0},
+            [{"sector": "Technology", "pe": 0}],
+            [],
+            [],
+            sector="Technology",
+            industry=None,
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+        )
+
+        assert result["sector_pe"] == "0.0"
+        assert result["pe_vs_sector"] is None
+
+    def test_blank_sector_string_treated_as_missing(self):
+        result = project_valuation(
+            {}, [{"sector": "Technology", "pe": 50.0}], [], [],
+            sector="   ", industry="", exchange="  ", as_of_date="2026-05-29",
+        )
+
+        assert result["sector"] is None
+        assert result["exchange"] is None
+        assert result["sector_pe"] is None
 
 
 class TestStrOrNone:

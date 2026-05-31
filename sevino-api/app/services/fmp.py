@@ -337,6 +337,40 @@ class FmpClient:
         )
         return data or []
 
+    async def ratios_annual(
+        self, symbol: str, *, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """Annual valuation ratios, newest first. Empty payload returns ``[]``."""
+        data = await self._request(
+            "/ratios",
+            {"symbol": symbol, "period": "annual", "limit": limit},
+        )
+        return data or []
+
+    async def sector_pe(
+        self, exchange: str, on_date: str
+    ) -> list[dict[str, Any]]:
+        """Per-sector P/E for an exchange on a date. Empty payload returns ``[]``.
+
+        Non-trading days legitimately return no rows, so callers walk the date
+        back to the last session rather than treating empty as an error.
+        """
+        data = await self._request(
+            "/sector-pe-snapshot",
+            {"date": on_date, "exchange": exchange},
+        )
+        return data or []
+
+    async def industry_pe(
+        self, exchange: str, on_date: str
+    ) -> list[dict[str, Any]]:
+        """Per-industry P/E for an exchange on a date. Empty payload returns ``[]``."""
+        data = await self._request(
+            "/industry-pe-snapshot",
+            {"date": on_date, "exchange": exchange},
+        )
+        return data or []
+
     async def earnings_calendar(
         self, from_date: date, to_date: date
     ) -> list[dict[str, Any]]:
@@ -649,4 +683,94 @@ def project_financials(
         "fiscal_period": _ttm_period_label(income_ttm),
         "period_end_date": none_if_blank(income_ttm.get("date")),
         "reported_currency": none_if_blank(income_ttm.get("reportedCurrency")),
+    }
+
+
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _pe_premium(company_pe: float | None, benchmark_pe: float | None) -> float | None:
+    """Company P/E relative to a benchmark as a decimal (0.20 == 20% richer).
+
+    None when either value is missing or the benchmark is not strictly
+    positive — a non-positive benchmark P/E makes the premium meaningless.
+    """
+    if company_pe is None or benchmark_pe is None or benchmark_pe <= 0:
+        return None
+    return round(company_pe / benchmark_pe - 1, 4)
+
+
+def _match_pe(rows: list[dict[str, Any]], key: str, value: str | None) -> float | None:
+    """P/E of the snapshot row whose ``key`` (sector/industry) equals ``value``."""
+    if not value:
+        return None
+    for row in rows:
+        if row.get(key) == value:
+            return _as_number(row.get("pe"))
+    return None
+
+
+def _build_valuation_history(
+    annual_ratios: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    return [
+        {
+            "fiscal_year": str_or_none(row.get("fiscalYear")),
+            "pe": str_or_none(row.get("priceToEarningsRatio")),
+            "ps": str_or_none(row.get("priceToSalesRatio")),
+            "pb": str_or_none(row.get("priceToBookRatio")),
+        }
+        for row in annual_ratios
+    ]
+
+
+def project_valuation(
+    ratios_ttm: dict[str, Any],
+    sector_rows: list[dict[str, Any]],
+    industry_rows: list[dict[str, Any]],
+    annual_ratios: list[dict[str, Any]],
+    *,
+    sector: str | None,
+    industry: str | None,
+    exchange: str | None,
+    as_of_date: str | None,
+) -> dict[str, Any]:
+    sector = none_if_blank(sector)
+    industry = none_if_blank(industry)
+    exchange = none_if_blank(exchange)
+
+    company_pe = _as_number(ratios_ttm.get("priceToEarningsRatioTTM"))
+    sector_pe = _match_pe(sector_rows, "sector", sector)
+    industry_pe = _match_pe(industry_rows, "industry", industry)
+    matched_benchmark = sector_pe is not None or industry_pe is not None
+
+    # Non-positive P/Es (loss-making years) make a valuation *range* meaningless,
+    # so they're excluded from the low/high/median while the raw history below
+    # still reports every year.
+    pe_series = [
+        pe
+        for row in annual_ratios
+        if (pe := _as_number(row.get("priceToEarningsRatio"))) is not None and pe > 0
+    ]
+    return {
+        "pe": str_or_none(company_pe),
+        "sector": sector,
+        "industry": industry,
+        "exchange": exchange,
+        "as_of_date": as_of_date if matched_benchmark else None,
+        "sector_pe": str_or_none(sector_pe),
+        "industry_pe": str_or_none(industry_pe),
+        "pe_vs_sector": str_or_none(_pe_premium(company_pe, sector_pe)),
+        "pe_vs_industry": str_or_none(_pe_premium(company_pe, industry_pe)),
+        "pe_5y_low": str_or_none(min(pe_series)) if pe_series else None,
+        "pe_5y_high": str_or_none(max(pe_series)) if pe_series else None,
+        "pe_5y_median": str_or_none(_median(pe_series)),
+        "valuation_history": _build_valuation_history(annual_ratios),
     }
