@@ -14,7 +14,10 @@ from app.exceptions import (
 from app.tasks import sync_assets as sync_assets_mod
 from app.tasks.sync_assets import (
     ENRICHMENT_BATCH_LIMIT,
+    ENRICHMENT_COLD_START_BATCH_LIMIT,
+    ENRICHMENT_COLD_START_EXIT_THRESHOLD,
     ENRICHMENT_CONCURRENCY,
+    ENRICHMENT_REQUESTS_PER_MINUTE,
     ENRICHMENT_STALE_DAYS,
     _enrich_assets,
     sync_assets,
@@ -46,6 +49,11 @@ def _install_enrichment_session(monkeypatch) -> MagicMock:
             return None
 
     monkeypatch.setattr(sync_assets_mod, "async_session", lambda: _SessionCM())
+    monkeypatch.setattr(
+        sync_assets_mod.AssetRepository,
+        "count_enriched_assets",
+        AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+    )
     return session
 
 
@@ -172,6 +180,11 @@ class TestEnrichAssetsBatching:
         list_mock = AsyncMock(return_value=[])
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
             "list_symbols_needing_enrichment",
             list_mock,
         )
@@ -190,6 +203,11 @@ class TestEnrichAssetsBatching:
 
     async def test_empty_batch_short_circuits(self, monkeypatch):
         _install_enrichment_session(monkeypatch)
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository,
             "list_symbols_needing_enrichment",
@@ -213,6 +231,11 @@ class TestEnrichAssetsBatching:
         symbols = [f"S{i:02d}" for i in range(25)]
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
             "list_symbols_needing_enrichment",
             AsyncMock(return_value=symbols),
         )
@@ -221,6 +244,11 @@ class TestEnrichAssetsBatching:
         )
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository, "mark_enriched", AsyncMock()
+        )
+        monkeypatch.setattr(
+            sync_assets_mod._PerMinuteRateLimiter,
+            "acquire",
+            AsyncMock(),
         )
 
         state = {"active": 0, "peak": 0}
@@ -241,10 +269,99 @@ class TestEnrichAssetsBatching:
         # With 25 symbols and a real await, the cap should actually be hit.
         assert state["peak"] == ENRICHMENT_CONCURRENCY
 
+    async def test_cold_start_uses_smaller_batch_limit(self, monkeypatch):
+        _install_enrichment_session(monkeypatch)
+        list_mock = AsyncMock(return_value=[])
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=0),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "list_symbols_needing_enrichment",
+            list_mock,
+        )
+
+        fmp = MagicMock()
+        fmp.profile = AsyncMock()
+
+        await _enrich_assets(fmp)
+
+        assert list_mock.await_args.kwargs == {
+            "limit": ENRICHMENT_COLD_START_BATCH_LIMIT,
+            "stale_days": ENRICHMENT_STALE_DAYS,
+        }
+
+    async def test_rate_limiter_paces_request_starts(self, monkeypatch):
+        _install_enrichment_session(monkeypatch)
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "list_symbols_needing_enrichment",
+            AsyncMock(return_value=["AAPL", "TSLA", "MSFT"]),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "apply_enrichment", AsyncMock()
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "mark_enriched", AsyncMock()
+        )
+
+        sleeps: list[float] = []
+
+        async def _fake_sleep(delay: float):
+            sleeps.append(delay)
+
+        monkeypatch.setattr(sync_assets_mod.asyncio, "sleep", _fake_sleep)
+        ticks = iter([0.0, 0.0, 0.2, 0.2, 0.8, 0.8])
+        monkeypatch.setattr(sync_assets_mod, "monotonic", lambda: next(ticks))
+
+        fmp = MagicMock()
+        fmp.profile = AsyncMock(return_value=FULL_PROFILE)
+
+        await _enrich_assets(fmp)
+
+        interval = 60 / ENRICHMENT_REQUESTS_PER_MINUTE
+        assert sleeps == pytest.approx([interval, (2 * interval) - 0.2])
+
+    async def test_stays_in_cold_start_until_threshold(self, monkeypatch):
+        _install_enrichment_session(monkeypatch)
+        list_mock = AsyncMock(return_value=[])
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD - 1),
+        )
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "list_symbols_needing_enrichment",
+            list_mock,
+        )
+
+        fmp = MagicMock()
+        fmp.profile = AsyncMock()
+
+        await _enrich_assets(fmp)
+
+        assert list_mock.await_args.kwargs == {
+            "limit": ENRICHMENT_COLD_START_BATCH_LIMIT,
+            "stale_days": ENRICHMENT_STALE_DAYS,
+        }
+
 
 class TestEnrichAssetsErrorPaths:
     async def test_402_marks_enriched_without_writing_data(self, monkeypatch):
         _install_enrichment_session(monkeypatch)
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository,
             "list_symbols_needing_enrichment",
@@ -286,6 +403,11 @@ class TestEnrichAssetsErrorPaths:
     )
     async def test_transient_error_left_for_next_run(self, monkeypatch, exc):
         _install_enrichment_session(monkeypatch)
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository,
+            "count_enriched_assets",
+            AsyncMock(return_value=ENRICHMENT_COLD_START_EXIT_THRESHOLD),
+        )
         monkeypatch.setattr(
             sync_assets_mod.AssetRepository,
             "list_symbols_needing_enrichment",
@@ -428,6 +550,10 @@ def _install_full_sync_session(monkeypatch) -> None:
     session.execute = AsyncMock(return_value=execute_result)
     session.commit = AsyncMock()
     session.flush = AsyncMock()
+    begin_cm = MagicMock()
+    begin_cm.__aenter__ = AsyncMock(return_value=session)
+    begin_cm.__aexit__ = AsyncMock(return_value=None)
+    session.begin = MagicMock(return_value=begin_cm)
 
     class _SessionCM:
         async def __aenter__(self):

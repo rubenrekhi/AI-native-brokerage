@@ -14,6 +14,7 @@ backfill of the ~12k catalog spans a few daily runs.
 
 import asyncio
 from datetime import date
+from time import monotonic
 from typing import Any
 
 import sentry_sdk
@@ -39,8 +40,33 @@ logger = structlog.get_logger(__name__)
 FMP_LOGO_URL_TEMPLATE = "https://financialmodelingprep.com/image-stock/{symbol}.png"
 
 ENRICHMENT_BATCH_LIMIT = 500
+ENRICHMENT_COLD_START_BATCH_LIMIT = 100
+ENRICHMENT_COLD_START_EXIT_THRESHOLD = 500
 ENRICHMENT_CONCURRENCY = 10
 ENRICHMENT_STALE_DAYS = 30
+ENRICHMENT_REQUESTS_PER_MINUTE = 75
+ENRICHMENT_COLD_START_REQUESTS_PER_MINUTE = 20
+
+
+class _PerMinuteRateLimiter:
+    """Paces request starts so a cold backfill doesn't burst FMP.
+
+    The semaphore still controls in-flight concurrency; this limiter spaces
+    out *starts* to keep us under a rough per-minute budget.
+    """
+
+    def __init__(self, requests_per_minute: int) -> None:
+        self._interval = 60 / requests_per_minute
+        self._next_slot = 0.0
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            now = monotonic()
+            wait = max(0.0, self._next_slot - now)
+            self._next_slot = max(now, self._next_slot) + self._interval
+        if wait > 0:
+            await asyncio.sleep(wait)
 
 
 def _to_asset_row(alpaca_asset: dict[str, Any]) -> dict[str, Any] | None:
@@ -115,18 +141,33 @@ async def _enrich_assets(fmp: FmpClient) -> dict[str, int]:
     # tens of seconds at this concurrency. Read the symbol list, release the
     # session, fetch, then reopen only for the writes.
     async with async_session() as session:
+        enriched_count = await AssetRepository.count_enriched_assets(
+            session
+        )
+        cold_start = enriched_count < ENRICHMENT_COLD_START_EXIT_THRESHOLD
+        batch_limit = (
+            ENRICHMENT_COLD_START_BATCH_LIMIT
+            if cold_start
+            else ENRICHMENT_BATCH_LIMIT
+        )
         symbols = await AssetRepository.list_symbols_needing_enrichment(
             session,
-            limit=ENRICHMENT_BATCH_LIMIT,
+            limit=batch_limit,
             stale_days=ENRICHMENT_STALE_DAYS,
         )
     if not symbols:
         return {"enriched": 0, "no_data": 0, "failed": 0}
 
     semaphore = asyncio.Semaphore(ENRICHMENT_CONCURRENCY)
+    rate_limiter = _PerMinuteRateLimiter(
+        ENRICHMENT_COLD_START_REQUESTS_PER_MINUTE
+        if cold_start
+        else ENRICHMENT_REQUESTS_PER_MINUTE
+    )
 
     async def _fetch(symbol: str) -> tuple[str, dict[str, Any] | None, bool]:
         async with semaphore:
+            await rate_limiter.acquire()
             try:
                 raw = await fmp.profile(symbol)
             except MarketDataError:
@@ -158,7 +199,18 @@ async def _enrich_assets(fmp: FmpClient) -> dict[str, int]:
         "no_data": len(no_data_symbols),
         "failed": failed,
     }
-    logger.info("assets_enriched", **counts)
+    logger.info(
+        "assets_enriched",
+        batch_limit=batch_limit,
+        cold_start=cold_start,
+        enriched_count=enriched_count,
+        requests_per_minute=(
+            ENRICHMENT_COLD_START_REQUESTS_PER_MINUTE
+            if cold_start
+            else ENRICHMENT_REQUESTS_PER_MINUTE
+        ),
+        **counts,
+    )
     return counts
 
 
@@ -223,20 +275,22 @@ async def sync_assets(ctx: dict) -> dict:
             logger.warning(
                 "assets_sync_malformed_rows_skipped", count=malformed
             )
+        if not rows:
+            logger.warning("assets_sync_all_rows_malformed")
+            return {"status": "skipped", "reason": "all_rows_malformed"}
 
         input_symbols = {r["symbol"] for r in rows}
 
         try:
             async with async_session() as session:
-                existing_result = await session.execute(
-                    select(Asset.symbol, Asset.tradeable)
-                )
-                existing: dict[str, bool] = {
-                    sym: tradeable for sym, tradeable in existing_result.all()
-                }
-
-                await AssetRepository.bulk_upsert(session, rows)
-                await session.commit()
+                async with session.begin():
+                    existing_result = await session.execute(
+                        select(Asset.symbol, Asset.tradeable)
+                    )
+                    existing: dict[str, bool] = {
+                        sym: tradeable for sym, tradeable in existing_result.all()
+                    }
+                    await AssetRepository.bulk_upsert(session, rows)
         except Exception as exc:
             logger.error("assets_sync_db_upsert_failed", error=str(exc))
             _capture_with_scope(exc, failure_stage="db_upsert")

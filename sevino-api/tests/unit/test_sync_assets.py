@@ -44,6 +44,10 @@ def _install_fake_session(
     session.execute = AsyncMock(return_value=execute_result)
     session.commit = AsyncMock()
     session.flush = AsyncMock()
+    begin_cm = MagicMock()
+    begin_cm.__aenter__ = AsyncMock(return_value=session)
+    begin_cm.__aexit__ = AsyncMock(return_value=None)
+    session.begin = MagicMock(return_value=begin_cm)
 
     class _SessionCM:
         async def __aenter__(self):
@@ -132,6 +136,20 @@ class TestSyncAssetsUpsert:
         broker.list_assets.assert_awaited_once_with(
             status="active", asset_class="us_equity"
         )
+
+    async def test_wraps_db_sync_in_single_transaction(self, monkeypatch):
+        broker = MagicMock()
+        broker.list_assets = AsyncMock(
+            return_value=[_alpaca_asset(symbol="AAPL", name="Apple Inc")]
+        )
+        session = _install_fake_session(monkeypatch, existing=[])
+        monkeypatch.setattr(
+            sync_assets_mod.AssetRepository, "bulk_upsert", AsyncMock()
+        )
+
+        await sync_assets({"alpaca": broker})
+
+        session.begin.assert_called_once()
 
 
 class TestSyncAssetsFractionable:
@@ -375,6 +393,30 @@ class TestSyncAssetsErrorHandling:
         )
         assert event == "assets_sync_malformed_rows_skipped"
         assert kwargs == {"count": 1}
+
+    async def test_all_malformed_rows_skip_db_work(self, monkeypatch):
+        broker = MagicMock()
+        broker.list_assets = AsyncMock(
+            return_value=[
+                {"id": "alp_bad_1", "exchange": "NASDAQ"},
+                {"id": "alp_bad_2", "status": "active"},
+            ]
+        )
+
+        def _no_db():
+            raise AssertionError("async_session must not be called")
+
+        monkeypatch.setattr(sync_assets_mod, "async_session", _no_db)
+        warning = MagicMock()
+        monkeypatch.setattr(sync_assets_mod.logger, "warning", warning)
+
+        result = await sync_assets({"alpaca": broker})
+
+        assert result == {"status": "skipped", "reason": "all_rows_malformed"}
+        assert [call.args[0] for call in warning.call_args_list] == [
+            "assets_sync_malformed_rows_skipped",
+            "assets_sync_all_rows_malformed",
+        ]
 
     async def test_db_upsert_failure_captures_with_scope_and_reraises(
         self, monkeypatch

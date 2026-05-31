@@ -10,11 +10,14 @@ assets because referenced order_events/radar_items must remain resolvable).
 from datetime import date, timedelta
 from typing import Any, Iterable
 
+import structlog
 from sqlalchemy import and_, case, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.asset import Asset
+
+logger = structlog.get_logger(__name__)
 
 
 def _escape_ilike(value: str) -> str:
@@ -100,20 +103,80 @@ class AssetRepository:
 
         Only flushes; the caller (typically an ARQ task) must commit.
         """
-        rows = [
-            {
-                "symbol": a["symbol"].upper(),
-                "name": a["name"],
-                "exchange": a.get("exchange"),
-                "tradeable": a.get("tradeable", True),
-                "fractionable": a.get("fractionable", True),
-                "logo_url": a.get("logo_url"),
-                "alpaca_asset_id": a.get("alpaca_asset_id"),
+        rows_by_symbol: dict[str, dict[str, Any]] = {}
+        duplicate_symbols = 0
+        for asset in assets:
+            symbol = asset["symbol"].upper()
+            if symbol in rows_by_symbol:
+                duplicate_symbols += 1
+            rows_by_symbol[symbol] = {
+                "symbol": symbol,
+                "name": asset["name"],
+                "exchange": asset.get("exchange"),
+                "tradeable": asset.get("tradeable", True),
+                "fractionable": asset.get("fractionable", True),
+                "logo_url": asset.get("logo_url"),
+                "alpaca_asset_id": asset.get("alpaca_asset_id"),
             }
-            for a in assets
-        ]
+        rows = list(rows_by_symbol.values())
         if not rows:
             return
+        if duplicate_symbols:
+            logger.warning(
+                "assets_bulk_upsert_duplicate_symbols",
+                duplicate_symbols=duplicate_symbols,
+            )
+
+        # Alpaca asset UUIDs are useful hints but not a stable enough key to
+        # let them take the sync down. If the feed claims an existing UUID for
+        # a different symbol, clear the stale holder first. If the feed itself
+        # duplicates a UUID across multiple symbols, let the last-seen symbol
+        # keep it and null the rest so the symbol-based upsert can still land.
+        owner_by_asset_id: dict[str, str] = {}
+        duplicate_asset_ids = 0
+        for row in rows:
+            asset_id = row["alpaca_asset_id"]
+            if not asset_id:
+                continue
+            previous_owner = owner_by_asset_id.get(asset_id)
+            if previous_owner is not None and previous_owner != row["symbol"]:
+                duplicate_asset_ids += 1
+            owner_by_asset_id[asset_id] = row["symbol"]
+        if duplicate_asset_ids:
+            for row in rows:
+                asset_id = row["alpaca_asset_id"]
+                if (
+                    asset_id is not None
+                    and owner_by_asset_id.get(asset_id) != row["symbol"]
+                ):
+                    row["alpaca_asset_id"] = None
+            logger.warning(
+                "assets_bulk_upsert_duplicate_alpaca_asset_ids_in_feed",
+                duplicate_asset_ids=duplicate_asset_ids,
+            )
+
+        incoming_asset_ids = list(owner_by_asset_id.keys())
+        if incoming_asset_ids:
+            existing_holders = await db.execute(
+                select(Asset.symbol, Asset.alpaca_asset_id).where(
+                    Asset.alpaca_asset_id.in_(incoming_asset_ids)
+                )
+            )
+            stale_symbols = [
+                symbol
+                for symbol, asset_id in existing_holders.all()
+                if owner_by_asset_id.get(asset_id) != symbol
+            ]
+            if stale_symbols:
+                await db.execute(
+                    update(Asset)
+                    .where(Asset.symbol.in_(stale_symbols))
+                    .values(alpaca_asset_id=None)
+                )
+                logger.info(
+                    "assets_bulk_upsert_cleared_stale_alpaca_asset_ids",
+                    cleared_rows=len(stale_symbols),
+                )
 
         # asyncpg caps prepared-statement parameters at 32,767. With 7
         # columns per row the live Alpaca feed (~12k symbols) overflows a
@@ -138,7 +201,7 @@ class AssetRepository:
             )
             await db.execute(stmt)
 
-        input_symbols = [r["symbol"] for r in rows]
+        input_symbols = list(rows_by_symbol.keys())
         await db.execute(
             update(Asset)
             .where(
@@ -176,6 +239,16 @@ class AssetRepository:
         )
         result = await db.execute(stmt)
         return list(result.scalars().all())
+
+    @staticmethod
+    async def count_enriched_assets(db: AsyncSession) -> int:
+        """How many catalog rows currently carry enrichment ground truth."""
+        result = await db.execute(
+            select(func.count())
+            .select_from(Asset)
+            .where(Asset.enriched_at.is_not(None))
+        )
+        return int(result.scalar_one())
 
     @staticmethod
     async def apply_enrichment(

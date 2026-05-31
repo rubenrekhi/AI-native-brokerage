@@ -280,6 +280,87 @@ class TestBulkUpsert:
         )
         assert result.scalar_one() is True
 
+    async def test_reclaims_stale_alpaca_asset_id_from_old_symbol(
+        self, db_session: AsyncSession
+    ):
+        await db_session.execute(
+            text(
+                """
+                INSERT INTO assets (symbol, name, alpaca_asset_id, tradeable)
+                VALUES
+                    ('OLD', 'Old Co', 'alp_shared', true),
+                    ('KEEP', 'Keep Co', 'alp_keep', true)
+                """
+            )
+        )
+        await db_session.flush()
+
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [
+                {
+                    "symbol": "NEW",
+                    "name": "New Co",
+                    "alpaca_asset_id": "alp_shared",
+                },
+                {
+                    "symbol": "KEEP",
+                    "name": "Keep Co",
+                    "alpaca_asset_id": "alp_keep",
+                },
+            ],
+        )
+
+        result = await db_session.execute(
+            text(
+                """
+                SELECT symbol, alpaca_asset_id
+                FROM assets
+                WHERE symbol IN ('KEEP', 'NEW', 'OLD')
+                ORDER BY symbol
+                """
+            )
+        )
+        rows = {symbol: asset_id for symbol, asset_id in result.all()}
+        assert rows == {
+            "KEEP": "alp_keep",
+            "NEW": "alp_shared",
+            "OLD": None,
+        }
+
+    async def test_duplicate_alpaca_asset_ids_in_feed_do_not_abort_sync(
+        self, db_session: AsyncSession
+    ):
+        await AssetRepository.bulk_upsert(
+            db_session,
+            [
+                {
+                    "symbol": "AAA",
+                    "name": "Alpha",
+                    "alpaca_asset_id": "alp_dup",
+                },
+                {
+                    "symbol": "BBB",
+                    "name": "Beta",
+                    "alpaca_asset_id": "alp_dup",
+                },
+            ],
+        )
+
+        result = await db_session.execute(
+            text(
+                """
+                SELECT symbol, alpaca_asset_id
+                FROM assets
+                WHERE symbol IN ('AAA', 'BBB')
+                ORDER BY symbol
+                """
+            )
+        )
+        rows = result.all()
+        assert [symbol for symbol, _ in rows] == ["AAA", "BBB"]
+        assert sum(asset_id == "alp_dup" for _, asset_id in rows) == 1
+
 
 class TestSearchWildcardEscaping:
     async def test_percent_in_query_is_literal(

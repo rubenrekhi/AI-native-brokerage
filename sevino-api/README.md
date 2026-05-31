@@ -13,6 +13,9 @@ FastAPI backend for Sevino. Handles authentication, trading (via Alpaca), bank l
 - [git-worktreeinclude](https://github.com/satococoa/git-worktreeinclude) — install via `brew install satococoa/tap/git-worktreeinclude`. Required for carrying `.env` into new git worktrees (see [Worktrees](#worktrees)).
 - Docker (required by Supabase CLI)
 - Alpaca Broker API sandbox keys ([sign up](https://broker-app.alpaca.markets/sign-up))
+- Financial Modeling Prep API key for radar enrichment. The free tier is not
+  sufficient for a cold radar bootstrap or ongoing full-catalog enrichment;
+  use a paid tier if you need the AI Radar pipeline to populate locally.
 - Plaid sandbox keys ([sign up](https://dashboard.plaid.com/signup))
 - Supabase project ([create one](https://supabase.com/dashboard))
 
@@ -54,6 +57,10 @@ make down
 ```
 
 You need both `make server` and `make worker` running for the full system. If you're working on routes that don't touch background jobs, you can skip the worker.
+
+`make worker` does not hot-reload. If you change ARQ tasks, worker startup,
+or shared code the worker imports, stop and restart it or you'll keep running
+stale in-memory bytecode even after the server reflects your latest edits.
 
 The API will be running at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 
