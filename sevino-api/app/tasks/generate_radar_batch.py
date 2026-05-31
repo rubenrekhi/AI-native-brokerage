@@ -16,10 +16,22 @@ from uuid import UUID
 import structlog
 
 from app.database import async_session
+from app.services.radar_job import RadarJobError
 from app.services.radar_job.orchestrator import generate_radar_batch as run_orchestrator
 from app.ai.anthropic_client import create_anthropic_client
 
 logger = structlog.get_logger(__name__)
+
+# Error codes that are deterministic given current DB/Alpaca state — retrying
+# the ARQ job won't change the outcome. Treat them as successful no-ops so we
+# don't burn the default max_tries=5 budget on guaranteed failures.
+# - ``already_rotated``: another worker won the FOR-UPDATE race on this user's
+#   slot; the batch landed elsewhere, nothing more to do.
+# - ``pool_too_small``: the candidate sourcer produced <10 items, meaning the
+#   gated universe is too sparse for this user right now (e.g. their held
+#   sectors plus exclusions left nothing). The next scheduled refresh will
+#   try again with fresh data.
+_DETERMINISTIC_NOOP_CODES = frozenset({"already_rotated", "pool_too_small"})
 
 
 async def generate_radar_batch(ctx: dict, user_id: str) -> dict:
@@ -53,6 +65,16 @@ async def generate_radar_batch(ctx: dict, user_id: str) -> dict:
                 anthropic=anthropic,
             )
             await db.commit()
+        except RadarJobError as exc:
+            await db.rollback()
+            if exc.code in _DETERMINISTIC_NOOP_CODES:
+                logger.info(
+                    "radar_task_skipped",
+                    user_id=user_id,
+                    code=exc.code,
+                )
+                return {"user_id": user_id, "skipped": exc.code}
+            raise
         except Exception:
             await db.rollback()
             raise

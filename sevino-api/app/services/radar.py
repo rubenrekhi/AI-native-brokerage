@@ -10,7 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import (
     ConflictError,
+    MarketDataError,
+    MarketDataInvalidInputError,
     MarketDataUnavailableError,
+    MarketDataUpstreamError,
     NotFoundError,
 )
 from app.repositories.asset import AssetRepository
@@ -62,11 +65,23 @@ class RadarService:
             quotes_by_symbol = {
                 q["symbol"]: q for q in response.get("quotes", [])
             }
-        except MarketDataUnavailableError:
+        except (
+            MarketDataUnavailableError,
+            MarketDataUpstreamError,
+            MarketDataError,
+            MarketDataInvalidInputError,
+        ) as exc:
+            # Live quote overlay is optional — radar items are the source of
+            # truth and must always render. Catch the full market-data error
+            # family (network failure, upstream 4xx/5xx like 429 rate limits,
+            # missing data, malformed inputs) and degrade to null overlays
+            # rather than 500ing the whole endpoint.
             logger.warning(
                 "radar_quotes_unavailable",
                 user_id=str(user_id),
                 symbol_count=len(symbols),
+                error_type=type(exc).__name__,
+                error=str(exc),
             )
 
         return RadarListResponse(

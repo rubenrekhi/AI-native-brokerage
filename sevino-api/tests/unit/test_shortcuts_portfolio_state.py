@@ -23,12 +23,12 @@ def _snap(
     total: str,
     cash: str = "0",
     positions: list[tuple[str, str, str | None]] | None = None,
-) -> portfolio_state._PortfolioSnapshot:
-    return portfolio_state._PortfolioSnapshot(
+) -> portfolio_state.PortfolioSnapshot:
+    return portfolio_state.PortfolioSnapshot(
         total_value=Decimal(total),
         cash=Decimal(cash),
         positions=[
-            portfolio_state._Position(
+            portfolio_state.Position(
                 symbol=symbol, market_value=Decimal(mv), sector=sector
             )
             for symbol, mv, sector in (positions or [])

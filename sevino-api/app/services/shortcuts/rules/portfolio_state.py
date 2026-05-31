@@ -48,26 +48,34 @@ IDLE_CASH_RATIO = Decimal("0.20")
 
 
 @dataclass(frozen=True)
-class _Position:
+class Position:
     symbol: str
     market_value: Decimal
     sector: str | None
 
 
 @dataclass(frozen=True)
-class _PortfolioSnapshot:
+class PortfolioSnapshot:
     total_value: Decimal
     cash: Decimal
-    positions: list[_Position]
+    positions: list[Position]
 
 
 async def evaluate(
     ctx: ShortcutContext,
     db: AsyncSession,
     alpaca: AlpacaBrokerService | None,
+    *,
+    snapshot: "PortfolioSnapshot | None" = None,
 ) -> list[Shortcut]:
-    """Emit holdings-aware shortcuts; empty if there's no live snapshot."""
-    snapshot = await _gather_snapshot(ctx.user_id, db, alpaca)
+    """Emit holdings-aware shortcuts; empty if there's no live snapshot.
+
+    ``snapshot`` may be pre-fetched by the orchestrator and reused across
+    multiple rule modules so we don't hit Alpaca's positions endpoint
+    twice per request. When omitted, we fetch our own.
+    """
+    if snapshot is None:
+        snapshot = await gather_snapshot(ctx.user_id, db, alpaca)
     if snapshot is None:
         return []
 
@@ -79,9 +87,9 @@ async def evaluate(
     return shortcuts
 
 
-async def _gather_snapshot(
+async def gather_snapshot(
     user_id: uuid.UUID, db: AsyncSession, alpaca: AlpacaBrokerService | None
-) -> _PortfolioSnapshot | None:
+) -> PortfolioSnapshot | None:
     if alpaca is None:
         return None
     account = await BrokerageAccountRepository.get_by_user_id(db, user_id)
@@ -103,14 +111,14 @@ async def _gather_snapshot(
 
     sectors = await _sectors_for(db, [p["symbol"] for p in raw_positions])
     positions = [
-        _Position(
+        Position(
             symbol=p["symbol"],
             market_value=Decimal(p.get("market_value") or "0"),
             sector=sectors.get(p["symbol"]),
         )
         for p in raw_positions
     ]
-    return _PortfolioSnapshot(
+    return PortfolioSnapshot(
         total_value=Decimal(raw_account.get("equity") or "0"),
         cash=Decimal(raw_account.get("cash") or "0"),
         positions=positions,
@@ -127,7 +135,7 @@ async def _sectors_for(
     return {symbol: sector for symbol, sector in rows if sector is not None}
 
 
-def _concentration(snap: _PortfolioSnapshot) -> list[Shortcut]:
+def _concentration(snap: PortfolioSnapshot) -> list[Shortcut]:
     if snap.total_value <= PORTFOLIO_FLOOR:
         return []
     out: list[Shortcut] = []
@@ -144,7 +152,7 @@ def _concentration(snap: _PortfolioSnapshot) -> list[Shortcut]:
     return out
 
 
-def _allocation_drift(snap: _PortfolioSnapshot) -> list[Shortcut]:
+def _allocation_drift(snap: PortfolioSnapshot) -> list[Shortcut]:
     if snap.total_value <= PORTFOLIO_FLOOR:
         return []
     by_sector: dict[str, Decimal] = {}
@@ -166,7 +174,7 @@ def _allocation_drift(snap: _PortfolioSnapshot) -> list[Shortcut]:
     return out
 
 
-def _idle_cash(snap: _PortfolioSnapshot) -> list[Shortcut]:
+def _idle_cash(snap: PortfolioSnapshot) -> list[Shortcut]:
     if snap.cash <= MIN_IDLE_CASH or snap.total_value <= 0:
         return []
     ratio = snap.cash / snap.total_value
@@ -182,7 +190,7 @@ def _idle_cash(snap: _PortfolioSnapshot) -> list[Shortcut]:
 
 
 def _daily_recap(
-    snap: _PortfolioSnapshot, bucket: TimeBucket
+    snap: PortfolioSnapshot, bucket: TimeBucket
 ) -> list[Shortcut]:
     if not snap.positions or bucket != TimeBucket.AFTER_MARKET:
         return []

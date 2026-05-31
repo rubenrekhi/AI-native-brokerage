@@ -13,7 +13,7 @@ batch + anchor instead of landing in a half-rotated state.
 """
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from uuid import UUID
 
 import structlog
@@ -41,7 +41,15 @@ from app.services.radar_job import RadarJobError
 from app.services.radar_job.candidate_sourcer import build_pool
 from app.services.radar_job.events_client import EventsClient
 from app.services.radar_job.llm import OwnedPosition, RadarLLM, UserContext
-from app.services.radar_job.quality_gate import StaticQualityGate
+from app.services.radar_job.quality_gate import (
+    ALLOWED_ASSET_TYPES,
+    ALLOWED_EXCHANGES,
+    CHINESE_ADR_COUNTRY,
+    EXCLUDE_CHINESE_ADRS,
+    MIN_DAYS_SINCE_IPO,
+    MIN_MARKET_CAP_USD,
+    StaticQualityGate,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -79,7 +87,18 @@ async def generate_radar_batch(
     LLM validation failed, etc.) so the ARQ wrapper has one failure type
     to catch and let retry policy handle.
     """
-    universe = await AssetRepository.list_eligible_for_radar(db)
+    # Push the gate's numeric / categorical filters into SQL so we don't
+    # hydrate the ~12k full enriched universe just to throw 80% away in
+    # Python. The Python gate still runs on the reduced result to apply the
+    # allow/deny-list rules that are easier to maintain as module constants.
+    universe = await AssetRepository.list_eligible_for_radar(
+        db,
+        min_market_cap=MIN_MARKET_CAP_USD,
+        allowed_exchanges=ALLOWED_EXCHANGES,
+        allowed_asset_types={t.value for t in ALLOWED_ASSET_TYPES},
+        ipo_cutoff=date.today() - timedelta(days=MIN_DAYS_SINCE_IPO),
+        exclude_country=CHINESE_ADR_COUNTRY if EXCLUDE_CHINESE_ADRS else None,
+    )
     gated = StaticQualityGate.filter(universe)
 
     events = EventsClient(fmp=fmp, redis=redis)

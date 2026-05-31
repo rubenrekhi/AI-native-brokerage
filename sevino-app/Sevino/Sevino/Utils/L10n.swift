@@ -382,7 +382,7 @@ enum L10n {
         static let exploreButton = String(localized: "home.explore_button")
         static let dismissExploreAccessibility = String(localized: "home.dismiss_explore_accessibility")
         static let shortcutMore = String(localized: "home.shortcut_more")
-        static let shortcutOverflowTitle = String(localized: "home.shortcut_overflow_title")
+        static let shortcutLess = String(localized: "home.shortcut_less")
         static let sidebarAccessibility = String(localized: "home.sidebar_accessibility")
         static let portfolioAccessibility = String(localized: "home.portfolio_accessibility")
         static let fundingAccessibility = String(localized: "home.funding_accessibility")

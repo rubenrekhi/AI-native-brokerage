@@ -361,9 +361,11 @@ async def _seed_enriched(
             text(
                 """
                 INSERT INTO assets
-                    (symbol, name, tradeable, sector, enriched_at)
+                    (symbol, name, tradeable, sector, enriched_at,
+                     market_cap, exchange, asset_type, ipo_date, country)
                 VALUES
-                    (:symbol, :name, :tradeable, :sector, :enriched_at)
+                    (:symbol, :name, :tradeable, :sector, :enriched_at,
+                     :market_cap, :exchange, :asset_type, :ipo_date, :country)
                 """
             ),
             {
@@ -372,6 +374,11 @@ async def _seed_enriched(
                 "tradeable": row.get("tradeable", True),
                 "sector": row.get("sector"),
                 "enriched_at": row.get("enriched_at"),
+                "market_cap": row.get("market_cap"),
+                "exchange": row.get("exchange"),
+                "asset_type": row.get("asset_type"),
+                "ipo_date": row.get("ipo_date"),
+                "country": row.get("country"),
             },
         )
     await db_session.flush()
@@ -448,6 +455,135 @@ class TestListEligibleForRadar:
         eligible = await AssetRepository.list_eligible_for_radar(db_session)
 
         assert {a.symbol for a in eligible} == {"ENR1", "ENR2"}
+
+    async def test_sql_filters_drop_disqualified_rows(
+        self, db_session: AsyncSession
+    ):
+        """Pushing the gate's numeric/categorical filters into SQL must
+        drop rows that fail any of: tradeable, market_cap floor, exchange
+        allow-list, asset_type allow-list, ipo cutoff, country exclusion.
+        """
+        from datetime import date as _date
+
+        await _seed_enriched(
+            db_session,
+            [
+                # Passes everything — should survive.
+                {
+                    "symbol": "GOOD",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 5_000_000_000,
+                    "exchange": "NASDAQ",
+                    "asset_type": "stock",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "US",
+                },
+                # Below market_cap floor.
+                {
+                    "symbol": "SMALL",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 100_000_000,
+                    "exchange": "NASDAQ",
+                    "asset_type": "stock",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "US",
+                },
+                # Wrong exchange.
+                {
+                    "symbol": "OTC",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 5_000_000_000,
+                    "exchange": "PINK",
+                    "asset_type": "stock",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "US",
+                },
+                # Wrong asset_type.
+                {
+                    "symbol": "PREF",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 5_000_000_000,
+                    "exchange": "NYSE",
+                    "asset_type": "fund",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "US",
+                },
+                # IPO too recent.
+                {
+                    "symbol": "FRESH",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 5_000_000_000,
+                    "exchange": "NYSE",
+                    "asset_type": "stock",
+                    "ipo_date": _date.today(),
+                    "country": "US",
+                },
+                # Excluded country.
+                {
+                    "symbol": "CADR",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 5_000_000_000,
+                    "exchange": "NYSE",
+                    "asset_type": "stock",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "CN",
+                },
+                # Untradeable.
+                {
+                    "symbol": "DEAD",
+                    "enriched_at": _days_ago(1),
+                    "tradeable": False,
+                    "market_cap": 5_000_000_000,
+                    "exchange": "NYSE",
+                    "asset_type": "stock",
+                    "ipo_date": _date(2010, 1, 1),
+                    "country": "US",
+                },
+            ],
+        )
+
+        eligible = await AssetRepository.list_eligible_for_radar(
+            db_session,
+            min_market_cap=2_000_000_000,
+            allowed_exchanges=["NYSE", "NASDAQ"],
+            allowed_asset_types=["stock", "etf"],
+            ipo_cutoff=_date.today() - timedelta(days=365),
+            exclude_country="CN",
+        )
+
+        assert {a.symbol for a in eligible} == {"GOOD"}
+
+    async def test_sql_filters_admit_null_ipo_date(
+        self, db_session: AsyncSession
+    ):
+        """Missing ipo_date is an FMP data gap — must NOT be treated as
+        "too young" (matches the Python gate's policy)."""
+        from datetime import date as _date
+
+        await _seed_enriched(
+            db_session,
+            [
+                {
+                    "symbol": "MEGA",
+                    "enriched_at": _days_ago(1),
+                    "market_cap": 100_000_000_000,
+                    "exchange": "NYSE",
+                    "asset_type": "stock",
+                    "ipo_date": None,  # data gap
+                    "country": "US",
+                },
+            ],
+        )
+
+        eligible = await AssetRepository.list_eligible_for_radar(
+            db_session,
+            min_market_cap=2_000_000_000,
+            allowed_exchanges=["NYSE", "NASDAQ"],
+            allowed_asset_types=["stock", "etf"],
+            ipo_cutoff=_date.today() - timedelta(days=365),
+        )
+
+        assert [a.symbol for a in eligible] == ["MEGA"]
 
 
 class TestSectorsForSymbols:

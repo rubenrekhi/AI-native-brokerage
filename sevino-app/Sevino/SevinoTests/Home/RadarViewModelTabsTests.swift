@@ -124,6 +124,48 @@ final class RadarViewModelTabsTests: XCTestCase {
         XCTAssertEqual(viewModel.activeTab, .starred)
     }
 
+    func testActiveTabPreservedAcrossReloads() async {
+        // First load applies the default — newItems present, so .new wins.
+        mockClient.fetchResponse = RadarListResponse(
+            items: [Self.makeItem(ticker: "NVDA", source: .aiGenerated, isStarred: false)],
+            nextRefreshAt: nil
+        )
+        await viewModel.loadRadar()
+        XCTAssertEqual(viewModel.activeTab, .new)
+
+        // User switches tabs intentionally.
+        viewModel.activeTab = .starred
+
+        // Subsequent reload (retry after error, app foreground refresh, etc.)
+        // must not yank the user back to .new.
+        await viewModel.loadRadar()
+        XCTAssertEqual(viewModel.activeTab, .starred)
+    }
+
+    func testDefaultTabAppliedAfterFirstSuccessFollowingError() async {
+        // The default-tab gate keys off "hasAppliedDefaultTab" — a failed
+        // first attempt must not flip it, so the next successful load can
+        // still apply the right default.
+        struct LoadError: Error {}
+        viewModel.activeTab = .new  // not the default for an empty radar
+        mockClient.fetchError = LoadError()
+
+        await viewModel.loadRadar()
+
+        XCTAssertEqual(viewModel.activeTab, .new,
+                       "failed first load must not apply the default tab")
+
+        // Now the retry succeeds with no new picks — default should apply
+        // and flip the tab to .starred.
+        mockClient.fetchError = nil
+        mockClient.fetchResponse = RadarListResponse(items: [], nextRefreshAt: nil)
+
+        await viewModel.loadRadar()
+
+        XCTAssertEqual(viewModel.activeTab, .starred,
+                       "default tab applies on first SUCCESS, not first attempt")
+    }
+
     func testNextRefreshWeekdayFormatsFutureAnchor() async {
         let future = Date(timeIntervalSinceNow: 7 * 86_400)
         mockClient.fetchResponse = RadarListResponse(items: [], nextRefreshAt: future)

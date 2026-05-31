@@ -11,7 +11,10 @@ from sqlalchemy.exc import IntegrityError
 
 from app.exceptions import (
     ConflictError,
+    MarketDataError,
+    MarketDataInvalidInputError,
     MarketDataUnavailableError,
+    MarketDataUpstreamError,
     NotFoundError,
 )
 from app.models.asset import Asset
@@ -185,6 +188,44 @@ async def test_list_for_user_graceful_degrades_on_market_data_unavailable(
 
     market_data = AsyncMock()
     market_data.get_batch_quotes.side_effect = MarketDataUnavailableError()
+
+    result = await RadarService(market_data, AsyncMock()).list_for_user(user_id)
+
+    assert len(result.items) == 1
+    assert result.items[0].price is None
+    assert result.items[0].change_abs is None
+    assert result.items[0].change_pct is None
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        MarketDataUpstreamError(status_code=429),
+        MarketDataUpstreamError(status_code=500),
+        MarketDataError("no data for AAPL", symbol="AAPL"),
+        MarketDataInvalidInputError("bad symbol"),
+    ],
+)
+async def test_list_for_user_graceful_degrades_on_any_market_data_error(
+    monkeypatch, error
+):
+    """Live quote overlay is optional — every MarketData* error must fall
+    through to null overlays, never a 5xx. Regression for FMP 429s blowing
+    up GET /v1/radar instead of degrading."""
+    user_id = uuid4()
+    row = _orm_row(symbol="AAPL", user_id=user_id)
+
+    async def fake_list_for_user(db, uid):
+        return [row]
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.list_for_user",
+        fake_list_for_user,
+    )
+    _patch_profile(monkeypatch)
+
+    market_data = AsyncMock()
+    market_data.get_batch_quotes.side_effect = error
 
     result = await RadarService(market_data, AsyncMock()).list_for_user(user_id)
 

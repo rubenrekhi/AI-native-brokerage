@@ -37,6 +37,7 @@ from app.services.alpaca_broker import (
     AlpacaBrokerService,
     AlpacaBrokerUnavailableError,
 )
+from app.services.shortcuts.rules.portfolio_state import PortfolioSnapshot
 from app.services.market_data import (
     MarketDataError,
     MarketDataInvalidInputError,
@@ -82,15 +83,23 @@ async def evaluate(
     db: AsyncSession,
     alpaca: AlpacaBrokerService | None,
     market_data: MarketDataService | None,
+    *,
+    snapshot: PortfolioSnapshot | None = None,
 ) -> list[Shortcut]:
-    """Emit market-aware shortcuts; empty at night or with no fresh data."""
+    """Emit market-aware shortcuts; empty at night or with no fresh data.
+
+    ``snapshot`` is the portfolio snapshot from ``portfolio_state`` reused
+    here to avoid a second Alpaca positions call. When provided we read
+    symbols/sectors from it directly; when omitted we fall back to fetching
+    via Alpaca (kept for the unit-test path that mocks Alpaca directly).
+    """
     if ctx.bucket == TimeBucket.NIGHT:
         return []
 
     shortcuts: list[Shortcut] = []
-    shortcuts += await _morning_watch(ctx, db, alpaca)
+    shortcuts += await _morning_watch(ctx, db, alpaca, snapshot=snapshot)
     shortcuts += await _big_move(ctx, market_data)
-    shortcuts += await _sector_lead_lag(ctx, db, alpaca, market_data)
+    shortcuts += await _sector_lead_lag(ctx, db, alpaca, market_data, snapshot=snapshot)
     return shortcuts
 
 
@@ -118,11 +127,13 @@ async def _sector_lead_lag(
     db: AsyncSession,
     alpaca: AlpacaBrokerService | None,
     market_data: MarketDataService | None,
+    *,
+    snapshot: PortfolioSnapshot | None = None,
 ) -> list[Shortcut]:
     # Intraday relative move loses meaning once the session closes.
     if ctx.bucket != TimeBucket.MARKET_HOURS:
         return []
-    sectors = await _held_sectors(ctx.user_id, db, alpaca)
+    sectors = await _held_sectors(ctx.user_id, db, alpaca, snapshot=snapshot)
     sector_etfs = [(s, SECTOR_TO_ETF[s]) for s in sorted(sectors)]
     if not sector_etfs:
         return []
@@ -157,10 +168,15 @@ async def _morning_watch(
     ctx: ShortcutContext,
     db: AsyncSession,
     alpaca: AlpacaBrokerService | None,
+    *,
+    snapshot: PortfolioSnapshot | None = None,
 ) -> list[Shortcut]:
     if ctx.bucket != TimeBucket.MORNING:
         return []
-    has_positions = bool(await _position_symbols(ctx.user_id, db, alpaca))
+    if snapshot is not None:
+        has_positions = bool(snapshot.positions)
+    else:
+        has_positions = bool(await _position_symbols(ctx.user_id, db, alpaca))
     if not has_positions and not await _has_radar_item(ctx.user_id, db):
         return []
     return [
@@ -173,8 +189,16 @@ async def _morning_watch(
 
 
 async def _held_sectors(
-    user_id: uuid.UUID, db: AsyncSession, alpaca: AlpacaBrokerService | None
+    user_id: uuid.UUID,
+    db: AsyncSession,
+    alpaca: AlpacaBrokerService | None,
+    *,
+    snapshot: PortfolioSnapshot | None = None,
 ) -> set[str]:
+    if snapshot is not None:
+        # Sectors already attached to each Position by the shared snapshot —
+        # filter to ones with a known sector ETF and we're done.
+        return {p.sector for p in snapshot.positions if p.sector in SECTOR_TO_ETF}
     symbols = await _position_symbols(user_id, db, alpaca)
     if not symbols:
         return set()

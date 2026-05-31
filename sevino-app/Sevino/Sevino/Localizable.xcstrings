@@ -1896,22 +1896,22 @@
         }
       }
     },
+    "home.shortcut_less" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show less"
+          }
+        }
+      }
+    },
     "home.shortcut_more" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "More"
-          }
-        }
-      }
-    },
-    "home.shortcut_overflow_title" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "More questions"
+            "value" : "Show more"
           }
         }
       }

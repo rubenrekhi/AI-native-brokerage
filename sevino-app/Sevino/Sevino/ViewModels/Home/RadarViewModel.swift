@@ -11,6 +11,12 @@ final class RadarViewModel {
 
     var activeTab: RadarTab = .new
 
+    /// True once the first successful fetch has applied the default tab.
+    /// Subsequent reloads (manual retry, app foreground refresh) leave
+    /// `activeTab` alone so we don't yank the user back to New after
+    /// they've intentionally switched to Starred.
+    private var hasAppliedDefaultTab = false
+
     /// This week's unstarred AI picks, best match first.
     private(set) var newItems: [RadarItem] = []
 
@@ -37,7 +43,10 @@ final class RadarViewModel {
             radarItems = response.items
             nextRefreshAt = response.nextRefreshAt
             recomputeTabs()
-            activeTab = newItems.isEmpty ? .starred : .new
+            if !hasAppliedDefaultTab {
+                activeTab = newItems.isEmpty ? .starred : .new
+                hasAppliedDefaultTab = true
+            }
         } catch let caughtError {
             error = caughtError.localizedDescription
         }

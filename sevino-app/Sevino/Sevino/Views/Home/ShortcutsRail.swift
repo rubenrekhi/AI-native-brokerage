@@ -1,30 +1,38 @@
 import SwiftUI
 
-/// Owns the shortcuts view model and overflow-sheet state so `HomeView` swaps a
-/// single call site. The inline top-3 list renders via `HomeChatSuggestions`;
-/// the rest surface in `ShortcutsOverflowSheet` behind the "More" pill.
+/// Owns the shortcuts view model. The expansion state lives on the parent
+/// (`HomeView`) because expanding the rail also hides the greeting — the two
+/// views share the same y-region of the screen, so the parent coordinates
+/// who renders. When `isExpanded` is true, every shortcut renders inline
+/// (no bottom sheet); when false, only the top 3 + a "Show more" pill.
 struct ShortcutsRail: View {
     let scale: CGFloat
+    @Binding var isExpanded: Bool
     let onSelect: (String) -> Void
 
     @State private var viewModel = ShortcutsViewModel()
-    @State private var showOverflow = false
 
     var body: some View {
         HomeChatSuggestions(
             scale: scale,
-            shortcuts: viewModel.topShortcuts,
-            hasOverflow: viewModel.hasOverflow,
+            shortcuts: isExpanded ? viewModel.shortcuts : viewModel.topShortcuts,
+            canExpand: viewModel.hasOverflow,
+            isExpanded: isExpanded,
             onSelect: onSelect,
-            onShowMore: { showOverflow = true }
+            onToggleExpand: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isExpanded.toggle()
+                }
+            }
         )
         .task { await viewModel.load() }
-        .sheet(isPresented: $showOverflow) {
-            ShortcutsOverflowSheet(
-                scale: scale,
-                shortcuts: viewModel.overflowShortcuts,
-                onSelect: onSelect
-            )
+        .onChange(of: viewModel.hasOverflow) { _, hasOverflow in
+            // If a reload drops the overflow (e.g. fewer shortcuts came back),
+            // collapse so the user doesn't end up stuck in an expanded state
+            // with a stale "Show less" pill that has nothing extra to show.
+            if !hasOverflow && isExpanded {
+                isExpanded = false
+            }
         }
     }
 }

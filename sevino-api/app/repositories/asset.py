@@ -7,7 +7,7 @@ symbols missing from the feed as `tradeable = False` (we never hard-delete
 assets because referenced order_events/radar_items must remain resolvable).
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
 from typing import Any, Iterable
 
 from sqlalchemy import and_, case, func, or_, select, update
@@ -221,18 +221,47 @@ class AssetRepository:
 
     @staticmethod
     async def list_eligible_for_radar(
-        db: AsyncSession, *, limit: int | None = None
+        db: AsyncSession,
+        *,
+        limit: int | None = None,
+        min_market_cap: int | None = None,
+        allowed_exchanges: Iterable[str] | None = None,
+        allowed_asset_types: Iterable[str] | None = None,
+        ipo_cutoff: "date | None" = None,
+        exclude_country: str | None = None,
     ) -> list[Asset]:
         """Assets carrying FMP enrichment — the universe the radar quality
         gate (T2) and candidate sourcer (T3) query against.
 
         The enriched universe grows toward the full ~12k catalog, so callers
-        should pass `limit` to bound the load unless they truly need every
-        row. Ordered by symbol for a stable result under a limit.
+        should pass ``limit`` and/or push the gate's numeric/categorical
+        filters into SQL via the optional kwargs. Doing so lets Postgres
+        drop the ~80% of rows that fail the market-cap / exchange /
+        asset-type / IPO-age / country checks before they ever hit
+        SQLAlchemy hydration. Allow/deny-list filters (specific symbols and
+        industries) stay in Python because they're cheap on the reduced
+        set and easier to maintain as module constants.
+
+        Ordered by symbol for a stable result under a limit.
         """
-        stmt = select(Asset).where(Asset.enriched_at.is_not(None)).order_by(
-            Asset.symbol
-        )
+        conds = [Asset.enriched_at.is_not(None), Asset.tradeable.is_(True)]
+        if min_market_cap is not None:
+            conds.append(Asset.market_cap >= min_market_cap)
+        if allowed_exchanges is not None:
+            conds.append(Asset.exchange.in_(list(allowed_exchanges)))
+        if allowed_asset_types is not None:
+            conds.append(Asset.asset_type.in_(list(allowed_asset_types)))
+        if ipo_cutoff is not None:
+            # A NULL ipo_date is an FMP data gap on a qualifying large cap;
+            # we admit it (matching the Python gate's policy) rather than
+            # treat it as "too young."
+            conds.append(or_(Asset.ipo_date.is_(None), Asset.ipo_date <= ipo_cutoff))
+        if exclude_country is not None:
+            conds.append(
+                or_(Asset.country.is_(None), Asset.country != exclude_country)
+            )
+
+        stmt = select(Asset).where(*conds).order_by(Asset.symbol)
         if limit is not None:
             stmt = stmt.limit(limit)
         result = await db.execute(stmt)

@@ -13,7 +13,7 @@ _BUCKET_TEMPLATES: dict[TimeBucket, list[str]] = {
         "How do I read a stock chart?",
     ],
     TimeBucket.MARKET_HOURS: [
-        "How do I find a stock to buy?",
+        "How do I research a stock?",
         "What are limit orders?",
     ],
     TimeBucket.AFTER_MARKET: [

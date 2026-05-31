@@ -4,7 +4,7 @@ struct RadarMorphingView: View {
     let scale: CGFloat
     let isExpanded: Bool
     let isHidden: Bool
-    let viewModel: RadarViewModel
+    @Bindable var viewModel: RadarViewModel
     let onTap: () -> Void
     let onDismiss: () -> Void
 
@@ -43,10 +43,7 @@ struct RadarMorphingView: View {
                 nextRefreshWeekday: viewModel.nextRefreshWeekday
             ),
             scale: scale,
-            activeTab: Binding(
-                get: { viewModel.activeTab },
-                set: { viewModel.activeTab = $0 }
-            ),
+            activeTab: $viewModel.activeTab,
             onToggleStar: { id in Task { await viewModel.toggleStar(itemId: id) } }
         )
         .transition(.asymmetric(insertion: .opacity, removal: .identity))

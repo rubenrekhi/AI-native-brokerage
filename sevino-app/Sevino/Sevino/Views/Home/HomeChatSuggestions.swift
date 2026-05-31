@@ -3,9 +3,10 @@ import SwiftUI
 struct HomeChatSuggestions: View {
     let scale: CGFloat
     let shortcuts: [Shortcut]
-    let hasOverflow: Bool
+    let canExpand: Bool
+    let isExpanded: Bool
     let onSelect: (String) -> Void
-    let onShowMore: () -> Void
+    let onToggleExpand: () -> Void
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 14 * scale) {
@@ -21,13 +22,19 @@ struct HomeChatSuggestions: View {
                             .foregroundStyle(Color.sevinoSecondary)
                             .accessibilityHidden(true)
                     }
+                    .contentShape(.rect)
                 }
             }
 
-            if hasOverflow {
-                Button(L10n.Home.shortcutMore, action: onShowMore)
-                    .font(.system(size: 13 * scale, weight: .medium))
-                    .foregroundStyle(Color.sevinoSecondary)
+            if canExpand {
+                Button(action: onToggleExpand) {
+                    Text(isExpanded
+                         ? L10n.Home.shortcutLess
+                         : L10n.Home.shortcutMore)
+                        .font(.system(size: 13 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoSecondary)
+                        .contentShape(.rect)
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)

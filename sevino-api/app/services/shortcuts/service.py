@@ -24,6 +24,7 @@ from app.services.shortcuts.rules import (
     quiet_state,
     radar_update,
 )
+from app.services.shortcuts.rules.portfolio_state import gather_snapshot
 from app.services.shortcuts.time_buckets import ET, current_bucket
 
 logger = structlog.get_logger(__name__)
@@ -52,13 +53,17 @@ class ShortcutsService:
         ctx = await self._build_context(
             user_id, now or datetime.now(timezone.utc)
         )
+        # Fetch the Alpaca portfolio snapshot once and share it across the
+        # holdings-aware rules. Without this, ``portfolio_state`` and
+        # ``market_state`` would each call ``list_positions`` independently.
+        snapshot = await gather_snapshot(user_id, self._db, self._alpaca)
         rules = {
             "first_time": first_time.evaluate(ctx),
             "portfolio_state": await portfolio_state.evaluate(
-                ctx, self._db, self._alpaca
+                ctx, self._db, self._alpaca, snapshot=snapshot
             ),
             "market_state": await market_state.evaluate(
-                ctx, self._db, self._alpaca, self._market_data
+                ctx, self._db, self._alpaca, self._market_data, snapshot=snapshot
             ),
             "radar_update": await radar_update.evaluate(ctx, self._db),
             "capability": capability.evaluate(ctx),

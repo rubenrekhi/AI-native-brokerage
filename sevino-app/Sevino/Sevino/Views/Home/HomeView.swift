@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var showSidebar = false
     @State private var sidebarDragOffset: CGFloat = 0
     @State private var showQuickCommands = false
+    @State private var shortcutsExpanded = false
     @State private var webSearchEnabled = false
     @State private var bottomSafeArea: CGFloat = 0
 
@@ -62,7 +63,7 @@ struct HomeView: View {
     var body: some View {
         SevinoGlassContainer {
             ZStack {
-                if !viewModel.isConversationActive {
+                if !viewModel.isConversationActive && !shortcutsExpanded {
                     HomeGreetingSection(
                         scale: scale,
                         greeting: viewModel.greeting,
@@ -622,7 +623,11 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                ShortcutsRail(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
+                ShortcutsRail(
+                    scale: scale,
+                    isExpanded: $shortcutsExpanded,
+                    onSelect: { tickerMentionViewModel.updateText($0) }
+                )
                     .padding(.bottom, chatInputHeight + 20 * scale)
                     .padding(.horizontal, 16 * scale)
                     .blur(radius: anyModalOpen ? 10 : 0)
