@@ -51,6 +51,43 @@ class StockBarsProvider(Protocol):
         ...
 
 
+_BarsCacheKey = tuple[str, str, datetime, datetime | None, int]
+
+
+class RunScopedStockBarsProvider:
+    """Deduplicate identical bar fetches during one digest generation run."""
+
+    def __init__(self, inner: StockBarsProvider) -> None:
+        self._inner = inner
+        self._tasks: dict[
+            _BarsCacheKey, asyncio.Task[Sequence[Mapping[str, Any]]]
+        ] = {}
+
+    async def get_stock_bars(
+        self,
+        symbol: str,
+        *,
+        timeframe: str,
+        start: datetime,
+        end: datetime | None = None,
+        limit: int = 10000,
+    ) -> Sequence[Mapping[str, Any]]:
+        key = (_normalize_symbol(symbol), timeframe, start, end, limit)
+        task = self._tasks.get(key)
+        if task is None:
+            task = asyncio.create_task(
+                self._inner.get_stock_bars(
+                    symbol,
+                    timeframe=timeframe,
+                    start=start,
+                    end=end,
+                    limit=limit,
+                )
+            )
+            self._tasks[key] = task
+        return await task
+
+
 @dataclass(frozen=True)
 class _DetectionResult:
     symbol: str

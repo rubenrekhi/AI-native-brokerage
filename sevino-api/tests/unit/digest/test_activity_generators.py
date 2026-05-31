@@ -32,7 +32,6 @@ def _ctx(*, now: datetime | None = None) -> DigestContext:
         portfolio_snapshot=None,
         holdings=[],
         financial_profile=None,
-        favorited_radar_symbols=[],
         market_state=MarketState(
             as_of=now or datetime(2026, 6, 2, 13, tzinfo=timezone.utc),
             session="pre",

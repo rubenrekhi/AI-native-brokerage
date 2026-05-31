@@ -56,6 +56,21 @@ class RadarItemRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_favorited_for_user(
+        db: AsyncSession, user_id: uuid.UUID
+    ) -> list[RadarItem]:
+        """Return the user's favorited radar rows in stable symbol order."""
+        result = await db.execute(
+            select(RadarItem)
+            .where(
+                RadarItem.user_id == user_id,
+                RadarItem.is_favorited.is_(True),
+            )
+            .order_by(RadarItem.symbol)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def list_all_symbols(
         db: AsyncSession, user_id: uuid.UUID
     ) -> set[str]:

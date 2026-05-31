@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
@@ -8,6 +9,7 @@ from app.exceptions import MarketDataUnavailableError
 from app.services.digest.moves import (
     HOLDING_MOVE_PCT,
     MoveData,
+    RunScopedStockBarsProvider,
     detect_overnight_moves,
     is_meaningful_move,
 )
@@ -212,3 +214,43 @@ async def test_detect_overnight_moves_programming_errors_propagate():
         await detect_overnight_moves(
             ["AAPL"], FailingMarketData(TypeError("bad fake")), now=NOW
         )
+
+
+async def test_run_scoped_stock_bars_provider_deduplicates_in_flight_calls():
+    class SlowMarketData:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        async def get_stock_bars(
+            self,
+            symbol: str,
+            *,
+            timeframe: str,
+            **_: Any,
+        ) -> list[dict[str, Any]]:
+            self.calls.append(f"{symbol}:{timeframe}")
+            await asyncio.sleep(0)
+            return [{"t": "2026-05-28T04:00:00Z", "c": "100"}]
+
+    inner = SlowMarketData()
+    provider = RunScopedStockBarsProvider(inner)
+
+    first, second = await asyncio.gather(
+        provider.get_stock_bars(
+            "aapl",
+            timeframe="1Day",
+            start=NOW,
+            end=NOW,
+            limit=10,
+        ),
+        provider.get_stock_bars(
+            "AAPL",
+            timeframe="1Day",
+            start=NOW,
+            end=NOW,
+            limit=10,
+        ),
+    )
+
+    assert first == second == [{"t": "2026-05-28T04:00:00Z", "c": "100"}]
+    assert inner.calls == ["aapl:1Day"]

@@ -1,8 +1,8 @@
 """Gathers the per-user inputs the digest generators read.
 
 Mirrors the radar orchestrator's context gather: portfolio comes from
-Alpaca (live, only for ACTIVE accounts), the financial profile and
-favorited radar symbols from the DB. Alpaca being unavailable degrades to
+Alpaca (live, only for ACTIVE accounts) and the financial profile comes
+from the DB. Alpaca being unavailable degrades to
 an empty portfolio rather than failing the whole run — a digest with
 non-portfolio cards is still worth shipping.
 """
@@ -15,10 +15,8 @@ from typing import Any
 from zoneinfo import ZoneInfo
 
 import structlog
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.radar_item import RadarItem
 from app.repositories.brokerage_account import (
     STATUS_ACTIVE,
     BrokerageAccountRepository,
@@ -42,13 +40,11 @@ async def build_context(
 ) -> DigestContext:
     snapshot, holdings = await _portfolio_inputs(user_id, db, alpaca)
     financial = await FinancialProfileRepository.get_by_user_id(db, user_id)
-    favorited = await _favorited_symbols(db, user_id)
     return DigestContext(
         user_id=user_id,
         portfolio_snapshot=snapshot,
         holdings=holdings,
         financial_profile=financial,
-        favorited_radar_symbols=favorited,
         market_state=_market_state(datetime.now(timezone.utc)),
     )
 
@@ -70,20 +66,6 @@ async def _portfolio_inputs(
         )
         return None, []
     return snapshot, list(holdings)
-
-
-async def _favorited_symbols(
-    db: AsyncSession, user_id: uuid.UUID
-) -> list[str]:
-    result = await db.execute(
-        select(RadarItem.symbol)
-        .where(
-            RadarItem.user_id == user_id,
-            RadarItem.is_favorited.is_(True),
-        )
-        .order_by(RadarItem.symbol)
-    )
-    return list(result.scalars().all())
 
 
 def _market_state(now_utc: datetime) -> MarketState:

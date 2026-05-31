@@ -41,7 +41,6 @@ class DigestContext:
     portfolio_snapshot: dict[str, Any] | None
     holdings: list[dict[str, Any]]
     financial_profile: UserFinancialProfile | None
-    favorited_radar_symbols: list[str]
     market_state: MarketState
 
 

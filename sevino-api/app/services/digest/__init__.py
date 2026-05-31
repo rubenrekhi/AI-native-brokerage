@@ -7,5 +7,6 @@ Submodules:
 - `context` — `build_context`, the per-user input gather
 - `generators` — registered card generators for portfolio activity
 - `moves` — overnight/pre-market move detection helpers
+- `generators` — built-in card candidate generators
 - `service` — `DigestService` (generate / read / dismiss)
 """

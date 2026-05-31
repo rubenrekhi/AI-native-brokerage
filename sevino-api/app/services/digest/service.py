@@ -2,9 +2,9 @@
 
 `generate_for_user` runs the configured generator set, persists the result,
 and is what the morning cron (T12) will call per user. `get_today` /
-`dismiss` back the two `/v1/digest` endpoints. T11 wires the registered
-generators into the default service path alongside shortlist / reranker
-logic; until then callers can inject generators explicitly.
+`dismiss` back the two `/v1/digest` endpoints. Generators are built up
+across T7–T11; until the default service path is wired, callers inject
+generators or market-data-backed generator factories explicitly.
 """
 
 from __future__ import annotations
@@ -21,6 +21,8 @@ from app.models.digest import DigestSnapshot
 from app.repositories.digest import DigestRepository
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.digest.context import ET, build_context
+from app.services.digest.generators import build_known_generators
+from app.services.digest.moves import RunScopedStockBarsProvider, StockBarsProvider
 from app.services.digest.types import CardCandidate, DigestContext, Generator
 
 logger = structlog.get_logger(__name__)
@@ -38,13 +40,16 @@ class DigestService:
         self,
         db: AsyncSession,
         alpaca: AlpacaBrokerService | None = None,
+        market_data: StockBarsProvider | None = None,
         generators: list[Generator] | None = None,
     ) -> None:
         self._db = db
         self._alpaca = alpaca
-        self._generators: list[Generator] = (
-            list(generators) if generators is not None else []
-        )
+        self._market_data = market_data
+        if generators is not None:
+            self._generators: list[Generator] | None = list(generators)
+        else:
+            self._generators = None
 
     async def generate_for_user(self, user_id: uuid.UUID) -> DigestSnapshot:
         """Build context, run generators, and upsert today's snapshot.
@@ -100,14 +105,22 @@ class DigestService:
     async def _gather_candidates(
         self, ctx: DigestContext
     ) -> list[CardCandidate]:
-        if not self._generators:
+        if self._generators is not None:
+            generators = self._generators
+        elif self._market_data is not None:
+            generators = build_known_generators(
+                RunScopedStockBarsProvider(self._market_data)
+            )
+        else:
+            generators = []
+        if not generators:
             return []
         if self._alpaca is None:
             raise RuntimeError("digest generators require an Alpaca client")
         results = await asyncio.gather(
             *(
                 generator.generate(ctx, self._db, self._alpaca)
-                for generator in self._generators
+                for generator in generators
             )
         )
         return [candidate for batch in results for candidate in batch]
