@@ -12,6 +12,7 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     var completeReauthResult: Result<Void, Error> = .success(())
     var createTransferResult: Result<TransferResponse, Error>?
     var listTransfersResult: Result<[TransferResponse], Error> = .success([])
+    var listDividendsResult: Result<[DividendResponse], Error> = .success([])
     var getCashInterestResult: Result<CashInterestResponse, Error> = .success(
         CashInterestResponse(
             balance: "0",
@@ -37,6 +38,7 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     private(set) var completeReauthCalls: [UUID] = []
     private(set) var createTransferCalls: [(relationshipId: String, amount: Decimal, direction: TransferDirection)] = []
     private(set) var listTransfersCalls = 0
+    private(set) var listDividendsCalls: [(limit: Int, offset: Int)] = []
     private(set) var getCashInterestCalls = 0
 
     func createLinkToken() async throws -> String {
@@ -87,6 +89,11 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     func listTransfers() async throws -> [TransferResponse] {
         listTransfersCalls += 1
         return try listTransfersResult.get()
+    }
+
+    func listDividends(limit: Int, offset: Int) async throws -> [DividendResponse] {
+        listDividendsCalls.append((limit, offset))
+        return try listDividendsResult.get()
     }
 
     func getCashInterest() async throws -> CashInterestResponse {

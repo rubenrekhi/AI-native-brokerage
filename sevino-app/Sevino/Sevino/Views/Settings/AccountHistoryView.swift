@@ -17,7 +17,10 @@ struct AccountHistoryView: View {
         SevinoGlassContainer {
             VStack(spacing: 0) {
                 SettingsHeaderView(title: L10n.Settings.accountHistory, scale: scale, onBack: { dismiss() })
-                    .padding(.bottom, 24 * scale)
+                    .padding(.bottom, 16 * scale)
+
+                filterBar
+                    .padding(.bottom, 16 * scale)
 
                 content
             }
@@ -48,29 +51,75 @@ struct AccountHistoryView: View {
 
     @ViewBuilder
     private var content: some View {
-        if vm.isLoading && vm.transfers.isEmpty {
+        if vm.isLoading && vm.items.isEmpty {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else if let error = vm.error, vm.transfers.isEmpty {
+        } else if let error = vm.error, vm.items.isEmpty {
             errorState(message: error)
-        } else if vm.transfers.isEmpty {
+        } else if vm.items.isEmpty {
             emptyState
         } else {
-            transferList
+            list
         }
     }
 
-    private var transferList: some View {
-        ScrollView {
-            VStack(spacing: 12 * scale) {
-                ForEach(vm.transfers) { transfer in
-                    AccountHistoryRow(transfer: transfer, scale: scale)
+    private var filterBar: some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 8 * scale) {
+                FilterMenu(
+                    label: L10n.Settings.accountHistoryFilterTypeLabel,
+                    selectionLabel: typeLabel(vm.typeFilter),
+                    isActive: vm.typeFilter != .all,
+                    scale: scale
+                ) {
+                    Picker("", selection: Bindable(vm).typeFilter) {
+                        Text(L10n.Settings.accountHistoryFilterAll).tag(AccountHistoryTypeFilter.all)
+                        Text(L10n.Settings.accountHistoryFilterDeposits).tag(AccountHistoryTypeFilter.deposits)
+                        Text(L10n.Settings.accountHistoryFilterWithdrawals).tag(AccountHistoryTypeFilter.withdrawals)
+                        Text(L10n.Settings.accountHistoryFilterDividends).tag(AccountHistoryTypeFilter.dividends)
+                    }
+                }
+
+                FilterMenu(
+                    label: L10n.Settings.accountHistoryFilterTimeframeLabel,
+                    selectionLabel: timeframeLabel(vm.timeframeFilter),
+                    isActive: vm.timeframeFilter != .all,
+                    scale: scale
+                ) {
+                    Picker("", selection: Bindable(vm).timeframeFilter) {
+                        Text(L10n.Settings.accountHistoryFilterAll).tag(AccountHistoryTimeframeFilter.all)
+                        Text(L10n.Settings.accountHistoryFilter7d).tag(AccountHistoryTimeframeFilter.last7Days)
+                        Text(L10n.Settings.accountHistoryFilter30d).tag(AccountHistoryTimeframeFilter.last30Days)
+                        Text(L10n.Settings.accountHistoryFilter90d).tag(AccountHistoryTimeframeFilter.last90Days)
+                    }
                 }
             }
-            .padding(.bottom, 16 * scale)
         }
         .scrollIndicators(.hidden)
-        .refreshable { await vm.load() }
+    }
+
+    @ViewBuilder
+    private var list: some View {
+        let visible = vm.visibleItems
+        if visible.isEmpty {
+            filteredEmptyState
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 12 * scale) {
+                    ForEach(visible) { item in
+                        switch item {
+                        case .transfer(let transfer):
+                            AccountHistoryRow(transfer: transfer, scale: scale)
+                        case .dividend(let dividend):
+                            DividendHistoryRow(dividend: dividend, scale: scale)
+                        }
+                    }
+                }
+                .padding(.bottom, 16 * scale)
+            }
+            .scrollIndicators(.hidden)
+            .refreshable { await vm.load() }
+        }
     }
 
     private var emptyState: some View {
@@ -80,6 +129,33 @@ struct AccountHistoryView: View {
             Text(L10n.Settings.accountHistoryEmptyMessage)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var filteredEmptyState: some View {
+        ContentUnavailableView {
+            Label(L10n.Settings.accountHistoryFilteredEmptyTitle, systemImage: "line.3.horizontal.decrease.circle")
+        } description: {
+            Text(L10n.Settings.accountHistoryFilteredEmptyMessage)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func typeLabel(_ filter: AccountHistoryTypeFilter) -> String {
+        switch filter {
+        case .all: L10n.Settings.accountHistoryFilterAll
+        case .deposits: L10n.Settings.accountHistoryFilterDeposits
+        case .withdrawals: L10n.Settings.accountHistoryFilterWithdrawals
+        case .dividends: L10n.Settings.accountHistoryFilterDividends
+        }
+    }
+
+    private func timeframeLabel(_ filter: AccountHistoryTimeframeFilter) -> String {
+        switch filter {
+        case .all: L10n.Settings.accountHistoryFilterAll
+        case .last7Days: L10n.Settings.accountHistoryFilter7d
+        case .last30Days: L10n.Settings.accountHistoryFilter30d
+        case .last90Days: L10n.Settings.accountHistoryFilter90d
+        }
     }
 
     private func errorState(message: String) -> some View {
@@ -224,6 +300,89 @@ private struct AccountHistoryRow: View {
     }
 }
 
+private struct DividendHistoryRow: View {
+    let dividend: DividendResponse
+    let scale: CGFloat
+
+    private var statusKind: DividendStatusKind {
+        DividendStatusKind.from(dividend.status)
+    }
+
+    private var statusLabel: String {
+        switch statusKind {
+        case .settled: L10n.Dividend.statusSettled
+        case .pending: L10n.Dividend.statusPending
+        case .failed: L10n.Dividend.statusFailed
+        case .unknown: L10n.Dividend.statusUnknown
+        }
+    }
+
+    private var amountText: String {
+        let formatted = dividend.netAmountValue.formatted(.currency(code: "USD"))
+        return "+\(formatted)"
+    }
+
+    private var dateText: String {
+        guard let date = dividend.createdAtDate else { return "" }
+        return date.formatted(.dateTime.month(.abbreviated).day().year())
+    }
+
+    private var accessibilityLabel: String {
+        var parts: [String] = [
+            L10n.Settings.accountHistoryDividendLabel,
+            dividend.symbol,
+            amountText,
+            statusLabel,
+        ]
+        if !dateText.isEmpty { parts.append(dateText) }
+        return parts.joined(separator: ", ")
+    }
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12 * scale) {
+            Image(systemName: "dollarsign.circle")
+                .font(.system(size: 14 * scale, weight: .bold))
+                .foregroundStyle(Color.sevinoPositive)
+                .frame(width: 36 * scale, height: 36 * scale)
+                .background(Color.sevinoGreyAccent.opacity(0.2), in: .circle)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4 * scale) {
+                HStack(spacing: 6 * scale) {
+                    Text(L10n.Settings.accountHistoryDividendLabel)
+                        .font(.system(size: 15 * scale, weight: .semibold))
+                        .foregroundStyle(Color.sevinoSecondary)
+
+                    DividendStatusBadge(kind: statusKind, scale: scale)
+                }
+
+                Text(dividend.symbol)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 4 * scale) {
+                Text(amountText)
+                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .foregroundStyle(Color.sevinoPositive)
+
+                if !dateText.isEmpty {
+                    Text(dateText)
+                        .font(.system(size: 12 * scale))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                }
+            }
+        }
+        .padding(14 * scale)
+        .modifier(SevinoGlass.card)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
+    }
+}
+
 private struct StatusBadge: View {
     let kind: TransferStatusKind
     let scale: CGFloat
@@ -256,28 +415,139 @@ private struct StatusBadge: View {
     }
 }
 
+private struct DividendStatusBadge: View {
+    let kind: DividendStatusKind
+    let scale: CGFloat
+
+    private var label: String {
+        switch kind {
+        case .settled: L10n.Dividend.statusSettled
+        case .pending: L10n.Dividend.statusPending
+        case .failed: L10n.Dividend.statusFailed
+        case .unknown: L10n.Dividend.statusUnknown
+        }
+    }
+
+    private var color: Color {
+        switch kind {
+        case .pending, .unknown: Color.sevinoWarning
+        case .settled: Color.sevinoPositive
+        case .failed: Color.sevinoNegative
+        }
+    }
+
+    var body: some View {
+        Text(label)
+            .font(.system(size: 10 * scale, weight: .semibold))
+            .tracking(0.5)
+            .foregroundStyle(color)
+            .padding(.horizontal, 8 * scale)
+            .padding(.vertical, 3 * scale)
+            .background(color.opacity(0.15), in: .capsule)
+    }
+}
+
 #if DEBUG
-#Preview("Loaded") {
+#Preview("Loaded — all filters have content") {
     NavigationStack {
-        AccountHistoryView(vm: .previewLoaded())
+        AccountHistoryView(vm: AccountHistoryViewModel(
+            fundingService: PreviewAccountHistoryFundingService()
+        ))
     }
     .preferredColorScheme(.dark)
 }
 
-#Preview("Empty") {
+#Preview("Transfers only — try Dividends or 7d filter") {
+    NavigationStack {
+        AccountHistoryView(vm: AccountHistoryViewModel(
+            fundingService: PreviewAccountHistoryFundingService(dividends: [])
+        ))
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Dividends only — try Deposits or 7d filter") {
+    NavigationStack {
+        AccountHistoryView(vm: AccountHistoryViewModel(
+            fundingService: PreviewAccountHistoryFundingService(transfers: [])
+        ))
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Empty — no activity yet") {
     NavigationStack {
         AccountHistoryView(vm: AccountHistoryViewModel(fundingService: PreviewNoopFundingService()))
     }
     .preferredColorScheme(.dark)
 }
 
-private extension AccountHistoryViewModel {
-    static func previewLoaded() -> AccountHistoryViewModel {
-        AccountHistoryViewModel(fundingService: PreviewAccountHistoryFundingService())
-    }
-}
-
 private final class PreviewAccountHistoryFundingService: FundingServiceProtocol, @unchecked Sendable {
+    static let sampleTransfers: [TransferResponse] = [
+        TransferResponse(
+            id: "t-1",
+            status: "COMPLETE",
+            amount: "1250.00",
+            direction: "INCOMING",
+            createdAt: "2026-04-18T14:21:00Z",
+            reason: nil,
+            bank: TransferBank(nickname: nil, accountMask: "4821", institutionName: "Chase")
+        ),
+        TransferResponse(
+            id: "t-2",
+            status: "QUEUED",
+            amount: "300.00",
+            direction: "OUTGOING",
+            createdAt: "2026-04-14T09:05:00Z",
+            reason: nil,
+            bank: TransferBank(nickname: "Savings", accountMask: "7733", institutionName: "Ally")
+        ),
+        TransferResponse(
+            id: "t-3",
+            status: "FAILED",
+            amount: "75.00",
+            direction: "INCOMING",
+            createdAt: "2026-04-02T16:10:00Z",
+            reason: "Insufficient funds",
+            bank: TransferBank(nickname: nil, accountMask: "9102", institutionName: "Schwab Bank")
+        ),
+    ]
+
+    static let sampleDividends: [DividendResponse] = [
+        DividendResponse(
+            id: "d-1",
+            symbol: "AAPL",
+            netAmount: "22.50",
+            status: "executed",
+            createdAt: "2026-05-28T13:30:00Z"
+        ),
+        DividendResponse(
+            id: "d-2",
+            symbol: "MSFT",
+            netAmount: "8.75",
+            status: "executed",
+            createdAt: "2026-04-22T13:30:00Z"
+        ),
+        DividendResponse(
+            id: "d-3",
+            symbol: "KO",
+            netAmount: "1.84",
+            status: "correct",
+            createdAt: "2026-04-10T13:30:00Z"
+        ),
+    ]
+
+    private let transfersFixture: [TransferResponse]
+    private let dividendsFixture: [DividendResponse]
+
+    init(
+        transfers: [TransferResponse] = PreviewAccountHistoryFundingService.sampleTransfers,
+        dividends: [DividendResponse] = PreviewAccountHistoryFundingService.sampleDividends
+    ) {
+        self.transfersFixture = transfers
+        self.dividendsFixture = dividends
+    }
+
     func createLinkToken() async throws -> String { "" }
     func linkBank(_: LinkBankRequest) async throws -> AchRelationshipDTO { throw PreviewUnimplemented() }
     func listAchRelationships() async throws -> [AchRelationshipDTO] { [] }
@@ -290,40 +560,8 @@ private final class PreviewAccountHistoryFundingService: FundingServiceProtocol,
         direction _: TransferDirection
     ) async throws -> TransferResponse { throw PreviewUnimplemented() }
 
-    func listTransfers() async throws -> [TransferResponse] {
-        [
-            TransferResponse(
-                id: "t-1",
-                status: "COMPLETE",
-                amount: "1250.00",
-                direction: "INCOMING",
-                createdAt: "2026-04-18T14:21:00Z",
-                reason: nil,
-                bank: TransferBank(nickname: nil, accountMask: "4821", institutionName: "Chase")
-            ),
-            TransferResponse(
-                id: "t-2",
-                status: "QUEUED",
-                amount: "300.00",
-                direction: "OUTGOING",
-                createdAt: "2026-04-14T09:05:00Z",
-                reason: nil,
-                bank: TransferBank(nickname: "Savings", accountMask: "7733", institutionName: "Ally")
-            ),
-            TransferResponse(
-                id: "t-3",
-                status: "FAILED",
-                amount: "75.00",
-                direction: "INCOMING",
-                createdAt: "2026-04-02T16:10:00Z",
-                reason: "Insufficient funds",
-                bank: TransferBank(nickname: nil, accountMask: "9102", institutionName: "Schwab Bank")
-            ),
-        ]
-    }
-
-    func getCashInterest() async throws -> CashInterestResponse {
-        throw PreviewUnimplemented()
-    }
+    func listTransfers() async throws -> [TransferResponse] { transfersFixture }
+    func listDividends(limit _: Int, offset _: Int) async throws -> [DividendResponse] { dividendsFixture }
+    func getCashInterest() async throws -> CashInterestResponse { throw PreviewUnimplemented() }
 }
 #endif

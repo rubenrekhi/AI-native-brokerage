@@ -14,6 +14,7 @@ protocol FundingServiceProtocol {
         direction: TransferDirection
     ) async throws -> TransferResponse
     func listTransfers() async throws -> [TransferResponse]
+    func listDividends(limit: Int, offset: Int) async throws -> [DividendResponse]
     func getCashInterest() async throws -> CashInterestResponse
 }
 
@@ -90,6 +91,19 @@ final class FundingService: FundingServiceProtocol {
     func listTransfers() async throws -> [TransferResponse] {
         let response: TransferListResponse = try await api.get("/v1/funding/transfers")
         return response.transfers
+    }
+
+    func listDividends(limit: Int = 50, offset: Int = 0) async throws -> [DividendResponse] {
+        var components = URLComponents()
+        components.path = "/v1/brokerage/dividends"
+        components.queryItems = [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "offset", value: String(offset)),
+        ]
+        guard let path = components.string else { throw URLError(.badURL) }
+
+        let response: DividendListResponse = try await api.get(path)
+        return response.dividends
     }
 
     func getCashInterest() async throws -> CashInterestResponse {
