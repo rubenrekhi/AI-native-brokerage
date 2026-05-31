@@ -1,11 +1,10 @@
 """Business logic for the Daily Digest.
 
-`generate_for_user` runs the (currently empty) generator set, persists the
-result, and is what the morning cron (T12) will call per user.
-`get_today` / `dismiss` back the two `/v1/digest` endpoints. Generators,
-the heuristic shortlist, and the Anthropic reranker land in later tickets
-(T7–T11) — until then `generate_for_user` ships an empty card stack
-end-to-end so the type contracts and persistence are settled.
+`generate_for_user` runs the configured generator set, persists the result,
+and is what the morning cron (T12) will call per user. `get_today` /
+`dismiss` back the two `/v1/digest` endpoints. T11 wires the registered
+generators into the default service path alongside shortlist / reranker
+logic; until then callers can inject generators explicitly.
 """
 
 from __future__ import annotations
@@ -103,8 +102,13 @@ class DigestService:
     ) -> list[CardCandidate]:
         if not self._generators:
             return []
+        if self._alpaca is None:
+            raise RuntimeError("digest generators require an Alpaca client")
         results = await asyncio.gather(
-            *(generator.generate(ctx) for generator in self._generators)
+            *(
+                generator.generate(ctx, self._db, self._alpaca)
+                for generator in self._generators
+            )
         )
         return [candidate for batch in results for candidate in batch]
 

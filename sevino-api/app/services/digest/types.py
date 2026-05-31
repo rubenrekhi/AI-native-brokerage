@@ -12,7 +12,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.user_financial_profile import UserFinancialProfile
+from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.digest.cards import DigestCard
 
 
@@ -60,8 +63,13 @@ class Generator(Protocol):
     The pipeline runs every generator concurrently via ``asyncio.gather``
     and flattens their candidates before the heuristic shortlist and the
     Anthropic reranker (T11). Implementations must be read-only over the
-    context and tolerate missing inputs (no brokerage account, empty
-    holdings) by returning ``[]``.
+    DB / upstream services and tolerate missing inputs (no brokerage
+    account, empty holdings) by returning ``[]``.
     """
 
-    async def generate(self, ctx: DigestContext) -> list[CardCandidate]: ...
+    async def generate(
+        self,
+        ctx: DigestContext,
+        db: AsyncSession,
+        alpaca: AlpacaBrokerService,
+    ) -> list[CardCandidate]: ...

@@ -5,6 +5,7 @@ Submodules:
 - `cards` — the `DigestCard` discriminated union (SSE/JSONB wire format)
 - `types` — `DigestContext`, `CardCandidate`, the `Generator` protocol
 - `context` — `build_context`, the per-user input gather
+- `generators` — registered card generators for portfolio activity
 - `moves` — overnight/pre-market move detection helpers
 - `service` — `DigestService` (generate / read / dismiss)
 """
