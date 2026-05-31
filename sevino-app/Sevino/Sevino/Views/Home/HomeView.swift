@@ -616,7 +616,7 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 Spacer()
 
-                HomeChatSuggestions(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
+                ShortcutsRail(scale: scale, onSelect: { tickerMentionViewModel.updateText($0) })
                     .padding(.bottom, chatInputHeight + 20 * scale)
                     .padding(.horizontal, 16 * scale)
                     .blur(radius: anyModalOpen ? 10 : 0)

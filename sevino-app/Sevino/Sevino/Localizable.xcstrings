@@ -1856,6 +1856,16 @@
         }
       }
     },
+    "home.shortcut_more" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More"
+          }
+        }
+      }
+    },
     "home.sidebar_accessibility" : {
       "localizations" : {
         "en" : {
@@ -1882,36 +1892,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Since %@"
-          }
-        }
-      }
-    },
-    "home.suggestion_news" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“Any news today?”"
-          }
-        }
-      }
-    },
-    "home.suggestion_portfolio" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“How’s my portfolio?”"
-          }
-        }
-      }
-    },
-    "home.suggestion_radar" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“What stocks are on my radar?”"
           }
         }
       }

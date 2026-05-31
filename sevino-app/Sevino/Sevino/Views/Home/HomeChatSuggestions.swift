@@ -2,20 +2,17 @@ import SwiftUI
 
 struct HomeChatSuggestions: View {
     let scale: CGFloat
+    let shortcuts: [Shortcut]
+    let hasOverflow: Bool
     let onSelect: (String) -> Void
-
-    private static let suggestions: [String] = [
-        L10n.Home.suggestionNews,
-        L10n.Home.suggestionPortfolio,
-        L10n.Home.suggestionRadar,
-    ]
+    let onShowMore: () -> Void
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 14 * scale) {
-            ForEach(Self.suggestions, id: \.self) { suggestion in
-                Button { onSelect(stripped(suggestion)) } label: {
+            ForEach(shortcuts) { shortcut in
+                Button { onSelect(shortcut.text) } label: {
                     HStack(spacing: 6 * scale) {
-                        Text(suggestion)
+                        Text(shortcut.text)
                             .font(.system(size: 14 * scale))
                             .foregroundStyle(Color.sevinoSecondary)
 
@@ -26,11 +23,13 @@ struct HomeChatSuggestions: View {
                     }
                 }
             }
+
+            if hasOverflow {
+                Button(L10n.Home.shortcutMore, action: onShowMore)
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoSecondary)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private func stripped(_ text: String) -> String {
-        text.trimmingCharacters(in: CharacterSet(charactersIn: "\u{201C}\u{201D}\""))
     }
 }
