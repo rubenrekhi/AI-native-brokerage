@@ -1,9 +1,10 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any, ClassVar
 
 import httpx
 import sentry_sdk
 import structlog
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from app.exceptions import (
     MarketDataError,
@@ -46,14 +47,78 @@ def _redact(text: str, secret: str) -> str:
     return text.replace(secret, "***")
 
 
+def _comparable_datetime(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+class _FmpNewsItem(BaseModel):
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    headline: str = Field(alias="title")
+    source: str | None = Field(default=None, alias="site")
+    url: str
+    published_at: datetime = Field(alias="publishedDate")
+    summary: str | None = Field(default=None, alias="text")
+    image_url: str | None = Field(default=None, alias="image")
+
+    @field_validator("source", "summary", "image_url", mode="before")
+    @classmethod
+    def _none_if_blank(cls, value: Any) -> Any:
+        return none_if_blank(value)
+
+
+class StockNewsItem(_FmpNewsItem):
+    symbol: str
+
+
+class GeneralNewsItem(_FmpNewsItem):
+    pass
+
+
+def _fmp_news_from_date(since: datetime) -> str:
+    return _comparable_datetime(since).date().isoformat()
+
+
+def _fmp_news_request_limit(since: datetime, limit: int) -> int:
+    cutoff = _comparable_datetime(since)
+    if (
+        cutoff.hour == 0
+        and cutoff.minute == 0
+        and cutoff.second == 0
+        and cutoff.microsecond == 0
+    ):
+        return limit
+    return max(limit, min(max(limit * 3, 100), 500))
+
+
+def _validate_news_items[T: _FmpNewsItem](
+    rows: list[dict[str, Any]] | None, item_type: type[T]
+) -> list[T]:
+    news: list[T] = []
+    for index, row in enumerate(rows or []):
+        try:
+            news.append(item_type.model_validate(row))
+        except ValidationError as exc:
+            logger.warning(
+                "fmp_news_item_invalid",
+                item_type=item_type.__name__,
+                index=index,
+                error_count=exc.error_count(),
+            )
+    return news
+
+
 class FmpClient:
     """HTTP client for Financial Modeling Prep API.
 
     The HTTP client is reused for the lifetime of the process; construct
     one in `lifecycle.lifespan` and call `await close()` on shutdown.
 
-    Endpoint methods return raw FMP JSON shapes. Use the `project_*`
-    helpers to map them to our schema shape.
+    Most endpoint methods return raw FMP JSON shapes. Use the `project_*`
+    helpers to map them to our schema shape. News methods return validated
+    news item models because their callers consume those typed rows directly.
     """
 
     DEFAULT_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/stable"
@@ -76,7 +141,15 @@ class FmpClient:
         await self._client.aclose()
 
     async def _request(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        url = f"{self._base_url}{path}"
+        base_url = self._base_url.rstrip("/")
+        if (
+            base_url.endswith("/stable")
+            and (path.startswith("/api/v3/") or path.startswith("/api/v4/"))
+        ):
+            # FMP's legacy news endpoints live under /api/v3 and /api/v4,
+            # while this client defaults to the newer /stable base path.
+            base_url = base_url.removesuffix("/stable")
+        url = f"{base_url}{path}"
         query: dict[str, Any] = {"apikey": self._api_key}
         if params:
             query.update(params)
@@ -213,6 +286,62 @@ class FmpClient:
             {"from": from_date.isoformat(), "to": to_date.isoformat()},
         )
         return data or []
+
+    async def get_stock_news(
+        self, symbols: list[str], since: datetime, limit: int = 50
+    ) -> list[StockNewsItem]:
+        """Stock news for the requested symbols, newest rows at or after ``since``.
+
+        FMP's ``from`` parameter is date-granular, so sub-day ``since`` filters
+        are applied client-side after requesting headroom for same-day rows.
+        """
+        if limit <= 0:
+            return []
+        tickers = [symbol.strip().upper() for symbol in symbols if symbol.strip()]
+        if not tickers:
+            return []
+
+        data = await self._request(
+            "/api/v3/stock_news",
+            {
+                "tickers": ",".join(tickers),
+                "from": _fmp_news_from_date(since),
+                "limit": _fmp_news_request_limit(since, limit),
+            },
+        )
+        news = _validate_news_items(data, StockNewsItem)
+        cutoff = _comparable_datetime(since)
+        return [
+            item
+            for item in news
+            if _comparable_datetime(item.published_at) >= cutoff
+        ][:limit]
+
+    async def get_general_news(
+        self, since: datetime, limit: int = 20
+    ) -> list[GeneralNewsItem]:
+        """General market news, newest rows at or after ``since``.
+
+        FMP's ``from`` parameter is date-granular, so sub-day ``since`` filters
+        are applied client-side after requesting headroom for same-day rows.
+        """
+        if limit <= 0:
+            return []
+
+        data = await self._request(
+            "/api/v4/general_news",
+            {
+                "from": _fmp_news_from_date(since),
+                "limit": _fmp_news_request_limit(since, limit),
+            },
+        )
+        news = _validate_news_items(data, GeneralNewsItem)
+        cutoff = _comparable_datetime(since)
+        return [
+            item
+            for item in news
+            if _comparable_datetime(item.published_at) >= cutoff
+        ][:limit]
 
 
 def project_quote(raw: dict[str, Any]) -> dict[str, Any]:

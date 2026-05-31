@@ -1,0 +1,29 @@
+[
+  {
+    "symbol": "AAPL",
+    "publishedDate": "2026-05-30T16:30:00+00:00",
+    "title": "Apple shares rise after product update",
+    "image": "https://example.com/aapl.jpg",
+    "site": "Reuters",
+    "text": "Apple shares rose after the company announced a product update.",
+    "url": "https://example.com/news/aapl-product-update"
+  },
+  {
+    "symbol": "MSFT",
+    "publishedDate": "2026-05-30T12:00:00+00:00",
+    "title": "Microsoft expands cloud capacity",
+    "image": "",
+    "site": "CNBC",
+    "text": "Microsoft announced additional cloud infrastructure spending.",
+    "url": "https://example.com/news/msft-cloud-capacity"
+  },
+  {
+    "symbol": "AAPL",
+    "publishedDate": "2026-05-29T20:00:00+00:00",
+    "title": "Apple supplier updates guidance",
+    "image": "https://example.com/aapl-supplier.jpg",
+    "site": "MarketWatch",
+    "text": "A supplier updated guidance before the cutoff window.",
+    "url": "https://example.com/news/aapl-supplier-guidance"
+  }
+]
