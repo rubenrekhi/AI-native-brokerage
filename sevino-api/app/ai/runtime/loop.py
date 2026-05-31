@@ -19,6 +19,7 @@ mid-turn, not batched at the end.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from typing import Any, Awaitable, Callable
@@ -73,12 +74,18 @@ _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
 _DEFAULT_CANCELLATION_REASON = "client_disconnect"
 
 
+def _render_digest_card_system_context(digest_card: dict[str, Any]) -> str:
+    payload = json.dumps(digest_card, indent=2, default=str)
+    return "The user is currently viewing this digest card:\n" + payload
+
+
 async def run_agent_turn(
     *,
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_message: str,
     user_context: dict[str, Any] | None = None,
+    digest_card: dict[str, Any] | None = None,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
@@ -158,6 +165,15 @@ async def run_agent_turn(
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+        if digest_card is not None:
+            # View-state context for this request only; unlike user_context,
+            # it is intentionally not appended to the persisted transcript.
+            request_system.append(
+                {
+                    "type": "text",
+                    "text": _render_digest_card_system_context(digest_card),
+                }
+            )
 
         # ``turn_id.hex`` is the 32-char lowercase form W3C trace context
         # requires, so a Langfuse trace looks up directly by

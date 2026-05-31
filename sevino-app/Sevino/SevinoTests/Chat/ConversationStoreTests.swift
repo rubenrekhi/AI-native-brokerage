@@ -333,6 +333,40 @@ final class ConversationStoreTests: XCTestCase {
         let decoded = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         XCTAssertEqual(decoded?["message"] as? String, "hello there")
         XCTAssertEqual(decoded?["idempotency_key"] as? String, "idem-fixed-key")
+        XCTAssertNil(decoded?["digest_card"])
+    }
+
+    func testSendIncludesDigestCardWhenProvided() async throws {
+        let client = MockSSEClient(script: [
+            .yield(makeRaw(json: turnStartedJSON())),
+            .yield(makeRaw(json: turnCompletedJSON())),
+        ])
+        let store = makeStore(client: client, idempotencyKey: "digest-key")
+        let digestCard = DigestCard(
+            id: "digest-1",
+            kind: "big_move",
+            fields: [
+                "camelCaseKey": .string("preserved"),
+                "relatedSymbols": .array([.string("NVDA")]),
+                "related_symbols": .array([.string("AMD")]),
+                "card_context": .object(["headline": .string("AMD moved 5%")]),
+            ]
+        )
+
+        try await store.send(text: "what changed?", digestCard: digestCard)
+
+        let body = try XCTUnwrap(client.capturedRequests[0].httpBody)
+        let decoded = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        let encodedCard = try XCTUnwrap(decoded?["digest_card"] as? [String: Any])
+        XCTAssertEqual(encodedCard["id"] as? String, "digest-1")
+        XCTAssertEqual(encodedCard["kind"] as? String, "big_move")
+        XCTAssertEqual(encodedCard["camelCaseKey"] as? String, "preserved")
+        XCTAssertNil(encodedCard["camel_case_key"])
+        XCTAssertEqual(encodedCard["relatedSymbols"] as? [String], ["NVDA"])
+        XCTAssertEqual(encodedCard["related_symbols"] as? [String], ["AMD"])
+
+        let context = try XCTUnwrap(encodedCard["card_context"] as? [String: Any])
+        XCTAssertEqual(context["headline"] as? String, "AMD moved 5%")
     }
 
     func testExplicitIdempotencyKeyOverridesFactory() async throws {

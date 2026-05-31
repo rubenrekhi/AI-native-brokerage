@@ -13,6 +13,7 @@ evolve without breaking clients.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
 from typing import Any
@@ -33,14 +34,38 @@ class ChatTurnRequest(BaseModel):
         "while a data modal is open. Injected into the user message so the "
         "AI can reference it. Max serialized size: 10 KB.",
     )
+    digest_card: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional Daily Digest card currently in view. Must "
+        "include at least 'kind' and 'id'; all other fields pass through as "
+        "structured JSON system context for the LLM. Max serialized size: "
+        "10 KB.",
+    )
 
     @model_validator(mode="after")
     def _validate_context_size(self) -> "ChatTurnRequest":
         if self.context is not None:
-            import json
-
             if len(json.dumps(self.context, default=str)) > _MAX_CONTEXT_BYTES:
                 msg = f"context exceeds {_MAX_CONTEXT_BYTES} byte limit"
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_digest_card(self) -> "ChatTurnRequest":
+        if self.digest_card is not None:
+            if len(json.dumps(self.digest_card, default=str)) > _MAX_CONTEXT_BYTES:
+                msg = f"digest_card exceeds {_MAX_CONTEXT_BYTES} byte limit"
+                raise ValueError(msg)
+            missing = [
+                field
+                for field in ("kind", "id")
+                if field not in self.digest_card
+            ]
+            if missing:
+                msg = (
+                    "digest_card must include required field(s): "
+                    + ", ".join(missing)
+                )
                 raise ValueError(msg)
         return self
 

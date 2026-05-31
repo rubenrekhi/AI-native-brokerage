@@ -325,6 +325,7 @@ async def _run(
     tool_registry: ToolRegistry | None = None,
     user_message: str = "hello",
     user_context: dict[str, Any] | None = None,
+    digest_card: dict[str, Any] | None = None,
     langfuse: Any = None,
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
@@ -359,6 +360,8 @@ async def _run(
         kwargs["server_tools_config"] = server_tools_config
     if user_context is not None:
         kwargs["user_context"] = user_context
+    if digest_card is not None:
+        kwargs["digest_card"] = digest_card
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -450,6 +453,42 @@ class TestHappyPath:
         assert kwargs["output_tokens"] == 11
         assert kwargs["cost_usd_micros"] > 0
         assert kwargs["latency_ms"] is not None
+
+    async def test_digest_card_is_appended_to_system_context(self, repo_mocks):
+        client = _make_client(_make_response(text="answer"))
+        digest_card = {
+            "id": "digest-1",
+            "kind": "big_move",
+            "related_symbols": ["AMD"],
+            "card_context": {"headline": "AMD moved 5%"},
+        }
+
+        await _run(client, repo_mocks, digest_card=digest_card)
+
+        kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
+        assert kwargs["request_system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": (
+                    "The user is currently viewing this digest card:\n"
+                    "{\n"
+                    '  "id": "digest-1",\n'
+                    '  "kind": "big_move",\n'
+                    '  "related_symbols": [\n'
+                    '    "AMD"\n'
+                    "  ],\n"
+                    '  "card_context": {\n'
+                    '    "headline": "AMD moved 5%"\n'
+                    "  }\n"
+                    "}"
+                ),
+            },
+        ]
 
     async def test_completes_agent_turn_with_totals_and_assistant_link(
         self, repo_mocks

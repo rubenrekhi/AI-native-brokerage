@@ -307,7 +307,8 @@ class TestHappyPath:
     async def test_streams_event_sequence_and_persists_full_turn(
         self, db_engine, fixture, chat_client
     ):
-        _install_anthropic(_stub_client(_stub_response(text="hello world")))
+        anthropic_stub = _stub_client(_stub_response(text="hello world"))
+        _install_anthropic(anthropic_stub)
 
         events = await _consume_sse(
             chat_client,
@@ -421,6 +422,45 @@ class TestHappyPath:
             assert len(invs) == 1
             assert invs[0].stop_reason == "end_turn"
 
+        request_system = anthropic_stub.messages.stream.call_args.kwargs["system"]
+        assert len(request_system) == 1
+        assert request_system[0]["type"] == "text"
+        assert request_system[0]["cache_control"] == {"type": "ephemeral"}
+
+    async def test_digest_card_is_sent_as_system_context(
+        self, fixture, chat_client
+    ):
+        anthropic_stub = _stub_client(_stub_response(text="card-aware answer"))
+        _install_anthropic(anthropic_stub)
+        digest_card = {
+            "id": "digest-1",
+            "kind": "big_move",
+            "related_symbols": ["AMD"],
+            "card_context": {"headline": "AMD moved 5%"},
+        }
+
+        await _consume_sse(
+            chat_client,
+            f"/v1/conversations/{fixture.conversation_id}/turns",
+            json={
+                "message": "what changed?",
+                "idempotency_key": "digest-key",
+                "digest_card": digest_card,
+            },
+        )
+
+        request_system = anthropic_stub.messages.stream.call_args.kwargs["system"]
+        assert len(request_system) == 2
+        assert request_system[0]["cache_control"] == {"type": "ephemeral"}
+        digest_context = request_system[1]["text"]
+        assert digest_context.startswith(
+            "The user is currently viewing this digest card:\n"
+        )
+        assert '"id": "digest-1"' in digest_context
+        assert '"kind": "big_move"' in digest_context
+        assert '"AMD"' in digest_context
+        assert '"headline": "AMD moved 5%"' in digest_context
+
 
 # ---------- request validation ----------
 
@@ -451,6 +491,23 @@ class TestRequestValidation:
         )
 
         assert response.status_code == 422
+
+    async def test_digest_card_requires_kind_and_id(
+        self, fixture, chat_client
+    ):
+        _install_anthropic(_stub_client(_stub_response()))
+
+        response = await chat_client.post(
+            f"/v1/conversations/{fixture.conversation_id}/turns",
+            json={
+                "message": "what changed?",
+                "idempotency_key": "bad-digest",
+                "digest_card": {"kind": "big_move"},
+            },
+        )
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "VALIDATION_ERROR"
 
 
 # ---------- ownership ----------

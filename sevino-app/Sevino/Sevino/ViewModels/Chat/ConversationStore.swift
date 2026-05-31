@@ -61,12 +61,14 @@ final class ConversationStore {
     /// explicit mapping. Locked to a property to match the strategy used in
     /// `SSEEventTests`.
     private let eventDecoder = JSONDecoder()
-    /// `Block` and the request body rely on the project-wide snake_case ↔
-    /// camelCase strategy (see `JSONCoders+Sevino.swift`). Used to round-trip
-    /// `block_start` / `block_data` payloads from `JSONValue` into typed
-    /// blocks and to encode `TurnRequestBody`.
+    /// `Block` relies on the project-wide snake_case ↔ camelCase strategy
+    /// (see `JSONCoders+Sevino.swift`). Used to round-trip `block_start` /
+    /// `block_data` payloads from `JSONValue` into typed blocks.
     private let blockDecoder = JSONDecoder.sevino()
     private let encoder = JSONEncoder.sevino()
+    /// `TurnRequestBody` carries opaque context dictionaries whose keys must
+    /// survive unchanged; snake_case is handled by explicit `CodingKeys`.
+    private let requestEncoder = JSONEncoder()
 
     /// id of the assistant `Message` currently being populated by SSE events,
     /// or `nil` between turns. Stored separately from `messages.last?.id` so a
@@ -171,6 +173,7 @@ final class ConversationStore {
     func send(
         text: String,
         context: [String: JSONValue]? = nil,
+        digestCard: DigestCard? = nil,
         attachedContext: AttachedContext? = nil,
         idempotencyKey: String? = nil
     ) async throws {
@@ -185,6 +188,7 @@ final class ConversationStore {
         let request = try buildRequest(
             message: text,
             context: context,
+            digestCard: digestCard,
             idempotencyKey: idempotencyKey ?? idempotencyKeyFactory()
         )
         state = .streaming
@@ -359,7 +363,12 @@ final class ConversationStore {
         }
     }
 
-    private func buildRequest(message: String, context: [String: JSONValue]?, idempotencyKey: String) throws -> URLRequest {
+    private func buildRequest(
+        message: String,
+        context: [String: JSONValue]?,
+        digestCard: DigestCard?,
+        idempotencyKey: String
+    ) throws -> URLRequest {
         let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/turns"
         guard let url = URL(string: baseURL + path) else {
             throw URLError(.badURL)
@@ -367,8 +376,13 @@ final class ConversationStore {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let body = TurnRequestBody(message: message, context: context, idempotencyKey: idempotencyKey)
-        request.httpBody = try encoder.encode(body)
+        let body = TurnRequestBody(
+            message: message,
+            context: context,
+            digestCard: digestCard,
+            idempotencyKey: idempotencyKey
+        )
+        request.httpBody = try requestEncoder.encode(body)
         return request
     }
 }
@@ -378,5 +392,13 @@ final class ConversationStore {
 private struct TurnRequestBody: Encodable {
     let message: String
     let context: [String: JSONValue]?
+    let digestCard: DigestCard?
     let idempotencyKey: String
+
+    private enum CodingKeys: String, CodingKey {
+        case message
+        case context
+        case digestCard = "digest_card"
+        case idempotencyKey = "idempotency_key"
+    }
 }
