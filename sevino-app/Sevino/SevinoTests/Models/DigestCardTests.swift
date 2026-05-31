@@ -4,7 +4,7 @@ import XCTest
 final class DigestCardTests: XCTestCase {
 
     func testRoundTripsNestedPayload() throws {
-        let card = DigestCard(
+        let card = ChatDigestCard(
             payload: [
                 "id": .string("digest-1"),
                 "kind": .string("big_move"),
@@ -22,13 +22,13 @@ final class DigestCardTests: XCTestCase {
         )
 
         let data = try JSONEncoder().encode(card)
-        let decoded = try JSONDecoder().decode(DigestCard.self, from: data)
+        let decoded = try JSONDecoder().decode(ChatDigestCard.self, from: data)
 
         XCTAssertEqual(decoded, card)
     }
 
     func testIdKindInitializerOverlaysFields() {
-        let card = DigestCard(
+        let card = ChatDigestCard(
             id: "canonical-id",
             kind: "canonical-kind",
             fields: [

@@ -173,7 +173,7 @@ final class ConversationStore {
     func send(
         text: String,
         context: [String: JSONValue]? = nil,
-        digestCard: DigestCard? = nil,
+        digestCard: ChatDigestCard? = nil,
         attachedContext: AttachedContext? = nil,
         idempotencyKey: String? = nil
     ) async throws {
@@ -366,7 +366,7 @@ final class ConversationStore {
     private func buildRequest(
         message: String,
         context: [String: JSONValue]?,
-        digestCard: DigestCard?,
+        digestCard: ChatDigestCard?,
         idempotencyKey: String
     ) throws -> URLRequest {
         let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/turns"
@@ -392,7 +392,7 @@ final class ConversationStore {
 private struct TurnRequestBody: Encodable {
     let message: String
     let context: [String: JSONValue]?
-    let digestCard: DigestCard?
+    let digestCard: ChatDigestCard?
     let idempotencyKey: String
 
     private enum CodingKeys: String, CodingKey {

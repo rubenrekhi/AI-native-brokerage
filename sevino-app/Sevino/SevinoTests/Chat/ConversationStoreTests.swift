@@ -342,7 +342,7 @@ final class ConversationStoreTests: XCTestCase {
             .yield(makeRaw(json: turnCompletedJSON())),
         ])
         let store = makeStore(client: client, idempotencyKey: "digest-key")
-        let digestCard = DigestCard(
+        let digestCard = ChatDigestCard(
             id: "digest-1",
             kind: "big_move",
             fields: [

@@ -1,7 +1,7 @@
 import Foundation
 
 @propertyWrapper
-struct DecimalString: Codable, Equatable, Hashable {
+struct DecimalString: Codable, Equatable, Hashable, Sendable {
     var wrappedValue: Decimal
 
     init(wrappedValue: Decimal) {

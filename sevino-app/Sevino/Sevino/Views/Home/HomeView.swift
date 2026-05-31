@@ -11,6 +11,7 @@ struct HomeView: View {
     @State private var holdingsViewModel: HoldingsViewModel
     @State private var radarViewModel: RadarViewModel
     @State private var transferViewModel: TransferViewModel
+    @State private var digestViewModel: DigestViewModel
     @State private var tickerMentionViewModel = TickerMentionViewModel()
     @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
@@ -38,6 +39,17 @@ struct HomeView: View {
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
 
+    private var digestCoverPresented: Binding<Bool> {
+        Binding(
+            get: { digestViewModel.presentationState == .full },
+            set: { isPresented in
+                if !isPresented && digestViewModel.presentationState == .full {
+                    Task { await digestViewModel.dismissToPeek() }
+                }
+            }
+        )
+    }
+
     private func modalDimBrightness(when isDimmed: Bool) -> Double {
         guard isDimmed else { return 0 }
         return colorScheme == .light ? -0.3 : -0.2
@@ -56,7 +68,8 @@ struct HomeView: View {
         fundingViewModel: FundingViewModel = FundingViewModel(),
         holdingsViewModel: HoldingsViewModel = HoldingsViewModel(),
         radarViewModel: RadarViewModel = RadarViewModel(),
-        transferViewModel: TransferViewModel = TransferViewModel()
+        transferViewModel: TransferViewModel = TransferViewModel(),
+        digestViewModel: DigestViewModel = DigestViewModel()
     ) {
         self._viewModel = State(initialValue: viewModel)
         self._portfolioViewModel = State(initialValue: portfolioViewModel)
@@ -64,6 +77,7 @@ struct HomeView: View {
         self._holdingsViewModel = State(initialValue: holdingsViewModel)
         self._radarViewModel = State(initialValue: radarViewModel)
         self._transferViewModel = State(initialValue: transferViewModel)
+        self._digestViewModel = State(initialValue: digestViewModel)
     }
 
     var body: some View {
@@ -198,6 +212,7 @@ struct HomeView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.95, anchor: .bottom)))
             }
         }
+        .overlay(alignment: .bottom) { digestPeekOverlay }
         .overlay(alignment: .bottom) { quickCommandsOverlay }
         .animation(.spring(duration: 0.25, bounce: 0.1), value: tickerMentionViewModel.isShowingPopup)
         .overlay(alignment: .topTrailing) { holdingsFilterOverlay }
@@ -254,9 +269,15 @@ struct HomeView: View {
             )
         }
         .task { await viewModel.load() }
+        .task { await digestViewModel.refreshForForeground() }
         .onChange(of: viewModel.turnState) { oldState, newState in
             if oldState == .streaming && newState == .idle {
                 Task { await viewModel.refreshChats() }
+            }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            if newPhase == .active {
+                Task { await digestViewModel.refreshForForeground() }
             }
         }
         .task { await holdingsViewModel.loadHoldings() }
@@ -336,6 +357,13 @@ struct HomeView: View {
             }
         } message: { message in
             Text(message)
+        }
+        .fullScreenCover(isPresented: digestCoverPresented) {
+            DigestStackView(
+                scale: scale,
+                viewModel: digestViewModel,
+                onRouteToChat: routeToChatFromDigest
+            )
         }
     }
 
@@ -515,6 +543,12 @@ struct HomeView: View {
         }
     }
 
+    private func routeToChatFromDigest() {
+        dismissAllModals()
+        shortcutsExpanded = false
+        tickerMentionViewModel.requestFocus()
+    }
+
     private func toggleSidebar() {
         withAnimation(.spring(duration: 0.5, bounce: 0.32)) {
             showSidebar.toggle()
@@ -611,6 +645,20 @@ struct HomeView: View {
             } action: { newHeight in
                 chatInputHeight = newHeight
             }
+        }
+    }
+
+    @ViewBuilder
+    private var digestPeekOverlay: some View {
+        if digestViewModel.presentationState == .peek && !anyModalOpen && !showQuickCommands {
+            PeekCardView(
+                scale: scale,
+                cardCount: digestViewModel.cards.count,
+                onTap: digestViewModel.reopenDigest
+            )
+            .padding(.horizontal, 16 * scale)
+            .padding(.bottom, chatInputHeight + 16 * scale)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -751,7 +799,8 @@ private struct ResumeErrorAlert: ViewModifier {
         viewModel: HomeViewModel(
             chatService: PlaceholderRecentChatsService.shared
         ),
-        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient())
+        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient()),
+        digestViewModel: DigestViewModel(client: PlaceholderDigestAPIClient())
     )
     .preferredColorScheme(.dark)
 }
@@ -761,7 +810,8 @@ private struct ResumeErrorAlert: ViewModifier {
         viewModel: HomeViewModel(
             chatService: PlaceholderRecentChatsService.shared
         ),
-        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient())
+        radarViewModel: RadarViewModel(client: PlaceholderRadarAPIClient()),
+        digestViewModel: DigestViewModel(client: PlaceholderDigestAPIClient())
     )
     .preferredColorScheme(.light)
 }

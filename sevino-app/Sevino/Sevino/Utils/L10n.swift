@@ -345,6 +345,17 @@ enum L10n {
         static let alpacaAgreementFdic = String(localized: "onboarding.alpaca_agreement_fdic")
     }
 
+    enum Digest {
+        static let title = String(localized: "digest.title")
+        static let dismissAccessibility = String(localized: "digest.dismiss_accessibility")
+        static func cardsReady(_ count: Int) -> String {
+            String(format: String(localized: "digest.cards_ready"), count)
+        }
+        static func progressAccessibility(_ current: Int, _ total: Int) -> String {
+            String(format: String(localized: "digest.progress_accessibility"), current, total)
+        }
+    }
+
     enum Home {
         static let chatPlaceholder = String(localized: "home.chat_placeholder")
         static let chatPrefillDeposit = String(localized: "home.chat_prefill_deposit")

@@ -83,6 +83,33 @@ final class APIClientTests: XCTestCase {
         XCTAssertEqual(body, Response(preferredName: "Riley"))
     }
 
+    func testGetTodaysDigestReturnsNilOn204() async throws {
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/digest/today",
+            response: .success(status: 204, body: Data())
+        )
+
+        let client = makeClient()
+        let body = try await client.getTodaysDigest()
+
+        XCTAssertNil(body)
+        XCTAssertEqual(StubURLProtocol.lastRequest()?.httpMethod, "GET")
+    }
+
+    func testDismissDigestPostsToDigestDismiss() async throws {
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/digest/dismiss",
+            response: .success(status: 204, body: Data())
+        )
+
+        let client = makeClient()
+        try await client.dismissDigest()
+
+        XCTAssertEqual(StubURLProtocol.lastRequest()?.httpMethod, "POST")
+    }
+
     // MARK: - Headers
 
     func testAuthorizationHeaderAttachedWhenTokenAvailable() async throws {

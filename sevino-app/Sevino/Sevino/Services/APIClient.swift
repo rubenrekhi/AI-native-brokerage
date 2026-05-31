@@ -41,6 +41,14 @@ final class APIClient: APIClientProtocol {
         try await request(path, method: "GET")
     }
 
+    func getTodaysDigest() async throws -> DigestTodayResponseDTO? {
+        try await requestOptional("/v1/digest/today", method: "GET")
+    }
+
+    func dismissDigest() async throws {
+        try await post("/v1/digest/dismiss")
+    }
+
     func post<T: Decodable>(_ path: String) async throws -> T {
         try await request(path, method: "POST")
     }

@@ -33,7 +33,9 @@ struct SevinoApp: App {
     @ViewBuilder
     private var contentView: some View {
         #if DEBUG
-        if let fake = FakeAuthServiceForUITests.makeFromLaunchArguments() {
+        if UITestLaunchArgument.parsedMode == .digestFlow {
+            DigestUITestHostView()
+        } else if let fake = FakeAuthServiceForUITests.makeFromLaunchArguments() {
             ContentView(
                 authVM: AuthViewModel(authService: fake),
                 viewModel: ContentViewModel(authService: fake)
