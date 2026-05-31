@@ -10,6 +10,12 @@ from app.ai.tools.display_stock_card import (
     DisplayStockCard,
     DisplayStockCardInput,
 )
+from app.ai.tools.portfolio import (
+    GetPortfolio,
+    GetPortfolioPerformance,
+    PortfolioInput,
+    PortfolioPerformanceInput,
+)
 from app.ai.tools.radar_operations import RadarOperations, RadarOperationsInput
 from app.ai.tools.stock_info import GetStockInfo, StockInfoInput
 
@@ -22,7 +28,11 @@ __all__ = [
     "ToolResult",
     "DisplayStockCard",
     "DisplayStockCardInput",
+    "GetPortfolio",
+    "GetPortfolioPerformance",
     "GetStockInfo",
+    "PortfolioInput",
+    "PortfolioPerformanceInput",
     "StockInfoInput",
     "RadarOperations",
     "RadarOperationsInput",
@@ -35,6 +45,8 @@ def build_default_registry() -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(GetStockInfo())
     registry.register(DisplayStockCard())
+    registry.register(GetPortfolio())
+    registry.register(GetPortfolioPerformance())
     registry.register(RadarOperations())
     return registry
 
