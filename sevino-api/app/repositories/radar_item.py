@@ -115,8 +115,15 @@ class RadarItemRepository:
         company_name: str | None,
         context_blurb: str | None = None,
         relevance_score: float | None = None,
+        bucket: str | None = None,
+        expires_at: datetime | None = None,
     ) -> RadarItem:
-        """Create an AI-generated radar row. Unfavorited, expires in 7 days."""
+        """Create an AI-generated radar row. Unfavorited.
+
+        `expires_at` defaults to 7 days from now (sweep-cron compatibility);
+        the orchestrator overrides it with the user's next refresh anchor so
+        a row's lifetime matches the cadence rather than its insertion time.
+        """
         item = RadarItem(
             user_id=user_id,
             symbol=symbol,
@@ -125,11 +132,33 @@ class RadarItemRepository:
             is_favorited=False,
             context_blurb=context_blurb,
             relevance_score=relevance_score,
-            expires_at=datetime.now(timezone.utc) + AI_ITEM_TTL,
+            bucket=bucket,
+            expires_at=expires_at
+            if expires_at is not None
+            else datetime.now(timezone.utc) + AI_ITEM_TTL,
         )
         db.add(item)
         await db.flush()
         return item
+
+    @staticmethod
+    async def delete_unfavorited_ai(
+        db: AsyncSession, user_id: uuid.UUID
+    ) -> int:
+        """Drop the user's prior AI picks they didn't keep — the atomic
+        rotation primitive the orchestrator calls just before inserting the
+        new batch.
+
+        Source + favorited filters guarantee user-added rows and favorited
+        AI items survive even if a future caller drifts from the invariant.
+        """
+        stmt = sa_delete(RadarItem).where(
+            RadarItem.user_id == user_id,
+            RadarItem.source == SOURCE_AI_GENERATED,
+            RadarItem.is_favorited.is_(False),
+        )
+        result = await db.execute(stmt)
+        return result.rowcount or 0
 
     @staticmethod
     async def delete(db: AsyncSession, item: RadarItem) -> None:

@@ -17,6 +17,7 @@ from app.lifecycle import lifespan
 from app.logging_config import configure_logging
 from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
 from app.rate_limit import limiter
+from app.routes.admin_radar import router as admin_radar_router
 from app.routes.assets import router as assets_router
 from app.routes.brokerage import router as brokerage_router
 from app.routes.conversations import router as conversations_router
@@ -132,6 +133,12 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(
         plaid_webhooks_router, prefix="/v1/plaid/webhooks", tags=["plaid"]
     )
+    # Dev-only: lets a developer kick a radar batch on demand. Not mounted
+    # in staging/prod so QA can't accidentally trigger production batches.
+    if settings.environment == "dev":
+        app.include_router(
+            admin_radar_router, prefix="/admin/radar", tags=["admin"]
+        )
 
 
 include_routers(app)

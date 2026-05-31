@@ -297,3 +297,74 @@ async def test_delete_expired_ai_items_returns_zero_when_no_match(
     )
 
     assert await RadarItemRepository.delete_expired_ai_items(db_session) == 0
+
+
+async def test_create_ai_item_accepts_bucket_and_expires_at_override(
+    db_session, test_user
+):
+    anchor = datetime.now(timezone.utc) + timedelta(days=7)
+    item = await RadarItemRepository.create_ai_item(
+        db_session,
+        user_id=test_user,
+        symbol="META",
+        company_name="Meta Platforms",
+        bucket="diversification",
+        expires_at=anchor,
+    )
+
+    assert item.bucket == "diversification"
+    # `expires_at` flows straight through; the default 7d-from-now path is
+    # only taken when the caller leaves it unset.
+    assert item.expires_at == anchor
+
+
+async def test_delete_unfavorited_ai_drops_only_unfavorited_ai_rows_for_user(
+    db_session, test_user, make_extra_user
+):
+    other_user = await make_extra_user()
+    rows = [
+        ("KEEP_FAV_AI", test_user, "ai_generated", True),
+        ("KEEP_USER_ADDED", test_user, "user_added", False),
+        ("KEEP_USER_ADDED_FAV", test_user, "user_added", True),
+        ("DROP_AI_1", test_user, "ai_generated", False),
+        ("DROP_AI_2", test_user, "ai_generated", False),
+        ("KEEP_OTHER_USER_AI", other_user, "ai_generated", False),
+    ]
+    for symbol, uid, source, fav in rows:
+        db_session.add(RadarItem(
+            user_id=uid, symbol=symbol,
+            source=source, is_favorited=fav,
+        ))
+    await db_session.flush()
+
+    deleted = await RadarItemRepository.delete_unfavorited_ai(
+        db_session, test_user
+    )
+    assert deleted == 2
+
+    result = await db_session.execute(select(RadarItem.symbol))
+    remaining = set(result.scalars().all())
+    assert remaining == {
+        "KEEP_FAV_AI",
+        "KEEP_USER_ADDED",
+        "KEEP_USER_ADDED_FAV",
+        "KEEP_OTHER_USER_AI",
+    }
+
+
+async def test_delete_unfavorited_ai_returns_zero_when_no_match(
+    db_session, test_user
+):
+    db_session.add(RadarItem(
+        user_id=test_user, symbol="FAV_AI",
+        source="ai_generated", is_favorited=True,
+    ))
+    db_session.add(RadarItem(
+        user_id=test_user, symbol="MINE",
+        source="user_added", is_favorited=True,
+    ))
+    await db_session.flush()
+
+    assert await RadarItemRepository.delete_unfavorited_ai(
+        db_session, test_user
+    ) == 0

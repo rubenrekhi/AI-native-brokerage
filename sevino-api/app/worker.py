@@ -17,6 +17,7 @@ from app.listeners.registry import build_listeners
 from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.fmp import FmpClient
+from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
 from app.tasks.reconcile_funding import reconcile_funding
@@ -230,6 +231,7 @@ class WorkerSettings:
         sync_assets,
         sweep_expired_radar_items,
         reconcile_funding,
+        generate_radar_batch,
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),

@@ -65,6 +65,9 @@ class UserProfile(Base, TimestampMixin):
     last_active_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    next_radar_refresh_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     financial_profile: Mapped[Optional["UserFinancialProfile"]] = relationship(
         back_populates="user", cascade="all, delete-orphan", uselist=False
