@@ -109,6 +109,10 @@ class DigestService:
         )
         return persisted
 
+    async def rollback(self) -> None:
+        """Rollback the underlying session after a cancelled generation."""
+        await self._db.rollback()
+
     async def get_today(
         self, user_id: uuid.UUID
     ) -> DigestSnapshot | None:

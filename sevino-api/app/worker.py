@@ -17,11 +17,13 @@ from app.listeners.registry import build_listeners
 from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.fmp import FmpClient
+from app.tasks.generate_daily_digest import generate_daily_digest
 from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
 from app.tasks.reconcile_funding import reconcile_funding
 from app.tasks.refresh_due_radar import refresh_due_radar
+from app.tasks.sweep_digest_snapshots import sweep_digest_snapshots
 from app.tasks.sweep_expired_radar import sweep_expired_radar_items
 from app.tasks.sync_assets import sync_assets
 
@@ -234,6 +236,8 @@ class WorkerSettings:
         reconcile_funding,
         generate_radar_batch,
         refresh_due_radar,
+        generate_daily_digest,
+        sweep_digest_snapshots,
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
@@ -246,6 +250,10 @@ class WorkerSettings:
         cron(reconcile_funding, minute={15}),
         # Hourly at :05 — offset from health pings on :00.
         cron(refresh_due_radar, minute={5}),
+        # 9am New York local in both DST states; idempotency makes one no-op.
+        cron(generate_daily_digest, hour={13, 14}, minute={0}),
+        # Retain one week of digest snapshots.
+        cron(sweep_digest_snapshots, hour={4}, minute={0}),
     ]
     on_startup = startup
     on_shutdown = shutdown

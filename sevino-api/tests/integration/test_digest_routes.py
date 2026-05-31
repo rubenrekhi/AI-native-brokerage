@@ -1,11 +1,15 @@
 """Integration tests for the /v1/digest routes."""
 
+import asyncio
 from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 
+from app.main import app
 from app.models.digest import DigestSnapshot
 from app.repositories.digest import DigestRepository
+from app.routes.digest import _digest_service
 from app.services.digest.context import ET
 from tests.integration.conftest import _pg_available_sync
 
@@ -31,8 +35,13 @@ async def _seed_today(db_session, user_id, *, cards=None) -> DigestSnapshot:
 
 
 async def test_get_today_returns_204_when_no_snapshot(
-    authenticated_db_client, test_user
+    authenticated_db_client, test_user, monkeypatch
 ):
+    monkeypatch.setattr(
+        "app.routes.digest._now_utc",
+        lambda: datetime(2026, 5, 31, 12, 59, tzinfo=timezone.utc),
+    )
+
     response = await authenticated_db_client.get("/v1/digest/today")
     assert response.status_code == 204
 
@@ -80,8 +89,12 @@ async def test_get_today_serializes_persisted_cards(
 
 
 async def test_get_today_ignores_other_days(
-    authenticated_db_client, db_session, test_user
+    authenticated_db_client, db_session, test_user, monkeypatch
 ):
+    monkeypatch.setattr(
+        "app.routes.digest._now_utc",
+        lambda: datetime(2026, 5, 31, 12, 59, tzinfo=timezone.utc),
+    )
     await DigestRepository.upsert(
         db_session,
         DigestSnapshot(
@@ -94,6 +107,74 @@ async def test_get_today_ignores_other_days(
 
     response = await authenticated_db_client.get("/v1/digest/today")
     assert response.status_code == 204
+
+
+async def test_get_today_lazy_fallback_generates_after_9am(
+    authenticated_db_client, db_session, test_user, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.routes.digest._now_utc",
+        lambda: datetime(2026, 5, 31, 14, 0, tzinfo=timezone.utc),
+    )
+
+    class FakeDigestService:
+        async def get_today(self, user_id):
+            return await DigestRepository.get_by_user_and_date(
+                db_session, user_id, _today_ny()
+            )
+
+        async def generate_for_user(self, user_id):
+            return await DigestRepository.upsert(
+                db_session,
+                DigestSnapshot(
+                    user_id=user_id,
+                    ny_local_date=_today_ny(),
+                    cards=[],
+                    generated_at=datetime.now(timezone.utc),
+                ),
+            )
+
+        async def rollback(self):
+            await db_session.rollback()
+
+    app.dependency_overrides[_digest_service] = lambda: FakeDigestService()
+    try:
+        response = await authenticated_db_client.get("/v1/digest/today")
+    finally:
+        app.dependency_overrides.pop(_digest_service, None)
+
+    assert response.status_code == 200
+    assert response.json()["snapshot"]["ny_local_date"] == _today_ny().isoformat()
+
+
+async def test_get_today_lazy_fallback_timeout_returns_204(
+    authenticated_db_client, test_user, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.routes.digest._now_utc",
+        lambda: datetime(2026, 5, 31, 14, 0, tzinfo=timezone.utc),
+    )
+    monkeypatch.setattr("app.routes.digest.LAZY_GENERATION_TIMEOUT_SECONDS", 0.01)
+    rollback = AsyncMock()
+
+    class SlowDigestService:
+        async def get_today(self, user_id):
+            return None
+
+        async def generate_for_user(self, user_id):
+            await asyncio.sleep(1)
+
+        async def rollback(self):
+            await rollback()
+
+    app.dependency_overrides[_digest_service] = lambda: SlowDigestService()
+    try:
+        response = await authenticated_db_client.get("/v1/digest/today")
+    finally:
+        app.dependency_overrides.pop(_digest_service, None)
+
+    assert response.status_code == 204
+    rollback.assert_awaited_once()
 
 
 async def test_get_today_requires_auth(client):

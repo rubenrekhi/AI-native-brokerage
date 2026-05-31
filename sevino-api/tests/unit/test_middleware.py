@@ -1,6 +1,7 @@
 """Unit tests for correlation ID and request logging middleware."""
 
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import structlog
@@ -12,6 +13,10 @@ from app.config import settings
 from app.middleware.api_key import APIKeyMiddleware, _EXEMPT_PATHS
 from app.middleware.correlation import CORRELATION_HEADER, CorrelationIDMiddleware
 from app.middleware.logging import RequestLoggingMiddleware
+from app.middleware.user_activity import (
+    UserActivityMiddleware,
+    _IN_PROCESS_TOUCH_CACHE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -290,3 +295,49 @@ async def test_api_key_skips_when_not_configured():
 
         resp = await middleware.dispatch(request, call_next)
         assert resp is expected_response
+
+
+# ---------------------------------------------------------------------------
+# UserActivityMiddleware
+# ---------------------------------------------------------------------------
+
+async def test_user_activity_uses_redis_debounce_before_db(monkeypatch):
+    middleware = UserActivityMiddleware(app=MagicMock())
+    request = _make_request()
+    redis = SimpleNamespace(set=AsyncMock(return_value=None))
+    request.scope["app"] = SimpleNamespace(state=SimpleNamespace(redis=redis))
+    request.state.user_id = "11111111-1111-1111-1111-111111111111"
+    async_session = MagicMock(side_effect=AssertionError("should not hit DB"))
+    monkeypatch.setattr("app.middleware.user_activity.async_session", async_session)
+
+    async def call_next(req):
+        return Response(status_code=200)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 200
+    redis.set.assert_awaited_once()
+    async_session.assert_not_called()
+
+
+async def test_user_activity_in_process_debounce_skips_second_db_touch(monkeypatch):
+    _IN_PROCESS_TOUCH_CACHE.clear()
+    middleware = UserActivityMiddleware(app=MagicMock())
+    request = _make_request()
+    request.scope["app"] = SimpleNamespace(state=SimpleNamespace())
+    user_id = "22222222-2222-2222-2222-222222222222"
+    session = MagicMock()
+    session.execute = AsyncMock()
+    session.commit = AsyncMock()
+    session.rollback = AsyncMock()
+    cm = MagicMock()
+    cm.__aenter__ = AsyncMock(return_value=session)
+    cm.__aexit__ = AsyncMock(return_value=None)
+    monkeypatch.setattr("app.middleware.user_activity.async_session", lambda: cm)
+
+    await middleware._touch_user(request, user_id)
+    await middleware._touch_user(request, user_id)
+
+    assert session.execute.await_count == 1
+    assert session.commit.await_count == 1
+    _IN_PROCESS_TOUCH_CACHE.clear()

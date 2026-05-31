@@ -1,10 +1,11 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions import NotFoundError
+from app.models.digest import DigestSnapshot
 from app.models.user_profile import UserProfile
 
 RADAR_CADENCE = timedelta(days=7)
@@ -88,6 +89,31 @@ class UserProfileRepository:
                 UserProfile.next_radar_refresh_at.is_not(None),
                 UserProfile.next_radar_refresh_at <= now,
                 UserProfile.onboarding_completed.is_(True),
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
+    async def list_active_users_without_digest(
+        db: AsyncSession,
+        *,
+        active_since: datetime,
+        ny_local_date: date,
+    ) -> list[uuid.UUID]:
+        """Recently active users missing a digest for the given NY-local day."""
+        result = await db.execute(
+            select(UserProfile.id)
+            .outerjoin(
+                DigestSnapshot,
+                and_(
+                    DigestSnapshot.user_id == UserProfile.id,
+                    DigestSnapshot.ny_local_date == ny_local_date,
+                ),
+            )
+            .where(
+                UserProfile.last_active_at.is_not(None),
+                UserProfile.last_active_at >= active_since,
+                DigestSnapshot.id.is_(None),
             )
         )
         return list(result.scalars().all())

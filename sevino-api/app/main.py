@@ -15,7 +15,12 @@ from app.database import get_db
 from app.exceptions import error_response, register_exception_handlers
 from app.lifecycle import lifespan
 from app.logging_config import configure_logging
-from app.middleware import APIKeyMiddleware, CorrelationIDMiddleware, RequestLoggingMiddleware
+from app.middleware import (
+    APIKeyMiddleware,
+    CorrelationIDMiddleware,
+    RequestLoggingMiddleware,
+    UserActivityMiddleware,
+)
 from app.rate_limit import limiter
 from app.routes.admin_radar import router as admin_radar_router
 from app.routes.assets import router as assets_router
@@ -97,9 +102,10 @@ def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSO
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
 # Middleware executes in reverse registration order (last added = outermost).
-# Request flow: CORS → CorrelationID → RequestLogging → APIKey → SlowAPI → route
+# Request flow: CORS → CorrelationID → RequestLogging → UserActivity → APIKey → SlowAPI → route
 app.add_middleware(APIKeyMiddleware)
 app.add_middleware(SlowAPIMiddleware)
+app.add_middleware(UserActivityMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(CorrelationIDMiddleware)
 
@@ -189,4 +195,3 @@ async def auth_health(
     )
     row = result.one_or_none()
     return {"user_id": user_id, "email": row.email if row else None}
-

@@ -12,7 +12,7 @@ never resurrects a digest the user already swiped away.
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -84,3 +84,15 @@ class DigestRepository:
             snapshot.dismissed_at = datetime.now(timezone.utc)
             await db.flush()
         return snapshot
+
+    @staticmethod
+    async def delete_older_than(
+        db: AsyncSession, cutoff_ny_local_date: date
+    ) -> int:
+        """Delete snapshots before the retained NY-local date window."""
+        result = await db.execute(
+            delete(DigestSnapshot).where(
+                DigestSnapshot.ny_local_date < cutoff_ny_local_date
+            )
+        )
+        return result.rowcount or 0

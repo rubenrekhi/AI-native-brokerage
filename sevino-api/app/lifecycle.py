@@ -55,17 +55,19 @@ async def lifespan(app: FastAPI):
     # boundary stays self-contained. Skip in dev when FMP_API_KEY is missing
     # so unrelated workflows (onboarding, trading) still boot.
     if settings.fmp_api_key:
+        app.state.fmp = FmpClient(api_key=settings.fmp_api_key)
         app.state.market_data_redis = Redis.from_url(
             _swap_redis_db(settings.redis_url, 1)
         )
         app.state.market_data = MarketDataService(
-            fmp=FmpClient(api_key=settings.fmp_api_key),
+            fmp=app.state.fmp,
             alpaca_broker=app.state.alpaca,
             redis=app.state.market_data_redis,
             alpaca_data_url=settings.alpaca_data_base_url,
             alpaca_broker_url=settings.alpaca_base_url,
         )
     else:
+        app.state.fmp = None
         app.state.market_data_redis = None
         app.state.market_data = None
     yield
