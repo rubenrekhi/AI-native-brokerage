@@ -196,10 +196,11 @@ class StockEarnings(BaseModel):
     with a beat/miss surprise — ``(actual − estimated) / |estimated|`` as a
     decimal (``0.05`` == a 5% beat) — and, where bars are available, the stock's
     move around that report. FMP exposes no pre-/post-market timing, so
-    ``price_move_pct`` and ``avg_post_earnings_move_pct`` use a fixed
-    prev-close → first-session-on-or-after-report window. Every field is null
-    when the data is missing, so the block degrades cleanly rather than failing
-    the lookup.
+    ``price_move_pct`` and ``avg_post_earnings_move_pct`` straddle the report
+    date (last close before → close of the session after) to capture the move
+    whether the company reported before the open or after the close. Every field
+    is null when the data is missing, so the block degrades cleanly rather than
+    failing the lookup.
     """
 
     next_period_end: str | None = None

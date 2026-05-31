@@ -1231,49 +1231,60 @@ def _bar(timestamp: str, close: float) -> dict:
 
 
 class TestComputeEarningsReactions:
-    def test_prev_close_to_first_session_on_or_after_report(self):
+    def test_straddles_report_date_prev_close_to_session_after(self):
         bars = [
-            _bar("2026-04-29T04:00:00Z", 100.0),  # prev close
-            _bar("2026-04-30T04:00:00Z", 110.0),  # first close on/after report
-            _bar("2026-05-01T04:00:00Z", 120.0),
+            _bar("2026-04-29T04:00:00Z", 100.0),  # last close before report
+            _bar("2026-04-30T04:00:00Z", 110.0),  # report-day session
+            _bar("2026-05-01T04:00:00Z", 120.0),  # session after report
         ]
         reactions = compute_earnings_reactions([date(2026, 4, 30)], bars)
 
-        assert reactions == {date(2026, 4, 30): 0.1}
+        # 100 → 120 straddle captures both a BMO (report-day) and an AMC
+        # (next-day) move: (120 - 100) / 100.
+        assert reactions == {date(2026, 4, 30): 0.2}
 
-    def test_report_on_non_trading_day_uses_next_session(self):
-        # Report dated on a weekend with no bar of its own; the first bar
-        # on/after the date is the next session.
+    def test_report_on_non_trading_day_straddles_surrounding_sessions(self):
+        # Report dated on a weekend; window runs from the prior session to the
+        # one after the first session on/after the report date.
         bars = [
             _bar("2026-05-01T04:00:00Z", 100.0),
             _bar("2026-05-04T04:00:00Z", 90.0),
+            _bar("2026-05-05T04:00:00Z", 95.0),
         ]
         reactions = compute_earnings_reactions([date(2026, 5, 2)], bars)
 
-        assert reactions[date(2026, 5, 2)] == -0.1
+        assert reactions[date(2026, 5, 2)] == -0.05
 
     def test_skips_event_without_prior_bar(self):
-        bars = [_bar("2026-04-30T04:00:00Z", 110.0)]
+        bars = [
+            _bar("2026-04-30T04:00:00Z", 110.0),
+            _bar("2026-05-01T04:00:00Z", 120.0),
+        ]
         assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
 
-    def test_skips_event_without_on_or_after_bar(self):
-        bars = [_bar("2026-04-29T04:00:00Z", 100.0)]
+    def test_skips_event_without_session_after_report(self):
+        bars = [
+            _bar("2026-04-29T04:00:00Z", 100.0),
+            _bar("2026-04-30T04:00:00Z", 110.0),
+        ]
         assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
 
     def test_skips_when_prev_close_non_positive(self):
         bars = [
             _bar("2026-04-29T04:00:00Z", 0.0),
             _bar("2026-04-30T04:00:00Z", 110.0),
+            _bar("2026-05-01T04:00:00Z", 120.0),
         ]
         assert compute_earnings_reactions([date(2026, 4, 30)], bars) == {}
 
     def test_unsorted_bars_are_handled(self):
         bars = [
+            _bar("2026-05-01T04:00:00Z", 120.0),
             _bar("2026-04-30T04:00:00Z", 110.0),
             _bar("2026-04-29T04:00:00Z", 100.0),
         ]
         reactions = compute_earnings_reactions([date(2026, 4, 30)], bars)
-        assert reactions[date(2026, 4, 30)] == 0.1
+        assert reactions[date(2026, 4, 30)] == 0.2
 
 
 class TestProjectEarnings:

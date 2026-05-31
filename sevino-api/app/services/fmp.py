@@ -829,14 +829,18 @@ def _surprise_pct(actual: Any, estimated: Any) -> float | None:
 def compute_earnings_reactions(
     report_dates: list[date], daily_bars: list[dict[str, Any]]
 ) -> dict[date, float]:
-    """Signed 1-session price move per report date, keyed by report date.
+    """Signed post-earnings price move per report date, keyed by report date.
 
-    The window is prev-session close → first-session-on-or-after-report close
-    (FMP gives no pre-/post-market timing, so a fixed window is used). ``daily_bars``
-    are Alpaca daily bars in ascending order with ``timestamp`` and ``close``.
-    Events without a bar on both sides, or with a non-positive prior close, are
-    omitted so the caller degrades those fields to null rather than emitting a
-    bogus move.
+    FMP gives no pre-/post-market timing, so the reaction day is unknown: a
+    company reporting before the open moves on the report date, one reporting
+    after the close moves the next session. The window straddles both —
+    last-close-before-report → close of the session *after* the first session
+    on or after the report date — so the move is captured either way (at the
+    cost of up to one extra day of drift). ``daily_bars`` are Alpaca daily bars
+    in ascending order with ``timestamp`` and ``close``. Events missing a bar on
+    either side of the window, or with a non-positive prior close, are omitted
+    so the caller degrades those fields to null rather than emitting a bogus
+    move.
     """
     closes: list[tuple[date, float]] = []
     for bar in daily_bars:
@@ -849,16 +853,18 @@ def compute_earnings_reactions(
     reactions: dict[date, float] = {}
     for report_date in report_dates:
         prev_close: float | None = None
-        post_close: float | None = None
-        for bar_date, close in closes:
+        end_close: float | None = None
+        for index, (bar_date, _close) in enumerate(closes):
             if bar_date < report_date:
-                prev_close = close
-            elif post_close is None:
-                post_close = close
+                prev_close = _close
+            else:
+                end_index = index + 1
+                if end_index < len(closes):
+                    end_close = closes[end_index][1]
                 break
-        if prev_close is None or post_close is None or prev_close <= 0:
+        if prev_close is None or end_close is None or prev_close <= 0:
             continue
-        reactions[report_date] = round((post_close - prev_close) / prev_close, 4)
+        reactions[report_date] = round((end_close - prev_close) / prev_close, 4)
     return reactions
 
 
