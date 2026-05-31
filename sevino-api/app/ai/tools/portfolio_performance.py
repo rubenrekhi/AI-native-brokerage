@@ -3,7 +3,7 @@
 Wraps ``PortfolioService.get_history`` into gain stats, high/low, and a
 downsampled trend series (at most 16 points) for the model rather than the
 raw curve. Shared account setup, error payloads, and the pill lifecycle live
-in ``_portfolio_common``.
+in ``app.ai.utils.portfolio_tool_runtime``.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from typing import Any, ClassVar, Literal
 import structlog
 from pydantic import BaseModel, Field
 
-from app.ai.tools._portfolio_common import (
+from app.ai.utils.portfolio_tool_runtime import (
     CONFIG_ERROR,
     UPSTREAM_ERROR,
     AccountUnavailable,

@@ -196,11 +196,12 @@ def _service(
 
 def _patch(monkeypatch, *, account: Any, service: MagicMock) -> None:
     monkeypatch.setattr(
-        "app.ai.tools._portfolio_common.BrokerageAccountRepository.get_by_user_id",
+        "app.ai.utils.portfolio_tool_runtime."
+        "BrokerageAccountRepository.get_by_user_id",
         AsyncMock(return_value=account),
     )
     monkeypatch.setattr(
-        "app.ai.tools._portfolio_common.PortfolioService",
+        "app.ai.utils.portfolio_tool_runtime.PortfolioService",
         MagicMock(return_value=service),
     )
 

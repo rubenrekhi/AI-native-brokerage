@@ -1,4 +1,4 @@
-"""Shared scaffolding for the portfolio read tools.
+"""Runtime helpers for the portfolio read tools.
 
 ``get_portfolio`` and ``get_portfolio_performance`` both open a
 ``PortfolioService`` against the user's active brokerage account and surface
