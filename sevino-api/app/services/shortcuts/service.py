@@ -17,10 +17,12 @@ from app.services.market_data import MarketDataService
 from app.services.shortcuts import ranker
 from app.services.shortcuts.context import ShortcutContext
 from app.services.shortcuts.rules import (
+    capability,
     first_time,
     market_state,
     portfolio_state,
     quiet_state,
+    radar_update,
 )
 from app.services.shortcuts.time_buckets import ET, current_bucket
 
@@ -30,9 +32,8 @@ logger = structlog.get_logger(__name__)
 class ShortcutsService:
     """Builds the shortcut feed: gather user context, run rules, then rank.
 
-    ``alpaca`` and ``market_data`` are held for the portfolio- and
-    market-aware rule categories; the current rules
-    (``first_time`` / ``quiet_state``) read only the database and the clock.
+    ``alpaca`` and ``market_data`` are optional; the portfolio- and
+    market-aware rules degrade to silence when they're absent.
     """
 
     def __init__(
@@ -59,6 +60,8 @@ class ShortcutsService:
             "market_state": await market_state.evaluate(
                 ctx, self._db, self._alpaca, self._market_data
             ),
+            "radar_update": await radar_update.evaluate(ctx, self._db),
+            "capability": capability.evaluate(ctx),
             "quiet_state": quiet_state.evaluate(ctx),
         }
         return ShortcutsResponse(items=ranker.rank(rules))

@@ -82,7 +82,7 @@ async def test_fresh_user_gets_first_time_in_top_slots(
     assert len(ids) == len(set(ids))
 
 
-async def test_established_user_gets_only_quiet_state(
+async def test_established_user_gets_no_first_time(
     authenticated_db_client, db_session, test_user
 ):
     await _make_established_user(db_session, str(test_user))
@@ -92,7 +92,12 @@ async def test_established_user_gets_only_quiet_state(
     assert response.status_code == 200
     items = response.json()["items"]
     assert items
-    assert all(i["category"] == "quiet_state" for i in items)
+    # first_time has cleared; with no broker/radar wired under the test
+    # transport, the always-on capability prompts join the quiet-state fallback.
+    categories = {i["category"] for i in items}
+    assert "first_time" not in categories
+    assert categories <= {"capability", "quiet_state"}
+    assert "quiet_state" in categories
 
 
 async def test_soft_deleted_conversations_do_not_count_toward_gate(
