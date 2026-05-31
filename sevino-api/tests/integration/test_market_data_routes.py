@@ -51,6 +51,10 @@ class TestGetStockInfoRoute:
         assert body["ratios"]["roe"] == "1.50"
         assert body["financials"]["revenue"] == "400000000000"
         assert body["financials"]["annual_trend"][0]["fiscal_year"] == "2025"
+        assert body["valuation"]["pe"] == "28.50"
+        assert body["valuation"]["sector_pe"] == "50.00"
+        assert body["valuation"]["pe_vs_sector"] == "-0.43"
+        assert body["valuation"]["valuation_history"][0]["fiscal_year"] == "2025"
         assert body["analyst"]["target_consensus"] == "200.00"
         market_data_mock.get_stock_info.assert_awaited_once_with("AAPL")
 
