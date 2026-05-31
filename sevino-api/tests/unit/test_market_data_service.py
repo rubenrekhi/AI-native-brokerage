@@ -391,11 +391,8 @@ class TestGetStockInfo:
         assert earnings["revenue_estimate_avg"] == "100"
         assert earnings["num_analysts"] == 12
         assert earnings["quarterly"][0]["report_date"] == "2026-04-30"
-        # (2.01 - 1.95) / 1.95 = 0.0308
         assert earnings["quarterly"][0]["eps_surprise_pct"] == "0.0308"
-        # (220 - 200) / 200 = 0.10
         assert earnings["quarterly"][0]["price_move_pct"] == "0.1"
-        # avg |move| over the two events: (0.10 + 0.05) / 2 = 0.075
         assert earnings["avg_post_earnings_move_pct"] == "0.075"
         assert earnings["events_measured"] == 2
 
@@ -532,6 +529,62 @@ class TestGetStockInfo:
         assert earnings["quarterly"][0]["price_move_pct"] is None
         assert earnings["avg_post_earnings_move_pct"] is None
         assert earnings["events_measured"] is None
+
+    async def test_unreported_quarter_excluded_from_reaction(self):
+        """A row without actuals must not contribute a reaction even if bars
+        straddle its date (FMP can return a past quarter before backfilling
+        actuals)."""
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200, json=[{"companyName": "Apple", "exchange": "NASDAQ"}]
+                )
+            if path.endswith("/earnings"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"date": "2026-04-30", "epsActual": None,
+                         "epsEstimated": 1.95},  # reported-but-unpopulated
+                        {"date": "2026-01-29", "epsActual": 2.85,
+                         "epsEstimated": 2.67},
+                    ],
+                )
+            return httpx.Response(200, json=[])
+
+        def alpaca_handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/bars"):
+                return httpx.Response(
+                    200,
+                    json={
+                        "bars": [
+                            {"t": "2026-01-28T05:00:00Z", "o": 100, "h": 100,
+                             "l": 100, "c": 100, "v": 1},
+                            {"t": "2026-01-29T05:00:00Z", "o": 105, "h": 105,
+                             "l": 105, "c": 105, "v": 1},
+                            {"t": "2026-04-29T05:00:00Z", "o": 200, "h": 200,
+                             "l": 200, "c": 200, "v": 1},
+                            {"t": "2026-04-30T05:00:00Z", "o": 220, "h": 220,
+                             "l": 220, "c": 220, "v": 1},
+                        ]
+                    },
+                )
+            return httpx.Response(200, json={})
+
+        service, _ = _service(
+            fmp_handler=fmp_handler, alpaca_handler=alpaca_handler
+        )
+
+        result = await service.get_stock_info("AAPL")
+
+        earnings = result["earnings"]
+        # Only the reported 2026-01-29 quarter is measured — the unpopulated
+        # 2026-04-30 row is skipped despite having bars on both sides.
+        assert earnings["events_measured"] == 1
+        assert [q["report_date"] for q in earnings["quarterly"]] == ["2026-01-29"]
 
     async def test_sector_benchmark_cached_per_exchange(self):
         """The sector/industry snapshot is cached by exchange, not by symbol."""

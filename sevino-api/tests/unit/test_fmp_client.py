@@ -1239,7 +1239,6 @@ class TestComputeEarningsReactions:
         ]
         reactions = compute_earnings_reactions([date(2026, 4, 30)], bars)
 
-        # (110 - 100) / 100 = +0.10
         assert reactions == {date(2026, 4, 30): 0.1}
 
     def test_report_on_non_trading_day_uses_next_session(self):
@@ -1251,7 +1250,6 @@ class TestComputeEarningsReactions:
         ]
         reactions = compute_earnings_reactions([date(2026, 5, 2)], bars)
 
-        # (90 - 100) / 100 = -0.10
         assert reactions[date(2026, 5, 2)] == -0.1
 
     def test_skips_event_without_prior_bar(self):
@@ -1323,9 +1321,7 @@ class TestProjectEarnings:
             "2026-04-30", "2026-01-29"
         ]
         first = result["quarterly"][0]
-        # (2.01 - 1.95) / 1.95 = 0.0308
         assert first["eps_surprise_pct"] == "0.0308"
-        # (111 - 109) / 109 = 0.0183
         assert first["revenue_surprise_pct"] == "0.0183"
 
     def test_actuals_limit_respected(self):
@@ -1352,7 +1348,6 @@ class TestProjectEarnings:
 
         assert result["quarterly"][0]["price_move_pct"] == "0.05"
         assert result["quarterly"][1]["price_move_pct"] == "-0.03"
-        # Average of absolute moves: (0.05 + 0.03) / 2 = 0.04
         assert result["avg_post_earnings_move_pct"] == "0.04"
         assert result["events_measured"] == 2
 

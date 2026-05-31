@@ -387,7 +387,8 @@ class MarketDataService:
         report_dates = [
             parsed
             for row in earnings_rows
-            if (parsed := _parse_iso_date(row.get("date"))) is not None
+            if row.get("epsActual") is not None
+            and (parsed := _parse_iso_date(row.get("date"))) is not None
         ]
         reactions = compute_earnings_reactions(report_dates, bars)
         return project_earnings(
