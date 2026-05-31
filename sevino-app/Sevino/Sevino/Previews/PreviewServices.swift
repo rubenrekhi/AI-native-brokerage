@@ -159,6 +159,7 @@ final class PreviewNoopFundingService: FundingServiceProtocol, @unchecked Sendab
         direction _: TransferDirection
     ) async throws -> TransferResponse { throw PreviewUnimplemented() }
     func listTransfers() async throws -> [TransferResponse] { [] }
+    func listDividends(limit _: Int, offset _: Int) async throws -> [DividendResponse] { [] }
     func getCashInterest() async throws -> CashInterestResponse {
         CashInterestResponse(
             balance: "0",
