@@ -427,9 +427,12 @@ class TestHappyPath:
         assert request_system[0]["type"] == "text"
         assert request_system[0]["cache_control"] == {"type": "ephemeral"}
 
-    async def test_digest_card_is_sent_as_system_context(
+    async def test_digest_card_reaches_model_as_context_hint(
         self, fixture, chat_client
     ):
+        # SEV-615 B: a digest card rides the unified ``context`` channel
+        # (``kind=digest``). Its content reaches the model via the
+        # ``DigestContextBlock`` hint on the user turn — not the system prompt.
         anthropic_stub = _stub_client(_stub_response(text="card-aware answer"))
         _install_anthropic(anthropic_stub)
         digest_card = {
@@ -445,21 +448,24 @@ class TestHappyPath:
             json={
                 "message": "what changed?",
                 "idempotency_key": "digest-key",
-                "digest_card": digest_card,
+                "context": {"kind": "digest", "data": digest_card},
             },
         )
 
-        request_system = anthropic_stub.messages.stream.call_args.kwargs["system"]
-        assert len(request_system) == 2
-        assert request_system[0]["cache_control"] == {"type": "ephemeral"}
-        digest_context = request_system[1]["text"]
-        assert digest_context.startswith(
-            "The user is currently viewing this digest card:\n"
+        call = anthropic_stub.messages.stream.call_args.kwargs
+        # System prompt is untouched — digest is no longer injected there.
+        assert len(call["system"]) == 1
+        assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
+        # The card content rides the user turn as a hint instead. (The loop
+        # mutates ``messages`` in place, appending the assistant turn, so
+        # target the user message explicitly rather than by position.)
+        user_msg = next(m for m in call["messages"] if m["role"] == "user")
+        hint = user_msg["content"][-1]["text"]
+        assert hint.startswith(
+            "The user opened the chat from a Daily Digest card."
         )
-        assert '"id": "digest-1"' in digest_context
-        assert '"kind": "big_move"' in digest_context
-        assert '"AMD"' in digest_context
-        assert '"headline": "AMD moved 5%"' in digest_context
+        assert "big_move" in hint
+        assert "AMD moved 5%" in hint
 
 
 # ---------- request validation ----------
@@ -492,17 +498,18 @@ class TestRequestValidation:
 
         assert response.status_code == 422
 
-    async def test_digest_card_requires_kind_and_id(
-        self, fixture, chat_client
-    ):
+    async def test_unknown_context_kind_rejected(self, fixture, chat_client):
+        # The digest required-field check is gone — digest now rides the
+        # ``context`` channel where ``kind`` is the only strict-validated
+        # field (data is opaque). A garbage kind still 422s before the stream.
         _install_anthropic(_stub_client(_stub_response()))
 
         response = await chat_client.post(
             f"/v1/conversations/{fixture.conversation_id}/turns",
             json={
                 "message": "what changed?",
-                "idempotency_key": "bad-digest",
-                "digest_card": {"kind": "big_move"},
+                "idempotency_key": "bad-kind",
+                "context": {"kind": "not_a_real_kind", "data": {}},
             },
         )
 

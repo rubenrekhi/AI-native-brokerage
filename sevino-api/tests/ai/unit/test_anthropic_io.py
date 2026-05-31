@@ -255,94 +255,49 @@ class TestToAnthropicContentText:
         assert converted == [{"type": "text", "text": ""}]
 
 
-class TestToAnthropicContentContext:
-    # The synthesized wrapper prefix is the model's only signal that the
-    # JSON payload is user-supplied modal context. A typo or behavior
-    # change here silently corrupts every turn that uses ``user_context``.
-    _EXPECTED_PREFIX = (
-        "[Attached context from the user's open modal — "
-        "use this data to inform your response]\n"
-    )
+class TestToAnthropicContentDropsContext:
+    # SEV-615: ``context`` is a user attachment, not model history. The
+    # model sees it once as a short hint on the turn it arrives (built in
+    # ``initialize_turn``); replaying the frozen snapshot on every later turn
+    # would be stale and costly, so history reload drops it entirely — same
+    # policy as ``status`` / ``stock_card`` / ``thinking``.
 
-    def test_wraps_context_data_with_attached_prefix(self):
+    def test_drops_context_block(self):
         converted = to_anthropic_content(
             [
                 {
                     "type": "context",
                     "block_id": "01HXYZ",
-                    "data": {"symbol": "AAPL", "price": "150.00"},
+                    "kind": "portfolio",
+                    "data": {"equity": "12500.50"},
                 }
             ]
         )
+        assert converted == []
 
-        assert len(converted) == 1
-        assert converted[0]["type"] == "text"
-        assert converted[0]["text"].startswith(self._EXPECTED_PREFIX)
-
-    def test_json_encodes_data_payload_compactly(self):
-        # ``json.dumps(..., separators=(",", ":"))`` — no whitespace, so
-        # cache hits on the prompt prefix line up byte-for-byte across
-        # turns.
+    def test_drops_context_keeps_surrounding_text_in_order(self):
+        # A reloaded user turn carries ``[text, context]``; only the text
+        # survives. The model must not see the frozen ``data`` again.
         converted = to_anthropic_content(
             [
+                {"type": "text", "block_id": "a", "text": "what's my portfolio?"},
                 {
                     "type": "context",
-                    "data": {"a": 1, "b": 2},
-                }
+                    "block_id": "b",
+                    "kind": "portfolio",
+                    "data": {"equity": "12500.50"},
+                },
             ]
         )
-
-        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
-        assert body == '{"a":1,"b":2}'
-
-    def test_non_serializable_values_fall_through_via_default_str(self):
-        # ``default=str`` means non-JSON-serializable types (Decimal,
-        # datetime, UUID) render via ``str()`` rather than raising.
-        import uuid
-        from decimal import Decimal
-
-        uid = uuid.UUID("12345678-1234-5678-1234-567812345678")
-        converted = to_anthropic_content(
-            [
-                {
-                    "type": "context",
-                    "data": {"price": Decimal("150.50"), "id": uid},
-                }
-            ]
-        )
-
-        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
-        assert '"price":"150.50"' in body
-        assert f'"id":"{uid}"' in body
-
-    def test_missing_data_field_falls_back_to_empty_dict(self):
-        # Defensive — the loop always supplies ``data``, but the helper
-        # should not raise if it's absent.
-        converted = to_anthropic_content([{"type": "context", "block_id": "x"}])
-        body = converted[0]["text"][len(self._EXPECTED_PREFIX):]
-        assert body == "{}"
-
-    def test_mixed_text_and_context_preserve_order(self):
-        # Reload renders user text + context block in author order. The
-        # adapter must not reorder them or the model sees a different
-        # narrative.
-        converted = to_anthropic_content(
-            [
-                {"type": "text", "block_id": "a", "text": "what's AAPL?"},
-                {"type": "context", "block_id": "b", "data": {"x": 1}},
-            ]
-        )
-
-        assert len(converted) == 2
-        assert converted[0] == {"type": "text", "text": "what's AAPL?"}
-        assert converted[1]["type"] == "text"
-        assert converted[1]["text"].startswith(self._EXPECTED_PREFIX)
+        assert converted == [
+            {"type": "text", "text": "what's my portfolio?"}
+        ]
 
 
 class TestToAnthropicContentDropsUiBlocks:
     # Anthropic 400s on unknown ``type`` values. ``to_anthropic_content``
-    # should keep only ``text`` and ``context`` and drop UI-only variants
-    # (``status``, ``thinking``, ``stock_card``) before sending history
+    # should keep only ``text`` and drop every other variant (``status``,
+    # ``thinking``, ``stock_card``, ``context``) before sending history
     # back. Tool-use context is intentionally lost across turns; the
     # assistant text is sufficient continuity.
 

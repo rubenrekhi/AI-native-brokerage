@@ -19,7 +19,6 @@ mid-turn, not batched at the end.
 from __future__ import annotations
 
 import asyncio
-import json
 import time
 import uuid
 from typing import Any, Awaitable, Callable
@@ -58,6 +57,7 @@ from app.ai.transport.events import TurnStarted
 from app.repositories.conversation import (  # noqa: F401  (patched class-wide via this module path)
     ConversationRepository,
 )
+from app.schemas.conversations import AttachedContextRequest, ContextKind
 
 __all__ = ["run_agent_turn"]
 
@@ -74,14 +74,13 @@ _BREACH_TO_ERROR_CODE: dict[CapBreach, ErrorCode] = {
 _DEFAULT_CANCELLATION_REASON = "client_disconnect"
 
 
-def _render_digest_card_system_context(digest_card: dict[str, Any]) -> str:
-    payload = json.dumps(digest_card, indent=2, default=str)
-    return "The user is currently viewing this digest card:\n" + payload
-
-
 def _digest_card_context_source(
     digest_card: dict[str, Any] | None,
 ) -> dict[str, str | None] | None:
+    """Derive the chat ``card_context_source`` ({symbol, kind}) from a digest
+    card. Sourced from the unified ``context`` attachment (``kind=digest``);
+    the card content reaches the model via ``DigestContextBlock.render_hint``,
+    while this drives the client-side source chip on ``TurnStarted``."""
     if digest_card is None:
         return None
 
@@ -110,8 +109,7 @@ async def run_agent_turn(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_message: str,
-    user_context: dict[str, Any] | None = None,
-    digest_card: dict[str, Any] | None = None,
+    user_context: AttachedContextRequest | None = None,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
@@ -176,7 +174,16 @@ async def run_agent_turn(
 
         # Emitted here (not in ``initialize_turn``) so that a cancel on
         # this await still leaves ``turn_id`` set in the outer scope —
-        # the outer finally relies on it to finalise the row.
+        # the outer finally relies on it to finalise the row. A digest
+        # attachment (``context`` with ``kind=digest``) still drives the
+        # client-side source chip; its card content reaches the model via
+        # ``DigestContextBlock.render_hint`` (SEV-615), not the system prompt.
+        digest_card = (
+            user_context.data
+            if user_context is not None
+            and user_context.kind is ContextKind.DIGEST
+            else None
+        )
         await sse_emitter.emit(
             TurnStarted(
                 turn_id=turn_id,
@@ -195,15 +202,6 @@ async def run_agent_turn(
                 "cache_control": {"type": "ephemeral"},
             }
         ]
-        if digest_card is not None:
-            # View-state context for this request only; unlike user_context,
-            # it is intentionally not appended to the persisted transcript.
-            request_system.append(
-                {
-                    "type": "text",
-                    "text": _render_digest_card_system_context(digest_card),
-                }
-            )
 
         # ``turn_id.hex`` is the 32-char lowercase form W3C trace context
         # requires, so a Langfuse trace looks up directly by

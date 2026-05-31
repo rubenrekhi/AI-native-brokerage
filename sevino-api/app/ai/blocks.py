@@ -1,6 +1,8 @@
 """Block schemas streamed via SSE and persisted to ``messages.content_blocks``.
 
-Mirrors the iOS ``enum Block``.
+Mirrors the iOS ``enum Block``. Persisted user-attachment context blocks
+(input-only, never streamed, never replayed) live in ``app.ai.context_blocks``
+— not in this ``Block`` union (see SEV-615).
 """
 
 from __future__ import annotations

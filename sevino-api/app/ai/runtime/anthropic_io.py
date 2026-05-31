@@ -13,7 +13,6 @@ the ``thinking_tokens`` audit column.
 
 from __future__ import annotations
 
-import json
 from typing import Any, Final
 
 __all__ = [
@@ -54,30 +53,22 @@ def scrub_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
 def to_anthropic_content(
     content_blocks: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Strip Sevino-only fields before sending history back to Anthropic.
+    """Keep only ``text`` blocks before sending history back to Anthropic.
 
-    Drops the ``block_id`` we add for iOS correlation and UI-only variants
-    (``status``, ``stock_card``, ``thinking``) — Anthropic 400s on unknown
-    types. Tool-use context is lost across turns; the assistant text is
-    sufficient continuity.
+    Drops the ``block_id`` we add for iOS correlation and every UI-only /
+    input-only variant (``status``, ``stock_card``, ``thinking``, ``context``)
+    — Anthropic 400s on unknown types. ``context`` is a user attachment that
+    is never replayed: the model already saw it as a short hint (the
+    attachment's ``render_hint`` in ``app.ai.context_blocks``) on the
+    turn it arrived, so re-sending the frozen snapshot every later turn would
+    be stale and costly (SEV-615). Tool-use context is also lost across turns;
+    the assistant text is sufficient continuity.
     """
-    converted: list[dict[str, Any]] = []
-    for block in content_blocks:
-        if block.get("type") == "text":
-            converted.append({"type": "text", "text": block.get("text", "")})
-        elif block.get("type") == "context":
-            data = block.get("data", {})
-            converted.append(
-                {
-                    "type": "text",
-                    "text": (
-                        "[Attached context from the user's open modal — "
-                        "use this data to inform your response]\n"
-                        + json.dumps(data, separators=(",", ":"), default=str)
-                    ),
-                }
-            )
-    return converted
+    return [
+        {"type": "text", "text": block.get("text", "")}
+        for block in content_blocks
+        if block.get("type") == "text"
+    ]
 
 
 def estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:

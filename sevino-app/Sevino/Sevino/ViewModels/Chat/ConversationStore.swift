@@ -137,20 +137,31 @@ final class ConversationStore {
     /// still sees the rest of the transcript around the bad row.
     /// Reuses the cached `encoder`/`blockDecoder` from `self` so a 50-
     /// message resume doesn't allocate a hundred fresh coders.
+    ///
+    /// The persisted `ContextBlock` (`type: "context"`) is a user attachment,
+    /// not a streamed `Block` variant, so it's intercepted before the `Block`
+    /// decoder rejects it and mapped onto `Message.attachedContext` — that
+    /// re-renders the chip on resume (SEV-615). An unknown kind / malformed
+    /// payload leaves the chip nil but keeps the rest of the message.
     private func buildMessage(from dto: MessageDTO) -> Message {
         let role = Role(rawValue: dto.role) ?? .assistant
-        let blocks: [Block] = dto.contentBlocks.compactMap { raw in
+        var attachedContext: AttachedContext?
+        var blocks: [Block] = []
+        for raw in dto.contentBlocks {
+            if case .object(let obj) = raw, case .string("context")? = obj["type"] {
+                attachedContext = AttachedContext.fromPersisted(raw, encoder: encoder)
+                continue
+            }
             do {
                 let data = try encoder.encode(raw)
-                return try blockDecoder.decode(Block.self, from: data)
+                blocks.append(try blockDecoder.decode(Block.self, from: data))
             } catch {
                 #if DEBUG
                 Self.logger.error("resume: dropped malformed block: \(String(describing: error), privacy: .public)")
                 #endif
-                return nil
             }
         }
-        return Message(id: dto.id, role: role, blocks: blocks)
+        return Message(id: dto.id, role: role, blocks: blocks, attachedContext: attachedContext)
     }
 
     /**
@@ -186,12 +197,18 @@ final class ConversationStore {
         )
         messages.append(userMessage)
 
+        // SEV-615 B: a digest card rides the unified `context` channel as
+        // `kind=digest` (its payload is the opaque `data`), instead of a
+        // separate `digest_card` field. The source chip still renders from
+        // the locally-derived `pendingCardContextSource`.
         pendingCardContextSource = digestCard.flatMap(CardContextSource.init)
+        let effectiveContext: [String: JSONValue]? = digestCard.map { card in
+            ["kind": .string("digest"), "data": .object(card.payload)]
+        } ?? context
 
         let request = try buildRequest(
             message: text,
-            context: context,
-            digestCard: digestCard,
+            context: effectiveContext,
             idempotencyKey: idempotencyKey ?? idempotencyKeyFactory()
         )
         state = .streaming
@@ -375,7 +392,6 @@ final class ConversationStore {
     private func buildRequest(
         message: String,
         context: [String: JSONValue]?,
-        digestCard: ChatDigestCard?,
         idempotencyKey: String
     ) throws -> URLRequest {
         let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/turns"
@@ -388,7 +404,6 @@ final class ConversationStore {
         let body = TurnRequestBody(
             message: message,
             context: context,
-            digestCard: digestCard,
             idempotencyKey: idempotencyKey
         )
         request.httpBody = try requestEncoder.encode(body)
@@ -397,17 +412,16 @@ final class ConversationStore {
 }
 
 /// Wire body for `POST /v1/conversations/{id}/turns`. Mirrors
-/// `app/schemas/conversations.py:ChatTurnRequest`.
+/// `app/schemas/conversations.py:ChatTurnRequest`. Digest cards ride `context`
+/// as `kind=digest` (SEV-615 B), so there is no separate `digest_card` field.
 private struct TurnRequestBody: Encodable {
     let message: String
     let context: [String: JSONValue]?
-    let digestCard: ChatDigestCard?
     let idempotencyKey: String
 
     private enum CodingKeys: String, CodingKey {
         case message
         case context
-        case digestCard = "digest_card"
         case idempotencyKey = "idempotency_key"
     }
 }

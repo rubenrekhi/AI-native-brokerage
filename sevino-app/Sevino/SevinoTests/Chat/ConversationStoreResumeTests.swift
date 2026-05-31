@@ -125,6 +125,158 @@ final class ConversationStoreResumeTests: XCTestCase {
         XCTAssertEqual(text.text, "real reply")
     }
 
+    // MARK: - Attached context chip (SEV-615)
+
+    func testResumeRestoresPortfolioContextChip() async throws {
+        // A persisted `ContextBlock` carries snake_case `data` keys; resume
+        // must rebuild the chip (not render the block) and survive the
+        // response decoder's snake→camel key conversion.
+        let json = """
+        {
+          "items": [
+            {
+              "id": "\(UUID().uuidString)",
+              "role": "user",
+              "created_at": "2026-05-11T20:00:00Z",
+              "content_blocks": [
+                {"type": "text", "block_id": "u1", "text": "how am I doing?"},
+                {"type": "context", "block_id": "c1", "kind": "portfolio",
+                 "data": {"equity": "12500.50", "currency": "USD",
+                          "gain_abs": "350.25", "gain_pct": "0.0288",
+                          "time_range": "1M"}}
+              ]
+            }
+          ],
+          "next_cursor": null
+        }
+        """
+        let api = MockAPIClient()
+        api.responseToReturn = try decodeDTO(from: json)
+
+        let store = makeStore(api: api)
+        try await store.load()
+
+        XCTAssertEqual(store.messages.count, 1)
+        let message = store.messages[0]
+        // The context block is intercepted, not rendered as a Block.
+        XCTAssertEqual(message.blocks.count, 1, "context block must not render as a Block")
+        guard case .text(let text) = message.blocks.first else {
+            return XCTFail("expected the user text block to survive")
+        }
+        XCTAssertEqual(text.text, "how am I doing?")
+        XCTAssertEqual(
+            message.attachedContext,
+            .portfolio(
+                equity: Decimal(string: "12500.50")!,
+                currency: "USD",
+                gainAbs: Decimal(string: "350.25")!,
+                gainPct: Decimal(string: "0.0288")!,
+                timeRange: "1M"
+            )
+        )
+    }
+
+    func testResumeRestoresHoldingsChipWithOptionalUnrealizedPl() async throws {
+        // `unrealized_pl` is sent only when non-nil — the resume decoder must
+        // tolerate the field being absent on some rows.
+        let json = """
+        {
+          "items": [
+            {
+              "id": "\(UUID().uuidString)",
+              "role": "user",
+              "created_at": "2026-05-11T20:00:00Z",
+              "content_blocks": [
+                {"type": "context", "block_id": "c1", "kind": "holdings",
+                 "data": {"holdings": [
+                   {"ticker": "AAPL", "market_value": "5400", "unrealized_pl": "320"},
+                   {"ticker": "MSFT", "market_value": "3200"}
+                 ]}}
+              ]
+            }
+          ],
+          "next_cursor": null
+        }
+        """
+        let api = MockAPIClient()
+        api.responseToReturn = try decodeDTO(from: json)
+
+        let store = makeStore(api: api)
+        try await store.load()
+
+        XCTAssertEqual(store.messages[0].blocks.count, 0)
+        XCTAssertEqual(
+            store.messages[0].attachedContext,
+            .holdings(holdings: [
+                HoldingSummary(ticker: "AAPL", marketValue: 5400, unrealizedPl: 320),
+                HoldingSummary(ticker: "MSFT", marketValue: 3200, unrealizedPl: nil),
+            ])
+        )
+    }
+
+    func testResumeUnknownContextKindDropsChipButKeepsMessage() async throws {
+        // BE-first rollout safety: an older client (or a future kind) drops
+        // the chip gracefully and still renders the rest of the message.
+        let json = """
+        {
+          "items": [
+            {
+              "id": "\(UUID().uuidString)",
+              "role": "user",
+              "created_at": "2026-05-11T20:00:00Z",
+              "content_blocks": [
+                {"type": "context", "block_id": "c1", "kind": "future_kind", "data": {}},
+                {"type": "text", "block_id": "u1", "text": "still here"}
+              ]
+            }
+          ],
+          "next_cursor": null
+        }
+        """
+        let api = MockAPIClient()
+        api.responseToReturn = try decodeDTO(from: json)
+
+        let store = makeStore(api: api)
+        try await store.load()
+
+        XCTAssertNil(store.messages[0].attachedContext)
+        XCTAssertEqual(store.messages[0].blocks.count, 1)
+        guard case .text(let text) = store.messages[0].blocks.first else {
+            return XCTFail("expected the text block to survive")
+        }
+        XCTAssertEqual(text.text, "still here")
+    }
+
+    func testResumeMalformedContextDataDropsChipButKeepsMessage() async throws {
+        // Valid kind, but the per-kind `data` shape is incomplete (missing
+        // required portfolio fields) → chip nil, message preserved.
+        let json = """
+        {
+          "items": [
+            {
+              "id": "\(UUID().uuidString)",
+              "role": "user",
+              "created_at": "2026-05-11T20:00:00Z",
+              "content_blocks": [
+                {"type": "context", "block_id": "c1", "kind": "portfolio",
+                 "data": {"equity": "100"}},
+                {"type": "text", "block_id": "u1", "text": "hi"}
+              ]
+            }
+          ],
+          "next_cursor": null
+        }
+        """
+        let api = MockAPIClient()
+        api.responseToReturn = try decodeDTO(from: json)
+
+        let store = makeStore(api: api)
+        try await store.load()
+
+        XCTAssertNil(store.messages[0].attachedContext)
+        XCTAssertEqual(store.messages[0].blocks.count, 1)
+    }
+
     // MARK: - Error path
 
     func testLoadFailureParksStateInErrorAndRethrows() async {

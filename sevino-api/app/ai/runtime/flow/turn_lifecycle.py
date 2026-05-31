@@ -18,6 +18,7 @@ from typing import Any
 import structlog
 from ulid import ULID
 
+from app.ai.context_blocks import ContextBlock, build_context_block
 from app.ai.prompts import SystemPrompt
 from app.ai.runtime.anthropic_io import to_anthropic_content
 from app.ai.runtime.db import DbSessionFactory
@@ -26,6 +27,7 @@ from app.ai.runtime.types import ModelConfig
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import Error, TurnCompleted
 from app.repositories.conversation import ConversationRepository
+from app.schemas.conversations import AttachedContextRequest
 
 __all__ = [
     "TurnTotals",
@@ -69,7 +71,7 @@ async def initialize_turn(
     user_id: uuid.UUID,
     conversation_id: uuid.UUID,
     user_message: str,
-    user_context: dict[str, Any] | None,
+    user_context: AttachedContextRequest | None,
     system_prompt: SystemPrompt,
     model_config: ModelConfig,
     db_factory: DbSessionFactory,
@@ -83,6 +85,14 @@ async def initialize_turn(
 
     Persists the user message first so a crash mid-turn doesn't lose the
     user's input. ``block_id`` is required for the iOS resume decoder.
+
+    An attached ``user_context`` drives two decoupled channels (SEV-615):
+    the persisted ``ContextBlock`` (UI chip, restored on resume) and a
+    short ``render_hint`` describing the open screen, appended to the current
+    turn's messages (model input, this turn only). Only a whitelisted,
+    non-stale field (the chart's selected range) is projected into the hint;
+    the rest of ``data`` is never sent to the model, and the block is never
+    replayed — ``to_anthropic_content`` drops it from history.
     """
     async with db_factory() as db:
         content_blocks: list[dict[str, Any]] = [
@@ -92,14 +102,14 @@ async def initialize_turn(
                 "text": user_message,
             }
         ]
-        if user_context:
-            content_blocks.append(
-                {
-                    "type": "context",
-                    "block_id": str(ULID()),
-                    "data": user_context,
-                }
+        ctx_block: ContextBlock | None = None
+        if user_context is not None:
+            ctx_block = build_context_block(
+                block_id=str(ULID()),
+                kind=user_context.kind,
+                data=user_context.data,
             )
+            content_blocks.append(ctx_block.model_dump(mode="json"))
         user_msg = await ConversationRepository.append_user_message(
             db,
             conversation_id=conversation_id,
@@ -113,6 +123,14 @@ async def initialize_turn(
         {"role": m.role, "content": to_anthropic_content(m.content_blocks)}
         for m in history
     ]
+
+    # Model channel, current turn only: build the attachment's hint and
+    # append it to the just-persisted user message (``messages[-1]``). The
+    # hint is ``kind``-driven and projects only a whitelisted ``data`` field.
+    if ctx_block is not None:
+        messages[-1]["content"].append(
+            {"type": "text", "text": ctx_block.render_hint()}
+        )
 
     async with db_factory() as db:
         turn = await ConversationRepository.start_agent_turn(

@@ -14,6 +14,7 @@ and the helper drains it after the loop returns.
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -61,6 +62,7 @@ from app.ai.transport.events import (
     TurnCompleted,
     TurnStarted,
 )
+from app.schemas.conversations import AttachedContextRequest, ContextKind
 
 MODEL_ID = "claude-sonnet-4-6"
 SYSTEM_PROMPT = SystemPrompt(text="you are sevino", hash="hash-abc")
@@ -324,8 +326,7 @@ async def _run(
     hard_caps: HardCaps | None = None,
     tool_registry: ToolRegistry | None = None,
     user_message: str = "hello",
-    user_context: dict[str, Any] | None = None,
-    digest_card: dict[str, Any] | None = None,
+    user_context: AttachedContextRequest | None = None,
     langfuse: Any = None,
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
@@ -360,8 +361,6 @@ async def _run(
         kwargs["server_tools_config"] = server_tools_config
     if user_context is not None:
         kwargs["user_context"] = user_context
-    if digest_card is not None:
-        kwargs["digest_card"] = digest_card
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -454,41 +453,62 @@ class TestHappyPath:
         assert kwargs["cost_usd_micros"] > 0
         assert kwargs["latency_ms"] is not None
 
-    async def test_digest_card_is_appended_to_system_context(self, repo_mocks):
-        client = _make_client(_make_response(text="answer"))
+    async def test_digest_context_injects_card_content_hint_not_system_prompt(
+        self, repo_mocks
+    ):
+        # SEV-615 B: a digest card rides the unified ``context`` channel
+        # (``kind=digest``). Its content reaches the model via the
+        # ``DigestContextBlock`` hint on the *current turn* — not the system
+        # prompt — and ``card_context_source`` is still derived for the chip.
         digest_card = {
             "id": "digest-1",
             "kind": "big_move",
             "related_symbols": ["AMD"],
             "card_context": {"headline": "AMD moved 5%"},
         }
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "what changed?"},
+                {
+                    "type": "context",
+                    "block_id": "c",
+                    "kind": "digest",
+                    "data": digest_card,
+                },
+            )
+        ]
+        client = _make_client(_make_response(text="answer"))
+        captured = _capture_messages(client)
 
-        _, events = await _run(client, repo_mocks, digest_card=digest_card)
+        _, events = await _run(
+            client,
+            repo_mocks,
+            user_message="what changed?",
+            user_context=AttachedContextRequest(
+                kind=ContextKind.DIGEST, data=digest_card
+            ),
+        )
 
+        # System prompt is untouched — no digest injection there.
         kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
         assert kwargs["request_system"] == [
             {
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
-            },
-            {
-                "type": "text",
-                "text": (
-                    "The user is currently viewing this digest card:\n"
-                    "{\n"
-                    '  "id": "digest-1",\n'
-                    '  "kind": "big_move",\n'
-                    '  "related_symbols": [\n'
-                    '    "AMD"\n'
-                    "  ],\n"
-                    '  "card_context": {\n'
-                    '    "headline": "AMD moved 5%"\n'
-                    "  }\n"
-                    "}"
-                ),
-            },
+            }
         ]
+
+        # The card content rides the current turn's user message instead.
+        hint = captured["messages"][-1]["content"][-1]
+        assert hint["type"] == "text"
+        assert hint["text"].startswith(
+            "The user opened the chat from a Daily Digest card."
+        )
+        assert "big_move" in hint["text"]
+        assert "AMD moved 5%" in hint["text"]
+
+        # The source chip still resolves from the digest context.
         started = events[0]
         assert isinstance(started, TurnStarted)
         assert started.card_context_source == {
@@ -2802,20 +2822,63 @@ class TestAnthropicServerTools:
         assert status_blocks[0]["state"] == "failed"
 
 
-# ---------- user_context end-to-end ----------
+# ---------- user_context: two decoupled channels (SEV-615) ----------
+
+
+def _history_user_msg(*content_blocks: dict[str, Any]) -> Any:
+    """A persisted user ``Message`` stand-in for ``load_history`` mocks.
+
+    ``initialize_turn`` reloads history to build ``messages``; the current
+    turn is always its newest row, so faithful tests echo the just-persisted
+    blocks back here rather than the default empty list.
+    """
+    return type(
+        "M", (), {"role": "user", "content_blocks": list(content_blocks)}
+    )()
+
+
+def _capture_messages(client: Any) -> dict[str, Any]:
+    """Snapshot the ``messages`` arg of the *first* ``messages.stream`` call.
+
+    The loop appends assistant turns after the response returns, so capturing
+    at call time is the only way to see exactly what the model received.
+    """
+    captured: dict[str, Any] = {}
+    original_stream = client.messages.stream
+
+    def capture(**kwargs: Any) -> Any:
+        if "messages" not in captured:
+            captured["messages"] = [
+                {"role": m["role"], "content": list(m["content"])}
+                for m in kwargs["messages"]
+            ]
+        return original_stream(**kwargs)
+
+    client.messages.stream = MagicMock(side_effect=capture)
+    return captured
 
 
 class TestUserContext:
-    # ``user_context`` flows: caller passes a dict → ``initialize_turn``
-    # persists a ``context`` block alongside the user-text block → on a
-    # follow-up turn ``to_anthropic_content`` synthesises a wrapper text
-    # block from the persisted JSON. The wrapper prefix is the model's
-    # only signal that the JSON is contextual — any drift here silently
-    # corrupts model reasoning.
+    # SEV-615: ``user_context`` drives two decoupled channels.
+    #   UI channel    — a typed ``ContextBlock`` persisted in
+    #                    ``content_blocks`` (restores the chip on resume).
+    #   Model channel — a short ``render_hint`` appended to the current
+    #                    turn's messages; ``kind``-driven plus a whitelisted
+    #                    non-stale field (the portfolio chart's range), never
+    #                    the frozen numeric ``data``, never replayed later.
 
-    async def test_persists_context_block_after_text_block(self, repo_mocks):
+    async def test_persists_typed_context_block_after_text_block(
+        self, repo_mocks
+    ):
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "what's this?"}
+            )
+        ]
         client = _make_client(_make_response())
-        ctx = {"symbol": "AAPL", "modal": "ticker_detail"}
+        ctx = AttachedContextRequest(
+            kind=ContextKind.PORTFOLIO, data={"equity": "12500.50"}
+        )
 
         await _run(
             client, repo_mocks, user_message="what's this?", user_context=ctx
@@ -2826,12 +2889,13 @@ class TestUserContext:
         assert len(blocks) == 2
         assert blocks[0]["type"] == "text"
         assert blocks[0]["text"] == "what's this?"
-        # Context block carries the raw payload — wrapping happens on
-        # reload via ``to_anthropic_content``, not at persist time.
+        # The persisted block is the typed ``ContextBlock`` dump: ``kind``
+        # is the plain enum *value* (not the enum repr) and ``data`` rides
+        # through opaque for the iOS chip.
         assert blocks[1]["type"] == "context"
-        assert blocks[1]["data"] == ctx
-        # Both blocks must carry server-minted ULIDs so iOS resume can
-        # correlate them with later streamed events.
+        assert blocks[1]["kind"] == "portfolio"
+        assert blocks[1]["data"] == {"equity": "12500.50"}
+        # Both blocks carry server-minted ULIDs for iOS resume correlation.
         assert isinstance(blocks[0]["block_id"], str) and blocks[0]["block_id"]
         assert isinstance(blocks[1]["block_id"], str) and blocks[1]["block_id"]
         assert blocks[0]["block_id"] != blocks[1]["block_id"]
@@ -2848,77 +2912,121 @@ class TestUserContext:
         assert len(blocks) == 1
         assert blocks[0]["type"] == "text"
 
-    async def test_no_context_block_when_user_context_empty_dict(
+    async def test_context_block_persisted_even_with_empty_data(
         self, repo_mocks
     ):
-        # ``if user_context:`` falsiness guard — empty dict shouldn't
-        # persist a context block, since the wrapper would attach a "{}"
-        # payload that confuses the model.
+        # The guard is ``user_context is not None`` — an attachment with
+        # empty ``data`` is still a valid attachment (hint + chip are
+        # ``kind``-driven), so it persists a context block.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "hello"}
+            )
+        ]
         client = _make_client(_make_response())
+        ctx = AttachedContextRequest(kind=ContextKind.RADAR)
 
-        await _run(client, repo_mocks, user_message="hello", user_context={})
+        await _run(client, repo_mocks, user_message="hello", user_context=ctx)
 
         kwargs = repo_mocks["append_user_message"].call_args.kwargs
         blocks = kwargs["content_blocks"]
-        assert len(blocks) == 1
+        assert len(blocks) == 2
+        assert blocks[1]["type"] == "context"
+        assert blocks[1]["kind"] == "radar"
+        assert blocks[1]["data"] == {}
 
-    async def test_history_reload_wraps_context_with_attached_prefix(
+    async def test_current_turn_injects_kind_hint_after_user_text(
         self, repo_mocks
     ):
-        # When a prior turn's ``context`` block is reloaded from history,
-        # the loop synthesises a wrapper text block with the canonical
-        # "[Attached context from the user's open modal — use this data
-        # to inform your response]" prefix. The model receives this in
-        # ``messages``; anything other than the exact prefix would change
-        # its instructions.
-        prior_user = type(
-            "M",
-            (),
-            {
-                "role": "user",
-                "content_blocks": [
-                    {"type": "text", "block_id": "x", "text": "what's AAPL"},
-                    {
-                        "type": "context",
-                        "block_id": "y",
-                        "data": {"symbol": "AAPL"},
-                    },
-                ],
-            },
-        )()
-        repo_mocks["load_history"].return_value = [prior_user]
+        # Model channel: the current turn's user message gets the short hint
+        # appended after the user text. The portfolio hint surfaces the
+        # whitelisted ``time_range`` ("1M" -> "1-month") but never the frozen
+        # ``equity`` snapshot, which would be stale.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "how am I doing?"},
+                {
+                    "type": "context",
+                    "block_id": "c",
+                    "kind": "portfolio",
+                    "data": {"equity": "12500.50", "time_range": "1M"},
+                },
+            )
+        ]
         client = _make_client(_make_response())
+        captured = _capture_messages(client)
 
-        # Snapshot ``messages`` at call time — the loop appends the
-        # assistant response after the call returns, so the post-call
-        # reference would show 2 messages instead of 1.
-        captured: dict[str, Any] = {}
-        original_stream = client.messages.stream
+        await _run(
+            client,
+            repo_mocks,
+            user_message="how am I doing?",
+            user_context=AttachedContextRequest(
+                kind=ContextKind.PORTFOLIO,
+                data={"equity": "12500.50", "time_range": "1M"},
+            ),
+        )
 
-        def capture_messages(**kwargs: Any) -> Any:
-            captured["messages"] = [dict(m) for m in kwargs["messages"]]
-            return original_stream(**kwargs)
+        user_blocks = captured["messages"][-1]["content"]
+        assert user_blocks[0] == {"type": "text", "text": "how am I doing?"}
+        assert user_blocks[-1] == {
+            "type": "text",
+            "text": (
+                "The user is currently viewing their portfolio, with the "
+                "value chart set to the 1-month range. This screen shows "
+                "their total account value and the gain or loss over that "
+                "range on an interactive value-over-time chart. Their message "
+                "may be referring to a figure, trend, or the selected period "
+                "shown here."
+            ),
+        }
+        # The selected range is surfaced; the frozen snapshot value is not.
+        assert "1-month" in json.dumps(captured["messages"])
+        assert "12500.50" not in json.dumps(captured["messages"])
 
-        client.messages.stream = MagicMock(side_effect=capture_messages)
+    async def test_no_hint_injected_when_user_context_none(self, repo_mocks):
+        # Without an attachment the current turn carries only the user text.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "plain question"}
+            )
+        ]
+        client = _make_client(_make_response())
+        captured = _capture_messages(client)
 
+        await _run(client, repo_mocks, user_message="plain question")
+
+        assert captured["messages"][-1]["content"] == [
+            {"type": "text", "text": "plain question"}
+        ]
+
+    async def test_reloaded_context_block_is_not_replayed(self, repo_mocks):
+        # A *prior* turn's persisted context block must not re-enter the
+        # model input on a later turn — ``to_anthropic_content`` drops it,
+        # leaving only that turn's user text.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "x", "text": "what's AAPL"},
+                {
+                    "type": "context",
+                    "block_id": "y",
+                    "kind": "holdings",
+                    "data": {"holdings": [{"ticker": "AAPL"}]},
+                },
+            )
+        ]
+        client = _make_client(_make_response())
+        captured = _capture_messages(client)
+
+        # No ``user_context`` on *this* turn → no hint; the reloaded block
+        # is dropped, leaving just the prior user text.
         await _run(client, repo_mocks)
 
-        # First Anthropic call sees the wrapped context as a text block.
         history_messages = captured["messages"]
         assert len(history_messages) == 1
-        user_blocks = history_messages[0]["content"]
-        assert len(user_blocks) == 2
-        assert user_blocks[0] == {"type": "text", "text": "what's AAPL"}
-        # The wrapped context block carries the exact prefix.
-        assert user_blocks[1]["type"] == "text"
-        expected_prefix = (
-            "[Attached context from the user's open modal — "
-            "use this data to inform your response]\n"
-        )
-        assert user_blocks[1]["text"].startswith(expected_prefix)
-        # Body is compact JSON of the data dict.
-        body = user_blocks[1]["text"][len(expected_prefix):]
-        assert body == '{"symbol":"AAPL"}'
+        assert history_messages[0]["content"] == [
+            {"type": "text", "text": "what's AAPL"}
+        ]
+        assert "AAPL" in history_messages[0]["content"][0]["text"]
 
 
 # ---------- non-error terminal stop reasons ----------
