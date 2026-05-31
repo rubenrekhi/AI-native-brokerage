@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Callable
+from datetime import datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -431,6 +432,46 @@ class TestGetChart:
         }
         # Result must be cached.
         assert any(c[0] == "market:chart:AAPL:1M" for c in redis.set_calls)
+
+    async def test_get_stock_bars_passes_explicit_window(self):
+        captured: dict = {}
+
+        def alpaca_handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json={
+                    "bars": [
+                        {
+                            "t": "2026-05-29T12:59:00Z",
+                            "o": 100,
+                            "h": 102,
+                            "l": 99,
+                            "c": 101,
+                            "v": 123,
+                        }
+                    ]
+                },
+            )
+
+        service, _ = _service(alpaca_handler=alpaca_handler)
+
+        result = await service.get_stock_bars(
+            " aapl ",
+            timeframe="1Min",
+            start=datetime(2026, 5, 28, 20, 0, tzinfo=timezone.utc),
+            end=datetime(2026, 5, 29, 13, 0, tzinfo=timezone.utc),
+            limit=50,
+        )
+
+        assert captured["path"] == "/v2/stocks/AAPL/bars"
+        assert captured["params"]["timeframe"] == "1Min"
+        assert captured["params"]["start"] == "2026-05-28T20:00:00+00:00"
+        assert captured["params"]["end"] == "2026-05-29T13:00:00+00:00"
+        assert captured["params"]["limit"] == "50"
+        assert result[0]["timestamp"] == "2026-05-29T12:59:00Z"
+        assert result[0]["close"] == "101"
 
     async def test_intraday_timeframe_uses_short_ttl(self):
         def alpaca_handler(request: httpx.Request) -> httpx.Response:

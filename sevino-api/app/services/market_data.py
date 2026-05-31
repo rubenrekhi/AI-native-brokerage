@@ -186,6 +186,25 @@ class MarketDataService:
         await self._cache_set(cache_key, response, ttl)
         return response
 
+    async def get_stock_bars(
+        self,
+        symbol: str,
+        *,
+        timeframe: str,
+        start: datetime,
+        end: datetime | None = None,
+        limit: int = 10000,
+    ) -> list[dict[str, Any]]:
+        """Fetch projected Alpaca stock bars for internal batch workflows."""
+        symbol = _normalize_symbol(symbol)
+        return await self._alpaca_bars(
+            symbol,
+            timeframe,
+            start=start,
+            end=end,
+            limit=limit,
+        )
+
     async def get_market_status(self) -> dict[str, Any]:
         cache_key = _MARKET_STATUS_KEY
         cached = await self._cache_get(cache_key)
@@ -302,20 +321,30 @@ class MarketDataService:
         return {"Authorization": f"Bearer {token}"}
 
     async def _alpaca_bars(
-        self, symbol: str, timeframe: str, days_back: int
+        self,
+        symbol: str,
+        timeframe: str,
+        days_back: int | None = None,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int = 10000,
     ) -> list[dict[str, Any]]:
-        start = (
-            datetime.now(timezone.utc) - timedelta(days=days_back)
-        ).isoformat()
+        if start is None:
+            if days_back is None:
+                raise ValueError("days_back or start is required")
+            start = datetime.now(timezone.utc) - timedelta(days=days_back)
         path = f"/v2/stocks/{symbol}/bars"
         params = {
             "timeframe": timeframe,
-            "start": start,
-            "limit": 10000,
+            "start": start.isoformat(),
+            "limit": limit,
             "adjustment": "split",
             "feed": "iex",
             "sort": "asc",
         }
+        if end is not None:
+            params["end"] = end.isoformat()
         body = await self._alpaca_get(
             f"{self._alpaca_data_url}{path}", params=params, log_path=path
         )
