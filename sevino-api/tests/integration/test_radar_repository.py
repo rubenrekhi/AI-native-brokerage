@@ -164,6 +164,42 @@ async def test_get_by_id_for_user_returns_none_for_unknown_id(
     assert result is None
 
 
+async def test_get_by_symbol_for_user_returns_row_when_owned(
+    db_session, test_user
+):
+    item = RadarItem(user_id=test_user, symbol="AAPL")
+    db_session.add(item)
+    await db_session.flush()
+
+    result = await RadarItemRepository.get_by_symbol_for_user(
+        db_session, test_user, "AAPL"
+    )
+    assert result is not None
+    assert result.id == item.id
+
+
+async def test_get_by_symbol_for_user_returns_none_for_other_users_symbol(
+    db_session, test_user, make_extra_user
+):
+    other_user = await make_extra_user()
+    db_session.add(RadarItem(user_id=other_user, symbol="AAPL"))
+    await db_session.flush()
+
+    result = await RadarItemRepository.get_by_symbol_for_user(
+        db_session, test_user, "AAPL"
+    )
+    assert result is None
+
+
+async def test_get_by_symbol_for_user_returns_none_for_unknown_symbol(
+    db_session, test_user
+):
+    result = await RadarItemRepository.get_by_symbol_for_user(
+        db_session, test_user, "ZZZZ"
+    )
+    assert result is None
+
+
 async def test_create_user_added_sets_favorited_no_expiry_user_source(
     db_session, test_user
 ):
@@ -283,20 +319,34 @@ async def test_delete_expired_ai_items_only_deletes_expired_non_favorited_ai_row
 
     deleted_count = await RadarItemRepository.delete_expired_ai_items(db_session)
 
-    assert deleted_count == 1
-    result = await db_session.execute(select(RadarItem.symbol))
+    # `delete_expired_ai_items` is global (sweep cron), so both its count and
+    # an unscoped read can include committed rows from other users/sessions in
+    # the shared local DB. Assert against this test's own rows: at least our
+    # expired row was swept, and exactly the right rows survive for this user.
+    assert deleted_count >= 1
+    result = await db_session.execute(
+        select(RadarItem.symbol).where(RadarItem.user_id == test_user)
+    )
     remaining = set(result.scalars().all())
     assert remaining == {"FRESH_AI", "FAV_AI", "USER_ADDED", "USER_ADDED_DRIFT"}
 
 
-async def test_delete_expired_ai_items_returns_zero_when_no_match(
+async def test_delete_expired_ai_items_leaves_unexpired_ai_rows(
     db_session, test_user
 ):
-    await RadarItemRepository.create_ai_item(
+    item = await RadarItemRepository.create_ai_item(
         db_session, user_id=test_user, symbol="NVDA", company_name="NVIDIA Corp.",
     )
 
-    assert await RadarItemRepository.delete_expired_ai_items(db_session) == 0
+    await RadarItemRepository.delete_expired_ai_items(db_session)
+
+    # The user's fresh AI row (default 7d expiry) doesn't match the sweep, so
+    # it survives. Assert survival (scoped) rather than a global delete count
+    # of 0 — committed rows from other sessions in the shared local DB, or a
+    # leaked AI row that has since aged past its expiry, would break `== 0`.
+    assert await RadarItemRepository.get_by_id_for_user(
+        db_session, item.id, test_user
+    ) is not None
 
 
 async def test_create_ai_item_accepts_bucket_and_expires_at_override(
@@ -342,7 +392,13 @@ async def test_delete_unfavorited_ai_drops_only_unfavorited_ai_rows_for_user(
     )
     assert deleted == 2
 
-    result = await db_session.execute(select(RadarItem.symbol))
+    # Scope to the two users this test created — an unscoped read would pick
+    # up committed rows from other users/sessions sharing the local DB.
+    result = await db_session.execute(
+        select(RadarItem.symbol).where(
+            RadarItem.user_id.in_([test_user, other_user])
+        )
+    )
     remaining = set(result.scalars().all())
     assert remaining == {
         "KEEP_FAV_AI",

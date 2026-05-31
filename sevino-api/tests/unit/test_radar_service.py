@@ -449,3 +449,133 @@ async def test_toggle_unfavorite_ai_generated_resets_expires_at(monkeypatch):
     # expires_at lands in [before + 7d, after + 7d].
     assert item.expires_at is not None
     assert before + timedelta(days=7) <= item.expires_at <= after + timedelta(days=7)
+
+
+async def test_remove_by_symbol_deletes_and_returns_true(monkeypatch):
+    item = _make_radar_item(is_favorited=True)
+    deleted: list[RadarItem] = []
+
+    async def fake_get_by_symbol_for_user(db, user_id, symbol):
+        return item
+
+    async def fake_delete(db, target):
+        deleted.append(target)
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_symbol_for_user",
+        fake_get_by_symbol_for_user,
+    )
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.delete", fake_delete
+    )
+
+    result = await RadarService(AsyncMock(), AsyncMock()).remove_user_item_by_symbol(
+        uuid4(), "AAPL"
+    )
+
+    assert result is True
+    assert deleted == [item]
+
+
+async def test_remove_by_symbol_returns_false_when_absent(monkeypatch):
+    delete_called = False
+
+    async def fake_get_by_symbol_for_user(db, user_id, symbol):
+        return None
+
+    async def fake_delete(db, target):
+        nonlocal delete_called
+        delete_called = True
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_symbol_for_user",
+        fake_get_by_symbol_for_user,
+    )
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.delete", fake_delete
+    )
+
+    result = await RadarService(AsyncMock(), AsyncMock()).remove_user_item_by_symbol(
+        uuid4(), "AAPL"
+    )
+
+    assert result is False
+    assert delete_called is False
+
+
+async def test_remove_by_symbol_uppercases_before_lookup(monkeypatch):
+    captured: dict = {}
+
+    async def fake_get_by_symbol_for_user(db, user_id, symbol):
+        captured["symbol"] = symbol
+        return None
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_symbol_for_user",
+        fake_get_by_symbol_for_user,
+    )
+
+    await RadarService(AsyncMock(), AsyncMock()).remove_user_item_by_symbol(
+        uuid4(), "aapl"
+    )
+
+    assert captured["symbol"] == "AAPL"
+
+
+async def test_list_items_returns_reads_without_calling_market_data(monkeypatch):
+    rows = [_orm_row(symbol="AAPL"), _orm_row(symbol="NVDA")]
+
+    async def fake_list_for_user(db, user_id):
+        return rows
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.list_for_user",
+        fake_list_for_user,
+    )
+
+    market_data = AsyncMock()
+    result = await RadarService(market_data, AsyncMock()).list_items(uuid4())
+
+    assert [r.symbol for r in result] == ["AAPL", "NVDA"]
+    assert all(isinstance(r, RadarItemRead) for r in result)
+    # "get" never needs live quotes — the price overlay is skipped.
+    market_data.get_batch_quotes.assert_not_called()
+
+
+async def test_list_items_returns_empty_list_for_no_rows(monkeypatch):
+    async def fake_list_for_user(db, user_id):
+        return []
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.list_for_user",
+        fake_list_for_user,
+    )
+
+    result = await RadarService(AsyncMock(), AsyncMock()).list_items(uuid4())
+    assert result == []
+
+
+async def test_remove_by_symbol_deletes_ai_generated_rows_too(monkeypatch):
+    item = _make_radar_item(is_favorited=False, source="ai_generated")
+    deleted: list[RadarItem] = []
+
+    async def fake_get_by_symbol_for_user(db, user_id, symbol):
+        return item
+
+    async def fake_delete(db, target):
+        deleted.append(target)
+
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.get_by_symbol_for_user",
+        fake_get_by_symbol_for_user,
+    )
+    monkeypatch.setattr(
+        "app.services.radar.RadarItemRepository.delete", fake_delete
+    )
+
+    result = await RadarService(AsyncMock(), AsyncMock()).remove_user_item_by_symbol(
+        uuid4(), "AAPL"
+    )
+
+    assert result is True
+    assert deleted == [item]
