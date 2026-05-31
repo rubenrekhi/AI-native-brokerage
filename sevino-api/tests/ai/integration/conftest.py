@@ -13,5 +13,6 @@ from tests.integration.conftest import (  # noqa: F401
     db_engine,
     db_session,
     insert_auth_user,
+    isolate_user_profile_cron_state,
     test_user,
 )

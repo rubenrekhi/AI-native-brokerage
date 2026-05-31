@@ -296,6 +296,8 @@ async def test_orchestrator_raises_when_pool_is_too_small(
     # Skip the universe-seeding fixture — empty `assets` means the
     # candidate sourcer returns an empty pool and the orchestrator must
     # bail before calling the LLM (or writing anything).
+    await db_session.execute(text("DELETE FROM assets"))
+    await db_session.flush()
     fmp, redis = stub_fmp_and_redis
     from app.services.radar_job import RadarJobError
 

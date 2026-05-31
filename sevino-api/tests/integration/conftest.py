@@ -120,7 +120,20 @@ async def db_session(db_engine):
 
 
 @pytest.fixture
-async def test_user(db_session: AsyncSession):
+async def isolate_user_profile_cron_state(db_session: AsyncSession):
+    """Null cron-filter columns so leftover local-DB rows don't fail
+    whole-table sweeps under test. Cleared inside the rolling-back session."""
+    await db_session.execute(
+        text(
+            "UPDATE user_profiles "
+            "SET next_radar_refresh_at = NULL, last_active_at = NULL"
+        )
+    )
+    await db_session.flush()
+
+
+@pytest.fixture
+async def test_user(db_session: AsyncSession, isolate_user_profile_cron_state):
     """
     Insert a test user into auth.users and user_profiles.
 
