@@ -312,14 +312,14 @@ Useful for building activity feeds and AI context ("what happened in my account 
 
 ## Portfolio Read Endpoints (Sevino API)
 
-The three Sevino-API routes the iOS portfolio surfaces depend on. Each one wraps an Alpaca call (or two) behind a Redis cache and a non-`ACTIVE` short-circuit. For the response field-by-field contract, ticket index, and decision history, see `.context/portfolio-data/architecture.md` and `.context/portfolio-data/tickets/README.md`.
+The three Sevino-API routes the iOS portfolio surfaces depend on. Each one wraps an Alpaca call (or two) behind a non-`ACTIVE` short-circuit. `history` is additionally cached in Redis; `snapshot` and `holdings` go straight to Alpaca on every request — they reflect user-mutated state and must not lie post-trade (SEV-626).
 
 ### Routes
 
 | Route | Used by (iOS) | Alpaca calls | Cache key | TTL |
 |---|---|---|---|---|
-| `GET /v1/portfolio/snapshot` | Status-bar pill, expanded modal hero | `GET /v1/trading/accounts/{id}/account` | `portfolio:snapshot:{user_id}` | 30s |
-| `GET /v1/portfolio/holdings` | Holdings modal | `GET .../account` + `.../positions` (concurrent) | `portfolio:holdings:{user_id}` | 30s |
+| `GET /v1/portfolio/snapshot` | Status-bar pill, expanded modal hero | `GET /v1/trading/accounts/{id}/account` | — | uncached |
+| `GET /v1/portfolio/holdings` | Holdings modal | `GET .../account` + `.../positions` (concurrent) | — | uncached |
 | `GET /v1/portfolio/history?range=1M` | Performance chart | `GET .../account/portfolio/history` | `portfolio:history:{user_id}:{range}` | 60s |
 
 Routes are mounted in `app/main.py` under the `/v1/portfolio` prefix. Source: `app/routes/portfolio.py`, service `app/services/portfolio.py`.
@@ -334,17 +334,19 @@ All money / quantity / percentage fields serialize as JSON **strings**, not numb
 
 Every portfolio response model uses these aliases — never plain `Decimal`. iOS decodes via the `@DecimalString` property wrapper (`sevino-app/Sevino/Sevino/Utils/DecimalString.swift`).
 
-### Caching
+### Caching (history only)
 
-Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py` from the same `redis_url` as ARQ. The cache helper in `app/cache.py`:
+Only `GET /v1/portfolio/history` is cached. Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py` from the same `redis_url` as ARQ. The cache helper in `app/cache.py`:
 
 ```python
 async def cache_get_or_set(client: aioredis.Redis, key: str, ttl: int, fetcher: ...): ...
 ```
 
-Caches the **serialized response dict**, not the raw Alpaca response — so transformations (decimal quantization, sorting, asset-name joins) are computed once per TTL window. Malformed cache entries fall back to the fetcher (see `#506`).
+Caches the **serialized response dict**, not the raw Alpaca response — so transformations (decimal quantization, point filtering, summary stats) are computed once per TTL window. Malformed cache entries fall back to the fetcher (see `#506`).
 
-**Invalidation.** Transfer-status SSE events (`/v2/events/funding/status`, filtered to `entity_type == "Transfer"`) delete `portfolio:snapshot:{user_id}`, `portfolio:holdings:{user_id}`, and every `portfolio:history:{user_id}:{range}` key for the affected user so the iOS app sees fresh balances on the next read after a deposit/withdrawal. The 30–60s TTL is the safety net if the SSE connection drops and an event is missed. **Future:** wire SSE order fills the same way on each `fill` event.
+**Why snapshot + holdings are uncached.** They reflect user-mutated state (orders, cancels, fills, FDIC sweeps, KYC transitions). A 30s cache would surface stale `buying_power` / `cash` immediately after a trade. iOS doesn't poll, so the cache wasn't absorbing any load — only creating staleness. History is ambient (yesterday's equity doesn't change) and the per-range cache is a real win for users scrubbing through chart ranges. See SEV-626.
+
+**Invalidation.** Transfer-status SSE events (`/v2/events/funding/status`, filtered to `entity_type == "Transfer"`) delete every `portfolio:history:{user_id}:{range}` key for the affected user so the chart reflects the deposit/withdrawal on the next read. The 60s TTL is the safety net if the SSE connection drops and an event is missed.
 
 > The v1 endpoint `/v1/events/transfers/status` is deprecated for new broker partners (returns HTTP 410). Sevino uses the v2 funding-status stream, which multiplexes Transfer/BankRelationship/WireBank events and exposes `event_id` as a ULID on the top-level field (resumed with `?since_id=<ulid>`).
 

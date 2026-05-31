@@ -53,9 +53,9 @@ make migrate                           # apply pending migrations (alembic upgra
 - `services/` — business logic / external API wrappers
 - `services/alpaca_broker.py` — `AlpacaBrokerService` (OAuth2 client credentials via `authx.sandbox.alpaca.markets`); defines `AlpacaBrokerError` and `AlpacaBrokerUnavailableError`
 - `services/onboarding.py` — `OnboardingService` for incremental step saves and KYC submission
-- `services/portfolio.py` — `PortfolioService` (snapshot / holdings / history), `range_to_alpaca_params` mapper, Redis-cached responses (TTL 30/30/60s)
+- `services/portfolio.py` — `PortfolioService` (snapshot / holdings / history), `range_to_alpaca_params` mapper. Only `history` is Redis-cached (60s TTL); `snapshot` + `holdings` are uncached and call Alpaca on every request (SEV-626)
 - `dependencies/portfolio.py` — `get_alpaca_account_context` gates non-`ACTIVE` accounts with `ConflictError("ACCOUNT_NOT_ACTIVE")` (409)
-- `cache.py` — `cache_get_or_set(client, key, ttl, fetcher)` helper used by all portfolio reads
+- `cache.py` — `cache_get_or_set(client, key, ttl, fetcher)` helper used by `get_history` only (snapshot + holdings are uncached)
 - `repositories/` — data access layer (`UserProfileRepository`, `FinancialProfileRepository`, `BrokerageAccountRepository`, `AssetRepository`)
 - `schemas/_types.py` — `MoneyStr` / `QtyStr` / `PctStr` Pydantic aliases. Money/qty/pct fields serialize as JSON **strings** (not numbers) so iOS and Python share `Decimal` semantics across the wire. Never use plain `Decimal` on a portfolio response schema.
 - `schemas/onboarding.py`, `schemas/portfolio.py` — Pydantic request/response models

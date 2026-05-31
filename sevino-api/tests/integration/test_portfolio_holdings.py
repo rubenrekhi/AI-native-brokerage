@@ -1,10 +1,13 @@
 """Integration tests for GET /v1/portfolio/holdings.
 
-End-to-end behavior: auth → account-context dep → cache → Alpaca + DB
-join → response shape. Uses real local Postgres (via
-`authenticated_db_client`) but injects mock Alpaca + an in-memory fake
-Redis through FastAPI `dependency_overrides`. Auto-skipped when
-Postgres on :54322 is down.
+End-to-end behavior: auth → account-context dep → Alpaca + DB join →
+response shape. Uses real local Postgres (via `authenticated_db_client`)
+but injects a mock Alpaca + in-memory fake Redis through FastAPI
+`dependency_overrides`. Auto-skipped when Postgres on :54322 is down.
+
+Redis is still required by the service constructor (history caches
+through it), so the fake stays — it just no longer participates in the
+holdings path.
 
 Names are joined in via `AssetRepository.get_names_by_symbols`, so the
 happy-path test inserts real `assets` rows (rolled back with the
@@ -299,15 +302,15 @@ class TestHoldingsAlpacaErrors:
         assert response.json()["code"] == "ALPACA_UNAVAILABLE"
 
 
-class TestHoldingsCaching:
-    async def test_second_call_within_ttl_skips_alpaca(
+class TestHoldingsNoCache:
+    async def test_two_sequential_calls_hit_alpaca_twice(
         self,
         authenticated_db_client,
         test_brokerage_account,
         portfolio_deps,
         seed_assets,
     ):
-        alpaca_mock, fake_redis = portfolio_deps
+        alpaca_mock, _ = portfolio_deps
         alpaca_mock.list_positions.return_value = [_position("TSLA", "1500.00")]
 
         first = await authenticated_db_client.get("/v1/portfolio/holdings")
@@ -316,12 +319,8 @@ class TestHoldingsCaching:
         assert first.status_code == 200
         assert second.status_code == 200
         assert first.json() == second.json()
-        assert alpaca_mock.get_trading_account.call_count == 1
-        assert alpaca_mock.list_positions.call_count == 1
-
-        cache_key = f"portfolio:holdings:{test_brokerage_account['user_id']}"
-        cached_raw = await fake_redis.get(cache_key)
-        assert cached_raw is not None
+        assert alpaca_mock.get_trading_account.call_count == 2
+        assert alpaca_mock.list_positions.call_count == 2
 
 
 class TestHoldingsAuth:

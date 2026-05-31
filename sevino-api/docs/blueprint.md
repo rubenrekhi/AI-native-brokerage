@@ -446,20 +446,19 @@ Redis sits between the API and Alpaca for frequently accessed data. Cache keys f
 
 | Data | Cache Key Pattern | TTL | Invalidation |
 |---|---|---|---|
-| Portfolio snapshot (equity, cash, buying power, daily change) | `portfolio:snapshot:{user_id}` | 30s | TTL + SSE invalidation on transfer events (post-MVP: also on fills) |
-| Holdings (positions + cash + total) | `portfolio:holdings:{user_id}` | 30s | TTL + SSE invalidation on transfer events (post-MVP: also on fills) |
 | Portfolio history (charts) | `portfolio:history:{user_id}:{range}` | 60s | TTL + SSE invalidation on transfer events |
 | Stock quotes (planned) | `market:quote:{symbol}` | 15s | TTL only (ambient market data) |
 
-The portfolio cache helper is `cache_get_or_set()` in `app/cache.py` — it caches the **serialized response dict** (already transformed: decimal-as-string, sorted, with asset-name joins) so a cache miss recomputation is idempotent. Malformed cache entries silently fall back to the fetcher. Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py`.
+The portfolio cache helper is `cache_get_or_set()` in `app/cache.py` — it caches the **serialized response dict** (already transformed: decimal-as-string, summary stats computed) so a cache miss recomputation is idempotent. Malformed cache entries silently fall back to the fetcher. Redis client lives on `app.state.redis`, initialized in `app/lifecycle.py`.
 
 **What is NOT cached (always live):**
 
-Order submission, KYC/account creation, transfer initiation, and any write operation. These go directly to Alpaca every time.
+- Portfolio **snapshot** (`/v1/portfolio/snapshot`) and **holdings** (`/v1/portfolio/holdings`) — they reflect user-mutated state (orders, cancels, fills, FDIC sweep, KYC transitions). iOS doesn't poll, so a TTL cache would only surface stale `buying_power` / `cash` immediately after a trade without absorbing any real load (SEV-626).
+- Order submission, KYC/account creation, transfer initiation, and any write operation. These go directly to Alpaca every time.
 
 **Invalidation strategy:**
 
-Two mechanisms work together. Alpaca SSE events (see §4.3) trigger immediate cache key deletion for user-triggered state changes — when an order fills, the worker deletes the positions and account cache so the next read fetches fresh data. For ambient market data (quotes, chart history) where there's no user-triggered event, cache simply expires by TTL. The TTL also acts as a safety net if the SSE connection drops and an event is missed.
+Two mechanisms work together. Alpaca SSE events (see §4.3) trigger immediate cache key deletion for user-triggered state changes — a transfer event deletes every `portfolio:history:{user_id}:{range}` so the chart reflects the deposit/withdrawal on the next read. For ambient market data (quotes) where there's no user-triggered event, cache simply expires by TTL. The TTL also acts as a safety net if the SSE connection drops and an event is missed.
 
 ### 3.5 Connection Setup
 
@@ -901,21 +900,19 @@ The `order_events` table is our audit log — it's the authoritative record of e
 
 **Sequence:**
 
-All portfolio and market data follows the same pattern: user action → API checks Redis cache → cache miss calls Alpaca REST → cache result → return.
+Portfolio reads come in two flavors: **uncached** (snapshot, holdings — straight to Alpaca every call) and **cached** (history — Redis read-through). Market data follows the same read-through pattern as history.
 
 **Snapshot** (status bar pill, expanded modal hero):
 1. iOS calls `GET /v1/portfolio/snapshot`.
-2. API checks `portfolio:snapshot:{user_id}` cache (30s TTL).
-3. Cache miss → `GET /v1/trading/accounts/{id}/account` via `AlpacaBrokerService.get_trading_account`.
-4. Response: `account_status`, `currency`, `equity`, `last_equity`, `cash`, `buying_power`, `daily_change_abs`, `daily_change_pct` — money fields decimal-as-string. Non-`ACTIVE` accounts get 409 `ACCOUNT_NOT_ACTIVE` before reaching the service (see `alpaca-integration.md`).
-5. Used by: status bar value + daily change (FR-9.2), AI greeting (FR-4.7), force-press modal (FR-9.4).
+2. API calls `GET /v1/trading/accounts/{id}/account` via `AlpacaBrokerService.get_trading_account` (no cache — every request goes to Alpaca).
+3. Response: `account_status`, `currency`, `equity`, `last_equity`, `cash`, `buying_power`, `daily_change_abs`, `daily_change_pct` — money fields decimal-as-string. Non-`ACTIVE` accounts get 409 `ACCOUNT_NOT_ACTIVE` before reaching the service (see `alpaca-integration.md`).
+4. Used by: status bar value + daily change (FR-9.2), AI greeting (FR-4.7), force-press modal (FR-9.4).
 
 **Holdings** (user taps Holdings icon or asks AI):
 1. iOS calls `GET /v1/portfolio/holdings`.
-2. API checks `portfolio:holdings:{user_id}` cache (30s TTL).
-3. Cache miss → concurrent `GET .../account` + `GET .../positions`, then joins with `assets.name` for company names.
-4. Response: `account_status`, `currency`, `cash`, `total_market_value`, `positions[]` sorted by market value desc. Non-`ACTIVE` accounts get 409 before reaching the service.
-5. Used by: Holdings modal (FR-9.6), Portfolio Summary Card (FR-5.1), AI context (FR-4.3), concentration risk check (FR-8.10).
+2. API issues concurrent `GET .../account` + `GET .../positions` (no cache), then joins with `assets.name` for company names.
+3. Response: `account_status`, `currency`, `cash`, `total_market_value`, `positions[]` sorted by market value desc. Non-`ACTIVE` accounts get 409 before reaching the service.
+4. Used by: Holdings modal (FR-9.6), Portfolio Summary Card (FR-5.1), AI context (FR-4.3), concentration risk check (FR-8.10).
 
 **Portfolio History** (chart with time-range selector):
 1. iOS calls `GET /v1/portfolio/history?range=1M` (any of `1D|1W|1M|3M|6M|YTD|1Y|ALL`).
@@ -936,7 +933,7 @@ All portfolio and market data follows the same pattern: user action → API chec
 1. `GET /v2/stocks/snapshots?symbols=VTI,AAPL,MSFT,...` — single batch call for multiple symbols.
 
 **Status Bar Background Refresh:**
-The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. Triggers: view appearance, time-range change, scene-phase resume to active (5-minute staleness check), and pull-to-refresh. All refresh is frontend-initiated — the backend never polls. The 30s server-side Redis TTL means most refresh ticks are cache hits.
+The iOS app calls `GET /v1/portfolio/snapshot` to drive the status-bar pill. Triggers: view appearance, time-range change, scene-phase resume to active (5-minute staleness check), and pull-to-refresh. All refresh is frontend-initiated — the backend never polls. Each call goes straight to Alpaca (uncached), so the numbers always reflect the current account state post-trade.
 
 **Key decisions:**
 

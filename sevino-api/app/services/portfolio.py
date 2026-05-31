@@ -20,8 +20,6 @@ from app.schemas.portfolio import (
 )
 from app.services.alpaca_broker import AlpacaBrokerService
 
-SNAPSHOT_TTL = 30
-HOLDINGS_TTL = 30
 HISTORY_TTL = 60
 
 
@@ -95,31 +93,23 @@ class PortfolioService:
     async def get_snapshot(
         self, ctx: AlpacaAccountContext
     ) -> PortfolioSnapshotResponse:
-        key = f"portfolio:snapshot:{ctx.user_id}"
-
-        async def fetch() -> dict:
-            raw = await self._alpaca.get_trading_account(ctx.alpaca_account_id)
-            return _build_snapshot(raw, ctx.account_status)
-
-        cached = await cache_get_or_set(self._redis, key, SNAPSHOT_TTL, fetch)
-        return PortfolioSnapshotResponse.model_validate(cached)
+        raw = await self._alpaca.get_trading_account(ctx.alpaca_account_id)
+        return PortfolioSnapshotResponse.model_validate(
+            _build_snapshot(raw, ctx.account_status)
+        )
 
     async def get_holdings(
         self, ctx: AlpacaAccountContext
     ) -> HoldingsResponse:
-        key = f"portfolio:holdings:{ctx.user_id}"
-
-        async def fetch() -> dict:
-            raw_account, raw_positions = await asyncio.gather(
-                self._alpaca.get_trading_account(ctx.alpaca_account_id),
-                self._alpaca.list_positions(ctx.alpaca_account_id),
-            )
-            symbols = [p["symbol"] for p in raw_positions]
-            names = await AssetRepository.get_names_by_symbols(self._db, symbols)
-            return _build_holdings(raw_account, raw_positions, names, ctx.account_status)
-
-        cached = await cache_get_or_set(self._redis, key, HOLDINGS_TTL, fetch)
-        return HoldingsResponse.model_validate(cached)
+        raw_account, raw_positions = await asyncio.gather(
+            self._alpaca.get_trading_account(ctx.alpaca_account_id),
+            self._alpaca.list_positions(ctx.alpaca_account_id),
+        )
+        symbols = [p["symbol"] for p in raw_positions]
+        names = await AssetRepository.get_names_by_symbols(self._db, symbols)
+        return HoldingsResponse.model_validate(
+            _build_holdings(raw_account, raw_positions, names, ctx.account_status)
+        )
 
     async def get_history(
         self,
@@ -150,7 +140,6 @@ def _build_snapshot(raw: dict, status: str) -> dict:
     daily_pct = (
         daily_abs / last_equity if last_equity != 0 else Decimal("0")
     )
-    # Cache the JSON-ready dict so cache hits + misses produce the same shape.
     return PortfolioSnapshotResponse(
         account_status=status,
         currency=raw.get("currency") or "USD",

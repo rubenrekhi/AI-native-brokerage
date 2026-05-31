@@ -48,13 +48,9 @@ async def handle_transfer_status_change(
         return
 
     user_id = account.user_id
-    keys = [
-        f"portfolio:snapshot:{user_id}",
-        f"portfolio:holdings:{user_id}",
-        # Drive from PortfolioRange so adding a range to the enum forces
-        # invalidation to follow — silent miss otherwise.
-        *[f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange],
-    ]
+    # Drive from PortfolioRange so adding a range to the enum forces
+    # invalidation to follow — silent miss otherwise.
+    keys = [f"portfolio:history:{user_id}:{r.value}" for r in PortfolioRange]
     await cache_invalidate(redis, keys)
 
     logger.info(
