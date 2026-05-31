@@ -15,4 +15,5 @@ struct Holding: Identifiable, Equatable {
     let changeToday: Decimal?
     let changeTodayPercent: Decimal?
     let avgEntryPrice: Decimal?
+    let buyingPower: Decimal?
 }

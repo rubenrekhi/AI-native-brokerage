@@ -44,7 +44,7 @@ struct HoldingRow: View {
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
-        .disabled(!hasDetails)
+        .allowsHitTesting(hasDetails)
     }
 
     private var holdingIcon: some View {
@@ -70,6 +70,10 @@ struct HoldingRow: View {
                 Text(L10n.Home.holdingsShares(qty.asShareCount()))
                     .font(.system(size: 12 * scale))
                     .foregroundStyle(Color.sevinoGreyContrast)
+            } else if holding.isCash, holding.buyingPower != nil {
+                Text(L10n.Home.holdingsAvailableToInvest)
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
             }
         }
     }
@@ -84,6 +88,10 @@ struct HoldingRow: View {
                 Text("\(pl.asSignedCurrency()) (\(plpc.asSignedPercent()))")
                     .font(.system(size: 11 * scale))
                     .foregroundStyle(pl >= 0 ? Color.sevinoPositive : Color.sevinoNegative)
+            } else if holding.isCash, let buyingPower = holding.buyingPower {
+                Text(buyingPower.asCurrency())
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
             }
         }
     }
@@ -145,4 +153,61 @@ struct HoldingRow: View {
         .padding(.vertical, 6 * scale)
     }
 
+}
+
+#Preview("Holding rows") {
+    VStack(spacing: 0) {
+        HoldingRow(
+            holding: Holding(
+                ticker: "CASH",
+                isCash: true,
+                qty: nil,
+                marketValue: Decimal(string: "2450.00")!,
+                unrealizedPl: nil,
+                unrealizedPlpc: nil,
+                changeToday: nil,
+                changeTodayPercent: nil,
+                avgEntryPrice: nil,
+                buyingPower: Decimal(string: "1980.00")!
+            ),
+            scale: 1,
+            isExpanded: false,
+            onToggle: {}
+        )
+        HoldingRow(
+            holding: Holding(
+                ticker: "TSLA",
+                isCash: false,
+                qty: Decimal(string: "5")!,
+                marketValue: Decimal(string: "1250.00")!,
+                unrealizedPl: Decimal(string: "250.00")!,
+                unrealizedPlpc: Decimal(string: "0.25")!,
+                changeToday: Decimal(string: "25.00")!,
+                changeTodayPercent: Decimal(string: "0.0204")!,
+                avgEntryPrice: Decimal(string: "200.00")!,
+                buyingPower: nil
+            ),
+            scale: 1,
+            isExpanded: false,
+            onToggle: {}
+        )
+        HoldingRow(
+            holding: Holding(
+                ticker: "AMD",
+                isCash: false,
+                qty: Decimal(string: "10")!,
+                marketValue: Decimal(string: "900.00")!,
+                unrealizedPl: Decimal(string: "-100.00")!,
+                unrealizedPlpc: Decimal(string: "-0.10")!,
+                changeToday: Decimal(string: "-15.00")!,
+                changeTodayPercent: Decimal(string: "-0.0164")!,
+                avgEntryPrice: Decimal(string: "100.00")!,
+                buyingPower: nil
+            ),
+            scale: 1,
+            isExpanded: false,
+            onToggle: {}
+        )
+    }
+    .padding()
 }

@@ -45,6 +45,7 @@ def _ctx(status: str = "ACTIVE") -> AlpacaAccountContext:
 def _account(**overrides) -> dict:
     base = {
         "cash": "1500.00",
+        "buying_power": "1200.00",
         "currency": "USD",
     }
     base.update(overrides)
@@ -90,6 +91,7 @@ class TestHoldingsHappyPath:
         assert dumped["account_status"] == "ACTIVE"
         assert dumped["currency"] == "USD"
         assert dumped["cash"] == "1500.00"
+        assert dumped["buying_power"] == "1200.00"
         assert dumped["total_market_value"] == "1700.00"
         symbols = [p["symbol"] for p in dumped["positions"]]
         assert symbols == ["TSLA", "AAPL"]
@@ -160,6 +162,44 @@ class TestHoldingsTotals:
         assert dumped["cash"] == "500.00"
         # Empty symbol list short-circuits the repo call.
         get_names.assert_awaited_once_with(service._db, [])
+
+
+class TestHoldingsBuyingPower:
+    async def test_buying_power_flows_from_alpaca_account(
+        self, service, alpaca
+    ):
+        alpaca.get_trading_account.return_value = _account(
+            cash="5000.00", buying_power="3250.75"
+        )
+        alpaca.list_positions.return_value = []
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["buying_power"] == "3250.75"
+
+    async def test_missing_buying_power_defaults_to_zero(
+        self, service, alpaca
+    ):
+        account = _account()
+        account.pop("buying_power")
+        alpaca.get_trading_account.return_value = account
+        alpaca.list_positions.return_value = []
+
+        with patch(
+            "app.services.portfolio.AssetRepository.get_names_by_symbols",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            response = await service.get_holdings(_ctx())
+
+        dumped = response.model_dump(mode="json")
+        assert dumped["buying_power"] == "0.00"
 
 
 class TestHoldingsChangeToday:
@@ -309,6 +349,7 @@ class TestHoldingsCaching:
             "account_status": "ACTIVE",
             "currency": "USD",
             "cash": "100.00",
+            "buying_power": "80.00",
             "total_market_value": "200.00",
             "positions": [
                 {

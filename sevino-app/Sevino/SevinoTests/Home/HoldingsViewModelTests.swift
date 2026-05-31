@@ -126,7 +126,8 @@ final class HoldingsViewModelTests: XCTestCase {
             unrealizedPlpc: isCash ? nil : Decimal(string: "0.0100"),
             changeToday: isCash ? nil : changeToday,
             changeTodayPercent: isCash ? nil : changeTodayPercent,
-            avgEntryPrice: isCash ? nil : Decimal(string: "99.00")!
+            avgEntryPrice: isCash ? nil : Decimal(string: "99.00")!,
+            buyingPower: isCash ? Decimal(string: "800.00")! : nil
         )
     }
 }
@@ -327,7 +328,8 @@ final class HoldingsViewModelSortTests: XCTestCase {
             unrealizedPlpc: nil,
             changeToday: nil,
             changeTodayPercent: nil,
-            avgEntryPrice: nil
+            avgEntryPrice: nil,
+            buyingPower: value
         )
     }
 
@@ -347,7 +349,8 @@ final class HoldingsViewModelSortTests: XCTestCase {
             unrealizedPlpc: Decimal(0),
             changeToday: changeToday,
             changeTodayPercent: changeTodayPct,
-            avgEntryPrice: Decimal(100)
+            avgEntryPrice: Decimal(100),
+            buyingPower: nil
         )
     }
 }

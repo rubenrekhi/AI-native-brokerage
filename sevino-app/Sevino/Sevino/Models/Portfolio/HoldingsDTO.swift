@@ -11,6 +11,7 @@ struct HoldingsDTO: Decodable, Equatable {
     let accountStatus: String
     let currency: String
     @DecimalString var cash: Decimal
+    @DecimalString var buyingPower: Decimal
     @DecimalString var totalMarketValue: Decimal
     let positions: [PositionDTO]
 }

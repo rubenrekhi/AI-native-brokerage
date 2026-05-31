@@ -147,7 +147,8 @@ private struct HoldingsCardPreview: View {
                                     unrealizedPlpc: Decimal(string: "0.0708")!,
                                     changeToday: Decimal(string: "12.30")!,
                                     changeTodayPercent: Decimal(string: "0.0068")!,
-                                    avgEntryPrice: Decimal(string: "170.00")!
+                                    avgEntryPrice: Decimal(string: "170.00")!,
+                                    buyingPower: nil
                                 ),
                                 Holding(
                                     ticker: "CASH",
@@ -158,7 +159,8 @@ private struct HoldingsCardPreview: View {
                                     unrealizedPlpc: nil,
                                     changeToday: nil,
                                     changeTodayPercent: nil,
-                                    avgEntryPrice: nil
+                                    avgEntryPrice: nil,
+                                    buyingPower: Decimal(string: "200.00")!
                                 )
                             ],
                             displayOption: "Total Value"

@@ -102,6 +102,7 @@ def _make_holdings(**overrides) -> HoldingsResponse:
         "account_status": "ACTIVE",
         "currency": "USD",
         "cash": Decimal("100.00"),
+        "buying_power": Decimal("75.00"),
         "total_market_value": Decimal("1575.00"),
         "positions": [
             _make_position(),
@@ -130,6 +131,7 @@ class TestHoldingsResponse:
         assert dumped["account_status"] == "ACTIVE"
         assert dumped["currency"] == "USD"
         assert dumped["cash"] == "100.00"
+        assert dumped["buying_power"] == "75.00"
         assert dumped["total_market_value"] == "1575.00"
         assert len(dumped["positions"]) == 2
 

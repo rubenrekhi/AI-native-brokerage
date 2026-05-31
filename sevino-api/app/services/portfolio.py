@@ -204,6 +204,7 @@ def _build_holdings(
         account_status=status,
         currency=raw_account.get("currency") or "USD",
         cash=Decimal(raw_account.get("cash") or "0"),
+        buying_power=Decimal(raw_account.get("buying_power") or "0"),
         total_market_value=total,
         positions=positions,
     ).model_dump(mode="json")

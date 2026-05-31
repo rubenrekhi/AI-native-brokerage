@@ -1236,6 +1236,16 @@
         }
       }
     },
+    "home.holdings_available_to_invest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available to invest:"
+          }
+        }
+      }
+    },
     "home.holdings_average_cost" : {
       "localizations" : {
         "en" : {

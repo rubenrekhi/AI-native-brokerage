@@ -42,6 +42,7 @@ class HoldingsResponse(BaseModel):
     account_status: str
     currency: str
     cash: MoneyStr
+    buying_power: MoneyStr
     total_market_value: MoneyStr
     positions: list[Position]
 

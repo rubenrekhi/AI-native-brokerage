@@ -9,6 +9,7 @@ final class HoldingsMapperTests: XCTestCase {
     func test_cashRow_alwaysAtIndexZero_evenWithPositions() {
         let dto = Self.makeDTO(
             cash: Decimal(string: "500.00")!,
+            buyingPower: Decimal(string: "400.00")!,
             positions: [Self.makePosition(symbol: "TSLA")]
         )
 
@@ -17,10 +18,24 @@ final class HoldingsMapperTests: XCTestCase {
         XCTAssertEqual(holdings.first?.ticker, "CASH")
         XCTAssertEqual(holdings.first?.isCash, true)
         XCTAssertEqual(holdings.first?.marketValue, Decimal(string: "500.00"))
+        XCTAssertEqual(holdings.first?.buyingPower, Decimal(string: "400.00"))
         XCTAssertNil(holdings.first?.qty)
         XCTAssertNil(holdings.first?.unrealizedPl)
         XCTAssertNil(holdings.first?.changeToday)
         XCTAssertNil(holdings.first?.avgEntryPrice)
+    }
+
+    func test_positionRows_haveNilBuyingPower() {
+        let dto = Self.makeDTO(
+            cash: Decimal(string: "500.00")!,
+            buyingPower: Decimal(string: "400.00")!,
+            positions: [Self.makePosition(symbol: "TSLA")]
+        )
+
+        let holdings = mapHoldings(dto)
+
+        XCTAssertEqual(holdings[1].ticker, "TSLA")
+        XCTAssertNil(holdings[1].buyingPower)
     }
 
     func test_emptyPositions_returnsOnlyCashRow() {
@@ -121,12 +136,14 @@ final class HoldingsMapperTests: XCTestCase {
 
     private static func makeDTO(
         cash: Decimal,
+        buyingPower: Decimal = Decimal(0),
         positions: [PositionDTO]
     ) -> HoldingsDTO {
         let json: [String: Any] = [
             "account_status": "ACTIVE",
             "currency": "USD",
             "cash": "\(cash)",
+            "buying_power": "\(buyingPower)",
             "total_market_value": "0.00",
             "positions": positions.map(positionAsDict),
         ]
@@ -234,6 +251,7 @@ final class APIHoldingsServiceTests: XCTestCase {
           "account_status": "ACTIVE",
           "currency": "USD",
           "cash": "500.00",
+          "buying_power": "450.00",
           "total_market_value": "1250.00",
           "positions": [
             {
