@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.agent_turn import AgentTurn
     from app.models.brokerage_account import BrokerageAccount
     from app.models.conversation import Conversation
+    from app.models.digest import DigestSnapshot
     from app.models.order_event import OrderEvent
     from app.models.plaid_item import PlaidItem
     from app.models.radar_item import RadarItem
@@ -94,5 +95,8 @@ class UserProfile(Base, TimestampMixin):
         back_populates="user", cascade="all, delete-orphan"
     )
     agent_turns: Mapped[list["AgentTurn"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    digest_snapshots: Mapped[list["DigestSnapshot"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

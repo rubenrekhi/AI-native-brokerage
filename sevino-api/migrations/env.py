@@ -19,6 +19,7 @@ from app.models import (  # noqa: F401, E402
     Base,
     BrokerageAccount,
     Conversation,
+    DigestSnapshot,
     FeatureFlag,
     Message,
     ModelInvocation,

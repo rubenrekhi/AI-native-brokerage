@@ -4,6 +4,7 @@ from app.models.asset import Asset
 from app.models.base import Base
 from app.models.brokerage_account import BrokerageAccount
 from app.models.conversation import Conversation
+from app.models.digest import DigestSnapshot
 from app.models.feature_flag import FeatureFlag
 from app.models.message import Message
 from app.models.model_invocation import ModelInvocation
@@ -23,6 +24,7 @@ __all__ = [
     "Base",
     "BrokerageAccount",
     "Conversation",
+    "DigestSnapshot",
     "FeatureFlag",
     "Message",
     "ModelInvocation",
