@@ -1,4 +1,4 @@
-"""Unit tests for ``app.ai.tools.portfolio``.
+"""Unit tests for the portfolio read tools.
 
 Covers both portfolio tools end to end at the tool boundary — the
 ``PortfolioService`` and the brokerage-account lookup are patched, so these
@@ -29,8 +29,10 @@ from app.ai.blocks import StatusBlock
 from app.ai.tools import ToolContext, ToolHttpClients
 from app.ai.tools.portfolio import (
     GetPortfolio,
-    GetPortfolioPerformance,
     PortfolioInput,
+)
+from app.ai.tools.portfolio_performance import (
+    GetPortfolioPerformance,
     PortfolioPerformanceInput,
 )
 from app.ai.transport.events import BlockData, BlockStart, Event
@@ -194,11 +196,11 @@ def _service(
 
 def _patch(monkeypatch, *, account: Any, service: MagicMock) -> None:
     monkeypatch.setattr(
-        "app.ai.tools.portfolio.BrokerageAccountRepository.get_by_user_id",
+        "app.ai.tools._portfolio_common.BrokerageAccountRepository.get_by_user_id",
         AsyncMock(return_value=account),
     )
     monkeypatch.setattr(
-        "app.ai.tools.portfolio.PortfolioService",
+        "app.ai.tools._portfolio_common.PortfolioService",
         MagicMock(return_value=service),
     )
 

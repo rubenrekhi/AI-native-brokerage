@@ -12,8 +12,10 @@ from app.ai.tools.display_stock_card import (
 )
 from app.ai.tools.portfolio import (
     GetPortfolio,
-    GetPortfolioPerformance,
     PortfolioInput,
+)
+from app.ai.tools.portfolio_performance import (
+    GetPortfolioPerformance,
     PortfolioPerformanceInput,
 )
 from app.ai.tools.radar_operations import RadarOperations, RadarOperationsInput
