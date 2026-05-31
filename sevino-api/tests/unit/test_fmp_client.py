@@ -960,6 +960,25 @@ class TestProjectValuation:
         assert result["sector_pe"] == "0.0"
         assert result["pe_vs_sector"] is None
 
+    def test_premium_none_when_company_pe_non_positive(self):
+        # A loss-making company (negative P/E) has no meaningful premium —
+        # the raw ratio would read as a large bogus discount.
+        result = project_valuation(
+            {"priceToEarningsRatioTTM": -5.79},
+            [{"sector": "Consumer Cyclical", "pe": 89.7}],
+            [{"industry": "Auto - Manufacturers", "pe": 234.4}],
+            [],
+            sector="Consumer Cyclical",
+            industry="Auto - Manufacturers",
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+        )
+
+        assert result["pe"] == "-5.79"
+        assert result["sector_pe"] == "89.7"
+        assert result["pe_vs_sector"] is None
+        assert result["pe_vs_industry"] is None
+
     def test_blank_sector_string_treated_as_missing(self):
         result = project_valuation(
             {}, [{"sector": "Technology", "pe": 50.0}], [], [],

@@ -699,10 +699,13 @@ def _median(values: list[float]) -> float | None:
 def _pe_premium(company_pe: float | None, benchmark_pe: float | None) -> float | None:
     """Company P/E relative to a benchmark as a decimal (0.20 == 20% richer).
 
-    None when either value is missing or the benchmark is not strictly
-    positive — a non-positive benchmark P/E makes the premium meaningless.
+    None unless both P/Es are present and strictly positive. A non-positive
+    P/E on either side makes the premium meaningless — a loss-making company
+    (negative P/E) would otherwise read as a large bogus discount.
     """
-    if company_pe is None or benchmark_pe is None or benchmark_pe <= 0:
+    if company_pe is None or company_pe <= 0:
+        return None
+    if benchmark_pe is None or benchmark_pe <= 0:
         return None
     return round(company_pe / benchmark_pe - 1, 4)
 
