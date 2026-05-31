@@ -580,9 +580,21 @@ enum L10n {
         static let accountHistory = String(localized: "settings.account_history")
         static let accountHistoryEmptyTitle = String(localized: "settings.account_history_empty_title")
         static let accountHistoryEmptyMessage = String(localized: "settings.account_history_empty_message")
+        static let accountHistoryFilteredEmptyTitle = String(localized: "settings.account_history_filtered_empty_title")
+        static let accountHistoryFilteredEmptyMessage = String(localized: "settings.account_history_filtered_empty_message")
         static let accountHistoryErrorTitle = String(localized: "settings.account_history_error_title")
         static let accountHistoryDepositLabel = String(localized: "settings.account_history_deposit_label")
         static let accountHistoryWithdrawalLabel = String(localized: "settings.account_history_withdrawal_label")
+        static let accountHistoryDividendLabel = String(localized: "settings.account_history_dividend_label")
+        static let accountHistoryFilterTypeLabel = String(localized: "settings.account_history_filter_type_label")
+        static let accountHistoryFilterTimeframeLabel = String(localized: "settings.account_history_filter_timeframe_label")
+        static let accountHistoryFilterAll = String(localized: "settings.account_history_filter_all")
+        static let accountHistoryFilterDeposits = String(localized: "settings.account_history_filter_deposits")
+        static let accountHistoryFilterWithdrawals = String(localized: "settings.account_history_filter_withdrawals")
+        static let accountHistoryFilterDividends = String(localized: "settings.account_history_filter_dividends")
+        static let accountHistoryFilter7d = String(localized: "settings.account_history_filter_7d")
+        static let accountHistoryFilter30d = String(localized: "settings.account_history_filter_30d")
+        static let accountHistoryFilter90d = String(localized: "settings.account_history_filter_90d")
         static let accountHistoryUnknownBank = String(localized: "settings.account_history_unknown_bank")
         static let tradeHistory = String(localized: "settings.trade_history")
         static let tradeHistoryEmptyTitle = String(localized: "settings.trade_history_empty_title")
@@ -799,6 +811,13 @@ enum L10n {
         static func failedHeader(_ direction: String) -> String {
             String(format: String(localized: "transfer.failed_header"), direction)
         }
+    }
+
+    enum Dividend {
+        static let statusSettled = String(localized: "dividend.status_settled")
+        static let statusPending = String(localized: "dividend.status_pending")
+        static let statusFailed = String(localized: "dividend.status_failed")
+        static let statusUnknown = String(localized: "dividend.status_unknown")
     }
 
     enum Welcome {
