@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from typing import Any, ClassVar
+from typing import Any, ClassVar, TypeVar
 
 import httpx
 import sentry_sdk
@@ -11,9 +11,12 @@ from app.exceptions import (
     MarketDataUnavailableError,
     MarketDataUpstreamError,
 )
+from app.schemas.fmp import EarningsCalendarItem, HistoricalEarningsItem
 from app.services._http import BODY_LOG_LIMIT
 
 logger = structlog.get_logger(__name__)
+
+T = TypeVar("T", bound=BaseModel)
 
 
 def str_or_none(value: Any) -> str | None:
@@ -45,6 +48,36 @@ def _redact(text: str, secret: str) -> str:
     if not text or not secret:
         return text
     return text.replace(secret, "***")
+
+
+def _validate_fmp_rows(
+    raw: Any,
+    model: type[T],
+    *,
+    log_event: str,
+) -> list[T]:
+    """Validate FMP row lists, dropping malformed rows without killing the batch."""
+    if not raw:
+        return []
+    if not isinstance(raw, list):
+        logger.warning(
+            "fmp_unexpected_payload_shape",
+            log_event=log_event,
+            payload_type=type(raw).__name__,
+        )
+        return []
+
+    items: list[T] = []
+    for row in raw:
+        try:
+            items.append(model.model_validate(row))
+        except ValidationError as exc:
+            logger.warning(
+                log_event,
+                raw_keys=list(row.keys()) if isinstance(row, dict) else None,
+                error=str(exc),
+            )
+    return items
 
 
 def _comparable_datetime(value: datetime) -> datetime:
@@ -117,11 +150,13 @@ class FmpClient:
     one in `lifecycle.lifespan` and call `await close()` on shutdown.
 
     Most endpoint methods return raw FMP JSON shapes. Use the `project_*`
-    helpers to map them to our schema shape. News methods return validated
-    news item models because their callers consume those typed rows directly.
+    helpers to map them to our schema shape. Legacy v3 earnings methods and
+    news methods return validated models because their callers consume those
+    typed rows directly.
     """
 
     DEFAULT_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/stable"
+    DEFAULT_V3_BASE_URL: ClassVar[str] = "https://financialmodelingprep.com/api/v3"
     BATCH_QUOTE_MAX_SYMBOLS: ClassVar[int] = 100
 
     def __init__(
@@ -140,16 +175,24 @@ class FmpClient:
     async def close(self) -> None:
         await self._client.aclose()
 
-    async def _request(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        base_url = self._base_url.rstrip("/")
+    async def _request(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        base_url: str | None = None,
+        symbol_for_errors: str | None = None,
+    ) -> Any:
+        resolved_base_url = (base_url or self._base_url).rstrip("/")
         if (
-            base_url.endswith("/stable")
+            base_url is None
+            and resolved_base_url.endswith("/stable")
             and (path.startswith("/api/v3/") or path.startswith("/api/v4/"))
         ):
             # FMP's legacy news endpoints live under /api/v3 and /api/v4,
             # while this client defaults to the newer /stable base path.
-            base_url = base_url.removesuffix("/stable")
-        url = f"{base_url}{path}"
+            resolved_base_url = resolved_base_url.removesuffix("/stable")
+        url = f"{resolved_base_url}{path}"
         query: dict[str, Any] = {"apikey": self._api_key}
         if params:
             query.update(params)
@@ -179,7 +222,11 @@ class FmpClient:
             # agent tells the user the ticker isn't supported instead of
             # "temporarily unavailable, please retry."
             if resp.status_code == 402:
-                symbol = params.get("symbol", "") if params else ""
+                symbol = (
+                    symbol_for_errors
+                    or (params.get("symbol", "") if params else "")
+                    or ""
+                )
                 logger.info(
                     "fmp_symbol_not_in_tier",
                     path=path,
@@ -273,6 +320,49 @@ class FmpClient:
             {"from": from_date.isoformat(), "to": to_date.isoformat()},
         )
         return data or []
+
+    async def get_earnings_calendar(
+        self, from_date: date, to_date: date
+    ) -> list[EarningsCalendarItem]:
+        """Legacy v3 earnings calendar rows, validated into schema objects.
+
+        This intentionally coexists with `earnings_calendar`, which uses the
+        stable API and returns raw rows for the radar event ingester.
+        """
+        data = await self._request(
+            "/earning_calendar",
+            {"from": from_date.isoformat(), "to": to_date.isoformat()},
+            base_url=self.DEFAULT_V3_BASE_URL,
+        )
+        items = _validate_fmp_rows(
+            data,
+            EarningsCalendarItem,
+            log_event="fmp_earnings_calendar_row_invalid",
+        )
+        # FMP can over-include rows near request boundaries; preserve the
+        # method's inclusive date-window contract for callers.
+        return [
+            item for item in items if from_date <= item.reported_date <= to_date
+        ]
+
+    async def get_historical_earnings(
+        self, symbol: str, limit: int = 8
+    ) -> list[HistoricalEarningsItem]:
+        if limit <= 0:
+            return []
+
+        data = await self._request(
+            f"/historical/earning_calendar/{symbol}",
+            base_url=self.DEFAULT_V3_BASE_URL,
+            symbol_for_errors=symbol,
+        )
+        items = _validate_fmp_rows(
+            data,
+            HistoricalEarningsItem,
+            log_event="fmp_historical_earnings_row_invalid",
+        )
+        items.sort(key=lambda item: item.reported_date, reverse=True)
+        return items[:limit]
 
     async def dividend_calendar(
         self, from_date: date, to_date: date

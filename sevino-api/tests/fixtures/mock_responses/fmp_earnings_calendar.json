@@ -1,0 +1,35 @@
+[
+  {
+    "symbol": "AAPL",
+    "date": "2026-07-30",
+    "epsActual": null,
+    "epsEstimated": 1.42,
+    "revenueActual": null,
+    "revenueEstimated": 90000000000,
+    "time": "amc",
+    "fiscalDateEnding": "2026-06-30",
+    "lastUpdated": "2026-05-01"
+  },
+  {
+    "symbol": "MSFT",
+    "date": "2026-07-29",
+    "epsActual": null,
+    "epsEstimated": 3.1,
+    "revenueActual": null,
+    "revenueEstimated": 64000000000,
+    "time": "amc",
+    "fiscalDateEnding": "2026-06-30",
+    "lastUpdated": "2026-05-01"
+  },
+  {
+    "symbol": "NVDA",
+    "date": "2026-08-26",
+    "epsActual": null,
+    "epsEstimated": 1.01,
+    "revenueActual": null,
+    "revenueEstimated": 54000000000,
+    "time": "amc",
+    "fiscalDateEnding": "2026-07-31",
+    "lastUpdated": "2026-05-01"
+  }
+]

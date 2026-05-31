@@ -1,0 +1,32 @@
+[
+  {
+    "symbol": "AAPL",
+    "date": "2026-01-29",
+    "eps": 2.4,
+    "epsEstimated": 2.35,
+    "revenue": 119575000000,
+    "revenueEstimated": 118960000000,
+    "time": "amc",
+    "fiscalDateEnding": "2025-12-27"
+  },
+  {
+    "symbol": "AAPL",
+    "date": "2026-04-30",
+    "eps": 1.65,
+    "epsEstimated": 1.62,
+    "revenue": 95359000000,
+    "revenueEstimated": 94120000000,
+    "time": "amc",
+    "fiscalDateEnding": "2026-03-28"
+  },
+  {
+    "symbol": "AAPL",
+    "date": "2025-10-30",
+    "eps": 1.85,
+    "epsEstimated": 1.77,
+    "revenue": 102466000000,
+    "revenueEstimated": 101190000000,
+    "time": "amc",
+    "fiscalDateEnding": "2025-09-27"
+  }
+]
