@@ -136,11 +136,53 @@ class StockAnalyst(BaseModel):
     strong_sell: int | None = None
 
 
+class ValuationHistoryPoint(BaseModel):
+    fiscal_year: str | None = None
+    pe: str | None = None
+    ps: str | None = None
+    pb: str | None = None
+
+
+class StockValuation(BaseModel):
+    """Valuation multiples placed in context.
+
+    Pairs the company's trailing-twelve-month P/E with its sector and industry
+    P/E (same exchange, same trading day) and its own multi-year P/E range, so
+    a raw multiple reads as cheap or expensive relative to peers and to the
+    company's own history. ``pe`` is taken from ``ratios-ttm`` rather than the
+    quote because the quote's P/E field is unreliably populated.
+    ``sector_pe``/``industry_pe`` are exchange-scoped — FMP publishes a separate
+    figure per exchange — so ``exchange`` records which one was used and
+    ``as_of_date`` the trading day it was sampled. ``pe_vs_sector`` /
+    ``pe_vs_industry`` are decimal premiums (``0.20`` == 20% above the
+    benchmark). Every field is null when FMP omits it, so the block degrades
+    cleanly rather than failing the lookup.
+    """
+
+    pe: str | None = None
+    sector: str | None = None
+    industry: str | None = None
+    exchange: str | None = None
+    as_of_date: str | None = None
+
+    sector_pe: str | None = None
+    industry_pe: str | None = None
+    pe_vs_sector: str | None = None
+    pe_vs_industry: str | None = None
+
+    pe_5y_low: str | None = None
+    pe_5y_high: str | None = None
+    pe_5y_median: str | None = None
+
+    valuation_history: list[ValuationHistoryPoint] = Field(default_factory=list)
+
+
 class StockInfoResponse(BaseModel):
     quote: StockQuote
     profile: StockProfile
     ratios: StockRatios
     financials: StockFinancials = Field(default_factory=StockFinancials)
+    valuation: StockValuation = Field(default_factory=StockValuation)
     analyst: StockAnalyst
 
 

@@ -93,6 +93,24 @@
     "period_end_date": "2026-03-28",
     "reported_currency": "USD"
   },
+  "valuation": {
+    "pe": "28.50",
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "exchange": "NASDAQ",
+    "as_of_date": "2026-05-29",
+    "sector_pe": "50.00",
+    "industry_pe": "40.00",
+    "pe_vs_sector": "-0.43",
+    "pe_vs_industry": "-0.2875",
+    "pe_5y_low": "24.44",
+    "pe_5y_high": "37.29",
+    "pe_5y_median": "34.09",
+    "valuation_history": [
+      {"fiscal_year": "2025", "pe": "34.09", "ps": "9.18", "pb": "51.79"},
+      {"fiscal_year": "2024", "pe": "37.29", "ps": "8.90", "pb": "48.00"}
+    ]
+  },
   "analyst": {
     "target_high": "230.00",
     "target_low": "150.00",

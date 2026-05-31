@@ -18,6 +18,8 @@ from app.schemas.market_data import (
     StockProfile,
     StockQuote,
     StockRatios,
+    StockValuation,
+    ValuationHistoryPoint,
 )
 
 
@@ -213,6 +215,46 @@ class TestStockFinancials:
         assert result.annual_trend[0].fiscal_year == "2025"
 
 
+class TestStockValuation:
+    def test_empty_dict_yields_all_none_and_empty_history(self):
+        result = StockValuation.model_validate({})
+
+        assert result.pe is None
+        assert result.sector_pe is None
+        assert result.pe_vs_sector is None
+        assert result.pe_5y_median is None
+        assert result.valuation_history == []
+
+    def test_partial_fields_validate(self):
+        result = StockValuation.model_validate(
+            {
+                "pe": "25.0",
+                "sector_pe": "50.0",
+                "pe_vs_sector": "-0.5",
+                "as_of_date": "2026-05-29",
+            }
+        )
+
+        assert result.pe == "25.0"
+        assert result.sector_pe == "50.0"
+        assert result.pe_vs_sector == "-0.5"
+        assert result.as_of_date == "2026-05-29"
+
+    def test_history_points_validate(self):
+        result = StockValuation.model_validate(
+            {
+                "valuation_history": [
+                    {"fiscal_year": "2025", "pe": "30.0", "ps": "9.0", "pb": "50.0"},
+                    {"fiscal_year": "2024", "pe": "20.0"},
+                ]
+            }
+        )
+
+        assert len(result.valuation_history) == 2
+        assert isinstance(result.valuation_history[0], ValuationHistoryPoint)
+        assert result.valuation_history[0].pb == "50.0"
+
+
 class TestStockInfoResponse:
     def test_well_formed_dict_validates(self):
         data = {
@@ -252,6 +294,33 @@ class TestStockInfoResponse:
         result = StockInfoResponse.model_validate(data)
 
         assert result.financials.revenue == "400000000000"
+
+    def test_valuation_defaults_to_empty_block_when_omitted(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert isinstance(result.valuation, StockValuation)
+        assert result.valuation.pe is None
+
+    def test_valuation_block_validates_when_present(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "valuation": {"pe": "25.0", "sector_pe": "50.0"},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert result.valuation.pe == "25.0"
+        assert result.valuation.sector_pe == "50.0"
 
     @pytest.mark.parametrize(
         "field", ["quote", "profile", "ratios", "analyst"]
