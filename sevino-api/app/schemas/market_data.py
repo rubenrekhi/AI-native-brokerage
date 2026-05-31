@@ -177,12 +177,54 @@ class StockValuation(BaseModel):
     valuation_history: list[ValuationHistoryPoint] = Field(default_factory=list)
 
 
+class QuarterlyEarning(BaseModel):
+    report_date: str | None = None
+    eps_actual: str | None = None
+    eps_estimated: str | None = None
+    eps_surprise_pct: str | None = None
+    revenue_actual: str | None = None
+    revenue_estimated: str | None = None
+    revenue_surprise_pct: str | None = None
+    price_move_pct: str | None = None
+
+
+class StockEarnings(BaseModel):
+    """Forward estimates, recent quarterly actuals, and typical post-earnings move.
+
+    ``next_period_*`` are the nearest upcoming quarter from FMP analyst
+    estimates. ``quarterly`` is the last reported quarters (newest first), each
+    with a beat/miss surprise — ``(actual − estimated) / |estimated|`` as a
+    decimal (``0.05`` == a 5% beat) — and, where bars are available, the stock's
+    move around that report. FMP exposes no pre-/post-market timing, so
+    ``price_move_pct`` and ``avg_post_earnings_move_pct`` straddle the report
+    date (last close before → close of the session after) to capture the move
+    whether the company reported before the open or after the close. Every field
+    is null when the data is missing, so the block degrades cleanly rather than
+    failing the lookup.
+    """
+
+    next_period_end: str | None = None
+    revenue_estimate_avg: str | None = None
+    revenue_estimate_low: str | None = None
+    revenue_estimate_high: str | None = None
+    eps_estimate_avg: str | None = None
+    eps_estimate_low: str | None = None
+    eps_estimate_high: str | None = None
+    num_analysts: int | None = None
+
+    quarterly: list[QuarterlyEarning] = Field(default_factory=list)
+
+    avg_post_earnings_move_pct: str | None = None
+    events_measured: int | None = None
+
+
 class StockInfoResponse(BaseModel):
     quote: StockQuote
     profile: StockProfile
     ratios: StockRatios
     financials: StockFinancials = Field(default_factory=StockFinancials)
     valuation: StockValuation = Field(default_factory=StockValuation)
+    earnings: StockEarnings = Field(default_factory=StockEarnings)
     analyst: StockAnalyst
 
 

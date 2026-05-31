@@ -2,7 +2,7 @@ import asyncio
 import json
 import re
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 
 import httpx
@@ -25,7 +25,10 @@ from app.services.alpaca_broker import (
 )
 from app.services.fmp import (
     FmpClient,
+    _parse_iso_date,
+    compute_earnings_reactions,
     project_analyst,
+    project_earnings,
     project_financials,
     project_profile,
     project_quote,
@@ -66,6 +69,13 @@ _QUOTE_TTL_CLOSED = 1800
 _FUNDAMENTALS_TTL = 43200
 _ANNUAL_TREND_YEARS = 4
 _VALUATION_HISTORY_YEARS = 5
+_EARNINGS_ACTUALS = 4
+# Fetch more reported quarters than we surface so the typical-move average has a
+# stable sample, and pull plenty of estimate rows because FMP returns them
+# newest-first across several years (the upcoming period is selected by date).
+_EARNINGS_HISTORY_ROWS = 8
+_EARNINGS_ESTIMATE_ROWS = 16
+_EARNINGS_REACTION_LOOKBACK_DAYS = 730
 
 # Sector/industry P/E benchmarks aren't symbol-specific and move slowly, so
 # they're cached per exchange with a daily TTL and shared across every symbol
@@ -153,6 +163,7 @@ class MarketDataService:
             "ratios": fundamentals["ratios"],
             "financials": fundamentals["financials"],
             "valuation": fundamentals["valuation"],
+            "earnings": fundamentals["earnings"],
             "analyst": analyst,
         }
 
@@ -269,14 +280,22 @@ class MarketDataService:
             # the 12h TTL rolls the entry over.
             cached.setdefault("financials", _empty_financials())
             cached.setdefault("valuation", _empty_valuation())
+            cached.setdefault("earnings", _empty_earnings())
             return cached
 
         logger.info("market_data_cache_miss", key=cache_key)
-        profile_raw, ratios_raw, financials, annual_ratios = await asyncio.gather(
+        (
+            profile_raw,
+            ratios_raw,
+            financials,
+            annual_ratios,
+            earnings,
+        ) = await asyncio.gather(
             self._fmp.profile(symbol),
             self._fmp.ratios_ttm(symbol),
             self._fetch_financials(symbol),
             self._fetch_annual_ratios(symbol),
+            self._fetch_earnings(symbol),
         )
         valuation = await self._fetch_valuation(
             ratios_raw,
@@ -290,6 +309,7 @@ class MarketDataService:
             "ratios": project_ratios(ratios_raw),
             "financials": financials,
             "valuation": valuation,
+            "earnings": earnings,
         }
         await self._cache_set(cache_key, fundamentals, _FUNDAMENTALS_TTL)
         return fundamentals
@@ -342,6 +362,42 @@ class MarketDataService:
                 exc_type=type(exc).__name__,
             )
             return []
+
+    async def _fetch_earnings(self, symbol: str) -> dict[str, Any]:
+        """Fetch estimates, quarterly actuals, and daily bars, then project them.
+
+        Three independent failure domains: FMP earnings, FMP estimates, and the
+        Alpaca daily bars used for the post-earnings reaction. Each is captured
+        separately so a bar-fetch outage degrades only the reaction fields while
+        estimates and actuals still populate (and vice versa). Never raises into
+        ``get_stock_info``.
+        """
+        earnings_result, estimates_result, bars_result = await asyncio.gather(
+            self._fmp.earnings(symbol, limit=_EARNINGS_HISTORY_ROWS),
+            self._fmp.analyst_estimates(symbol, limit=_EARNINGS_ESTIMATE_ROWS),
+            self._alpaca_bars(symbol, "1Day", _EARNINGS_REACTION_LOOKBACK_DAYS),
+            return_exceptions=True,
+        )
+        earnings_rows = _earnings_rows_or_empty(earnings_result, symbol, "earnings")
+        estimate_rows = _earnings_rows_or_empty(
+            estimates_result, symbol, "analyst_estimates"
+        )
+        bars = _earnings_rows_or_empty(bars_result, symbol, "reaction_bars")
+
+        report_dates = [
+            parsed
+            for row in earnings_rows
+            if row.get("epsActual") is not None
+            and (parsed := _parse_iso_date(row.get("date"))) is not None
+        ]
+        reactions = compute_earnings_reactions(report_dates, bars)
+        return project_earnings(
+            earnings_rows,
+            estimate_rows,
+            reactions,
+            as_of=datetime.now(timezone.utc).date(),
+            actuals_limit=_EARNINGS_ACTUALS,
+        )
 
     async def _fetch_valuation(
         self,
@@ -612,6 +668,30 @@ def _empty_valuation() -> dict[str, Any]:
     return project_valuation(
         {}, [], [], [], sector=None, industry=None, exchange=None, as_of_date=None
     )
+
+
+def _empty_earnings() -> dict[str, Any]:
+    return project_earnings([], [], {}, as_of=date.min)
+
+
+def _earnings_rows_or_empty(
+    result: Any, symbol: str, source: str
+) -> list[dict[str, Any]]:
+    """Unwrap a `gather(return_exceptions=True)` earnings result.
+
+    A failed fetch degrades only its own fields; the other two earnings sources
+    still populate, so a raised exception is logged and dropped to ``[]``.
+    """
+    if isinstance(result, BaseException):
+        logger.warning(
+            "market_data_earnings_unavailable",
+            symbol=symbol,
+            source=source,
+            error=str(result),
+            exc_type=type(result).__name__,
+        )
+        return []
+    return result
 
 
 def _unwrap_snapshot(
