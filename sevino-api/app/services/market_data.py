@@ -1,6 +1,7 @@
 import asyncio
 import json
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
@@ -29,6 +30,7 @@ from app.services.fmp import (
     project_profile,
     project_quote,
     project_ratios,
+    project_valuation,
 )
 
 logger = structlog.get_logger(__name__)
@@ -63,6 +65,24 @@ _QUOTE_TTL = 15
 _QUOTE_TTL_CLOSED = 1800
 _FUNDAMENTALS_TTL = 43200
 _ANNUAL_TREND_YEARS = 4
+_VALUATION_HISTORY_YEARS = 5
+
+# Sector/industry P/E benchmarks aren't symbol-specific and move slowly, so
+# they're cached per exchange with a daily TTL and shared across every symbol
+# on that exchange (rather than refetched into each symbol's fundamentals blob).
+_SECTOR_PE_TTL = 86400
+# Snapshots are empty on weekends/holidays; walk back this many calendar days
+# to the last session before giving up (covers a long-weekend closure).
+_TRADING_DAY_LOOKBACK = 4
+
+# `FmpClient._request` raises only these on a per-call failure; catch them so a
+# missing benchmark or ratios fetch degrades its own fields instead of the
+# whole stock-info lookup.
+_FMP_FETCH_ERRORS = (
+    MarketDataError,
+    MarketDataUnavailableError,
+    MarketDataUpstreamError,
+)
 _CHART_TTL_INTRADAY = 60
 _CHART_TTL_DAILY = 3600
 _MARKET_STATUS_TTL = 60
@@ -132,6 +152,7 @@ class MarketDataService:
             "profile": fundamentals["profile"],
             "ratios": fundamentals["ratios"],
             "financials": fundamentals["financials"],
+            "valuation": fundamentals["valuation"],
             "analyst": analyst,
         }
 
@@ -243,22 +264,32 @@ class MarketDataService:
         cached = await self._cache_get(cache_key)
         if cached is not None:
             logger.info("market_data_cache_hit", key=cache_key)
-            # Entries written before financials existed lack the key; backfill
-            # an empty block so the response shape stays stable until the
-            # 12h TTL rolls the entry over.
+            # Entries written before financials/valuation existed lack the key;
+            # backfill an empty block so the response shape stays stable until
+            # the 12h TTL rolls the entry over.
             cached.setdefault("financials", _empty_financials())
+            cached.setdefault("valuation", _empty_valuation())
             return cached
 
         logger.info("market_data_cache_miss", key=cache_key)
-        profile_raw, ratios_raw, financials = await asyncio.gather(
+        profile_raw, ratios_raw, financials, annual_ratios = await asyncio.gather(
             self._fmp.profile(symbol),
             self._fmp.ratios_ttm(symbol),
             self._fetch_financials(symbol),
+            self._fetch_annual_ratios(symbol),
+        )
+        valuation = await self._fetch_valuation(
+            ratios_raw,
+            annual_ratios,
+            sector=profile_raw.get("sector"),
+            industry=profile_raw.get("industry"),
+            exchange=profile_raw.get("exchange"),
         )
         fundamentals = {
             "profile": project_profile(profile_raw),
             "ratios": project_ratios(ratios_raw),
             "financials": financials,
+            "valuation": valuation,
         }
         await self._cache_set(cache_key, fundamentals, _FUNDAMENTALS_TTL)
         return fundamentals
@@ -296,6 +327,115 @@ class MarketDataService:
         return project_financials(
             income_ttm, balance_ttm, cash_flow_ttm, annual_income
         )
+
+    async def _fetch_annual_ratios(self, symbol: str) -> list[dict[str, Any]]:
+        """Annual valuation ratios for the self-history range. Best-effort."""
+        try:
+            return await self._fmp.ratios_annual(
+                symbol, limit=_VALUATION_HISTORY_YEARS
+            )
+        except _FMP_FETCH_ERRORS as exc:
+            logger.warning(
+                "market_data_annual_ratios_unavailable",
+                symbol=symbol,
+                error=str(exc),
+                exc_type=type(exc).__name__,
+            )
+            return []
+
+    async def _fetch_valuation(
+        self,
+        ratios_ttm: dict[str, Any],
+        annual_ratios: list[dict[str, Any]],
+        *,
+        sector: str | None,
+        industry: str | None,
+        exchange: str | None,
+    ) -> dict[str, Any]:
+        """Project the valuation-context block. Best-effort.
+
+        The sector/industry benchmarks are exchange-scoped and not
+        symbol-specific, so they're fetched through a per-exchange daily cache.
+        A benchmark failure degrades only the vs-sector/vs-industry fields; the
+        company's own P/E and historical range still populate.
+        """
+        sector_rows: list[dict[str, Any]] = []
+        industry_rows: list[dict[str, Any]] = []
+        as_of_date: str | None = None
+        if exchange:
+            sector_rows, industry_rows, as_of_date = (
+                await self._get_sector_pe_cached(exchange)
+            )
+        return project_valuation(
+            ratios_ttm,
+            sector_rows,
+            industry_rows,
+            annual_ratios,
+            sector=sector,
+            industry=industry,
+            exchange=exchange,
+            as_of_date=as_of_date,
+        )
+
+    async def _get_sector_pe_cached(
+        self, exchange: str
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
+        sector_key = f"market:sector_pe:{exchange}"
+        industry_key = f"market:industry_pe:{exchange}"
+        sector_cached = await self._cache_get(sector_key)
+        industry_cached = await self._cache_get(industry_key)
+        if sector_cached is not None and industry_cached is not None:
+            logger.info("market_data_cache_hit", key=sector_key)
+            return (
+                sector_cached.get("rows", []),
+                industry_cached.get("rows", []),
+                sector_cached.get("as_of_date"),
+            )
+
+        logger.info("market_data_cache_miss", key=sector_key)
+        try:
+            # The headline `as_of_date` is the sector snapshot's resolved
+            # session. Both endpoints publish on the same per-exchange cadence,
+            # so the industry walk-back lands on the same day in practice; its
+            # date is discarded rather than tracked separately.
+            (sector_rows, as_of_date), (industry_rows, _) = await asyncio.gather(
+                self._snapshot_with_fallback(self._fmp.sector_pe, exchange),
+                self._snapshot_with_fallback(self._fmp.industry_pe, exchange),
+            )
+        except _FMP_FETCH_ERRORS as exc:
+            logger.warning(
+                "market_data_sector_pe_unavailable",
+                exchange=exchange,
+                error=str(exc),
+                exc_type=type(exc).__name__,
+            )
+            return [], [], None
+
+        await self._cache_set(
+            sector_key,
+            {"rows": sector_rows, "as_of_date": as_of_date},
+            _SECTOR_PE_TTL,
+        )
+        await self._cache_set(
+            industry_key,
+            {"rows": industry_rows, "as_of_date": as_of_date},
+            _SECTOR_PE_TTL,
+        )
+        return sector_rows, industry_rows, as_of_date
+
+    async def _snapshot_with_fallback(
+        self,
+        fetcher: Callable[[str, str], Awaitable[list[dict[str, Any]]]],
+        exchange: str,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        """Walk back from today to the last session that has snapshot rows."""
+        today = datetime.now(timezone.utc).date()
+        for delta in range(_TRADING_DAY_LOOKBACK + 1):
+            on_date = (today - timedelta(days=delta)).isoformat()
+            rows = await fetcher(exchange, on_date)
+            if rows:
+                return rows, on_date
+        return [], None
 
     async def _get_analyst_cached(self, symbol: str) -> dict[str, Any]:
         cache_key = f"market:analyst:{symbol}"
@@ -465,6 +605,12 @@ class MarketDataService:
 
 def _empty_financials() -> dict[str, Any]:
     return project_financials({}, {}, {}, [])
+
+
+def _empty_valuation() -> dict[str, Any]:
+    return project_valuation(
+        {}, [], [], [], sector=None, industry=None, exchange=None, as_of_date=None
+    )
 
 
 def _normalize_symbol(symbol: str) -> str:

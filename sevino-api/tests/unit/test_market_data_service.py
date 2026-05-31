@@ -234,10 +234,47 @@ class TestGetStockInfo:
             if path.endswith("/profile"):
                 return httpx.Response(
                     200,
-                    json=[{"companyName": "Apple Inc.", "exchangeShortName": "NASDAQ"}],
+                    json=[
+                        {
+                            "companyName": "Apple Inc.",
+                            "exchangeShortName": "NASDAQ",
+                            "exchange": "NASDAQ",
+                            "sector": "Technology",
+                            "industry": "Consumer Electronics",
+                        }
+                    ],
                 )
             if path.endswith("/ratios-ttm"):
-                return httpx.Response(200, json=[{"dividendYieldTTM": 0.005}])
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"dividendYieldTTM": 0.005, "priceToEarningsRatioTTM": 25.0}
+                    ],
+                )
+            if path.endswith("/ratios"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"fiscalYear": "2025", "priceToEarningsRatio": 30.0},
+                        {"fiscalYear": "2024", "priceToEarningsRatio": 20.0},
+                    ],
+                )
+            if path.endswith("/sector-pe-snapshot"):
+                return httpx.Response(
+                    200,
+                    json=[{"sector": "Technology", "exchange": "NASDAQ", "pe": 50.0}],
+                )
+            if path.endswith("/industry-pe-snapshot"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {
+                            "industry": "Consumer Electronics",
+                            "exchange": "NASDAQ",
+                            "pe": 40.0,
+                        }
+                    ],
+                )
             if path.endswith("/price-target-consensus"):
                 return httpx.Response(200, json=[{"targetConsensus": 200}])
             if path.endswith("/grades-consensus"):
@@ -278,6 +315,7 @@ class TestGetStockInfo:
             "profile",
             "ratios",
             "financials",
+            "valuation",
             "analyst",
         }
         assert result["quote"]["symbol"] == "AAPL"
@@ -293,6 +331,15 @@ class TestGetStockInfo:
         # Growth derived from the two annual rows: (400 - 380) / 380.
         assert financials["revenue_growth_yoy"] == "0.0526"
         assert len(financials["annual_trend"]) == 2
+        valuation = result["valuation"]
+        assert valuation["pe"] == "25.0"
+        assert valuation["sector_pe"] == "50.0"
+        assert valuation["industry_pe"] == "40.0"
+        # 25 / 50 - 1 = -0.5; 25 / 40 - 1 = -0.375.
+        assert valuation["pe_vs_sector"] == "-0.5"
+        assert valuation["pe_vs_industry"] == "-0.375"
+        assert valuation["pe_5y_low"] == "20.0"
+        assert valuation["pe_5y_high"] == "30.0"
 
     async def test_cache_hits_skip_provider(self):
         called = False
@@ -310,6 +357,7 @@ class TestGetStockInfo:
                 "profile": {"name": "Apple"},
                 "ratios": {"roe": "1.5"},
                 "financials": {"revenue": "400000000000"},
+                "valuation": {"pe": "25.0"},
             }
         )
         redis.store["market:analyst:AAPL"] = json.dumps({"target_consensus": "200"})
@@ -322,6 +370,7 @@ class TestGetStockInfo:
             "profile": {"name": "Apple"},
             "ratios": {"roe": "1.5"},
             "financials": {"revenue": "400000000000"},
+            "valuation": {"pe": "25.0"},
             "analyst": {"target_consensus": "200"},
         }
 
@@ -339,9 +388,11 @@ class TestGetStockInfo:
 
         result = await service.get_stock_info("AAPL")
 
-        # Backfilled to a valid, all-null financials block — never KeyError.
+        # Backfilled to valid, all-null blocks — never KeyError.
         assert result["financials"]["revenue"] is None
         assert result["financials"]["annual_trend"] == []
+        assert result["valuation"]["pe"] is None
+        assert result["valuation"]["valuation_history"] == []
 
     async def test_one_failing_statement_degrades_only_its_fields(self):
         def fmp_handler(request: httpx.Request) -> httpx.Response:
@@ -379,6 +430,145 @@ class TestGetStockInfo:
         # Other statements still populated.
         assert financials["total_debt"] == "110000000000"
         assert financials["free_cash_flow"] == "90000000000"
+
+    async def test_sector_benchmark_cached_per_exchange(self):
+        """The sector/industry snapshot is cached by exchange, not by symbol."""
+        snapshot_calls = 0
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            nonlocal snapshot_calls
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200,
+                    json=[{"companyName": "Apple", "exchange": "NASDAQ",
+                           "sector": "Technology"}],
+                )
+            if path.endswith("/sector-pe-snapshot"):
+                snapshot_calls += 1
+                return httpx.Response(
+                    200,
+                    json=[{"sector": "Technology", "exchange": "NASDAQ", "pe": 50.0}],
+                )
+            if path.endswith("/industry-pe-snapshot"):
+                return httpx.Response(200, json=[])
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{"priceToEarningsRatioTTM": 25.0}])
+            return httpx.Response(200, json=[])
+
+        service, redis = _service(fmp_handler=fmp_handler)
+
+        first = await service.get_stock_info("AAPL")
+        # Second symbol on the same exchange reuses the cached snapshot.
+        del redis.store["market:fundamentals:AAPL"]
+        second = await service.get_stock_info("MSFT")
+
+        assert first["valuation"]["sector_pe"] == "50.0"
+        assert second["valuation"]["sector_pe"] == "50.0"
+        assert snapshot_calls == 1
+        assert "market:sector_pe:NASDAQ" in redis.store
+
+    async def test_sector_benchmark_walks_back_to_last_session(self):
+        """Empty snapshot on the first date(s) walks back to a session with data."""
+        dates_tried: list[str] = []
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200,
+                    json=[{"companyName": "Apple", "exchange": "NASDAQ",
+                           "sector": "Technology"}],
+                )
+            if path.endswith("/sector-pe-snapshot"):
+                on_date = request.url.params["date"]
+                dates_tried.append(on_date)
+                # First date returns empty (e.g. weekend); next has data.
+                if len(dates_tried) == 1:
+                    return httpx.Response(200, json=[])
+                return httpx.Response(
+                    200,
+                    json=[{"sector": "Technology", "exchange": "NASDAQ", "pe": 50.0}],
+                )
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{"priceToEarningsRatioTTM": 25.0}])
+            return httpx.Response(200, json=[])
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        result = await service.get_stock_info("AAPL")
+
+        assert result["valuation"]["sector_pe"] == "50.0"
+        assert result["valuation"]["as_of_date"] == dates_tried[1]
+        assert len(dates_tried) >= 2
+
+    async def test_benchmark_failure_degrades_only_sector_fields(self):
+        """A failing snapshot leaves the company P/E and history intact."""
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(
+                    200,
+                    json=[{"companyName": "Apple", "exchange": "NASDAQ",
+                           "sector": "Technology"}],
+                )
+            if path.endswith("/sector-pe-snapshot"):
+                return httpx.Response(500, text="boom")
+            if path.endswith("/industry-pe-snapshot"):
+                return httpx.Response(500, text="boom")
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{"priceToEarningsRatioTTM": 25.0}])
+            if path.endswith("/ratios"):
+                return httpx.Response(
+                    200, json=[{"fiscalYear": "2025", "priceToEarningsRatio": 30.0}]
+                )
+            return httpx.Response(200, json=[])
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        result = await service.get_stock_info("AAPL")
+
+        valuation = result["valuation"]
+        # Benchmark failed → vs-sector fields null...
+        assert valuation["sector_pe"] is None
+        assert valuation["pe_vs_sector"] is None
+        assert valuation["as_of_date"] is None
+        # ...but the company P/E and own-history range still populate.
+        assert valuation["pe"] == "25.0"
+        assert valuation["pe_5y_low"] == "30.0"
+
+    async def test_missing_exchange_skips_benchmark_fetch(self):
+        """No exchange on the profile → no snapshot call, sector fields null."""
+        snapshot_called = False
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            nonlocal snapshot_called
+            path = request.url.path
+            if path.endswith("/quote"):
+                return httpx.Response(200, json=[{"symbol": "AAPL"}])
+            if path.endswith("/profile"):
+                return httpx.Response(200, json=[{"companyName": "Apple"}])
+            if path.endswith("/sector-pe-snapshot"):
+                snapshot_called = True
+                return httpx.Response(200, json=[])
+            if path.endswith("/ratios-ttm"):
+                return httpx.Response(200, json=[{"priceToEarningsRatioTTM": 25.0}])
+            return httpx.Response(200, json=[])
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        result = await service.get_stock_info("AAPL")
+
+        assert snapshot_called is False
+        assert result["valuation"]["pe"] == "25.0"
+        assert result["valuation"]["sector_pe"] is None
 
 
 # ── get_batch_quotes ───────────────────────────────────────
