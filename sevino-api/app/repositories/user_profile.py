@@ -72,6 +72,27 @@ class UserProfileRepository:
         return new_anchor
 
     @staticmethod
+    async def list_users_due_for_refresh(
+        db: AsyncSession, now: datetime
+    ) -> list[uuid.UUID]:
+        """User IDs whose radar batch is due — the hourly cron's enqueue set.
+
+        A user is due when their anchor is non-null and at or before ``now``
+        and they've completed onboarding. The first batch is enqueued
+        directly by the onboarding hook (which sets the anchor before the
+        account is ``ACTIVE``); the ``onboarding_completed`` gate keeps the
+        cron from re-firing for users who abandoned KYC before activation.
+        """
+        result = await db.execute(
+            select(UserProfile.id).where(
+                UserProfile.next_radar_refresh_at.is_not(None),
+                UserProfile.next_radar_refresh_at <= now,
+                UserProfile.onboarding_completed.is_(True),
+            )
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def try_claim_radar_slot(
         db: AsyncSession, user_id: uuid.UUID
     ) -> datetime | None:

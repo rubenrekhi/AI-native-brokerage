@@ -21,6 +21,7 @@ from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
 from app.tasks.reconcile_funding import reconcile_funding
+from app.tasks.refresh_due_radar import refresh_due_radar
 from app.tasks.sweep_expired_radar import sweep_expired_radar_items
 from app.tasks.sync_assets import sync_assets
 
@@ -232,6 +233,7 @@ class WorkerSettings:
         sweep_expired_radar_items,
         reconcile_funding,
         generate_radar_batch,
+        refresh_due_radar,
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
@@ -242,6 +244,8 @@ class WorkerSettings:
         cron(sweep_expired_radar_items, hour={3}, minute={0}),
         # Hourly at :15 — offset from health_ping/listener_liveness on :00.
         cron(reconcile_funding, minute={15}),
+        # Hourly at :05 — offset from health pings on :00.
+        cron(refresh_due_radar, minute={5}),
     ]
     on_startup = startup
     on_shutdown = shutdown

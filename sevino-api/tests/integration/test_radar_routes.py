@@ -66,7 +66,7 @@ async def test_get_radar_returns_empty_list_when_user_has_no_rows(
 ):
     response = await authenticated_db_client.get("/v1/radar")
     assert response.status_code == 200
-    assert response.json() == []
+    assert response.json() == {"items": [], "next_refresh_at": None}
 
 
 async def test_get_radar_returns_null_overlay_when_no_quote_matches_symbol(
@@ -79,16 +79,16 @@ async def test_get_radar_returns_null_overlay_when_no_quote_matches_symbol(
     response = await authenticated_db_client.get("/v1/radar")
 
     assert response.status_code == 200
-    body = response.json()
-    assert len(body) == 1
-    assert body[0]["symbol"] == "AAPL"
-    assert body[0]["company_name"] == "Apple Inc."
-    assert body[0]["source"] == "user_added"
-    assert body[0]["is_favorited"] is True
+    items = response.json()["items"]
+    assert len(items) == 1
+    assert items[0]["symbol"] == "AAPL"
+    assert items[0]["company_name"] == "Apple Inc."
+    assert items[0]["source"] == "user_added"
+    assert items[0]["is_favorited"] is True
     # `mock_market_data` defaults to an empty quotes list → overlay null.
-    assert body[0]["price"] is None
-    assert body[0]["change_abs"] is None
-    assert body[0]["change_pct"] is None
+    assert items[0]["price"] is None
+    assert items[0]["change_abs"] is None
+    assert items[0]["change_pct"] is None
 
 
 async def test_get_radar_merges_live_prices_into_response(
@@ -111,12 +111,12 @@ async def test_get_radar_merges_live_prices_into_response(
     response = await authenticated_db_client.get("/v1/radar")
 
     assert response.status_code == 200
-    body = response.json()
-    assert body[0]["price"] == "180.50"
-    assert body[0]["change_abs"] == "1.25"
+    items = response.json()["items"]
+    assert items[0]["price"] == "180.50"
+    assert items[0]["change_abs"] == "1.25"
     # FMP-percent (1.24) converted to PctStr factor (0.0124), serialized
     # with the 4-decimal PctStr precision.
-    assert body[0]["change_pct"] == "0.0124"
+    assert items[0]["change_pct"] == "0.0124"
 
 
 async def test_get_radar_returns_200_with_null_overlay_when_market_data_fails(
@@ -130,11 +130,11 @@ async def test_get_radar_returns_200_with_null_overlay_when_market_data_fails(
     response = await authenticated_db_client.get("/v1/radar")
 
     assert response.status_code == 200
-    body = response.json()
-    assert body[0]["symbol"] == "AAPL"
-    assert body[0]["price"] is None
-    assert body[0]["change_abs"] is None
-    assert body[0]["change_pct"] is None
+    items = response.json()["items"]
+    assert items[0]["symbol"] == "AAPL"
+    assert items[0]["price"] is None
+    assert items[0]["change_abs"] is None
+    assert items[0]["change_pct"] is None
 
 
 async def test_get_radar_requires_auth(client):
@@ -198,7 +198,7 @@ async def test_delete_radar_removes_row_and_subsequent_get_excludes_it(
     assert delete_response.status_code == 204
 
     get_response = await authenticated_db_client.get("/v1/radar")
-    assert get_response.json() == []
+    assert get_response.json()["items"] == []
 
 
 async def test_delete_radar_returns_404_for_unknown_id(
@@ -235,7 +235,7 @@ async def test_patch_unfavorite_user_added_returns_204_and_deletes_row(
     assert response.status_code == 204
     # Subsequent GET excludes the deleted row.
     get_response = await authenticated_db_client.get("/v1/radar")
-    assert get_response.json() == []
+    assert get_response.json()["items"] == []
 
 
 async def test_patch_favorite_ai_generated_nulls_expires_at(

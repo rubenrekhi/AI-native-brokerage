@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -72,6 +73,17 @@ def _orm_row(symbol: str = "AAPL", user_id=None) -> RadarItem:
     )
 
 
+def _patch_profile(monkeypatch, anchor=None):
+    """Patch UserProfileRepository.get_by_id so list_for_user can read the
+    cadence anchor without a real DB."""
+    async def fake_get_by_id(db, user_id):
+        return SimpleNamespace(next_radar_refresh_at=anchor)
+
+    monkeypatch.setattr(
+        "app.services.radar.UserProfileRepository.get_by_id", fake_get_by_id
+    )
+
+
 async def test_list_for_user_returns_empty_and_skips_market_data_when_no_rows(
     monkeypatch,
 ):
@@ -82,11 +94,15 @@ async def test_list_for_user_returns_empty_and_skips_market_data_when_no_rows(
         "app.services.radar.RadarItemRepository.list_for_user",
         fake_list_for_user,
     )
+    anchor = datetime(2026, 2, 1, tzinfo=timezone.utc)
+    _patch_profile(monkeypatch, anchor)
 
     market_data = AsyncMock()
     result = await RadarService(market_data, AsyncMock()).list_for_user(uuid4())
 
-    assert result == []
+    # Anchor surfaces even with no items — iOS needs it for the empty state.
+    assert result.items == []
+    assert result.next_refresh_at == anchor
     market_data.get_batch_quotes.assert_not_called()
 
 
@@ -103,6 +119,7 @@ async def test_list_for_user_returns_null_overlay_when_symbol_missing_from_quote
         "app.services.radar.RadarItemRepository.list_for_user",
         fake_list_for_user,
     )
+    _patch_profile(monkeypatch)
 
     market_data = AsyncMock()
     market_data.get_batch_quotes.return_value = {"quotes": []}
@@ -110,11 +127,11 @@ async def test_list_for_user_returns_null_overlay_when_symbol_missing_from_quote
     result = await RadarService(market_data, AsyncMock()).list_for_user(user_id)
 
     market_data.get_batch_quotes.assert_awaited_once_with(["AAPL"])
-    assert len(result) == 1
-    assert isinstance(result[0], RadarItemRead)
-    assert result[0].price is None
-    assert result[0].change_abs is None
-    assert result[0].change_pct is None
+    assert len(result.items) == 1
+    assert isinstance(result.items[0], RadarItemRead)
+    assert result.items[0].price is None
+    assert result.items[0].change_abs is None
+    assert result.items[0].change_pct is None
 
 
 async def test_list_for_user_merges_quote_overlay_into_matching_rows(monkeypatch):
@@ -128,6 +145,7 @@ async def test_list_for_user_merges_quote_overlay_into_matching_rows(monkeypatch
         "app.services.radar.RadarItemRepository.list_for_user",
         fake_list_for_user,
     )
+    _patch_profile(monkeypatch)
 
     market_data = AsyncMock()
     market_data.get_batch_quotes.return_value = {
@@ -145,9 +163,9 @@ async def test_list_for_user_merges_quote_overlay_into_matching_rows(monkeypatch
 
     result = await RadarService(market_data, AsyncMock()).list_for_user(user_id)
 
-    assert result[0].price == Decimal("180.50")
-    assert result[0].change_abs == Decimal("1.25")
-    assert result[0].change_pct == Decimal("1.24") / Decimal(100)
+    assert result.items[0].price == Decimal("180.50")
+    assert result.items[0].change_abs == Decimal("1.25")
+    assert result.items[0].change_pct == Decimal("1.24") / Decimal(100)
 
 
 async def test_list_for_user_graceful_degrades_on_market_data_unavailable(
@@ -163,16 +181,17 @@ async def test_list_for_user_graceful_degrades_on_market_data_unavailable(
         "app.services.radar.RadarItemRepository.list_for_user",
         fake_list_for_user,
     )
+    _patch_profile(monkeypatch)
 
     market_data = AsyncMock()
     market_data.get_batch_quotes.side_effect = MarketDataUnavailableError()
 
     result = await RadarService(market_data, AsyncMock()).list_for_user(user_id)
 
-    assert len(result) == 1
-    assert result[0].price is None
-    assert result[0].change_abs is None
-    assert result[0].change_pct is None
+    assert len(result.items) == 1
+    assert result.items[0].price is None
+    assert result.items[0].change_abs is None
+    assert result.items[0].change_pct is None
 
 
 async def test_add_user_item_uppercases_symbol_before_asset_lookup(monkeypatch):

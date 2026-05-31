@@ -11,6 +11,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.schemas._types import MoneyStr, PctStr
 
 RadarSource = Literal["user_added", "ai_generated"]
+RadarBucket = Literal[
+    "owned_sector", "diversification", "upcoming_event", "broad_notable"
+]
 
 
 class RadarItemCreate(BaseModel):
@@ -45,6 +48,7 @@ class RadarItemRead(BaseModel):
     company_name: str | None
     context_blurb: str | None
     source: RadarSource
+    bucket: RadarBucket | None
     is_favorited: bool
     relevance_score: float | None
     expires_at: datetime | None
@@ -53,3 +57,17 @@ class RadarItemRead(BaseModel):
     price: MoneyStr | None = None
     change_abs: MoneyStr | None = None
     change_pct: PctStr | None = None
+
+
+class RadarListResponse(BaseModel):
+    """Response shape for `GET /v1/radar`.
+
+    Wraps the item list with the cadence anchor so iOS can render the
+    right empty-state copy ("next batch arrives {weekday}"). ``null`` until
+    the user's first batch is enqueued at onboarding completion.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    items: list[RadarItemRead]
+    next_refresh_at: datetime | None

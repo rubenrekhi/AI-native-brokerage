@@ -14,7 +14,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.schemas.radar import RadarItemCreate, RadarItemRead, RadarItemUpdate
+from app.schemas.radar import (
+    RadarItemCreate,
+    RadarItemRead,
+    RadarItemUpdate,
+    RadarListResponse,
+)
 from app.services.market_data import MarketDataService, get_market_data_service
 from app.services.radar import RadarService
 
@@ -33,12 +38,12 @@ def _radar_service(
     return RadarService(market_data, db)
 
 
-@router.get("", response_model=list[RadarItemRead])
+@router.get("", response_model=RadarListResponse)
 async def list_radar(
     user_id: str = Depends(get_current_user),
     service: RadarService = Depends(_radar_service),
-) -> list[RadarItemRead]:
-    """Return the user's radar items."""
+) -> RadarListResponse:
+    """Return the user's radar items plus the next-refresh anchor."""
     return await service.list_for_user(uuid.UUID(user_id))
 
 

@@ -20,7 +20,8 @@ from app.repositories.radar_item import (
     SOURCE_USER_ADDED,
     RadarItemRepository,
 )
-from app.schemas.radar import RadarItemRead
+from app.repositories.user_profile import UserProfileRepository
+from app.schemas.radar import RadarItemRead, RadarListResponse
 from app.services.market_data import MarketDataService
 
 logger = structlog.get_logger(__name__)
@@ -35,8 +36,12 @@ class RadarService:
 
     async def list_for_user(
         self, user_id: uuid.UUID
-    ) -> list[RadarItemRead]:
+    ) -> RadarListResponse:
         """Return the user's visible radar rows with live prices merged.
+
+        The response wraps the rows with ``next_refresh_at`` (the user's
+        cadence anchor) so iOS can render the right empty-state copy even
+        when the list is empty.
 
         Prices come from `MarketDataService.get_batch_quotes` (FMP-backed,
         cached per-symbol). If the upstream is unavailable, returns the
@@ -44,8 +49,11 @@ class RadarService:
         truth and a missing price overlay is degraded UX, not a 5xx.
         """
         items = await RadarItemRepository.list_for_user(self._db, user_id)
+        profile = await UserProfileRepository.get_by_id(self._db, user_id)
+        next_refresh_at = profile.next_radar_refresh_at if profile else None
+
         if not items:
-            return []
+            return RadarListResponse(items=[], next_refresh_at=next_refresh_at)
 
         symbols = [item.symbol for item in items]
         quotes_by_symbol: dict[str, dict] = {}
@@ -61,10 +69,13 @@ class RadarService:
                 symbol_count=len(symbols),
             )
 
-        return [
-            _build_read(item, quotes_by_symbol.get(item.symbol))
-            for item in items
-        ]
+        return RadarListResponse(
+            items=[
+                _build_read(item, quotes_by_symbol.get(item.symbol))
+                for item in items
+            ],
+            next_refresh_at=next_refresh_at,
+        )
 
     async def add_user_item(
         self, user_id: uuid.UUID, symbol: str

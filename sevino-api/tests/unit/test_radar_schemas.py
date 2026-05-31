@@ -17,6 +17,7 @@ def _make_read(**overrides) -> RadarItemRead:
         "company_name": "Apple Inc.",
         "context_blurb": None,
         "source": "user_added",
+        "bucket": None,
         "is_favorited": True,
         "relevance_score": None,
         "expires_at": None,
@@ -79,6 +80,10 @@ class TestRadarItemRead:
     def test_rejects_unknown_source_value(self):
         with pytest.raises(ValidationError):
             _make_read(source="malicious")
+
+    def test_bucket_is_exposed_on_the_wire(self):
+        dumped = _make_read(bucket="diversification").model_dump(mode="json")
+        assert dumped["bucket"] == "diversification"
 
     def test_round_trip_through_json(self):
         original = _make_read(price=Decimal("180.50"), change_pct=Decimal("0.0070"))

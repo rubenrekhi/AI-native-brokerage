@@ -244,6 +244,15 @@ class TestGetOnboardingStatus:
 
 class TestPostOnboardingSubmit:
 
+    @pytest.fixture(autouse=True)
+    def _stub_arq(self):
+        """The submit route enqueues the first radar batch via
+        ``request.app.state.arq``; the test lifespan never sets it."""
+        prior = getattr(app.state, "arq", None)
+        app.state.arq = AsyncMock()
+        yield
+        app.state.arq = prior
+
     async def _fill_onboarding(self, client):
         """Helper — save all required onboarding fields via PATCH calls."""
         steps = [
