@@ -1,17 +1,10 @@
-"""Daily ARQ task for generating user digest snapshots.
-
-The cron runs twice around 9am New York time (13:00 and 14:00 UTC) so DST
-doesn't need special scheduling logic. Idempotency is enforced before work
-starts by selecting only users missing today's snapshot, and again by the
-repository upsert used by ``DigestService.generate_for_user``.
-"""
-
 from __future__ import annotations
 
 import asyncio
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import sentry_sdk
 import structlog
 
 from app.database import async_session
@@ -26,7 +19,6 @@ DIGEST_GENERATION_CONCURRENCY = 10
 
 
 async def generate_daily_digest(ctx: dict) -> dict:
-    """Generate today's digest for recently active users missing one."""
     now = datetime.now(timezone.utc)
     ny_local_date = now.astimezone(ET).date()
     active_since = now - RECENTLY_ACTIVE_WINDOW
@@ -43,9 +35,18 @@ async def generate_daily_digest(ctx: dict) -> dict:
         *(_generate_for_user(ctx, user_id, semaphore) for user_id in user_ids),
         return_exceptions=True,
     )
-    failures = [result for result in results if isinstance(result, Exception)]
-    generated = len(results) - len(failures)
+    failures: list[tuple[uuid.UUID, BaseException]] = [
+        (user_id, result)
+        for user_id, result in zip(user_ids, results)
+        if isinstance(result, BaseException)
+    ]
+    for user_id, exc in failures:
+        with sentry_sdk.new_scope() as scope:
+            scope.set_tag("digest_component", "daily_digest_cron")
+            scope.set_tag("user_id", str(user_id))
+            sentry_sdk.capture_exception(exc)
 
+    generated = len(results) - len(failures)
     logger.info(
         "daily_digest_generation_complete",
         candidate_count=len(user_ids),
@@ -53,13 +54,11 @@ async def generate_daily_digest(ctx: dict) -> dict:
         failed_count=len(failures),
         ny_local_date=ny_local_date.isoformat(),
     )
-    if failures:
-        raise ExceptionGroup("daily digest generation failed", failures)
     return {
         "status": "ok",
         "candidate_count": len(user_ids),
         "generated_count": generated,
-        "failed_count": 0,
+        "failed_count": len(failures),
     }
 
 

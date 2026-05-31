@@ -235,7 +235,7 @@ def _dedupe(matches: list[_NewsMatch]) -> list[_NewsMatch]:
     for index, match in enumerate(matches):
         root = find(index)
         current = clusters.get(root)
-        if current is None or _as_utc(match.item.published_at) < _as_utc(
+        if current is None or _as_utc(match.item.published_at) > _as_utc(
             current.item.published_at
         ):
             clusters[root] = match

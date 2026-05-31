@@ -195,12 +195,12 @@ async def test_missing_summary_and_body_keeps_empty_summary():
     assert candidates[0].card.summary == ""
 
 
-async def test_dedupe_cluster_keeps_earlier_published_headline():
-    earlier = _news(
+async def test_dedupe_cluster_keeps_latest_published_headline():
+    earlier_duplicate = _news(
         "AAPL shares rise after product update",
         datetime(2026, 5, 31, 12, 0, tzinfo=timezone.utc),
     )
-    later_duplicate = _news(
+    later = _news(
         "AAPL shares rise product update after",
         datetime(2026, 5, 31, 14, 0, tzinfo=timezone.utc),
     )
@@ -208,14 +208,14 @@ async def test_dedupe_cluster_keeps_earlier_published_headline():
         "AAPL supplier outlook improves",
         datetime(2026, 5, 31, 15, 0, tzinfo=timezone.utc),
     )
-    provider = FakeStockNews([later_duplicate, unrelated_newer, earlier])
+    provider = FakeStockNews([later, unrelated_newer, earlier_duplicate])
     generator = NewsGenerator(fmp=provider, now=lambda: NOW)
 
     candidates = await generator.generate(_ctx(_holding("AAPL")))
 
     assert [candidate.card.headline for candidate in candidates] == [
         "AAPL supplier outlook improves",
-        "AAPL shares rise after product update",
+        "AAPL shares rise product update after",
     ]
 
 

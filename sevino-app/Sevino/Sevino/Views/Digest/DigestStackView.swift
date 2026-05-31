@@ -23,19 +23,7 @@ struct DigestStackView: View {
             )
 
             GeometryReader { proxy in
-                if let card = viewModel.currentCard {
-                    DigestStoryCard(card: card, scale: scale)
-                        .frame(
-                            width: min(proxy.size.width, 360 * scale),
-                            alignment: .top
-                        )
-                        .frame(maxHeight: min(proxy.size.height, 460 * scale), alignment: .top)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .offset(x: dragOffset)
-                        .animation(.spring(duration: 0.32, bounce: 0.16), value: viewModel.currentCardIndex)
-                        .animation(.spring(duration: 0.25, bounce: 0.12), value: dragOffset)
-                        .gesture(dragGesture(cardWidth: proxy.size.width))
-                }
+                carousel(in: proxy.size)
             }
             .frame(maxHeight: 460 * scale)
         }
@@ -43,6 +31,31 @@ struct DigestStackView: View {
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 20 * scale)
         .simultaneousGesture(TapGesture().onEnded { dismissKeyboard() })
+    }
+
+    @ViewBuilder
+    private func carousel(in size: CGSize) -> some View {
+        if size.width > 0 && !viewModel.cards.isEmpty {
+            let cardWidth = max(min(size.width - 48 * scale, 320 * scale), 1)
+            let spacing = 14 * scale
+            let centerInset = max((size.width - cardWidth) / 2, 0)
+            let baseOffset = -CGFloat(viewModel.currentCardIndex) * (cardWidth + spacing)
+
+            HStack(spacing: spacing) {
+                ForEach(Array(viewModel.cards.enumerated()), id: \.element.id) { index, card in
+                    DigestStoryCard(card: card, scale: scale)
+                        .frame(width: cardWidth)
+                        .frame(maxHeight: min(size.height, 460 * scale), alignment: .top)
+                        .opacity(index == viewModel.currentCardIndex ? 1.0 : 0.55)
+                        .scaleEffect(index == viewModel.currentCardIndex ? 1.0 : 0.94)
+                }
+            }
+            .padding(.leading, centerInset)
+            .offset(x: baseOffset + dragOffset)
+            .animation(.spring(duration: 0.32, bounce: 0.16), value: viewModel.currentCardIndex)
+            .animation(.spring(duration: 0.25, bounce: 0.12), value: dragOffset)
+            .gesture(dragGesture(cardWidth: cardWidth))
+        }
     }
 
     private func dragGesture(cardWidth: CGFloat) -> some Gesture {
