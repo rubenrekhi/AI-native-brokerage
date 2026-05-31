@@ -32,8 +32,12 @@ logger = structlog.get_logger(__name__)
 
 class RadarService:
     def __init__(
-        self, market_data: MarketDataService, db: AsyncSession
+        self, market_data: MarketDataService | None, db: AsyncSession
     ) -> None:
+        # Only the read path (`list_for_user`) needs market data for its price
+        # overlay. The write paths (add / remove / toggle) never touch it, so
+        # callers that only mutate — like the chat `radar_operations` tool when
+        # `FMP_API_KEY` is unset — may pass None.
         self._market_data = market_data
         self._db = db
 
@@ -60,29 +64,30 @@ class RadarService:
 
         symbols = [item.symbol for item in items]
         quotes_by_symbol: dict[str, dict] = {}
-        try:
-            response = await self._market_data.get_batch_quotes(symbols)
-            quotes_by_symbol = {
-                q["symbol"]: q for q in response.get("quotes", [])
-            }
-        except (
-            MarketDataUnavailableError,
-            MarketDataUpstreamError,
-            MarketDataError,
-            MarketDataInvalidInputError,
-        ) as exc:
-            # Live quote overlay is optional — radar items are the source of
-            # truth and must always render. Catch the full market-data error
-            # family (network failure, upstream 4xx/5xx like 429 rate limits,
-            # missing data, malformed inputs) and degrade to null overlays
-            # rather than 500ing the whole endpoint.
-            logger.warning(
-                "radar_quotes_unavailable",
-                user_id=str(user_id),
-                symbol_count=len(symbols),
-                error_type=type(exc).__name__,
-                error=str(exc),
-            )
+        if self._market_data is not None:
+            try:
+                response = await self._market_data.get_batch_quotes(symbols)
+                quotes_by_symbol = {
+                    q["symbol"]: q for q in response.get("quotes", [])
+                }
+            except (
+                MarketDataUnavailableError,
+                MarketDataUpstreamError,
+                MarketDataError,
+                MarketDataInvalidInputError,
+            ) as exc:
+                # Live quote overlay is optional — radar items are the source of
+                # truth and must always render. Catch the full market-data error
+                # family (network failure, upstream 4xx/5xx like 429 rate limits,
+                # missing data, malformed inputs) and degrade to null overlays
+                # rather than 500ing the whole endpoint.
+                logger.warning(
+                    "radar_quotes_unavailable",
+                    user_id=str(user_id),
+                    symbol_count=len(symbols),
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                )
 
         return RadarListResponse(
             items=[
@@ -91,6 +96,18 @@ class RadarService:
             ],
             next_refresh_at=next_refresh_at,
         )
+
+    async def list_items(
+        self, user_id: uuid.UUID
+    ) -> list[RadarItemRead]:
+        """Return the user's visible radar rows without the live-price overlay.
+
+        The chat `radar_operations` "get" path needs source + context_blurb,
+        not quotes, so this skips the market-data merge `list_for_user` does
+        (and works with no `market_data` wired).
+        """
+        items = await RadarItemRepository.list_for_user(self._db, user_id)
+        return [RadarItemRead.model_validate(item) for item in items]
 
     async def add_user_item(
         self, user_id: uuid.UUID, symbol: str
@@ -212,6 +229,33 @@ class RadarService:
             radar_item_id=str(item_id),
             symbol=item.symbol,
         )
+
+    async def remove_user_item_by_symbol(
+        self, user_id: uuid.UUID, symbol: str
+    ) -> bool:
+        """Remove a radar item by ticker for callers that only know the symbol.
+
+        Deletes regardless of `source` (AI-surfaced or user-added) — if the
+        user wants a ticker off their radar, it goes. Idempotent: returns
+        ``False`` when the symbol isn't on the radar (the absence the caller
+        wanted already holds) so the chat tool can phrase "wasn't there" rather
+        than erroring.
+        """
+        normalized = symbol.upper()
+        item = await RadarItemRepository.get_by_symbol_for_user(
+            self._db, user_id, normalized
+        )
+        if item is None:
+            return False
+
+        await RadarItemRepository.delete(self._db, item)
+        logger.info(
+            "radar_item_removed_by_symbol",
+            user_id=str(user_id),
+            radar_item_id=str(item.id),
+            symbol=normalized,
+        )
+        return True
 
 
 def _build_read(item, quote: dict | None) -> RadarItemRead:

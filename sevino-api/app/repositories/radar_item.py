@@ -101,6 +101,22 @@ class RadarItemRepository:
         return result.scalar_one_or_none()
 
     @staticmethod
+    async def get_by_symbol_for_user(
+        db: AsyncSession, user_id: uuid.UUID, symbol: str
+    ) -> RadarItem | None:
+        """Ownership-guarded lookup by ticker. The `(user_id, symbol)` unique
+        constraint guarantees at most one row, so callers that only know the
+        symbol (e.g. the chat `radar_operations` tool) can resolve it without the
+        row id."""
+        result = await db.execute(
+            select(RadarItem).where(
+                RadarItem.user_id == user_id,
+                RadarItem.symbol == symbol,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
     async def create_user_added(
         db: AsyncSession,
         *,

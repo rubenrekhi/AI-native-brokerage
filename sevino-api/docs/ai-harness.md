@@ -15,7 +15,7 @@ Major moving parts:
 - **Loop orchestrator** (`runtime/loop.py`) — owns the turn-level try/finally, the iterate-on-`pause_turn`/`tool_use` while-loop, cap checks, and terminal finalization.
 - **Flow** (`runtime/flow/`) — one iteration's body (`iteration.py`), stream consumption (`stream_consumer.py`), and turn setup/teardown (`turn_lifecycle.py`).
 - **Dispatch** (`runtime/dispatch/`) — custom registered-tool execution (`custom.py`) and Anthropic-hosted server-tool tracking (`server.py`).
-- **Tools** (`tools/`) — the `Tool` ABC, `ToolRegistry`, and two concrete tools (`get_stock_info`, `display_stock_card`).
+- **Tools** (`tools/`) — the `Tool` ABC, `ToolRegistry`, and three concrete tools (`get_stock_info`, `display_stock_card`, `radar_operations`).
 - **Transport** (`transport/`) — SSE event types (`events.py`), the bounded-queue emitter (`emitter.py`), and Redis idempotency (`idempotency.py`).
 - **Blocks** (`blocks.py`) — the UI block schemas streamed and persisted; hand-mirrored by iOS.
 - **Prompts / models / client / observability** — system-prompt loading, model identifiers, the Anthropic client, and the Langfuse wrapper.
@@ -62,7 +62,8 @@ app/ai/
 │   ├── base.py                     # Tool ABC, ToolResult, ToolContext, ToolRegistry, ToolHttpClients
 │   ├── _performance.py             # shared change-for-range helper (PERFORMANCE_RANGES)
 │   ├── stock_info.py               # GetStockInfo — read data for the model (pill, no card)
-│   └── display_stock_card.py       # DisplayStockCard — render the visual card
+│   ├── display_stock_card.py       # DisplayStockCard — render the visual card
+│   └── radar_operations.py         # RadarOperations — get/add/remove on the user's radar (pill)
 └── transport/
     ├── __init__.py                 # empty
     ├── events.py                   # SSE Event union + serialize()/parse_wire_frame()
@@ -236,10 +237,11 @@ sequenceDiagram
 | `base.py` · `ToolContext` | Injected into `execute`: `user_id`, `db_factory`, `sse_emitter`, `http_clients`, and an **unused** `parent_emitter` (sub-agent scaffolding). | — |
 | `base.py` · `ToolHttpClients` | `market_data: MarketDataService | None` (None without `FMP_API_KEY`). | Extend here to give tools more outbound clients. |
 | `base.py` · `ToolRegistry` | `register(tool)` (rejects dupes), `get(name)`, `is_empty`, `to_anthropic_spec()` (caches the array tail). | Concrete impl of the `types.py` Protocol. |
-| `__init__.py` · `build_default_registry()` / `DEFAULT_REGISTRY` | Registers `GetStockInfo` + `DisplayStockCard`. | Module-level singleton used by `post_turn`. |
+| `__init__.py` · `build_default_registry()` / `DEFAULT_REGISTRY` | Registers `GetStockInfo` + `DisplayStockCard` + `RadarOperations`. | Module-level singleton used by `post_turn`. |
 | `_performance.py` · `change_for_range(...)`, `bars_from_chart`, `PERFORMANCE_RANGES` | Shared change-over-range math so model prose and the iOS card can't drift. | `1D` uses FMP daily change; longer ranges diff first bar to price. |
 | `stock_info.py` · `GetStockInfo` | Read live quote/profile/ratios/analyst for one ticker; returns data to the model. Emits a "Pulling data on X" pill (active→complete/failed). | Data goes to `model_payload`, plus the completed pill as `ui_block`. Fetches info + all range charts concurrently; degrades per-range on failure. |
 | `display_stock_card.py` · `DisplayStockCard` | Render the inline visual card (logo, price, chart, optional stats). Pre-fetches bars for every range. | Emits no pill itself; returns a `StockCardBlock` as `ui_block`. Only the initial range is load-bearing. |
+| `radar_operations.py` · `RadarOperations` | Read/add/remove on the user's radar via `RadarService` (adds land starred/user-added). `get` returns each item's human/ai source + AI-pick reason (`context_blurb`); pill "Looking at your Radar". add/remove emit "Adding/Removing $TICKER …". All active→complete/failed. | `operation` is `get`/`add`/`remove`; `symbol` required for add/remove only. Idempotent: duplicate add → `already_on_radar`, absent remove → `not_on_radar` (both complete, not errors). Reuses the radar service/repository; no new wire `Block`. |
 
 ### Transport (`app/ai/transport/`)
 
