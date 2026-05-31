@@ -19,9 +19,20 @@ struct PortfolioSnapshot: Equatable {
     let chartDates: [Date]
 }
 
+/// Pill-only subset of `PortfolioSnapshot`. Returned by `fetchSnapshot()` for
+/// the 5-min auto-refresh timer, which updates the equity number on the pill
+/// without re-fetching the (cheap-but-pointless-on-the-pill) history bars.
+struct PortfolioPillUpdate: Equatable {
+    let equity: Decimal
+    let currency: String
+    let dailyChangeAbs: Decimal
+    let dailyChangePct: Decimal
+}
+
 /// Protocol for fetching portfolio data — enables mocking in previews and tests.
 protocol PortfolioServiceProtocol: Sendable {
     func fetchPortfolio(for range: TimeRange) async throws -> PortfolioSnapshot
+    func fetchSnapshot() async throws -> PortfolioPillUpdate
 }
 
 /// Calls `GET /v1/portfolio/snapshot` and `GET /v1/portfolio/history?range=...`
@@ -44,6 +55,16 @@ final class PortfolioService: PortfolioServiceProtocol {
         async let hist: PortfolioHistoryDTO  = api.get(Self.historyPath(for: range))
         let (snapshot, history) = try await (snap, hist)
         return Self.makeSnapshot(snapshot: snapshot, history: history, range: range)
+    }
+
+    func fetchSnapshot() async throws -> PortfolioPillUpdate {
+        let dto: PortfolioSnapshotDTO = try await api.get("/v1/portfolio/snapshot")
+        return PortfolioPillUpdate(
+            equity: dto.equity,
+            currency: dto.currency,
+            dailyChangeAbs: dto.dailyChangeAbs,
+            dailyChangePct: dto.dailyChangePct
+        )
     }
 
     static func historyPath(for range: TimeRange) -> String {

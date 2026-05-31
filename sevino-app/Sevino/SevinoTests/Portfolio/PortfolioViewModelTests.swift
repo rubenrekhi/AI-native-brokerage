@@ -156,6 +156,94 @@ final class PortfolioViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.error)
     }
 
+    // MARK: - loadSnapshot
+
+    func testLoadSnapshotUpdatesEquityAndCurrency() async {
+        mockService.pillUpdate = PortfolioPillUpdate(
+            equity: Decimal(string: "2750.50")!,
+            currency: "USD",
+            dailyChangeAbs: Decimal(string: "15.00")!,
+            dailyChangePct: Decimal(string: "0.0055")!
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.equity, Decimal(string: "2750.50"))
+        XCTAssertEqual(viewModel.currency, "USD")
+    }
+
+    func testLoadSnapshotOnOneDayUpdatesGainFromDailyChange() async {
+        viewModel.setTimeRange(.oneDay)
+        mockService.pillUpdate = PortfolioPillUpdate(
+            equity: Decimal(string: "2500.00")!,
+            currency: "USD",
+            dailyChangeAbs: Decimal(string: "42.00")!,
+            dailyChangePct: Decimal(string: "0.0170")!
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.gainAbs, Decimal(string: "42.00"))
+        XCTAssertEqual(viewModel.gainPct, Decimal(string: "0.0170"))
+    }
+
+    func testLoadSnapshotOnNonOneDayLeavesGainUnchanged() async {
+        await viewModel.loadPortfolio()
+        let preGainAbs = viewModel.gainAbs
+        let preGainPct = viewModel.gainPct
+
+        viewModel.setTimeRange(.oneMonth)
+        mockService.pillUpdate = PortfolioPillUpdate(
+            equity: Decimal(string: "9999.99")!,
+            currency: "USD",
+            dailyChangeAbs: Decimal(string: "999.00")!,
+            dailyChangePct: Decimal(string: "0.9999")!
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.gainAbs, preGainAbs,
+                       "Non-oneDay ranges read gain from history; snapshot daily-change must not bleed in")
+        XCTAssertEqual(viewModel.gainPct, preGainPct)
+    }
+
+    func testLoadSnapshotLeavesChartFieldsUntouched() async {
+        await viewModel.loadPortfolio()
+        let preChartPoints = viewModel.chartPoints
+        let preChartValues = viewModel.chartValues
+        let preChartDates = viewModel.chartDates
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertEqual(viewModel.chartPoints, preChartPoints)
+        XCTAssertEqual(viewModel.chartValues, preChartValues)
+        XCTAssertEqual(viewModel.chartDates, preChartDates)
+    }
+
+    func testLoadSnapshotDoesNotToggleIsLoading() async {
+        XCTAssertFalse(viewModel.isLoading)
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertFalse(viewModel.isLoading,
+                       "Background pill refresh must not flip isLoading — the pill would briefly flicker to its empty state")
+    }
+
+    func testLoadSnapshotSilentOnError() async {
+        await viewModel.loadPortfolio()
+        let preEquity = viewModel.equity
+
+        mockService.fetchSnapshotError = NSError(
+            domain: "test", code: 0,
+            userInfo: [NSLocalizedDescriptionKey: "Network error"]
+        )
+
+        await viewModel.loadSnapshot()
+
+        XCTAssertNil(viewModel.error, "Timer-driven background refresh must not surface alerts")
+        XCTAssertEqual(viewModel.equity, preEquity, "Last-good equity must remain visible on the pill")
+    }
+
     // MARK: - clearError
 
     func testClearErrorRemovesError() async {

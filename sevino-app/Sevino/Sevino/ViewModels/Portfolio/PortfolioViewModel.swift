@@ -50,6 +50,28 @@ final class PortfolioViewModel {
         }
     }
 
+    /// Background pill refresh fired by the 5-min timer and scene-phase resume.
+    /// Does not toggle `isLoading` or surface errors: the pill keeps showing the
+    /// last-good value via `hasLoaded`, and a transient network blip on a timer
+    /// tick must not pop a full-screen alert.
+    ///
+    /// Gain only updates on `.oneDay` because the snapshot endpoint carries the
+    /// daily delta; non-`.oneDay` gains are server-computed from history and
+    /// stay frozen until the next `loadPortfolio()` (modal re-present or range
+    /// change). The pill only renders the chevron direction, which rarely flips
+    /// intraday, so this staleness is invisible in practice.
+    func loadSnapshot() async {
+        do {
+            let pill = try await service.fetchSnapshot()
+            equity = pill.equity
+            currency = pill.currency
+            if selectedTimeRange == .oneDay {
+                gainAbs = pill.dailyChangeAbs
+                gainPct = pill.dailyChangePct
+            }
+        } catch { }
+    }
+
     func clearError() {
         error = nil
     }
