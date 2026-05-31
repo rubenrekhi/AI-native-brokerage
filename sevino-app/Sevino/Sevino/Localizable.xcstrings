@@ -36,6 +36,166 @@
         }
       }
     },
+    "digest.earnings_eps_actual" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPS actual"
+          }
+        }
+      }
+    },
+    "digest.earnings_eps_estimate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "EPS estimate"
+          }
+        }
+      }
+    },
+    "digest.earnings_revenue_actual" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenue actual"
+          }
+        }
+      }
+    },
+    "digest.earnings_revenue_estimate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenue estimate"
+          }
+        }
+      }
+    },
+    "digest.earnings_stock_reaction" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stock reaction %@"
+          }
+        }
+      }
+    },
+    "digest.market_direction_down" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes lower"
+          }
+        }
+      }
+    },
+    "digest.market_direction_mixed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes mixed"
+          }
+        }
+      }
+    },
+    "digest.market_direction_up" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Major indexes higher"
+          }
+        }
+      }
+    },
+    "digest.news_open_story" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open story"
+          }
+        }
+      }
+    },
+    "digest.pending_filled_empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No filled orders"
+          }
+        }
+      }
+    },
+    "digest.pending_filled_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filled"
+          }
+        }
+      }
+    },
+    "digest.pending_recurring_executed_empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recurring orders executed"
+          }
+        }
+      }
+    },
+    "digest.pending_recurring_executed_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recurring executed"
+          }
+        }
+      }
+    },
+    "digest.pending_recurring_skipped_empty" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No skipped recurring orders"
+          }
+        }
+      }
+    },
+    "digest.pending_recurring_skipped_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skipped"
+          }
+        }
+      }
+    },
+    "digest.pending_shares" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "shares"
+          }
+        }
+      }
+    },
     "digest.progress_accessibility" : {
       "localizations" : {
         "en" : {
@@ -46,12 +206,72 @@
         }
       }
     },
+    "digest.radar_new" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        }
+      }
+    },
+    "digest.radar_refreshed_title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your Radar refreshed"
+          }
+        }
+      }
+    },
+    "digest.radar_removed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Removed"
+          }
+        }
+      }
+    },
+    "digest.radar_updated" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated %@"
+          }
+        }
+      }
+    },
     "digest.title" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Today's Digest"
+          }
+        }
+      }
+    },
+    "digest.upcoming_reports" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reports %@"
+          }
+        }
+      }
+    },
+    "digest.watchlist_badge" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From your watchlist"
           }
         }
       }

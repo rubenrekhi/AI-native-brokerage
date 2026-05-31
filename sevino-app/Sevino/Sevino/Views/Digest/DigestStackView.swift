@@ -141,7 +141,7 @@ private struct DigestCardShell: View {
                 .font(.system(size: 15 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary.opacity(0.68))
 
-            DigestCardPlaceholderBody(card: card, scale: scale)
+            DigestCardBody(card: card, scale: scale)
 
             Spacer(minLength: 0)
         }
@@ -149,6 +149,34 @@ private struct DigestCardShell: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.sevinoSecondary, in: .rect(cornerRadius: 8 * scale))
         .foregroundStyle(Color.sevinoPrimary)
+    }
+}
+
+private struct DigestCardBody: View {
+    let card: DigestCard
+    let scale: CGFloat
+
+    var body: some View {
+        switch card {
+        case .dividends(let card):
+            DividendsCardView(card: card, scale: scale)
+        case .pendingOrderActivity(let card):
+            PendingOrdersCardView(card: card, scale: scale)
+        case .bigMove(let card):
+            BigMoveCardView(card: card, scale: scale)
+        case .watchlistMove(let card):
+            WatchlistMoveCardView(card: card, scale: scale)
+        case .marketContext(let card):
+            MarketContextCardView(card: card, scale: scale)
+        case .radarRefresh(let card):
+            RadarRefreshCardView(card: card, scale: scale)
+        case .earningsResult(let card):
+            EarningsResultCardView(card: card, scale: scale)
+        case .upcomingEarnings(let card):
+            UpcomingEarningsCardView(card: card, scale: scale)
+        case .news(let card):
+            NewsCardView(card: card, scale: scale)
+        }
     }
 }
 

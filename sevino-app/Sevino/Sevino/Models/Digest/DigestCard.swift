@@ -153,18 +153,32 @@ enum DigestCard: Codable, Identifiable, Equatable, Sendable {
     }
 }
 
-struct DividendPaymentDTO: Codable, Equatable, Sendable {
+struct DividendPaymentDTO: Codable, Identifiable, Equatable, Sendable {
     let symbol: String
     @DecimalString var amount: Decimal
     let paidAt: Date
+
+    var id: String {
+        "\(symbol)-\(paidAt.timeIntervalSince1970)"
+    }
 }
 
-struct OrderActivityItemDTO: Codable, Equatable, Sendable {
+struct OrderActivityItemDTO: Codable, Identifiable, Equatable, Sendable {
     let symbol: String
     let name: String?
     let side: String?
     @DecimalStringOptional var qty: Decimal?
     @DecimalStringOptional var notional: Decimal?
+
+    var id: String {
+        [
+            symbol,
+            name ?? "",
+            side ?? "",
+            qty?.description ?? "",
+            notional?.description ?? ""
+        ].joined(separator: "|")
+    }
 }
 
 struct DividendsDigestCard: Codable, Equatable, Sendable {

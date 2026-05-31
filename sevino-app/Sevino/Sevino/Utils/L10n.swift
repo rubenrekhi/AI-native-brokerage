@@ -348,11 +348,39 @@ enum L10n {
     enum Digest {
         static let title = String(localized: "digest.title")
         static let dismissAccessibility = String(localized: "digest.dismiss_accessibility")
+        static let earningsEpsActual = String(localized: "digest.earnings_eps_actual")
+        static let earningsEpsEstimate = String(localized: "digest.earnings_eps_estimate")
+        static let earningsRevenueActual = String(localized: "digest.earnings_revenue_actual")
+        static let earningsRevenueEstimate = String(localized: "digest.earnings_revenue_estimate")
+        static let marketDirectionMixed = String(localized: "digest.market_direction_mixed")
+        static let marketDirectionDown = String(localized: "digest.market_direction_down")
+        static let marketDirectionUp = String(localized: "digest.market_direction_up")
+        static let newsOpenStory = String(localized: "digest.news_open_story")
+        static let pendingFilledTitle = String(localized: "digest.pending_filled_title")
+        static let pendingFilledEmpty = String(localized: "digest.pending_filled_empty")
+        static let pendingRecurringExecutedTitle = String(localized: "digest.pending_recurring_executed_title")
+        static let pendingRecurringExecutedEmpty = String(localized: "digest.pending_recurring_executed_empty")
+        static let pendingRecurringSkippedTitle = String(localized: "digest.pending_recurring_skipped_title")
+        static let pendingRecurringSkippedEmpty = String(localized: "digest.pending_recurring_skipped_empty")
+        static let pendingShares = String(localized: "digest.pending_shares")
+        static let radarNew = String(localized: "digest.radar_new")
+        static let radarRefreshedTitle = String(localized: "digest.radar_refreshed_title")
+        static let radarRemoved = String(localized: "digest.radar_removed")
+        static let watchlistBadge = String(localized: "digest.watchlist_badge")
         static func cardsReady(_ count: Int) -> String {
             String(format: String(localized: "digest.cards_ready"), count)
         }
+        static func earningsStockReaction(_ reaction: String) -> String {
+            String(format: String(localized: "digest.earnings_stock_reaction"), reaction)
+        }
         static func progressAccessibility(_ current: Int, _ total: Int) -> String {
             String(format: String(localized: "digest.progress_accessibility"), current, total)
+        }
+        static func radarUpdated(_ date: String) -> String {
+            String(format: String(localized: "digest.radar_updated"), date)
+        }
+        static func upcomingReports(_ date: String) -> String {
+            String(format: String(localized: "digest.upcoming_reports"), date)
         }
     }
 
