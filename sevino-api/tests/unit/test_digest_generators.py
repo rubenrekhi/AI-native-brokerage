@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from app.repositories.radar_item import RadarItemRepository
 from app.services.digest.generators import (
+    EARNINGS_GENERATORS,
     KNOWN_GENERATORS,
     PRICE_MOVE_GENERATORS,
     create_known_generators,
@@ -19,6 +20,10 @@ from app.services.digest.types import DigestContext, MarketState
 
 
 class _MarketData:
+    pass
+
+
+class _Fmp:
     pass
 
 
@@ -213,6 +218,15 @@ def test_known_generators_include_activity_and_price_move_generators():
         "BigMovesGenerator",
         "WatchlistMovesGenerator",
         "MarketContextGenerator",
+        "EarningsResultsGenerator",
+        "UpcomingEarningsGenerator",
+    ]
+
+
+def test_earnings_generators_are_registered():
+    assert [generator.__name__ for generator in EARNINGS_GENERATORS] == [
+        "EarningsResultsGenerator",
+        "UpcomingEarningsGenerator",
     ]
 
 
@@ -226,4 +240,16 @@ def test_create_known_generators_adds_price_moves_with_market_data():
         "BigMovesGenerator",
         "WatchlistMovesGenerator",
         "MarketContextGenerator",
+    ]
+
+
+def test_create_known_generators_adds_earnings_with_fmp():
+    generators = create_known_generators(fmp=_Fmp())
+
+    assert [generator.__class__.__name__ for generator in generators] == [
+        "DividendsGenerator",
+        "PendingOrdersGenerator",
+        "RadarRefreshGenerator",
+        "EarningsResultsGenerator",
+        "UpcomingEarningsGenerator",
     ]

@@ -3,8 +3,8 @@
 `generate_for_user` runs the configured generator set, persists the result,
 and is what the morning cron (T12) will call per user. `get_today` /
 `dismiss` back the two `/v1/digest` endpoints. Generators are built up
-across T7–T11; until the default service path is wired, callers inject
-generators or market-data-backed generator factories explicitly.
+across T7-T11; until the default service path is wired, callers inject
+generators or market-data/FMP-backed generator factories explicitly.
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from app.services.digest.context import ET, build_context
 from app.services.digest.generators import build_known_generators
 from app.services.digest.moves import RunScopedStockBarsProvider, StockBarsProvider
 from app.services.digest.types import CardCandidate, DigestContext, Generator
+from app.services.fmp import FmpClient
 
 logger = structlog.get_logger(__name__)
 
@@ -41,11 +42,13 @@ class DigestService:
         db: AsyncSession,
         alpaca: AlpacaBrokerService | None = None,
         market_data: StockBarsProvider | None = None,
+        fmp: FmpClient | None = None,
         generators: list[Generator] | None = None,
     ) -> None:
         self._db = db
         self._alpaca = alpaca
         self._market_data = market_data
+        self._fmp = fmp
         if generators is not None:
             self._generators: list[Generator] | None = list(generators)
         else:
@@ -107,10 +110,13 @@ class DigestService:
     ) -> list[CardCandidate]:
         if self._generators is not None:
             generators = self._generators
-        elif self._market_data is not None:
-            generators = build_known_generators(
+        elif self._market_data is not None or self._fmp is not None:
+            market_data = (
                 RunScopedStockBarsProvider(self._market_data)
+                if self._market_data is not None
+                else None
             )
+            generators = build_known_generators(market_data, fmp=self._fmp)
         else:
             generators = []
         if not generators:
