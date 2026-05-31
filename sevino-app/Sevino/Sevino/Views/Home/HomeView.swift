@@ -126,6 +126,7 @@ struct HomeView: View {
                 .padding(.trailing, showPortfolio ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
+                .refreshOnPresent(showPortfolio) { await portfolioViewModel.loadPortfolio() }
 
                 FundingMorphingView(
                     scale: scale,
@@ -157,6 +158,7 @@ struct HomeView: View {
                 .padding(.leading, showHoldings ? 16 * scale : 0)
                 .padding(.top, 4 * scale)
                 .ignoresSafeArea(.keyboard)
+                .refreshOnPresent(showHoldings) { await holdingsViewModel.loadHoldings() }
 
                 RadarMorphingView(
                     scale: scale,
