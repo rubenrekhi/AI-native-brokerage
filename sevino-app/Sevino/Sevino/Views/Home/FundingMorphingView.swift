@@ -43,6 +43,11 @@ struct FundingMorphingView: View {
             }
         }
         .modifier(GlassMorphID(id: "funding", namespace: morphNamespace))
+        .refreshOnPresent(isExpanded) {
+            viewModel.clearErrors()
+            await viewModel.loadRelationships()
+            await viewModel.loadCashInterest()
+        }
     }
 
     private var pillButton: some View {
@@ -80,13 +85,6 @@ struct FundingMorphingView: View {
             insertion: .opacity.animation(.easeIn(duration: 0.25).delay(0.15)),
             removal: .identity
         ))
-        .task(id: isExpanded) {
-            if isExpanded {
-                viewModel.clearErrors()
-                await viewModel.loadRelationships()
-                await viewModel.loadCashInterest()
-            }
-        }
         .sheet(isPresented: $plaidLink.showPlaidLink) {
             if let token = plaidLink.linkToken {
                 PlaidLinkSheet(
