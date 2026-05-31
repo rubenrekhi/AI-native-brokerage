@@ -701,7 +701,7 @@ struct HomeView: View {
 private struct PortfolioAutoRefresh: ViewModifier {
     let scenePhase: ScenePhase
     let timer: Publishers.Autoconnect<Timer.TimerPublisher>
-    let refresh: @Sendable () async -> Void
+    let refresh: () async -> Void
 
     func body(content: Content) -> some View {
         content

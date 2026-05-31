@@ -69,9 +69,7 @@ final class PortfolioViewModel {
                 gainAbs = pill.dailyChangeAbs
                 gainPct = pill.dailyChangePct
             }
-        } catch {
-            // Silent: keep last-good data on the pill.
-        }
+        } catch { }
     }
 
     func clearError() {
