@@ -1,6 +1,7 @@
 """Brokerage service: read-only views over Alpaca trading data (orders, positions)."""
 
 import uuid
+from decimal import Decimal, InvalidOperation
 from typing import Any, Literal, TypeVar
 
 import structlog
@@ -13,6 +14,8 @@ from app.repositories.brokerage_account import (
     BrokerageAccountRepository,
 )
 from app.schemas.brokerage import (
+    DividendListResponse,
+    DividendResponse,
     OrderListResponse,
     OrderResponse,
     PositionListResponse,
@@ -75,6 +78,41 @@ class BrokerageService:
         )
         return PositionListResponse(positions=positions)
 
+    @staticmethod
+    async def list_dividends(
+        db: AsyncSession,
+        *,
+        alpaca: AlpacaBrokerService,
+        user_id: uuid.UUID,
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> DividendListResponse:
+        brokerage = await require_brokerage(db, user_id)
+
+        raw = await alpaca.get_dividend_activities(
+            account_id=brokerage.alpaca_account_id
+        )
+
+        # Account History shows dividend payments — money in, not the taxman's
+        # cut. The DIV bucket also carries withholdings (DIVNRA, DIVTAX) and
+        # ADR pass-through fees (DIVFEE) with negative net_amount; the positive
+        # filter excludes those without an explicit sub-type allowlist that
+        # would need updating every time Alpaca adds a new code.
+        payments = [rec for rec in raw if _positive_amount(rec.get("net_amount"))]
+
+        if offset:
+            payments = payments[offset:]
+        if limit is not None:
+            payments = payments[:limit]
+
+        dividends = _project(
+            payments,
+            DividendResponse,
+            log_event="alpaca_dividend_malformed",
+            user_id=user_id,
+        )
+        return DividendListResponse(dividends=dividends)
+
 
 async def require_brokerage(db: AsyncSession, user_id: uuid.UUID):
     """Brokerage gate for read-only views.
@@ -92,6 +130,15 @@ async def require_brokerage(db: AsyncSession, user_id: uuid.UUID):
             resource="brokerage_account",
         )
     return brokerage
+
+
+def _positive_amount(value: Any) -> bool:
+    if value is None:
+        return False
+    try:
+        return Decimal(str(value)) > 0
+    except (InvalidOperation, ValueError):
+        return False
 
 
 def _project(

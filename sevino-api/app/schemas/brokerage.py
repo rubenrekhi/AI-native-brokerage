@@ -51,3 +51,23 @@ class PositionResponse(BaseModel):
 
 class PositionListResponse(BaseModel):
     positions: list[PositionResponse]
+
+
+class DividendResponse(BaseModel):
+    """Subset of an Alpaca DIV activity projected for the Account History UI.
+
+    Status is passed through raw (e.g. `executed`, `correct`, `canceled`) —
+    the client buckets these into settled / pending / failed pills.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    id: str
+    symbol: str
+    net_amount: str
+    status: str
+    created_at: str | None = None
+
+
+class DividendListResponse(BaseModel):
+    dividends: list[DividendResponse]
