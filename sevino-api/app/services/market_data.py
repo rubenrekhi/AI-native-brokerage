@@ -25,6 +25,7 @@ from app.services.alpaca_broker import (
 )
 from app.services.fmp import (
     FmpClient,
+    _parse_iso_date,
     compute_earnings_reactions,
     project_analyst,
     project_earnings,
@@ -386,7 +387,7 @@ class MarketDataService:
         report_dates = [
             parsed
             for row in earnings_rows
-            if (parsed := _parse_report_date(row.get("date"))) is not None
+            if (parsed := _parse_iso_date(row.get("date"))) is not None
         ]
         reactions = compute_earnings_reactions(report_dates, bars)
         return project_earnings(
@@ -670,15 +671,6 @@ def _empty_valuation() -> dict[str, Any]:
 
 def _empty_earnings() -> dict[str, Any]:
     return project_earnings([], [], {}, as_of=date.min)
-
-
-def _parse_report_date(value: Any) -> date | None:
-    if not isinstance(value, str) or not value.strip():
-        return None
-    try:
-        return date.fromisoformat(value[:10])
-    except ValueError:
-        return None
 
 
 def _earnings_rows_or_empty(
