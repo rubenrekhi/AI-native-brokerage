@@ -406,7 +406,6 @@ async def post_turn(
                 conversation_id=conversation_id,
                 user_message=body.message,
                 user_context=body.context,
-                digest_card=body.digest_card,
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=DEFAULT_REGISTRY,

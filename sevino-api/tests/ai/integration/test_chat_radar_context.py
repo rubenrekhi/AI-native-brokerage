@@ -1,17 +1,18 @@
-"""T7 (SEV-612): radar attached-context reaches the AI input stream.
+"""Radar attached-context reaches the AI input as a kind-only hint (SEV-615).
 
-Asserts the request → persistence → ``to_anthropic_content`` path lands the
-modal context in ``model_invocations.request_messages`` (the JSONB audit of
-what was sent to Anthropic) against real Postgres. One env-gated case
-(``RUN_LIVE_LLM_TESTS=1``) makes a real call to confirm the model names a
-radar ticker back.
+Originally (SEV-612) the full radar ``data`` was injected into the model as a
+JSON block so it could name specific tickers. SEV-615 reworked attached
+context: the snapshot is persisted as a ``ContextBlock`` for the chip, but the
+model only ever sees a short, ``kind``-only hint on the turn it arrived — the
+live ticker data is **not** sent to the model and is never replayed. These
+tests pin that contract against real Postgres: the request → persistence →
+``to_anthropic_content`` path lands the radar *hint* (not the data) in
+``model_invocations.request_messages``.
 """
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
 import uuid
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -30,10 +31,9 @@ from anthropic.types import (
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.anthropic_client import create_anthropic_client
-from app.ai.models import MODELS
+from app.ai.context_blocks import build_context_block
 from app.ai.observability.langfuse import _NoopLangfuse
-from app.ai.prompts import SYSTEM_PROMPT_V1, SystemPrompt
+from app.ai.prompts import SystemPrompt
 from app.ai.runtime.caps import HardCaps
 from app.ai.runtime.db import make_session_factory
 from app.ai.runtime.loop import run_agent_turn
@@ -43,6 +43,7 @@ from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import Event
 from app.models.model_invocation import ModelInvocation
 from app.repositories.conversation import ConversationRepository
+from app.schemas.conversations import AttachedContextRequest, ContextKind
 from tests.integration.conftest import _pg_available_sync, insert_auth_user
 
 pytestmark = pytest.mark.skipif(
@@ -53,17 +54,9 @@ pytestmark = pytest.mark.skipif(
 MODEL_ID = "claude-sonnet-4-6"
 SYSTEM_PROMPT = SystemPrompt(text="you are sevino", hash="hash-radar")
 
-# Mirrors ``to_anthropic_content``'s injection wrapper verbatim. Drift here
-# (or there) means the model stops recognising the payload as modal context.
-_ATTACHED_CONTEXT_PREFIX = (
-    "[Attached context from the user's open modal — "
-    "use this data to inform your response]\n"
-)
-
-# Byte-for-byte the dict iOS builds in ``AttachedContext.swift`` for
-# ``case .radar`` — decimal-as-string money/percent, bool ``is_positive``.
-RADAR_CONTEXT: dict[str, Any] = {
-    "type": "radar",
+# The ``data`` payload iOS nests under ``context`` for ``.radar`` — decimal-as
+# -string money/percent, bool ``is_positive``. None of these reach the model.
+RADAR_DATA: dict[str, Any] = {
     "items": [
         {
             "ticker": "NVDA",
@@ -88,6 +81,12 @@ RADAR_CONTEXT: dict[str, Any] = {
         },
     ],
 }
+
+# The kind-only hint the model should see — derived from the block itself so
+# this test tracks the copy in ``RadarContextBlock.render_hint`` automatically.
+RADAR_HINT = build_context_block(
+    block_id="probe", kind=ContextKind.RADAR, data=RADAR_DATA
+).render_hint()
 
 
 # ---------- Anthropic stub (single text block) ----------
@@ -253,7 +252,12 @@ async def _drain(emitter: SSEEmitter) -> list[Event]:
     return events
 
 
-async def _run(fixture, *, user_message: str, user_context: dict[str, Any] | None):
+async def _run(
+    fixture,
+    *,
+    user_message: str,
+    user_context: AttachedContextRequest | None,
+):
     client = _stub_client(_stub_response())
     return await run_agent_turn(
         user_id=fixture.user_id,
@@ -273,15 +277,17 @@ async def _run(fixture, *, user_message: str, user_context: dict[str, Any] | Non
     )
 
 
-# ---------- radar context flows into the Anthropic input ----------
+# ---------- radar context reaches the model as a hint, never as data ----------
 
 
 class TestRadarContextReachesModelInput:
-    async def test_radar_context_injected_as_text_block(self, db_engine, fixture):
+    async def test_radar_context_injects_kind_only_hint(self, db_engine, fixture):
         result = await _run(
             fixture,
-            user_message="Tell me about NVDA on my radar",
-            user_context=RADAR_CONTEXT,
+            user_message="Tell me about my radar",
+            user_context=AttachedContextRequest(
+                kind=ContextKind.RADAR, data=RADAR_DATA
+            ),
         )
         assert result.terminal_state == "end_turn"
 
@@ -289,88 +295,41 @@ class TestRadarContextReachesModelInput:
         assert [m["role"] for m in request_messages] == ["user"]
 
         content = request_messages[0]["content"]
-        assert len(content) == 2
-        assert content[0] == {
-            "type": "text",
-            "text": "Tell me about NVDA on my radar",
-        }
+        # User text + the kind-only radar hint, nothing else.
+        assert content == [
+            {"type": "text", "text": "Tell me about my radar"},
+            {"type": "text", "text": RADAR_HINT},
+        ]
 
-        injected = content[1]
-        assert injected["type"] == "text"
-        assert injected["text"].startswith(_ATTACHED_CONTEXT_PREFIX)
-        for ticker in ("NVDA", "AAPL", "JPM"):
-            assert ticker in injected["text"]
-
-    async def test_injected_json_matches_ios_wire_shape(self, db_engine, fixture):
+    async def test_radar_data_never_reaches_the_model(self, db_engine, fixture):
+        # The persisted snapshot is for the chip only — no ticker, price, or
+        # per-item field may appear in what was sent to Anthropic (SEV-615).
         result = await _run(
             fixture,
             user_message="What's on my radar?",
-            user_context=RADAR_CONTEXT,
+            user_context=AttachedContextRequest(
+                kind=ContextKind.RADAR, data=RADAR_DATA
+            ),
         )
 
         request_messages = await _request_messages_for_turn(db_engine, result.turn_id)
-        injected_text = request_messages[0]["content"][1]["text"]
-        body = injected_text[len(_ATTACHED_CONTEXT_PREFIX):]
-
-        # The payload round-trips byte-for-byte — type tag, item count, and
-        # every iOS field name/value (ticker, description, price,
-        # change_percent, is_positive) survive request → history → input.
-        assert json.loads(body) == RADAR_CONTEXT
+        serialized = json.dumps(request_messages)
+        for leaked in ("NVDA", "AAPL", "JPM", "892.41", "is_positive"):
+            assert leaked not in serialized
 
     async def test_empty_radar_items_does_not_crash(self, db_engine, fixture):
         result = await _run(
             fixture,
             user_message="Anything on my radar?",
-            user_context={"type": "radar", "items": []},
+            user_context=AttachedContextRequest(
+                kind=ContextKind.RADAR, data={"items": []}
+            ),
         )
         assert result.terminal_state == "end_turn"
 
         request_messages = await _request_messages_for_turn(db_engine, result.turn_id)
         content = request_messages[0]["content"]
-        assert len(content) == 2
-        body = content[1]["text"][len(_ATTACHED_CONTEXT_PREFIX):]
-        assert json.loads(body) == {"type": "radar", "items": []}
-
-
-# ---------- live LLM (env-gated) ----------
-
-
-@pytest.mark.skipif(
-    os.getenv("RUN_LIVE_LLM_TESTS") != "1",
-    reason="live LLM test — set RUN_LIVE_LLM_TESTS=1 to run",
-)
-class TestRadarContextLiveLLM:
-    async def test_live_llm_references_radar_ticker(self, db_engine, fixture):
-        client = create_anthropic_client()
-        emitter = SSEEmitter()
-        # A real streaming turn can emit far more than the 64-event queue
-        # holds, so drain concurrently — otherwise ``emit`` blocks forever.
-        drain_task = asyncio.create_task(_drain(emitter))
-        try:
-            result = await run_agent_turn(
-                user_id=fixture.user_id,
-                conversation_id=fixture.conversation_id,
-                user_message="Tell me about NVDA on my radar.",
-                user_context=RADAR_CONTEXT,
-                anthropic_client=client,
-                db_factory=make_session_factory(db_engine),
-                tool_registry=EMPTY_REGISTRY,
-                http_clients=ToolHttpClients(),
-                system_prompt=SYSTEM_PROMPT_V1,
-                model_config=ModelConfig(model_id=MODELS.MAIN),
-                hard_caps=HardCaps(),
-                langfuse=_NoopLangfuse(),
-                environment="test",
-                sse_emitter=emitter,
-            )
-        finally:
-            await emitter.close()
-        await drain_task
-
-        assert result.terminal_state == "end_turn"
-        reply = " ".join(
-            b.get("text", "")
-            for b in result.assistant_message_blocks
-            if b.get("type") == "text"
-        )
-        assert "NVDA" in reply
+        assert content == [
+            {"type": "text", "text": "Anything on my radar?"},
+            {"type": "text", "text": RADAR_HINT},
+        ]

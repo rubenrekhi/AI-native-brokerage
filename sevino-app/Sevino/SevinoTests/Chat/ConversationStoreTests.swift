@@ -333,10 +333,13 @@ final class ConversationStoreTests: XCTestCase {
         let decoded = try JSONSerialization.jsonObject(with: body) as? [String: Any]
         XCTAssertEqual(decoded?["message"] as? String, "hello there")
         XCTAssertEqual(decoded?["idempotency_key"] as? String, "idem-fixed-key")
-        XCTAssertNil(decoded?["digest_card"])
+        XCTAssertNil(decoded?["context"])
     }
 
-    func testSendIncludesDigestCardWhenProvided() async throws {
+    func testSendRoutesDigestCardThroughContext() async throws {
+        // SEV-615 B: a digest card rides the unified `context` channel as
+        // `kind=digest` (payload becomes the opaque `data`); there is no
+        // separate `digest_card` field.
         let client = MockSSEClient(script: [
             .yield(makeRaw(json: turnStartedJSON())),
             .yield(makeRaw(json: turnCompletedJSON())),
@@ -357,16 +360,23 @@ final class ConversationStoreTests: XCTestCase {
 
         let body = try XCTUnwrap(client.capturedRequests[0].httpBody)
         let decoded = try JSONSerialization.jsonObject(with: body) as? [String: Any]
-        let encodedCard = try XCTUnwrap(decoded?["digest_card"] as? [String: Any])
-        XCTAssertEqual(encodedCard["id"] as? String, "digest-1")
-        XCTAssertEqual(encodedCard["kind"] as? String, "big_move")
-        XCTAssertEqual(encodedCard["camelCaseKey"] as? String, "preserved")
-        XCTAssertNil(encodedCard["camel_case_key"])
-        XCTAssertEqual(encodedCard["relatedSymbols"] as? [String], ["NVDA"])
-        XCTAssertEqual(encodedCard["related_symbols"] as? [String], ["AMD"])
+        XCTAssertNil(decoded?["digest_card"])
 
-        let context = try XCTUnwrap(encodedCard["card_context"] as? [String: Any])
-        XCTAssertEqual(context["headline"] as? String, "AMD moved 5%")
+        let context = try XCTUnwrap(decoded?["context"] as? [String: Any])
+        XCTAssertEqual(context["kind"] as? String, "digest")
+
+        // The card payload becomes `data`, with keys preserved verbatim
+        // (no snake_case mangling of the opaque bag).
+        let data = try XCTUnwrap(context["data"] as? [String: Any])
+        XCTAssertEqual(data["id"] as? String, "digest-1")
+        XCTAssertEqual(data["kind"] as? String, "big_move")
+        XCTAssertEqual(data["camelCaseKey"] as? String, "preserved")
+        XCTAssertNil(data["camel_case_key"])
+        XCTAssertEqual(data["relatedSymbols"] as? [String], ["NVDA"])
+        XCTAssertEqual(data["related_symbols"] as? [String], ["AMD"])
+
+        let cardContext = try XCTUnwrap(data["card_context"] as? [String: Any])
+        XCTAssertEqual(cardContext["headline"] as? String, "AMD moved 5%")
     }
 
     func testDigestCardAddsSourceToAssistantMessage() async throws {

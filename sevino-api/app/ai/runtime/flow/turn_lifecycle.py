@@ -89,9 +89,10 @@ async def initialize_turn(
     An attached ``user_context`` drives two decoupled channels (SEV-615):
     the persisted ``ContextBlock`` (UI chip, restored on resume) and a
     short ``render_hint`` describing the open screen, appended to the current
-    turn's messages (model input, this turn only). ``data`` is never sent to
-    the model and the block is never replayed — ``to_anthropic_content`` drops
-    it from history.
+    turn's messages (model input, this turn only). Only a whitelisted,
+    non-stale field (the chart's selected range) is projected into the hint;
+    the rest of ``data`` is never sent to the model, and the block is never
+    replayed — ``to_anthropic_content`` drops it from history.
     """
     async with db_factory() as db:
         content_blocks: list[dict[str, Any]] = [
@@ -123,9 +124,9 @@ async def initialize_turn(
         for m in history
     ]
 
-    # Model channel, current turn only: project the attachment to its
-    # subclass's ``kind``-only hint and append it to the just-persisted user
-    # message (``messages[-1]``). ``data`` is never read here.
+    # Model channel, current turn only: build the attachment's hint and
+    # append it to the just-persisted user message (``messages[-1]``). The
+    # hint is ``kind``-driven and projects only a whitelisted ``data`` field.
     if ctx_block is not None:
         messages[-1]["content"].append(
             {"type": "text", "text": ctx_block.render_hint()}

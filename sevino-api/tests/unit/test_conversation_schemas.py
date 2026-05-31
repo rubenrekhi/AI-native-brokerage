@@ -2,9 +2,8 @@
 
 ``ChatTurnRequest.context`` is a typed ``AttachedContextRequest`` (SEV-615):
 ``kind`` is strict-validated at the wire (unknown kinds 422), ``data`` stays
-opaque, and the 10 KB serialized-size cap applies. ``digest_card`` is the
-separate Daily Digest view-state field with its own required-field + size
-validation.
+opaque, and the 10 KB serialized-size cap applies. Daily Digest cards ride the
+same ``context`` channel as ``kind="digest"`` (no separate field).
 """
 
 from __future__ import annotations
@@ -32,7 +31,7 @@ class TestAttachedContextRequest:
         assert req.data == {}
 
     @pytest.mark.parametrize(
-        "kind", ["portfolio", "holdings", "funding", "radar"]
+        "kind", ["portfolio", "holdings", "funding", "radar", "digest"]
     )
     def test_accepts_every_known_kind(self, kind):
         assert (
@@ -98,58 +97,19 @@ class TestChatTurnRequestContext:
         )
         assert req.context is not None
 
-
-class TestChatTurnRequestDigestCard:
-    def test_chat_turn_request_accepts_without_digest_card(self) -> None:
-        request = ChatTurnRequest(message="hi", idempotency_key="k1")
-
-        assert request.digest_card is None
-
-    def test_chat_turn_request_accepts_digest_card_with_kind_and_id(
-        self,
-    ) -> None:
-        request = ChatTurnRequest(
-            message="what changed?",
-            idempotency_key="k1",
-            digest_card={
-                "id": "digest-1",
-                "kind": "big_move",
-                "card_context": {"headline": "AMD moved 5%"},
-            },
-        )
-
-        assert request.digest_card == {
-            "id": "digest-1",
-            "kind": "big_move",
-            "card_context": {"headline": "AMD moved 5%"},
-        }
-
-    @pytest.mark.parametrize(
-        "digest_card",
-        [
-            {"id": "digest-1"},
-            {"kind": "big_move"},
-        ],
-    )
-    def test_chat_turn_request_rejects_digest_card_missing_required_fields(
-        self,
-        digest_card: dict[str, object],
-    ) -> None:
-        with pytest.raises(ValidationError):
-            ChatTurnRequest(
-                message="what changed?",
-                idempotency_key="k1",
-                digest_card=digest_card,
-            )
-
-    def test_chat_turn_request_rejects_oversized_digest_card(self) -> None:
-        with pytest.raises(ValidationError, match="digest_card exceeds"):
-            ChatTurnRequest(
-                message="what changed?",
-                idempotency_key="k1",
-                digest_card={
-                    "id": "digest-1",
-                    "kind": "big_move",
-                    "card_context": {"headline": "x" * 10_000},
+    def test_digest_rides_the_context_channel(self):
+        # Daily Digest cards now flow through ``context`` as ``kind=digest``;
+        # the card payload is opaque ``data`` (no separate ``digest_card``).
+        req = ChatTurnRequest.model_validate(
+            {
+                "message": "what changed?",
+                "idempotency_key": "k",
+                "context": {
+                    "kind": "digest",
+                    "data": {"id": "d1", "kind": "big_move", "symbol": "AMD"},
                 },
-            )
+            }
+        )
+        assert req.context is not None
+        assert req.context.kind is ContextKind.DIGEST
+        assert req.context.data["kind"] == "big_move"

@@ -327,7 +327,6 @@ async def _run(
     tool_registry: ToolRegistry | None = None,
     user_message: str = "hello",
     user_context: AttachedContextRequest | None = None,
-    digest_card: dict[str, Any] | None = None,
     langfuse: Any = None,
     user_id: uuid.UUID | None = None,
     conversation_id: uuid.UUID | None = None,
@@ -362,8 +361,6 @@ async def _run(
         kwargs["server_tools_config"] = server_tools_config
     if user_context is not None:
         kwargs["user_context"] = user_context
-    if digest_card is not None:
-        kwargs["digest_card"] = digest_card
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -456,41 +453,62 @@ class TestHappyPath:
         assert kwargs["cost_usd_micros"] > 0
         assert kwargs["latency_ms"] is not None
 
-    async def test_digest_card_is_appended_to_system_context(self, repo_mocks):
-        client = _make_client(_make_response(text="answer"))
+    async def test_digest_context_injects_card_content_hint_not_system_prompt(
+        self, repo_mocks
+    ):
+        # SEV-615 B: a digest card rides the unified ``context`` channel
+        # (``kind=digest``). Its content reaches the model via the
+        # ``DigestContextBlock`` hint on the *current turn* — not the system
+        # prompt — and ``card_context_source`` is still derived for the chip.
         digest_card = {
             "id": "digest-1",
             "kind": "big_move",
             "related_symbols": ["AMD"],
             "card_context": {"headline": "AMD moved 5%"},
         }
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "t", "text": "what changed?"},
+                {
+                    "type": "context",
+                    "block_id": "c",
+                    "kind": "digest",
+                    "data": digest_card,
+                },
+            )
+        ]
+        client = _make_client(_make_response(text="answer"))
+        captured = _capture_messages(client)
 
-        _, events = await _run(client, repo_mocks, digest_card=digest_card)
+        _, events = await _run(
+            client,
+            repo_mocks,
+            user_message="what changed?",
+            user_context=AttachedContextRequest(
+                kind=ContextKind.DIGEST, data=digest_card
+            ),
+        )
 
+        # System prompt is untouched — no digest injection there.
         kwargs = repo_mocks["record_model_invocation"].call_args.kwargs
         assert kwargs["request_system"] == [
             {
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
-            },
-            {
-                "type": "text",
-                "text": (
-                    "The user is currently viewing this digest card:\n"
-                    "{\n"
-                    '  "id": "digest-1",\n'
-                    '  "kind": "big_move",\n'
-                    '  "related_symbols": [\n'
-                    '    "AMD"\n'
-                    "  ],\n"
-                    '  "card_context": {\n'
-                    '    "headline": "AMD moved 5%"\n'
-                    "  }\n"
-                    "}"
-                ),
-            },
+            }
         ]
+
+        # The card content rides the current turn's user message instead.
+        hint = captured["messages"][-1]["content"][-1]
+        assert hint["type"] == "text"
+        assert hint["text"].startswith(
+            "The user opened the chat from a Daily Digest card."
+        )
+        assert "big_move" in hint["text"]
+        assert "AMD moved 5%" in hint["text"]
+
+        # The source chip still resolves from the digest context.
         started = events[0]
         assert isinstance(started, TurnStarted)
         assert started.card_context_source == {
@@ -2844,9 +2862,10 @@ class TestUserContext:
     # SEV-615: ``user_context`` drives two decoupled channels.
     #   UI channel    — a typed ``ContextBlock`` persisted in
     #                    ``content_blocks`` (restores the chip on resume).
-    #   Model channel — a short ``kind``-only ``render_hint`` appended to
-    #                    the current turn's messages; never the frozen
-    #                    ``data``, and never replayed on later turns.
+    #   Model channel — a short ``render_hint`` appended to the current
+    #                    turn's messages; ``kind``-driven plus a whitelisted
+    #                    non-stale field (the portfolio chart's range), never
+    #                    the frozen numeric ``data``, never replayed later.
 
     async def test_persists_typed_context_block_after_text_block(
         self, repo_mocks
@@ -2919,9 +2938,10 @@ class TestUserContext:
     async def test_current_turn_injects_kind_hint_after_user_text(
         self, repo_mocks
     ):
-        # Model channel: the current turn's user message gets the one-line
-        # ``kind``-only hint appended after the user text — the frozen
-        # ``data`` never reaches the model.
+        # Model channel: the current turn's user message gets the short hint
+        # appended after the user text. The portfolio hint surfaces the
+        # whitelisted ``time_range`` ("1M" -> "1-month") but never the frozen
+        # ``equity`` snapshot, which would be stale.
         repo_mocks["load_history"].return_value = [
             _history_user_msg(
                 {"type": "text", "block_id": "t", "text": "how am I doing?"},
@@ -2929,7 +2949,7 @@ class TestUserContext:
                     "type": "context",
                     "block_id": "c",
                     "kind": "portfolio",
-                    "data": {"equity": "12500.50"},
+                    "data": {"equity": "12500.50", "time_range": "1M"},
                 },
             )
         ]
@@ -2941,7 +2961,8 @@ class TestUserContext:
             repo_mocks,
             user_message="how am I doing?",
             user_context=AttachedContextRequest(
-                kind=ContextKind.PORTFOLIO, data={"equity": "12500.50"}
+                kind=ContextKind.PORTFOLIO,
+                data={"equity": "12500.50", "time_range": "1M"},
             ),
         )
 
@@ -2950,14 +2971,16 @@ class TestUserContext:
         assert user_blocks[-1] == {
             "type": "text",
             "text": (
-                "The user is currently viewing their portfolio. This screen "
-                "shows their total account value, the gain or loss over a "
-                "selected time range, and an interactive value-over-time chart "
-                "with range options from one day to all-time. Their message may "
-                "be referring to a figure, trend, or time period shown here."
+                "The user is currently viewing their portfolio, with the "
+                "value chart set to the 1-month range. This screen shows "
+                "their total account value and the gain or loss over that "
+                "range on an interactive value-over-time chart. Their message "
+                "may be referring to a figure, trend, or the selected period "
+                "shown here."
             ),
         }
-        # The frozen snapshot value must not leak into the model input.
+        # The selected range is surfaced; the frozen snapshot value is not.
+        assert "1-month" in json.dumps(captured["messages"])
         assert "12500.50" not in json.dumps(captured["messages"])
 
     async def test_no_hint_injected_when_user_context_none(self, repo_mocks):

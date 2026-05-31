@@ -58,8 +58,8 @@ def to_anthropic_content(
     Drops the ``block_id`` we add for iOS correlation and every UI-only /
     input-only variant (``status``, ``stock_card``, ``thinking``, ``context``)
     — Anthropic 400s on unknown types. ``context`` is a user attachment that
-    is never replayed: the model already saw it as a short ``kind``-only
-    hint (the attachment's ``render_hint`` in ``app.ai.context_blocks``) on the
+    is never replayed: the model already saw it as a short hint (the
+    attachment's ``render_hint`` in ``app.ai.context_blocks``) on the
     turn it arrived, so re-sending the frozen snapshot every later turn would
     be stale and costly (SEV-615). Tool-use context is also lost across turns;
     the assistant text is sufficient continuity.

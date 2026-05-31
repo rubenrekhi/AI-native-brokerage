@@ -197,12 +197,18 @@ final class ConversationStore {
         )
         messages.append(userMessage)
 
+        // SEV-615 B: a digest card rides the unified `context` channel as
+        // `kind=digest` (its payload is the opaque `data`), instead of a
+        // separate `digest_card` field. The source chip still renders from
+        // the locally-derived `pendingCardContextSource`.
         pendingCardContextSource = digestCard.flatMap(CardContextSource.init)
+        let effectiveContext: [String: JSONValue]? = digestCard.map { card in
+            ["kind": .string("digest"), "data": .object(card.payload)]
+        } ?? context
 
         let request = try buildRequest(
             message: text,
-            context: context,
-            digestCard: digestCard,
+            context: effectiveContext,
             idempotencyKey: idempotencyKey ?? idempotencyKeyFactory()
         )
         state = .streaming
@@ -386,7 +392,6 @@ final class ConversationStore {
     private func buildRequest(
         message: String,
         context: [String: JSONValue]?,
-        digestCard: ChatDigestCard?,
         idempotencyKey: String
     ) throws -> URLRequest {
         let path = "/v1/conversations/\(conversationId.uuidString.lowercased())/turns"
@@ -399,7 +404,6 @@ final class ConversationStore {
         let body = TurnRequestBody(
             message: message,
             context: context,
-            digestCard: digestCard,
             idempotencyKey: idempotencyKey
         )
         request.httpBody = try requestEncoder.encode(body)
@@ -408,17 +412,16 @@ final class ConversationStore {
 }
 
 /// Wire body for `POST /v1/conversations/{id}/turns`. Mirrors
-/// `app/schemas/conversations.py:ChatTurnRequest`.
+/// `app/schemas/conversations.py:ChatTurnRequest`. Digest cards ride `context`
+/// as `kind=digest` (SEV-615 B), so there is no separate `digest_card` field.
 private struct TurnRequestBody: Encodable {
     let message: String
     let context: [String: JSONValue]?
-    let digestCard: ChatDigestCard?
     let idempotencyKey: String
 
     private enum CodingKeys: String, CodingKey {
         case message
         case context
-        case digestCard = "digest_card"
         case idempotencyKey = "idempotency_key"
     }
 }

@@ -2,13 +2,14 @@
 
 ``ContextBlock`` is persisted in ``messages.content_blocks`` but is never a
 member of the streamed ``Block`` union (``app.ai.blocks``) and never replayed
-across turns — ``to_anthropic_content`` drops it from history. Each
+across turns; ``to_anthropic_content`` drops it from history. Each
 ``ContextKind`` has a subclass in this package that owns its ``render_hint``:
-a short, ``kind``-only description of the open screen and what it shows — the
-only thing the model sees, and only on the turn the attachment arrived.
-``data`` is opaque to the backend and never sent to the model, so the hint
-describes the screen's contents generically and never echoes a live value
-(prices, balances, etc.) that would be stale by the next turn.
+a short description of the open screen and what it shows. This is the only
+thing the model sees, and only on the turn the attachment arrived. The hint is
+``kind``-driven; a subclass may also project a small whitelist of non-stale,
+categorical fields from ``data`` (e.g. the portfolio chart's selected time
+range). It never echoes a live numeric value (prices, balances) that would be
+stale by the next turn, and arbitrary ``data`` is never passed to the model.
 """
 
 from __future__ import annotations
@@ -32,11 +33,12 @@ class ContextBlock(BaseModel):
     data: dict[str, Any] = Field(default_factory=dict)
 
     def render_hint(self) -> str:
-        """Short, ``kind``-only description of the open screen for this turn.
+        """Short description of the open screen for the current turn.
 
-        Subclasses override per kind to describe what their screen shows;
-        the base returns a generic hint so an unmapped kind degrades
-        gracefully rather than leaking nothing. ``data`` is never read — it
-        stays opaque to the backend and out of model input.
+        Subclasses override per kind to describe what their screen shows, and
+        may project a whitelisted, non-stale field from ``data`` (see
+        ``PortfolioContextBlock``). The base reads nothing from ``data`` and
+        returns a generic hint so an unmapped kind degrades gracefully rather
+        than leaking nothing.
         """
         return _DEFAULT_HINT
