@@ -17,13 +17,28 @@ final class MockPortfolioService: PortfolioServiceProtocol {
         ]
     )
 
+    var fetchSnapshotError: Error?
+    var pillUpdate = PortfolioPillUpdate(
+        equity: Decimal(string: "1000.00")!,
+        currency: "USD",
+        dailyChangeAbs: Decimal(string: "5.00")!,
+        dailyChangePct: Decimal(string: "0.005")!
+    )
+
     private(set) var fetchPortfolioCallCount = 0
     private(set) var fetchPortfolioRanges: [TimeRange] = []
+    private(set) var fetchSnapshotCallCount = 0
 
     func fetchPortfolio(for range: TimeRange) async throws -> PortfolioSnapshot {
         fetchPortfolioCallCount += 1
         fetchPortfolioRanges.append(range)
         if let error = fetchPortfolioError { throw error }
         return snapshot
+    }
+
+    func fetchSnapshot() async throws -> PortfolioPillUpdate {
+        fetchSnapshotCallCount += 1
+        if let error = fetchSnapshotError { throw error }
+        return pillUpdate
     }
 }

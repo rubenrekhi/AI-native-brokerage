@@ -1,8 +1,10 @@
+import Combine
 import SwiftUI
 
 struct HomeView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.textSizeMultiplier) private var textSizeMultiplier
+    @Environment(\.scenePhase) private var scenePhase
     @State private var viewModel: HomeViewModel
     @State private var portfolioViewModel: PortfolioViewModel
     @State private var fundingViewModel: FundingViewModel
@@ -27,6 +29,10 @@ struct HomeView: View {
 
     private var sidebarWidth: CGFloat { 300 * scale }
     private var sidebarOffset: CGFloat { (showSidebar ? sidebarWidth : 0) + sidebarDragOffset }
+
+    // Captured as `let` so SwiftUI re-evaluations don't subscribe to a fresh
+    // publisher each pass.
+    private let portfolioRefreshTimer = Timer.publish(every: 300, on: .main, in: .common).autoconnect()
 
     private var anyModalOpen: Bool { showPortfolio || showFunding || showHoldings || showRadar }
     private var anyDismissableLayerOpen: Bool { anyModalOpen || showHoldingsFilter || showQuickCommands }
@@ -257,6 +263,11 @@ struct HomeView: View {
         .task(id: portfolioViewModel.selectedTimeRange) {
             await portfolioViewModel.loadPortfolio()
         }
+        .modifier(PortfolioAutoRefresh(
+            scenePhase: scenePhase,
+            timer: portfolioRefreshTimer,
+            refresh: { await portfolioViewModel.loadSnapshot() }
+        ))
         .alert(
             L10n.Home.portfolioLoadErrorTitle,
             isPresented: Binding(
@@ -681,6 +692,29 @@ struct HomeView: View {
         .accessibilityLabel(L10n.Home.sidebarAccessibility)
     }
 
+}
+
+/// Refreshes the portfolio pill every 5 minutes while the scene is `.active`
+/// and on every transition back to `.active`. Combine timers keep firing while
+/// the app is backgrounded, so the timer branch also gates on `scenePhase`.
+/// Extracted from `HomeView.body` to keep the type-checker under budget.
+private struct PortfolioAutoRefresh: ViewModifier {
+    let scenePhase: ScenePhase
+    let timer: Publishers.Autoconnect<Timer.TimerPublisher>
+    let refresh: @Sendable () async -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(timer) { _ in
+                guard scenePhase == .active else { return }
+                Task { await refresh() }
+            }
+            .onChange(of: scenePhase) { _, newPhase in
+                if newPhase == .active {
+                    Task { await refresh() }
+                }
+            }
+    }
 }
 
 /// Extracts the resume-failure alert from `HomeView` so the parent body
