@@ -472,8 +472,13 @@ enum L10n {
             String(format: String(localized: "home.radar_expires"), time)
         }
         static let radarStarAccessibility = String(localized: "home.radar_star_accessibility")
-        static let radarEmptyTitle = String(localized: "home.radar_empty_title")
-        static let radarEmptyMessage = String(localized: "home.radar_empty_message")
+        static let radarTabNew = String(localized: "home.radar_tab_new")
+        static let radarTabStarred = String(localized: "home.radar_tab_starred")
+        static let radarEmptyNewFirstBatch = String(localized: "home.radar_empty_new_first_batch")
+        static func radarEmptyNewReviewed(_ weekday: String) -> String {
+            String(format: String(localized: "home.radar_empty_new_reviewed"), weekday)
+        }
+        static let radarEmptyStarred = String(localized: "home.radar_empty_starred")
         static let radarLoadErrorTitle = String(localized: "home.radar_load_error_title")
         static let radarLoadErrorRetry = String(localized: "home.radar_load_error_retry")
         static let radarLoadErrorDismiss = String(localized: "home.radar_load_error_dismiss")

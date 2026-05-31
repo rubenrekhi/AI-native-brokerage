@@ -1766,22 +1766,32 @@
         }
       }
     },
-    "home.radar_empty_message" : {
+    "home.radar_empty_new_first_batch" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "We're still getting to know you. Check back soon for curated ideas."
+            "value" : "Your first picks are on the way."
           }
         }
       }
     },
-    "home.radar_empty_title" : {
+    "home.radar_empty_new_reviewed" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "No recommendations yet"
+            "value" : "You've reviewed this week's picks. Next batch arrives %@."
+          }
+        }
+      }
+    },
+    "home.radar_empty_starred" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Star picks from New to track them here, or add stocks from search."
           }
         }
       }
@@ -1842,6 +1852,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Curated for your profile"
+          }
+        }
+      }
+    },
+    "home.radar_tab_new" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New"
+          }
+        }
+      }
+    },
+    "home.radar_tab_starred" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starred"
           }
         }
       }

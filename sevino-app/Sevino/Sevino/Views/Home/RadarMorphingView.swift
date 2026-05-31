@@ -37,8 +37,16 @@ struct RadarMorphingView: View {
 
     private var expandedCard: some View {
         RadarCard(
-            data: RadarCardData(items: viewModel.radarItems),
+            data: RadarCardData(
+                newItems: viewModel.newItems,
+                starredItems: viewModel.starredItems,
+                nextRefreshWeekday: viewModel.nextRefreshWeekday
+            ),
             scale: scale,
+            activeTab: Binding(
+                get: { viewModel.activeTab },
+                set: { viewModel.activeTab = $0 }
+            ),
             onToggleStar: { id in Task { await viewModel.toggleStar(itemId: id) } }
         )
         .transition(.asymmetric(insertion: .opacity, removal: .identity))
