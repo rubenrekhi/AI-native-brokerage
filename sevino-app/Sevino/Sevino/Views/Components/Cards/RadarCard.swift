@@ -180,7 +180,7 @@ private struct RadarItemList: View {
     let onToggleStar: ((UUID) -> Void)?
 
     private var scrollThreshold: Int { 5 }
-    private var scrollMaxHeight: CGFloat { 440 * scale }
+    private var scrollMaxHeight: CGFloat { 380 * scale }
 
     var body: some View {
         Group {
