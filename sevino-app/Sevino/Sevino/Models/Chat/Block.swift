@@ -20,6 +20,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
     case stockCard(StockCardBlock)
     case stockComparison(StockComparisonBlock)
     case thinking(ThinkingBlock)
+    case cancelOrder(CancelOrderBlock)
 
     /// Per-block stable identifier used for `Identifiable` and as the target
     /// of `block_data` patches. Mirrors the backend's `block_id` field.
@@ -30,6 +31,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
         case .stockCard(let block): return block.blockId
         case .stockComparison(let block): return block.blockId
         case .thinking(let block): return block.blockId
+        case .cancelOrder(let block): return block.blockId
         }
     }
 
@@ -53,6 +55,8 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             self = .stockComparison(try StockComparisonBlock(from: decoder))
         case "thinking":
             self = .thinking(try ThinkingBlock(from: decoder))
+        case "cancel_order":
+            self = .cancelOrder(try CancelOrderBlock(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -83,6 +87,9 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             try block.encode(to: encoder)
         case .thinking(let block):
             try typeContainer.encode("thinking", forKey: .type)
+            try block.encode(to: encoder)
+        case .cancelOrder(let block):
+            try typeContainer.encode("cancel_order", forKey: .type)
             try block.encode(to: encoder)
         }
     }
@@ -327,6 +334,64 @@ struct ThinkingBlock: Codable, Equatable, Sendable {
 enum ThinkingState: String, Codable, Sendable {
     case streaming
     case complete
+}
+
+/// Pending-order cancel card. Surfaced when the agent finds a cancellable
+/// order and offers a hold-to-cancel receipt in chat.
+///
+/// Wire shape (snake_case; money / qty fields are decimal strings, dates are
+/// ISO 8601 strings — see `@DecimalString` / `@ISO8601Date`):
+///
+/// ```json
+/// {
+///   "type": "cancel_order",
+///   "block_id": "blk_01J…",
+///   "order_id": "ord_01J…",
+///   "symbol": "AAPL",
+///   "company_name": "Apple Inc.",
+///   "side": "buy",
+///   "order_type": "limit",
+///   "qty": "10",
+///   "notional": null,
+///   "limit_price": "190.00",
+///   "filled_qty": "3",
+///   "time_in_force": "day",
+///   "submitted_at": "2026-05-31T17:04:00Z",
+///   "status": "pending"
+/// }
+/// ```
+///
+/// `qty` and `notional` are mutually exclusive — market orders carry one of the
+/// two, limit orders carry `qty` + `limit_price`. `filled_qty` is `"0"` for an
+/// untouched order. No codegen mirrors this to the backend `Block` union yet;
+/// iOS owns the schema until that ticket lands.
+struct CancelOrderBlock: Codable, Equatable, Sendable, Identifiable {
+    let blockId: String
+    let orderId: String
+    let symbol: String
+    let companyName: String?
+    let side: OrderSide
+    let orderType: OrderType
+    @DecimalStringOptional var qty: Decimal?
+    @DecimalStringOptional var notional: Decimal?
+    @DecimalStringOptional var limitPrice: Decimal?
+    @DecimalString var filledQty: Decimal
+    let timeInForce: String
+    @ISO8601Date var submittedAt: Date
+    let status: OrderCancellationStatus
+
+    var id: String { blockId }
+}
+
+enum OrderType: String, Codable, Equatable, Sendable {
+    case market
+    case limit
+}
+
+enum OrderCancellationStatus: String, Codable, Equatable, Sendable {
+    case pending
+    case cancelled
+    case failed
 }
 
 /**

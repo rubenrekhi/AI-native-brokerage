@@ -309,6 +309,10 @@ final class ConversationStore {
                     Self.logger.error(
                         "text_delta targeted .stockCard block id=\(payload.blockId, privacy: .public)"
                     )
+                case .cancelOrder:
+                    Self.logger.error(
+                        "text_delta targeted .cancelOrder block id=\(payload.blockId, privacy: .public)"
+                    )
                 case .stockComparison:
                     Self.logger.error(
                         "text_delta targeted .stockComparison block id=\(payload.blockId, privacy: .public)"

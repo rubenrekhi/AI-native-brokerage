@@ -510,6 +510,192 @@
         }
       }
     },
+    "cancel_order.cancellation_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't cancel this order"
+          }
+        }
+      }
+    },
+    "cancel_order.day_order" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Day order"
+          }
+        }
+      }
+    },
+    "cancel_order.filled_shares" : {
+      "comment" : "Receipt subline on a cancelled order that had partially filled. %@ is the number of shares filled before cancellation.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ shares filled"
+          }
+        }
+      }
+    },
+    "cancel_order.footer_format" : {
+      "comment" : "Order card footer. %1$@ is the time-in-force term (e.g. Day order), %2$@ is the relative submission time (e.g. 2 hours ago).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, placed %2$@"
+          }
+        }
+      }
+    },
+    "cancel_order.gtc_order" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Good-til-canceled order"
+          }
+        }
+      }
+    },
+    "cancel_order.header_pending_buy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending buy"
+          }
+        }
+      }
+    },
+    "cancel_order.header_pending_sell" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending sell"
+          }
+        }
+      }
+    },
+    "cancel_order.hold_to_cancel" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to cancel"
+          }
+        }
+      }
+    },
+    "cancel_order.hold_to_cancel_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press and hold for two seconds to cancel this order"
+          }
+        }
+      }
+    },
+    "cancel_order.notional_market" : {
+      "comment" : "Market order described by dollar amount. %@ is the formatted notional (e.g. $500.00).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ market"
+          }
+        }
+      }
+    },
+    "cancel_order.partial_fill_note" : {
+      "comment" : "Subline on a still-pending partially-filled order. %1$@ is shares already filled, %2$@ is the original order quantity.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@/%2$@ filled — cancelling the rest"
+          }
+        }
+      }
+    },
+    "cancel_order.shares_at_limit" : {
+      "comment" : "Limit order detail. %1$@ is the share quantity, %2$@ is the formatted limit price (e.g. $250.00).",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ shares at %2$@ limit"
+          }
+        }
+      }
+    },
+    "cancel_order.shares_at_market" : {
+      "comment" : "Market order detail. %@ is the share quantity.",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ shares at market"
+          }
+        }
+      }
+    },
+    "cancel_order.side_buy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Buy"
+          }
+        }
+      }
+    },
+    "cancel_order.side_sell" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sell"
+          }
+        }
+      }
+    },
+    "cancel_order.status_cancelled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelled"
+          }
+        }
+      }
+    },
+    "cancel_order.status_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Failed"
+          }
+        }
+      }
+    },
+    "cancel_order.status_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
     "chat.card_context_source_with_symbol" : {
       "localizations" : {
         "en" : {

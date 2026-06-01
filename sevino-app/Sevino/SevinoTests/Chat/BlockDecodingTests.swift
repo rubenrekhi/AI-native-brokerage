@@ -489,6 +489,194 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertNil(stats.peRatio)
     }
 
+    // MARK: - Cancel order block
+
+    private static let cancelOrderLimitBuyPartialJSON = """
+    {
+      "type": "cancel_order",
+      "block_id": "blk_co",
+      "order_id": "ord_co",
+      "symbol": "AAPL",
+      "company_name": "Apple Inc.",
+      "side": "buy",
+      "order_type": "limit",
+      "qty": "10",
+      "notional": null,
+      "limit_price": "190.00",
+      "filled_qty": "3",
+      "time_in_force": "day",
+      "submitted_at": "2026-05-31T17:04:00Z",
+      "status": "pending"
+    }
+    """
+
+    func testCancelOrderLimitBuyPartialFillRoundTrips() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.cancelOrderLimitBuyPartialJSON.utf8)
+        )
+
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.blockId, "blk_co")
+        XCTAssertEqual(block.orderId, "ord_co")
+        XCTAssertEqual(block.symbol, "AAPL")
+        XCTAssertEqual(block.companyName, "Apple Inc.")
+        XCTAssertEqual(block.side, .buy)
+        XCTAssertEqual(block.orderType, .limit)
+        XCTAssertEqual(block.qty, Decimal(10))
+        XCTAssertNil(block.notional)
+        XCTAssertEqual(block.limitPrice, Decimal(string: "190.00"))
+        XCTAssertEqual(block.filledQty, Decimal(3))
+        XCTAssertEqual(block.timeInForce, "day")
+        XCTAssertEqual(block.status, .pending)
+        XCTAssertEqual(block.id, "blk_co")
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderMarketSellByNotionalCancelledRoundTrips() throws {
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_x",
+          "order_id": "ord_x",
+          "symbol": "TSLA",
+          "company_name": "Tesla, Inc.",
+          "side": "sell",
+          "order_type": "market",
+          "notional": "500.00",
+          "filled_qty": "0",
+          "time_in_force": "gtc",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "cancelled"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.side, .sell)
+        XCTAssertEqual(block.orderType, .market)
+        XCTAssertNil(block.qty)
+        XCTAssertEqual(block.notional, Decimal(string: "500.00"))
+        XCTAssertNil(block.limitPrice)
+        XCTAssertEqual(block.filledQty, Decimal(0))
+        XCTAssertEqual(block.status, .cancelled)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderMarketBuyByQtyFailedRoundTrips() throws {
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_f",
+          "order_id": "ord_f",
+          "symbol": "AAPL",
+          "company_name": "Apple Inc.",
+          "side": "buy",
+          "order_type": "market",
+          "qty": "10",
+          "filled_qty": "0",
+          "time_in_force": "day",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "failed"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.orderType, .market)
+        XCTAssertEqual(block.qty, Decimal(10))
+        XCTAssertNil(block.notional)
+        XCTAssertEqual(block.status, .failed)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderDecodesWithoutOptionalCompanyName() throws {
+        // `company_name`, `qty`, `notional`, and `limit_price` are all
+        // optional. A notional market order omits qty/limit; company_name may
+        // be absent. Missing keys must decode as nil, not reject the payload.
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_min",
+          "order_id": "ord_min",
+          "symbol": "AAPL",
+          "side": "buy",
+          "order_type": "market",
+          "notional": "250.00",
+          "filled_qty": "0",
+          "time_in_force": "day",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "pending"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertNil(block.companyName)
+        XCTAssertNil(block.qty)
+        XCTAssertNil(block.limitPrice)
+        XCTAssertEqual(block.notional, Decimal(string: "250.00"))
+    }
+
+    func testCancelOrderUnknownStatusFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"market","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"bogus"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderUnknownOrderTypeFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"stop","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderUnknownSideFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"hold",
+         "order_type":"market","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderInvalidDecimalStringFailsClosed() {
+        // Money / qty fields are decimal strings, never bare numbers. A
+        // non-numeric string must reject the payload rather than coerce.
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"market","qty":"ten","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
     // MARK: - Stock comparison (SEV-658)
 
     private static let comparisonStocksJSON = """

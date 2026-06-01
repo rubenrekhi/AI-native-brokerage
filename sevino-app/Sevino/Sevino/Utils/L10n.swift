@@ -883,6 +883,39 @@ enum L10n {
         static let errorSubmittingOrder = String(localized: "trade_execution.error_submitting_order")
     }
 
+    enum CancelOrder {
+        static let headerPendingBuy = String(localized: "cancel_order.header_pending_buy")
+        static let headerPendingSell = String(localized: "cancel_order.header_pending_sell")
+        static let statusPending = String(localized: "cancel_order.status_pending")
+        static let statusCancelled = String(localized: "cancel_order.status_cancelled")
+        static let statusFailed = String(localized: "cancel_order.status_failed")
+        static let sideBuy = String(localized: "cancel_order.side_buy")
+        static let sideSell = String(localized: "cancel_order.side_sell")
+        static func sharesAtMarket(_ qty: String) -> String {
+            String(format: String(localized: "cancel_order.shares_at_market"), qty)
+        }
+        static func notionalMarket(_ notional: String) -> String {
+            String(format: String(localized: "cancel_order.notional_market"), notional)
+        }
+        static func sharesAtLimit(_ qty: String, _ limitPrice: String) -> String {
+            String(format: String(localized: "cancel_order.shares_at_limit"), qty, limitPrice)
+        }
+        static func partialFillNote(_ filled: String, _ total: String) -> String {
+            String(format: String(localized: "cancel_order.partial_fill_note"), filled, total)
+        }
+        static func filledShares(_ filled: String) -> String {
+            String(format: String(localized: "cancel_order.filled_shares"), filled)
+        }
+        static let dayOrder = String(localized: "cancel_order.day_order")
+        static let gtcOrder = String(localized: "cancel_order.gtc_order")
+        static func footerFormat(_ orderTerm: String, _ relativeTime: String) -> String {
+            String(format: String(localized: "cancel_order.footer_format"), orderTerm, relativeTime)
+        }
+        static let holdToCancel = String(localized: "cancel_order.hold_to_cancel")
+        static let holdToCancelA11yHint = String(localized: "cancel_order.hold_to_cancel_a11y_hint")
+        static let cancellationFailed = String(localized: "cancel_order.cancellation_failed")
+    }
+
     enum Transfer {
         static let depositBadge = String(localized: "transfer.deposit_badge")
         static let withdrawBadge = String(localized: "transfer.withdraw_badge")

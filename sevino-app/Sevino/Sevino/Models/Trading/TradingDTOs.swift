@@ -133,7 +133,7 @@ struct OrderDetailResponse: Decodable, Equatable {
     let conversationId: String?
 }
 
-enum OrderSide: String {
+enum OrderSide: String, Codable, Equatable, Sendable {
     case buy
     case sell
     case unknown
