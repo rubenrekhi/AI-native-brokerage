@@ -422,13 +422,16 @@ class TestHappyPath:
             assert len(invs) == 1
             assert invs[0].stop_reason == "end_turn"
 
-        request_system = anthropic_stub.messages.stream.call_args.kwargs["system"]
-        assert len(request_system) == 2
+        call = anthropic_stub.messages.stream.call_args.kwargs
+        request_system = call["system"]
+        assert len(request_system) == 1
         assert request_system[0]["type"] == "text"
         assert request_system[0]["cache_control"] == {"type": "ephemeral"}
-        assert request_system[1]["type"] == "text"
-        assert "US Eastern Time" in request_system[1]["text"]
-        assert "cache_control" not in request_system[1]
+        # The live clock rides the current user message (after every cache
+        # breakpoint), not a second system block.
+        user_msg = [m for m in call["messages"] if m["role"] == "user"][-1]
+        assert "US Eastern Time" in user_msg["content"][-1]["text"]
+        assert "cache_control" not in user_msg["content"][-1]
 
     async def test_digest_card_reaches_model_as_context_hint(
         self, fixture, chat_client
@@ -456,21 +459,23 @@ class TestHappyPath:
         )
 
         call = anthropic_stub.messages.stream.call_args.kwargs
-        # System prompt is untouched by digest cards: only the cached prompt
-        # and the per-turn uncached time block are present.
-        assert len(call["system"]) == 2
+        # System prompt is untouched by digest cards: a single cached block,
+        # with the live clock on the user turn (not a second system block).
+        assert len(call["system"]) == 1
         assert call["system"][0]["cache_control"] == {"type": "ephemeral"}
-        system_text = "\n".join(block["text"] for block in call["system"])
-        assert "AMD moved 5%" not in system_text
-        assert "US Eastern Time" in call["system"][1]["text"]
-        assert "cache_control" not in call["system"][1]
-        # The card content rides the user turn as a hint instead. (The loop
-        # mutates ``messages`` in place, appending the assistant turn, so
-        # target the user message explicitly rather than by position.)
-        user_msg = next(m for m in call["messages"] if m["role"] == "user")
-        hint = user_msg["content"][-1]["text"]
-        assert hint.startswith(
-            "The user opened the chat from a Daily Digest card."
+        assert "AMD moved 5%" not in call["system"][0]["text"]
+        # The digest hint and the live clock both ride the user turn; the hint
+        # is appended first, the clock last. (The loop mutates ``messages`` in
+        # place, appending the assistant turn, so target the user message by
+        # role rather than position.)
+        user_msg = [m for m in call["messages"] if m["role"] == "user"][-1]
+        assert "US Eastern Time" in user_msg["content"][-1]["text"]
+        hint = next(
+            b["text"]
+            for b in user_msg["content"]
+            if b["text"].startswith(
+                "The user opened the chat from a Daily Digest card."
+            )
         )
         assert "big_move" in hint
         assert "AMD moved 5%" in hint

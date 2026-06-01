@@ -1,10 +1,12 @@
-"""Builds the live time + market-status block appended to the system prompt.
+"""Builds the live time + market-status block sent to the model each turn.
 
-This block is kept *out* of the cached system prompt on purpose. The static
-prompt is sent as a cache breakpoint (see ``runtime/loop.py``), so a clock
-value baked into it would invalidate the prompt cache on every turn. The
-text produced here is appended *after* the breakpoint — uncached — so the
-static prefix still gets a cache hit while the model sees a fresh clock.
+This block is kept *out* of the cached prefix on purpose. The static prompt,
+tools array, and prior-turn history are each marked as cache breakpoints (see
+``runtime/loop.py`` and ``runtime/anthropic_io.py``), so a clock value baked
+into any of them would invalidate the cache on every turn. The text produced
+here is appended to the current user message — after every breakpoint,
+uncached — so the cached prefix still gets a hit while the model sees a fresh
+clock.
 
 Market times are always rendered in US Eastern (``America/New_York``);
 ``ZoneInfo`` picks EST vs EDT for the instant, so the label is correct

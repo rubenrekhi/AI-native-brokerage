@@ -100,8 +100,8 @@ A single user message, traced through the exact functions it hits.
    - `claimed` → first mover, continue.
 4. **`SSEEmitter()`** is created. `post_turn` returns `EventSourceResponse(_stream())`. `_stream` spawns `_drive_turn` as a detached `asyncio.Task` and then yields events out of `emitter.iter_events()`.
 5. **`_drive_turn`** builds `ServerToolsConfig` from `settings` and calls **`run_agent_turn`** (`runtime/loop.py:76`) with the emitter, `DEFAULT_REGISTRY`, `ToolHttpClients(market_data=...)`, the system prompt, model config, hard caps, and Langfuse.
-6. **`run_agent_turn`** validates caps (`max_output_tokens > thinking_budget_tokens`, else `ValueError`), then **`initialize_turn`** (`flow/turn_lifecycle.py`): persists the user message (+ optional `context` block), loads history into `messages`, opens the `agent_turns` row. Returns `(turn_id, messages)`.
-7. The loop **emits `TurnStarted`**, marks the system prompt as a cache breakpoint, opens a Langfuse `agent` span, and enters `while True`.
+6. **`run_agent_turn`** validates caps (`max_output_tokens > thinking_budget_tokens`, else `ValueError`), then **`initialize_turn`** (`flow/turn_lifecycle.py`): persists the user message (+ optional `context` block), loads history into `messages`, appends the request-only time-context block to the current user message, marks the end of prior-turn history as a cache breakpoint, and opens the `agent_turns` row. Returns `(turn_id, messages)`.
+7. The loop **emits `TurnStarted`**, marks the system prompt as a (single) cache breakpoint — the live clock rides the user message instead (step 6), not a second system block — opens a Langfuse `agent` span, and enters `while True`.
 8. Each iteration: `disconnect_check` (None in prod) → `check_caps` → **`run_one_iteration`** (`flow/iteration.py:195`):
    1. **`build_iteration_request`** — assembles `messages.stream` kwargs: model, system, messages, `max_tokens`, `thinking`, and a combined `tools` array (server-tool specs + registry specs, last entry `cache_control`-marked).
    2. **`StreamConsumer.consume`** (`flow/stream_consumer.py`) — opens `anthropic_client.messages.stream`, forwards chunks to SSE as `BlockStart` / `TextDelta` / `BlockData` / `BlockEnd`, and returns the final `Message`. **This is where the LLM is called.**
@@ -206,7 +206,8 @@ sequenceDiagram
 | `errors.py` · `ErrorCode` | SSE-surfaced error codes (tool/model/internal/cancelled/cap/validation). | Stored on `agent_turns.error_code` and the `error` event. |
 | `errors.py` · `to_error_code(exc)` | Maps exceptions to `ErrorCode` (rate-limit, ≥500/overload, connection, cancel, timeout, validation, else internal). | Signature is `BaseException` because `CancelledError` is one. |
 | `anthropic_io.py` · `scrub_blocks` / `scrub_block` | Strip SDK-only fields (e.g. `parsed_output`) the API rejects as input, via `INPUT_FIELDS_BY_BLOCK_TYPE` allowlist. Unknown types pass through. | `thinking` keeps `signature` so it roundtrips within a turn. |
-| `anthropic_io.py` · `to_anthropic_content(content_blocks)` | Convert persisted blocks back to Anthropic input. Keeps `text`; converts `context` to a tagged text block; **drops** `status`/`stock_card`/`thinking`. | Used when loading cross-turn history — tool context and thinking are lost across turns. |
+| `anthropic_io.py` · `to_anthropic_content(content_blocks)` | Convert persisted blocks back to Anthropic input. Keeps **only** `text`; **drops** `block_id`, `context`, `status`, `stock_card`, `thinking`. | Used when loading cross-turn history — the `context` block and tool/thinking output are lost across turns; the model saw `context` only via its turn-only `render_hint`. |
+| `anthropic_io.py` · `append_time_context` / `mark_history_cache_breakpoint` | Shape the request `messages` for caching: append the live clock as a request-only block on the current user turn; mark the end of frozen prior-turn history as an ephemeral cache breakpoint. | Called once per turn from `initialize_turn`. Cache prefix order is `tools → system → messages`, so the clock must sit *after* the history breakpoint. |
 | `anthropic_io.py` · `estimate_thinking_tokens` | Heuristic `len(text)//4` for the audit column (Anthropic gives no per-block breakdown). | — |
 
 ### Flow (`app/ai/runtime/flow/`)
@@ -218,7 +219,7 @@ sequenceDiagram
 | `iteration.py` · `_decide_after_response(...)` | The `stop_reason` router (see lifecycle step 8.7). | A `tool_use` stop with **zero** tool_use blocks → `INTERNAL_ERROR` break (would otherwise loop forever). |
 | `stream_consumer.py` · `StreamConsumer` | Per-iteration. Owns stream-time state (`open_text_blocks`, `open_thinking_blocks`, `accumulated_text`); emits SSE block events; polls `disconnect_check` every 16th text delta. | Closes the upstream stream eagerly on cancel. `redacted_thinking` emits a one-shot complete block. Server-tool start/result chunks delegate to the shared `ServerToolTracker`. |
 | `stream_consumer.py` · `flush_partial_text(...)` | Append in-flight text partials to `assistant_blocks` on cancel (since `get_final_message` never returns mid-stream). | — |
-| `turn_lifecycle.py` · `initialize_turn(...)` | Persist user message (+`context` block), load history → `messages`, open `agent_turns` row. Returns `(turn_id, messages)`. | User message persisted **first** so a mid-turn crash doesn't lose input. `TurnStarted` is emitted by the caller, not here. |
+| `turn_lifecycle.py` · `initialize_turn(...)` | Persist user message (+`context` block), load history → `messages`, append the request-only time-context block + mark the history cache breakpoint, open `agent_turns` row. Returns `(turn_id, messages)`. | User message persisted **first** so a mid-turn crash doesn't lose input. `TurnStarted` is emitted by the caller, not here. |
 | `turn_lifecycle.py` · `TurnTotals` | Running token/cost counter accumulated across iterations. | Written to `agent_turns.total_*` at finalize. |
 | `turn_lifecycle.py` · `finalize_turn_row(...)` | Append assistant message (if any blocks) + `complete_agent_turn`. | Run under `asyncio.shield`; errors are logged, never re-raised (the row is the last signal left). |
 | `turn_lifecycle.py` · `emit_terminal_frame(...)` | Emit `Error` if `error_code` set, else `TurnCompleted`. | Only called on `completed_normally`. |
@@ -284,11 +285,17 @@ The two portfolio read tools each have a dedicated reference — [`tools/get_por
 
 **Conversation history.** Persisted in Postgres `messages.content_blocks` (JSONB). At turn start, `initialize_turn` calls `load_history` (all messages, oldest first) and maps each through `to_anthropic_content` into the in-memory `messages` list. History is therefore reconstructed from the database every turn; there is no in-process conversation cache.
 
-**What `to_anthropic_content` keeps vs. drops.** Only `text` survives as-is. A `context` block (user-attached modal data) becomes a tagged text block. `status`, `stock_card`, and `thinking` are dropped — so across turns the model sees prior assistant **text** but not its tool outputs or reasoning.
+**What `to_anthropic_content` keeps vs. drops.** Only `text` survives. A `context` block (user-attached modal data) is **dropped** along with `status`, `stock_card`, and `thinking` — so across turns the model sees prior assistant **text** but not its tool outputs or reasoning. The `context` block reached the model only on its own turn, via the turn-only `render_hint` appended to that user message.
 
 **Within a turn**, the in-memory `messages` list is the live context window. After each model call, the full `response_content` (text + tool_use + **thinking with signatures**, post-`scrub_blocks`) is appended as an `assistant` message; tool results are appended as a `user` message. This is what lets thinking signatures roundtrip byte-for-byte across `pause_turn`/`tool_use` continuations.
 
-**System prompt.** Loaded once at import from `prompts/sevino_v1.md` (+ optional server-tools addendum), hashed, and sent as a single `system` text block marked `cache_control: ephemeral` — so Anthropic prompt-caches everything up to that marker across iterations and across turns within the 5-minute TTL. The tools array tail is also cache-marked, extending the cache window over the tools.
+**Prompt caching.** The cache prefix is ordered `tools → system → messages`, and a breakpoint hits only if every byte before it is unchanged. Three `cache_control: ephemeral` breakpoints are set per request (3 of Anthropic's 4 max), all sharing the 5-minute TTL:
+
+- **System prompt** — loaded once at import from `prompts/sevino_v1.md` (+ optional server-tools addendum), hashed, and sent as a single `system` text block. Stable across turns.
+- **Tools array tail** — the last entry of the combined `tools` array is cache-marked, extending the cached prefix over the tool specs.
+- **Prior-turn history** — `mark_history_cache_breakpoint` marks the last block of the last frozen history message, so the replayed conversation cache-reads across turns (set in `initialize_turn`).
+
+The live **time context** (clock + market status) is appended to the **current user message**, *after* the history breakpoint — so its per-turn value never invalidates the cached prefix. (It was previously a second `system` block, which sat ahead of `messages` in the prefix and would have blocked history caching.)
 
 **Persisted vs. ephemeral:**
 

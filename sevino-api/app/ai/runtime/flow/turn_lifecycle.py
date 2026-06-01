@@ -20,7 +20,11 @@ from ulid import ULID
 
 from app.ai.context_blocks import ContextBlock, build_context_block
 from app.ai.prompts import SystemPrompt
-from app.ai.runtime.anthropic_io import to_anthropic_content
+from app.ai.runtime.anthropic_io import (
+    append_time_context,
+    mark_history_cache_breakpoint,
+    to_anthropic_content,
+)
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.types import ModelConfig
@@ -75,6 +79,7 @@ async def initialize_turn(
     system_prompt: SystemPrompt,
     model_config: ModelConfig,
     db_factory: DbSessionFactory,
+    time_context: str | None = None,
 ) -> tuple[uuid.UUID, list[dict[str, Any]]]:
     """Persist the user message, load history, open the agent_turn row.
 
@@ -93,6 +98,12 @@ async def initialize_turn(
     non-stale field (the chart's selected range) is projected into the hint;
     the rest of ``data`` is never sent to the model, and the block is never
     replayed — ``to_anthropic_content`` drops it from history.
+
+    ``time_context`` (live clock + market status) is likewise appended to the
+    current user message as a request-only block, and the end of frozen
+    prior-turn history is marked as a cache breakpoint — so the replayed
+    conversation caches across turns while the per-turn clock, sitting after
+    that breakpoint, never invalidates the cached prefix.
     """
     async with db_factory() as db:
         content_blocks: list[dict[str, Any]] = [
@@ -131,6 +142,9 @@ async def initialize_turn(
         messages[-1]["content"].append(
             {"type": "text", "text": ctx_block.render_hint()}
         )
+
+    append_time_context(messages, time_context)
+    mark_history_cache_breakpoint(messages)
 
     async with db_factory() as db:
         turn = await ConversationRepository.start_agent_turn(

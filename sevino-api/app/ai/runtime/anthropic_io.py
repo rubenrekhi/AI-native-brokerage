@@ -12,6 +12,15 @@ allowlist in sync with ``docs.claude.com/en/api/messages``.
 ``to_anthropic_content`` adapts Sevino's persisted block shapes back to
 Anthropic input format. ``estimate_thinking_tokens`` is a heuristic for
 the ``thinking_tokens`` audit column.
+
+``append_time_context`` and ``mark_history_cache_breakpoint`` shape the
+per-request ``messages`` list for prompt caching: the former appends the
+live clock as a request-only block on the current user turn, the latter
+marks the end of frozen prior-turn history as an ephemeral cache breakpoint
+so the replayed conversation caches across turns. The Anthropic cache
+prefix is ordered ``tools → system → messages``, so the volatile clock
+must sit *after* the history breakpoint (i.e. on the current user turn) or
+it would invalidate the cached history every turn.
 """
 
 from __future__ import annotations
@@ -20,7 +29,9 @@ from typing import Any, Final
 
 __all__ = [
     "INPUT_FIELDS_BY_BLOCK_TYPE",
+    "append_time_context",
     "estimate_thinking_tokens",
+    "mark_history_cache_breakpoint",
     "scrub_block",
     "scrub_blocks",
     "to_anthropic_content",
@@ -137,6 +148,35 @@ def to_anthropic_content(
         for block in content_blocks
         if block.get("type") == "text"
     ]
+
+
+def append_time_context(
+    messages: list[dict[str, Any]], time_context: str | None
+) -> None:
+    """Append the live clock/market block to the current user message.
+
+    A request-only block on ``messages[-1]`` — never persisted, never
+    replayed next turn — so the per-turn timestamp stays *after* the
+    history cache breakpoint and never invalidates the cached prefix.
+    """
+    if time_context and messages and messages[-1]["content"]:
+        messages[-1]["content"].append({"type": "text", "text": time_context})
+
+
+def mark_history_cache_breakpoint(messages: list[dict[str, Any]]) -> None:
+    """Mark the end of frozen prior-turn history as an ephemeral cache
+    breakpoint so the replayed conversation caches across turns.
+
+    Skips the current user turn (``messages[-1]``, which carries the volatile
+    time context) and any empty-content message — a card-only assistant turn
+    whose text ``to_anthropic_content`` stripped to ``[]``. No-op on the first
+    turn, where there is no prior history to cache.
+    """
+    for msg in reversed(messages[:-1]):
+        content = msg["content"]
+        if content:
+            content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
+            return
 
 
 def estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:

@@ -519,12 +519,19 @@ class TestHappyPath:
             "kind": "big_move",
         }
 
-    async def test_time_context_appended_as_uncached_second_system_block(
+    async def test_time_context_rides_current_user_message_not_system(
         self, repo_mocks
     ):
-        # The live clock must sit *after* the cache breakpoint so it never
-        # invalidates the cached static prompt: a second block, no marker.
+        # The live clock must sit *after* every cache breakpoint so it never
+        # invalidates the cached prefix: it rides the current user message as
+        # the last block, and the system prompt stays a single cached block.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "u", "text": "hello"}
+            )
+        ]
         client = _make_client(_make_response())
+        captured = _capture_messages(client)
 
         await _run(client, repo_mocks, time_context="It is 3:45 PM EDT.")
 
@@ -534,9 +541,12 @@ class TestHappyPath:
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
-            },
-            {"type": "text", "text": "It is 3:45 PM EDT."},
+            }
         ]
+        assert captured["messages"][-1]["content"][-1] == {
+            "type": "text",
+            "text": "It is 3:45 PM EDT.",
+        }
 
     async def test_no_time_context_keeps_single_cached_system_block(
         self, repo_mocks
@@ -1051,10 +1061,15 @@ class TestRequestShape:
         assert len(captured) == 1
         sent_messages = captured[0]
         # The thinking + status blocks are dropped; only the text block
-        # survives — and without its ``block_id``, which Anthropic's
-        # content-block schema rejects.
+        # survives — without its ``block_id`` (which Anthropic's content-block
+        # schema rejects), and carrying the history cache breakpoint since it
+        # is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
 
     async def test_history_assistant_text_blocks_strip_block_id(
@@ -1130,11 +1145,17 @@ class TestRequestShape:
             "assistant",
             "user",
         ]
-        # Anthropic-shape only — no ``block_id``.
+        # Anthropic-shape only — no ``block_id``. Carries the history cache
+        # breakpoint: it is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
-        # User blocks pass through unchanged — they never carry a block_id.
+        # User blocks pass through unchanged — they never carry a block_id,
+        # and this one is before the breakpoint so it stays unmarked.
         assert sent_messages[0]["content"] == [
             {"type": "text", "text": "first turn"}
         ]

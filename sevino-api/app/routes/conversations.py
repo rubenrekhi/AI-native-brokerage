@@ -323,8 +323,8 @@ async def _build_turn_time_context(
     market_data: MarketDataService | None,
     client_timezone: str | None,
 ) -> str:
-    """Live time + market-open status appended (uncached) to the system
-    prompt each turn. A clock outage degrades to time-only — context for the
+    """Live time + market-open status appended (uncached) to the current user
+    message each turn. A clock outage degrades to time-only — context for the
     model is best-effort and must never fail the turn. ``client_timezone``
     adds the user's local time beside Eastern; an unusable value is ignored
     downstream."""

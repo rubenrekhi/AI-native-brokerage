@@ -126,9 +126,10 @@ async def run_agent_turn(
 ) -> AgentTurnResult:
     """Run one agent turn end-to-end.
 
-    ``time_context``, when provided, is sent as a second system block after
-    the cached prompt — never folded into it — so its live clock value
-    doesn't invalidate the prompt cache breakpoint.
+    ``time_context``, when provided, is appended to the current user message
+    (via ``initialize_turn``) rather than the system prompt — so its live
+    clock value sits after the conversation-history cache breakpoint and
+    doesn't invalidate the cached prefix (prompt + tools + prior history).
 
     Anthropic errors and cap breaches don't raise — they're persisted with
     ``terminal_state='error'``. ``CancelledError`` propagates after
@@ -175,6 +176,7 @@ async def run_agent_turn(
             system_prompt=system_prompt,
             model_config=model_config,
             db_factory=db_factory,
+            time_context=time_context,
         )
 
         # Emitted here (not in ``initialize_turn``) so that a cancel on
@@ -199,7 +201,10 @@ async def run_agent_turn(
 
         # Mark the system block as a cache breakpoint so Anthropic reuses
         # everything up to the marker across turns within the 5m TTL —
-        # input cost drops to the cache-read rate on hits.
+        # input cost drops to the cache-read rate on hits. The live clock +
+        # market status is deliberately *not* here: it rides the current user
+        # message (see ``initialize_turn``) so the per-turn timestamp stays
+        # after the history breakpoint and never invalidates this prefix.
         request_system: list[dict[str, Any]] = [
             {
                 "type": "text",
@@ -207,11 +212,6 @@ async def run_agent_turn(
                 "cache_control": {"type": "ephemeral"},
             }
         ]
-
-        # Live clock + market status, appended *after* the cache breakpoint
-        # so the per-turn timestamp never invalidates the cached prompt above.
-        if time_context:
-            request_system.append({"type": "text", "text": time_context})
 
         # ``turn_id.hex`` is the 32-char lowercase form W3C trace context
         # requires, so a Langfuse trace looks up directly by
