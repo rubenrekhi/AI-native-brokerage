@@ -41,24 +41,8 @@ struct SingleStockCard: View {
         currentBars.map { Decimal($0.c) }
     }
 
-    private static let iso8601Fractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-
-    private static let iso8601: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime]
-        return f
-    }()
-
     private var chartDates: [Date] {
-        currentBars.map { bar in
-            Self.iso8601Fractional.date(from: bar.t)
-                ?? Self.iso8601.date(from: bar.t)
-                ?? .now
-        }
+        currentBars.map { ISO8601Coder.parse($0.t) ?? .now }
     }
 
     private var rangeOptions: [TimeRange] {

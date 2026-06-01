@@ -87,6 +87,8 @@ struct MessageRowView: View {
             StockComparisonCard(block: scb, scale: scale)
         case .thinking(let tb):
             ThinkingBlockView(block: tb, scale: scale)
+        case .cancelTransfer(let ctb):
+            CancelTransferCard(block: ctb, scale: scale)
         case .cancelOrder(let cob):
             CancelOrderCard(block: cob, scale: scale)
         }

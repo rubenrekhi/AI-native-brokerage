@@ -1027,6 +1027,150 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertEqual(dict?["type"] as? String, "stock_comparison")
     }
 
+    // MARK: - CancelTransferBlock decoding
+
+    private static let cancelTransferPendingJSON = """
+    {
+      "type": "cancel_transfer",
+      "block_id": "blk_xfer_1",
+      "transfer_id": "trf_abc123",
+      "direction": "deposit",
+      "amount": "500.00",
+      "bank_name": "Chase",
+      "bank_mask": "1234",
+      "initiated_at": "2026-05-31T14:30:00Z",
+      "status": "pending"
+    }
+    """
+
+    private func cancelTransferJSON(
+        direction: String,
+        status: String,
+        includeMask: Bool = true
+    ) -> Data {
+        let maskLine = includeMask ? "\"bank_mask\": \"5678\"," : ""
+        return Data("""
+        {
+          "type": "cancel_transfer",
+          "block_id": "blk_x",
+          "transfer_id": "trf_x",
+          "direction": "\(direction)",
+          "amount": "200.00",
+          "bank_name": "Wells Fargo",
+          \(maskLine)
+          "initiated_at": "2026-05-31T14:30:00Z",
+          "status": "\(status)"
+        }
+        """.utf8)
+    }
+
+    func testCancelTransferPendingDepositRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.cancelTransferPendingJSON.utf8)
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.blockId, "blk_xfer_1")
+        XCTAssertEqual(ctb.transferId, "trf_abc123")
+        XCTAssertEqual(ctb.direction, .deposit)
+        XCTAssertEqual(ctb.amount, Decimal(string: "500.00"))
+        XCTAssertEqual(ctb.bankName, "Chase")
+        XCTAssertEqual(ctb.bankMask, "1234")
+        XCTAssertEqual(ctb.status, .pending)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferWithdrawalCancelledRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "withdraw", status: "cancelled")
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.direction, .withdraw)
+        XCTAssertEqual(ctb.status, .cancelled)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferFailedStatusRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "deposit", status: "failed")
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.status, .failed)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferUnknownStatusIsRejected() {
+        // The status literal is a closed set on the wire — an unrecognized
+        // value must fail closed rather than silently degrade.
+        XCTAssertThrowsError(
+            try JSONDecoder.sevino().decode(
+                Block.self,
+                from: cancelTransferJSON(direction: "deposit", status: "settled")
+            )
+        )
+    }
+
+    func testCancelTransferUnknownDirectionIsRejected() {
+        XCTAssertThrowsError(
+            try JSONDecoder.sevino().decode(
+                Block.self,
+                from: cancelTransferJSON(direction: "swap", status: "pending")
+            )
+        )
+    }
+
+    func testCancelTransferMissingBankMaskDecodesToNil() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "deposit", status: "pending", includeMask: false)
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertNil(ctb.bankMask)
+    }
+
+    func testCancelTransferNumericAmountIsRejected() {
+        // Decimal-on-the-wire: amount must arrive as a string. A JSON number
+        // would let a Double mediate the money value, so it must be rejected.
+        let json = Data("""
+        {"type":"cancel_transfer","block_id":"x","transfer_id":"t","direction":"deposit",
+         "amount":500.00,"bank_name":"Chase","initiated_at":"2026-05-31T14:30:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelTransferInvalidInitiatedAtIsRejected() {
+        let json = Data("""
+        {"type":"cancel_transfer","block_id":"x","transfer_id":"t","direction":"deposit",
+         "amount":"500.00","bank_name":"Chase","initiated_at":"not-a-date","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
     // MARK: - List round trip
 
     func testListRoundTripPreservesOrderAndVariants() throws {

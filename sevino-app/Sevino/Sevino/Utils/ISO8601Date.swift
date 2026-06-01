@@ -23,7 +23,7 @@ struct ISO8601Date: Codable, Equatable, Hashable, Sendable {
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let raw = try container.decode(String.self)
-        guard let date = _iso8601Fractional.date(from: raw) ?? _iso8601.date(from: raw) else {
+        guard let date = ISO8601Coder.parse(raw) else {
             throw DecodingError.dataCorruptedError(
                 in: container,
                 debugDescription: "Invalid ISO 8601 date: \(raw)"
@@ -34,18 +34,6 @@ struct ISO8601Date: Codable, Equatable, Hashable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.singleValueContainer()
-        try container.encode(_iso8601Fractional.string(from: wrappedValue))
+        try container.encode(ISO8601Coder.string(from: wrappedValue))
     }
 }
-
-private let _iso8601: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
-}()
-
-private let _iso8601Fractional: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()

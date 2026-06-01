@@ -866,6 +866,21 @@ enum L10n {
         static let editRiskToleranceScenarioLabel = String(localized: "settings.edit_risk_tolerance_scenario_label")
     }
 
+    enum CancelTransfer {
+        static let headerDeposit = String(localized: "cancel_transfer.header_deposit")
+        static let headerWithdrawal = String(localized: "cancel_transfer.header_withdrawal")
+        static let statusPending = String(localized: "cancel_transfer.status_pending")
+        static let statusCancelled = String(localized: "cancel_transfer.status_cancelled")
+        static let statusFailed = String(localized: "cancel_transfer.status_failed")
+        static func bankAccountFormat(_ name: String, _ mask: String) -> String {
+            String(format: String(localized: "cancel_transfer.bank_account_format"), name, mask)
+        }
+        static let holdToCancel = String(localized: "cancel_transfer.hold_to_cancel")
+        static let holdToCancelA11yHint = String(localized: "cancel_transfer.hold_to_cancel_a11y_hint")
+        static let cancelled = String(localized: "cancel_transfer.cancelled")
+        static let cancellationFailed = String(localized: "cancel_transfer.cancellation_failed")
+    }
+
     enum TradeExecution {
         static let sideBuy = String(localized: "trade_execution.side_buy")
         static let sideSell = String(localized: "trade_execution.side_sell")

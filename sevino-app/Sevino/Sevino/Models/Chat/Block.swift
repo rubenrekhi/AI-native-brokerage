@@ -20,6 +20,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
     case stockCard(StockCardBlock)
     case stockComparison(StockComparisonBlock)
     case thinking(ThinkingBlock)
+    case cancelTransfer(CancelTransferBlock)
     case cancelOrder(CancelOrderBlock)
 
     /// Per-block stable identifier used for `Identifiable` and as the target
@@ -31,6 +32,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
         case .stockCard(let block): return block.blockId
         case .stockComparison(let block): return block.blockId
         case .thinking(let block): return block.blockId
+        case .cancelTransfer(let block): return block.blockId
         case .cancelOrder(let block): return block.blockId
         }
     }
@@ -55,6 +57,8 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             self = .stockComparison(try StockComparisonBlock(from: decoder))
         case "thinking":
             self = .thinking(try ThinkingBlock(from: decoder))
+        case "cancel_transfer":
+            self = .cancelTransfer(try CancelTransferBlock(from: decoder))
         case "cancel_order":
             self = .cancelOrder(try CancelOrderBlock(from: decoder))
         default:
@@ -87,6 +91,9 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             try block.encode(to: encoder)
         case .thinking(let block):
             try typeContainer.encode("thinking", forKey: .type)
+            try block.encode(to: encoder)
+        case .cancelTransfer(let block):
+            try typeContainer.encode("cancel_transfer", forKey: .type)
             try block.encode(to: encoder)
         case .cancelOrder(let block):
             try typeContainer.encode("cancel_order", forKey: .type)
@@ -334,6 +341,33 @@ struct ThinkingBlock: Codable, Equatable, Sendable {
 enum ThinkingState: String, Codable, Sendable {
     case streaming
     case complete
+}
+
+/// A pending ACH transfer the user can cancel with a hold-to-confirm gesture.
+/// Renders the transfer as a receipt and, while `status == .pending`, offers
+/// the cancel action.
+///
+/// `direction` reuses the funding `TransferDirection`; `amount` is a decimal
+/// string (decimal-on-the-wire); `bankMask` is optional. `initiatedAt` codes as
+/// an ISO 8601 string (via `@ISO8601Date`) so the block round-trips through
+/// `JSONEncoder.sevino()` regardless of its date strategy.
+struct CancelTransferBlock: Codable, Equatable, Sendable, Identifiable {
+    let blockId: String
+    let transferId: String
+    let direction: TransferDirection
+    @DecimalString var amount: Decimal
+    let bankName: String
+    let bankMask: String?
+    @ISO8601Date var initiatedAt: Date
+    let status: TransferStatus
+
+    var id: String { blockId }
+}
+
+enum TransferStatus: String, Codable, Sendable {
+    case pending
+    case cancelled
+    case failed
 }
 
 /// Pending-order cancel card. Surfaced when the agent finds a cancellable
