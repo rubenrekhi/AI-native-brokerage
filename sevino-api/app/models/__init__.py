@@ -9,6 +9,7 @@ from app.models.feature_flag import FeatureFlag
 from app.models.message import Message
 from app.models.model_invocation import ModelInvocation
 from app.models.order_event import OrderEvent
+from app.models.pending_action import PendingAction
 from app.models.plaid_item import PlaidItem
 from app.models.radar_item import RadarItem
 from app.models.sse_checkpoint import SseCheckpoint
@@ -29,6 +30,7 @@ __all__ = [
     "Message",
     "ModelInvocation",
     "OrderEvent",
+    "PendingAction",
     "PlaidItem",
     "RadarItem",
     "SseCheckpoint",

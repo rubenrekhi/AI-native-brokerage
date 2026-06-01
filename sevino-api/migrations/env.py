@@ -24,6 +24,7 @@ from app.models import (  # noqa: F401, E402
     Message,
     ModelInvocation,
     OrderEvent,
+    PendingAction,
     PlaidItem,
     RadarItem,
     SseCheckpoint,
