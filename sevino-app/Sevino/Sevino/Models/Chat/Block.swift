@@ -23,6 +23,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
     case recurringInvestmentSetup(RecurringInvestmentSetupBlock)
     case cancelTransfer(CancelTransferBlock)
     case cancelOrder(CancelOrderBlock)
+    case confirmation(ConfirmationBlock)
 
     /// Per-block stable identifier used for `Identifiable` and as the target
     /// of `block_data` patches. Mirrors the backend's `block_id` field.
@@ -36,6 +37,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
         case .recurringInvestmentSetup(let block): return block.blockId
         case .cancelTransfer(let block): return block.blockId
         case .cancelOrder(let block): return block.blockId
+        case .confirmation(let block): return block.blockId
         }
     }
 
@@ -65,6 +67,8 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             self = .cancelTransfer(try CancelTransferBlock(from: decoder))
         case "cancel_order":
             self = .cancelOrder(try CancelOrderBlock(from: decoder))
+        case "confirmation":
+            self = .confirmation(try ConfirmationBlock(from: decoder))
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type,
@@ -104,6 +108,9 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             try block.encode(to: encoder)
         case .cancelOrder(let block):
             try typeContainer.encode("cancel_order", forKey: .type)
+            try block.encode(to: encoder)
+        case .confirmation(let block):
+            try typeContainer.encode("confirmation", forKey: .type)
             try block.encode(to: encoder)
         }
     }
@@ -156,6 +163,73 @@ enum StatusState: String, Codable, Sendable {
     case active
     case complete
     case failed
+}
+
+/// Human-in-the-loop confirmation card. Mirrors `ConfirmationBlock` in
+/// `app/ai/blocks.py`. The assistant proposes a consequential action (a
+/// transfer, today) and the user must *tap* to confirm before it executes —
+/// tapping `POST`s to `/v1/conversations/{id}/actions/{actionId}`.
+///
+/// `status` is `"pending"` on the wire for a fresh proposal and is re-stamped
+/// from the live action at history-read time, so a confirmed / superseded /
+/// expired / executed card renders non-interactive. `details` is the
+/// kind-specific payload (opaque to the framework); iOS types only the fields
+/// it renders.
+struct ConfirmationBlock: Codable, Equatable, Sendable {
+    let blockId: String
+    let actionId: String
+    let kind: String
+    let title: String
+    let rows: [ConfirmationRow]
+    let details: ConfirmationDetails
+    let confirmLabel: String
+    let cancelLabel: String
+    let holdToConfirm: Bool
+    let status: String
+
+    /// A fresh proposal awaiting the user's tap. Any other status renders the
+    /// card as a non-interactive receipt / dead state.
+    var isPending: Bool { status == "pending" }
+
+    /// A copy with a new `status` — used to deaden the card locally on tap or
+    /// when a new message supersedes it.
+    func withStatus(_ newStatus: String) -> ConfirmationBlock {
+        ConfirmationBlock(
+            blockId: blockId,
+            actionId: actionId,
+            kind: kind,
+            title: title,
+            rows: rows,
+            details: details,
+            confirmLabel: confirmLabel,
+            cancelLabel: cancelLabel,
+            holdToConfirm: holdToConfirm,
+            status: newStatus
+        )
+    }
+}
+
+/// One label/value line on a `ConfirmationBlock`'s generic fallback layout.
+struct ConfirmationRow: Codable, Equatable, Sendable {
+    let label: String
+    let value: String
+}
+
+/// Kind-specific payload on a `ConfirmationBlock`. Every field is optional: the
+/// backend block is generic, and iOS types only the fields it renders (transfer
+/// today). Snake_case wire keys map via the decoder's `convertFromSnakeCase`
+/// strategy; unknown future keys are ignored.
+struct ConfirmationDetails: Codable, Equatable, Sendable {
+    let operation: String?
+    let direction: String?
+    let amount: String?
+    let currency: String?
+    let bankInstitution: String?
+    let bankMask: String?
+    let bankNickname: String?
+    let transferId: String?
+    let transferStatus: String?
+    let reason: String?
 }
 
 /// One price point in a `StockCardBlock` chart payload. The minimal `{t, c}`

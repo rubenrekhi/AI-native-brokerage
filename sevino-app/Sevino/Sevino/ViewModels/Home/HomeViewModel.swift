@@ -63,6 +63,14 @@ final class HomeViewModel {
         )
     }
 
+    /// Confirm or reject a human-in-the-loop action card (e.g. a proposed
+    /// transfer). Proxies the active conversation store.
+    func submitAction(actionId: String, decision: String) async throws {
+        try await conversationStore.submitAction(
+            actionId: actionId, decision: decision
+        )
+    }
+
     /**
      Resume a previously-persisted conversation in the chat surface.
 
