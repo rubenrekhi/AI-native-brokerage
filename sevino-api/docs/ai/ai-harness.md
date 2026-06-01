@@ -74,6 +74,7 @@ app/ai/
 └── utils/
     ├── __init__.py                 # package marker
     ├── time_context.py             # build_time_context — live time + market status per turn
+    ├── user_profile.py             # build_user_profile_context — per-user system block
     └── portfolio_tool_runtime.py   # shared account setup / errors / pill lifecycle (portfolio tools)
 ```
 
@@ -99,11 +100,11 @@ A single user message, traced through the exact functions it hits.
    - `complete` → `_replay_turn` re-emits the persisted assistant message as SSE; **Anthropic is not called**.
    - `claimed` → first mover, continue.
 4. **`SSEEmitter()`** is created. `post_turn` returns `EventSourceResponse(_stream())`. `_stream` spawns `_drive_turn` as a detached `asyncio.Task` and then yields events out of `emitter.iter_events()`.
-5. **`_drive_turn`** builds `ServerToolsConfig` from `settings` and calls **`run_agent_turn`** (`runtime/loop.py:76`) with the emitter, `DEFAULT_REGISTRY`, `ToolHttpClients(market_data=...)`, the system prompt, model config, hard caps, and Langfuse.
+5. **`_drive_turn`** builds `ServerToolsConfig` from `settings`, fetches the live time context and the per-user profile (`_build_turn_user_profile` → `build_user_profile_context`), and calls **`run_agent_turn`** (`runtime/loop.py`) with the emitter, `DEFAULT_REGISTRY`, `ToolHttpClients(...)`, the system prompt, time context, user profile, model config, hard caps, and Langfuse.
 6. **`run_agent_turn`** validates caps (`max_output_tokens > thinking_budget_tokens`, else `ValueError`), then **`initialize_turn`** (`flow/turn_lifecycle.py`): persists the user message (+ optional `context` block), loads history into `messages`, appends the request-only time-context block to the current user message, marks the end of prior-turn history as a cache breakpoint, and opens the `agent_turns` row. Returns `(turn_id, messages)`.
-7. The loop **emits `TurnStarted`**, marks the system prompt as a (single) cache breakpoint — the live clock rides the user message instead (step 6), not a second system block — opens a Langfuse `agent` span, and enters `while True`.
+7. The loop **emits `TurnStarted`**, marks the system prompt as a cache breakpoint (and, when a user profile is present, a second `system` block + breakpoint for it) — the live clock rides the user message instead (step 6) — opens a Langfuse `agent` span, and enters `while True`.
 8. Each iteration: `disconnect_check` (None in prod) → `check_caps` → **`run_one_iteration`** (`flow/iteration.py:195`):
-   1. **`build_iteration_request`** — assembles `messages.stream` kwargs: model, system, messages, `max_tokens`, `thinking`, and a combined `tools` array (server-tool specs + registry specs, last entry `cache_control`-marked).
+   1. **`build_iteration_request`** — assembles `messages.stream` kwargs: model, system, messages, `max_tokens`, `thinking`, and a combined `tools` array (server-tool specs + registry specs; no cache marker — tools cache via the system-prompt prefix).
    2. **`StreamConsumer.consume`** (`flow/stream_consumer.py`) — opens `anthropic_client.messages.stream`, forwards chunks to SSE as `BlockStart` / `TextDelta` / `BlockData` / `BlockEnd`, and returns the final `Message`. **This is where the LLM is called.**
    3. **`scrub_blocks`** strips SDK-only fields from the response; **`cost_usd_micros`** computes cost.
    4. **`ConversationRepository.record_model_invocation`** writes one `model_invocations` row (fresh session).
@@ -214,7 +215,7 @@ sequenceDiagram
 
 | File · symbol | Purpose | Notes |
 |---|---|---|
-| `iteration.py` · `build_iteration_request(...)` | Build `messages.stream` kwargs: model/system/messages/max_tokens/thinking + combined `tools`. | `cache_control` on the last tool spec caches the tools array with the system prompt. Empty `tools` is omitted (Anthropic 400s on empty). |
+| `iteration.py` · `build_iteration_request(...)` | Build `messages.stream` kwargs: model/system/messages/max_tokens/thinking + combined `tools`. | Tools carry no `cache_control` — they precede `system` in the cache prefix, so the system-prompt breakpoint caches them. Empty `tools` is omitted (Anthropic 400s on empty). |
 | `iteration.py` · `run_one_iteration(...)` → `IterationOutcome` | One full iteration: build → stream → persist invocation → reconcile server tools → accumulate → route. Wraps the model call in a Langfuse `generation` span. | On stream exception → returns `break`/`error` with `to_error_code(exc)`. On `CancelledError` → flushes partial text + status pills, re-raises. Falls back to a minted ULID + `loop_text_block_id_fallback` warning if a persisted text block has no streamed `block_start`. |
 | `iteration.py` · `_decide_after_response(...)` | The `stop_reason` router (see lifecycle step 8.7). | A `tool_use` stop with **zero** tool_use blocks → `INTERNAL_ERROR` break (would otherwise loop forever). |
 | `stream_consumer.py` · `StreamConsumer` | Per-iteration. Owns stream-time state (`open_text_blocks`, `open_thinking_blocks`, `accumulated_text`); emits SSE block events; polls `disconnect_check` every 16th text delta. | Closes the upstream stream eagerly on cancel. `redacted_thinking` emits a one-shot complete block. Server-tool start/result chunks delegate to the shared `ServerToolTracker`. |
@@ -245,7 +246,7 @@ The two portfolio read tools each have a dedicated reference — [`tools/get_por
 | `base.py` · `ToolResult` | `model_payload` (back to Anthropic), `ui_block: Block | None` (to the user), `internal_trace` (audit only). | `protected_namespaces=()` to allow the `model_payload` field name. |
 | `base.py` · `ToolContext` | Injected into `execute`: `user_id`, `db_factory`, `sse_emitter`, `http_clients`, and an **unused** `parent_emitter` (sub-agent scaffolding). | — |
 | `base.py` · `ToolHttpClients` | `market_data` (None without `FMP_API_KEY`) plus `alpaca` / `redis` (back the portfolio tools; None only when booted without a lifespan). All `… | None`. | Extend here to give tools more outbound clients. |
-| `base.py` · `ToolRegistry` | `register(tool)` (rejects dupes), `get(name)`, `is_empty`, `to_anthropic_spec()` (caches the array tail). | Concrete impl of the `types.py` Protocol. |
+| `base.py` · `ToolRegistry` | `register(tool)` (rejects dupes), `get(name)`, `is_empty`, `to_anthropic_spec()` (no cache marker — tools cache via the system-prompt prefix). | Concrete impl of the `types.py` Protocol. |
 | `__init__.py` · `build_default_registry()` / `DEFAULT_REGISTRY` | Registers `GetStockInfo` + `DisplayStockCard` + `RadarOperations` + `GetPortfolio` + `GetPortfolioPerformance`. | Module-level singleton used by `post_turn`. |
 | `_performance.py` · `change_for_range(...)`, `bars_from_chart`, `PERFORMANCE_RANGES` | Shared change-over-range math so model prose and the iOS card can't drift. | `1D` uses FMP daily change; longer ranges diff first bar to price. |
 | `stock_info.py` · `GetStockInfo` | Read live quote/profile/ratios/analyst for one ticker; returns data to the model. Emits a "Pulling data on X" pill (active→complete/failed). | Data goes to `model_payload`, plus the completed pill as `ui_block`. Fetches info + all range charts concurrently; degrades per-range on failure. |
@@ -289,13 +290,13 @@ The two portfolio read tools each have a dedicated reference — [`tools/get_por
 
 **Within a turn**, the in-memory `messages` list is the live context window. After each model call, the full `response_content` (text + tool_use + **thinking with signatures**, post-`scrub_blocks`) is appended as an `assistant` message; tool results are appended as a `user` message. This is what lets thinking signatures roundtrip byte-for-byte across `pause_turn`/`tool_use` continuations.
 
-**Prompt caching.** The cache prefix is ordered `tools → system → messages`, and a breakpoint hits only if every byte before it is unchanged. Three `cache_control: ephemeral` breakpoints are set per request (3 of Anthropic's 4 max), all sharing the 5-minute TTL:
+**Prompt caching.** The cache prefix is ordered `tools → system → messages`, and a breakpoint hits only if every byte before it is unchanged — so context is laid out slowest-changing first. Three `cache_control: ephemeral` breakpoints are set per request (3 of Anthropic's 4 max), all sharing the 5-minute TTL:
 
-- **System prompt** — loaded once at import from `prompts/sevino_v1.md` (+ optional server-tools addendum), hashed, and sent as a single `system` text block. Stable across turns.
-- **Tools array tail** — the last entry of the combined `tools` array is cache-marked, extending the cached prefix over the tool specs.
+- **System prompt** — loaded once at import from `prompts/sevino_v1.md` (+ optional server-tools addendum), hashed, sent as the first `system` block. Stable and shared across all users. Because `tools` precede `system` in the prefix, this breakpoint also caches the whole tools array, so the tools carry no marker of their own.
+- **User profile** — a per-user `system` block (name + onboarding investing profile), after the static prompt, when present. Stable per-user, so it caches across that user's turns and conversations (`build_user_profile_context`, rendered deterministically to stay byte-stable).
 - **Prior-turn history** — `mark_history_cache_breakpoint` marks the last block of the last frozen history message, so the replayed conversation cache-reads across turns (set in `initialize_turn`).
 
-The live **time context** (clock + market status) is appended to the **current user message**, *after* the history breakpoint — so its per-turn value never invalidates the cached prefix. (It was previously a second `system` block, which sat ahead of `messages` in the prefix and would have blocked history caching.)
+The live **time context** (clock + market status) is appended to the **current user message**, *after* every breakpoint — so its per-turn value never invalidates the cached prefix. The layout follows volatility: static prompt and per-user profile change rarest (top of `system`), conversation history grows per turn (`messages`), the clock changes every turn (tail). The 4th breakpoint slot is left free for future short-term memory.
 
 **Persisted vs. ephemeral:**
 
@@ -337,7 +338,7 @@ class MyTool(Tool[MyInput]):
 
 - **Definition:** subclass `Tool[InputT]`, set the three ClassVars, implement `execute`.
 - **Registration:** `registry.register(MyTool())` — done in `build_default_registry()` (`tools/__init__.py`). Duplicate names raise.
-- **Spec generation:** `ToolRegistry.to_anthropic_spec()` emits `{name, description, input_schema}` per tool, caching the last entry. `build_iteration_request` concatenates server-tool specs + registry specs and sends them every iteration.
+- **Spec generation:** `ToolRegistry.to_anthropic_spec()` emits `{name, description, input_schema}` per tool, with no cache marker (tools cache via the system-prompt prefix). `build_iteration_request` concatenates server-tool specs + registry specs and sends them every iteration.
 - **Selection:** the model picks tools by name; the harness does no pre-filtering. Every registered tool is offered on every turn.
 - **Execution:** on a `tool_use` stop, `dispatch_tool_uses` runs all blocks in parallel. Per tool: `tool.Input.model_validate(raw_input)` (failure → `VALIDATION_ERROR`, audit row, no execute), then `execute(validated, ctx)` (any raise → `TOOL_ERROR`, audit row). Unknown tool name → `INTERNAL_ERROR`.
 - **Result re-entry:** `model_payload` is `json.dumps`'d into a `tool_result` block keyed by `tool_use_id`, collected into one follow-up `user` message, and the loop **continues** — the model sees the results on the next iteration. `ui_block` is emitted to SSE (`BlockStart`/`BlockEnd`, deduped via `RecordingEmitter`) and appended to the persisted `assistant_blocks`. `internal_trace` goes only to the `tool_executions` row.

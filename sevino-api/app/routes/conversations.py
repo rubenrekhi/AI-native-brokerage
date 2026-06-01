@@ -47,6 +47,7 @@ import structlog
 from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Query, Request
 from redis.asyncio import Redis
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
@@ -79,6 +80,7 @@ from app.ai.transport.idempotency import (
     mark_failed,
 )
 from app.ai.utils.time_context import build_time_context
+from app.ai.utils.user_profile import build_user_profile_context
 from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
@@ -89,6 +91,8 @@ from app.repositories.conversation import (
     ConversationRepository,
     extract_text_preview,
 )
+from app.repositories.financial_profile import FinancialProfileRepository
+from app.repositories.user_profile import UserProfileRepository
 from app.schemas.conversations import (
     ChatTurnRequest,
     ConversationListItem,
@@ -339,6 +343,25 @@ async def _build_turn_time_context(
     )
 
 
+async def _build_turn_user_profile(
+    db_factory: DbSessionFactory, user_id: uuid.UUID
+) -> str | None:
+    """Stable per-user profile (onboarding identity + investing profile) sent
+    as a cached system block each turn so the model can tailor responses. Best
+    effort — a fetch failure degrades to no profile rather than failing the
+    turn. Returns ``None`` when nothing is known about the user yet."""
+    try:
+        async with db_factory() as db:
+            profile = await UserProfileRepository.get_by_id(db, user_id)
+            financial = await FinancialProfileRepository.get_by_user_id(
+                db, user_id
+            )
+    except SQLAlchemyError as exc:
+        logger.warning("chat_turn_user_profile_failed", error=str(exc))
+        return None
+    return build_user_profile_context(profile, financial)
+
+
 @router.post("/{conversation_id}/turns")
 @limiter.limit("30/minute")
 async def post_turn(
@@ -444,6 +467,7 @@ async def post_turn(
             time_context = await _build_turn_time_context(
                 market_data, body.client_timezone
             )
+            user_profile = await _build_turn_user_profile(db_factory, user_uuid)
 
             result = await run_agent_turn(
                 user_id=user_uuid,
@@ -460,6 +484,7 @@ async def post_turn(
                 ),
                 system_prompt=system_prompt_for(server_tools_config),
                 time_context=time_context,
+                user_profile=user_profile,
                 model_config=model_config,
                 hard_caps=hard_caps,
                 langfuse=langfuse,

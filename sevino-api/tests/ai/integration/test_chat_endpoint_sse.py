@@ -49,6 +49,7 @@ from app.models.agent_turn import AgentTurn
 from app.models.conversation import Conversation
 from app.models.message import Message as MessageRow
 from app.models.model_invocation import ModelInvocation
+from app.models.user_financial_profile import UserFinancialProfile
 from tests.integration.conftest import (
     TEST_API_KEY,
     _pg_available_sync,
@@ -479,6 +480,52 @@ class TestHappyPath:
         )
         assert "big_move" in hint
         assert "AMD moved 5%" in hint
+
+    async def test_user_profile_reaches_model_as_cached_system_block(
+        self, fixture, chat_client
+    ):
+        # A user with onboarding data gets a second, cache-marked system block
+        # describing them, fetched from their profile + financial profile. (The
+        # bare fixture user has neither, so other tests keep a single block.)
+        async with AsyncSession(
+            bind=fixture.engine, expire_on_commit=False
+        ) as setup:
+            await setup.execute(
+                text(
+                    "UPDATE user_profiles SET preferred_name = :n WHERE id = :id"
+                ),
+                {"n": "Jane", "id": fixture.user_id},
+            )
+            setup.add(
+                UserFinancialProfile(
+                    user_id=fixture.user_id,
+                    risk_tolerance="moderate",
+                    experience_level="invest_regularly",
+                    investment_goals=["grow_wealth", "retirement"],
+                )
+            )
+            await setup.commit()
+
+        anthropic_stub = _stub_client(_stub_response(text="tailored answer"))
+        _install_anthropic(anthropic_stub)
+
+        await _consume_sse(
+            chat_client,
+            f"/v1/conversations/{fixture.conversation_id}/turns",
+            json={"message": "hi", "idempotency_key": "profile-key"},
+        )
+
+        call = anthropic_stub.messages.stream.call_args.kwargs
+        assert len(call["system"]) == 2
+        prompt_block, profile_block = call["system"]
+        assert prompt_block["cache_control"] == {"type": "ephemeral"}
+        assert profile_block["cache_control"] == {"type": "ephemeral"}
+        profile_text = profile_block["text"]
+        assert profile_text.startswith("## About the user")
+        assert "speaking with Jane." in profile_text
+        assert "- Risk tolerance: moderate" in profile_text
+        assert "- Investing experience: invest regularly" in profile_text
+        assert "- Investing goals: grow wealth, retirement" in profile_text
 
 
 # ---------- request validation ----------

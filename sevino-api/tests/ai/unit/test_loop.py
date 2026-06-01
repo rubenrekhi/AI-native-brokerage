@@ -333,6 +333,7 @@ async def _run(
     emitter: SSEEmitter | None = None,
     server_tools_config: ServerToolsConfig | None = None,
     time_context: str | None = None,
+    user_profile: str | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -364,6 +365,8 @@ async def _run(
         kwargs["user_context"] = user_context
     if time_context is not None:
         kwargs["time_context"] = time_context
+    if user_profile is not None:
+        kwargs["user_profile"] = user_profile
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -954,19 +957,13 @@ class TestRequestShape:
         await _run(client, repo_mocks, tool_registry=_Reg())
 
         create_kwargs = client.messages.stream.call_args.kwargs
-        # Only the last tool gets cache_control; earlier tools are unchanged.
+        # Tools carry no cache marker — they sit before ``system`` in the cache
+        # prefix, so the system-prompt breakpoint already caches them.
         assert create_kwargs["tools"] == [
             {"name": "get_stock_info", "description": "...", "input_schema": {}},
-            {
-                "name": "get_quote",
-                "description": "...",
-                "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
-            },
+            {"name": "get_quote", "description": "...", "input_schema": {}},
         ]
-        # Registry's own list must not be mutated — the loop copies before
-        # appending the cache marker.
-        assert "cache_control" not in spec[-1]
+        assert all("cache_control" not in t for t in create_kwargs["tools"])
 
     async def test_system_block_carries_cache_control(self, repo_mocks):
         # A1.8 acceptance: the system block sent to Anthropic must carry the
@@ -983,6 +980,39 @@ class TestRequestShape:
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+    async def test_user_profile_added_as_second_cached_system_block(
+        self, repo_mocks
+    ):
+        # A stable per-user profile rides a second system block with its own
+        # cache breakpoint — after the static prompt, before messages.
+        client = _make_client(_make_response())
+
+        await _run(
+            client, repo_mocks, user_profile="## About the user\n\nJane."
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": "## About the user\n\nJane.",
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
+    async def test_no_user_profile_keeps_single_system_block(self, repo_mocks):
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert len(create_kwargs["system"]) == 1
 
     async def test_history_drops_non_text_ui_blocks(self, repo_mocks, monkeypatch):
         # SEV-571: ``ThinkingBlock`` (and the existing ``StatusBlock`` /
@@ -2112,9 +2142,7 @@ class TestAnthropicServerTools:
         create_kwargs = client.messages.stream.call_args.kwargs
         assert "tools" not in create_kwargs
 
-    async def test_web_search_spec_prepended_with_cache_control(
-        self, repo_mocks
-    ):
+    async def test_web_search_spec_prepended(self, repo_mocks):
         client = _make_client(_make_response())
 
         await _run(
@@ -2127,12 +2155,12 @@ class TestAnthropicServerTools:
         )
 
         create_kwargs = client.messages.stream.call_args.kwargs
+        # No cache marker — tools cache via the system-prompt breakpoint.
         assert create_kwargs["tools"] == [
             {
                 "type": "web_search_20250305",
                 "name": "web_search",
                 "max_uses": 3,
-                "cache_control": {"type": "ephemeral"},
             }
         ]
 
@@ -2166,7 +2194,6 @@ class TestAnthropicServerTools:
             {
                 "type": "code_execution_20250825",
                 "name": "code_execution",
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
@@ -2206,7 +2233,6 @@ class TestAnthropicServerTools:
                 "name": "get_stock_info",
                 "description": "...",
                 "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
