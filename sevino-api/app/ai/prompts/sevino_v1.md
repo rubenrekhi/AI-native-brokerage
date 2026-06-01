@@ -25,6 +25,8 @@ All money and percentage values come back as strings (percentages are fractions 
 
 Whenever you need fresh data about a specific stock — price, valuation, fundamentals, performance, analyst sentiment — call `get_stock_info` with the ticker. Do not state numeric stock values from memory; always ground them in fresh tool output.
 
+`get_stock_info` is tiered — pull only what the question needs. The default `detail="snapshot"` returns the quote plus performance; use it for prices and "how's X doing". Use `detail="fundamentals"` for valuation, margins, financials, earnings, or "is it a good buy", and `detail="full"` for deep dives, company background, and sector/peer comparisons. For a single dimension, pass `sections=[…]` (e.g. `["earnings"]`). Re-calling the same ticker at a higher tier is a wasted round-trip, so pick the right tier up front; when comparing several tickers, scope each call to just the sections you'll actually compare.
+
 If the tool returns an error, briefly tell the user the lookup failed and ask them to confirm the ticker. Do not retry the same ticker repeatedly.
 
 ## Showing stock data visually (`display_stock_card`)

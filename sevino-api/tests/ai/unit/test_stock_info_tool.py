@@ -9,7 +9,9 @@ agent loop never crashes on a stock lookup:
 * Provider down — ``MarketDataUnavailableError`` returns "temporarily unavailable".
 * Upstream non-2xx — ``MarketDataUpstreamError`` same.
 * Missing service — ``ctx.http_clients.market_data is None`` (no FMP_API_KEY).
-* Input validation — empty / oversize ticker rejected by Pydantic.
+* Tiering — ``detail`` tiers + ``sections`` override trim ``model_payload``;
+  the internal trace keeps every section.
+* Input validation — empty / oversize ticker, bad detail / section rejected.
 """
 
 from __future__ import annotations
@@ -51,6 +53,13 @@ _SAMPLE_RESPONSE = {
         "industry": "Consumer Electronics",
     },
     "ratios": {"dividend_yield": "0.0048", "roe": "1.6072"},
+    "financials": {"revenue": "391035000000", "net_income": "99803000000"},
+    "valuation": {"pe": "31.2", "pe_vs_sector": "0.18"},
+    "earnings": {
+        "next_period_end": "2026-07-31",
+        "avg_post_earnings_move_pct": "0.034",
+    },
+    "sector_context": {"sector_vs_market_pct": "0.0042", "peer_count": 4},
     "analyst": {"target_consensus": "220.50", "strong_buy": 12},
 }
 
@@ -152,11 +161,11 @@ class TestHappyPath:
         chart_calls = {call.args for call in md.get_chart.await_args_list}
         assert chart_calls == {("AAPL", r) for r in _RANGES}
 
-        # The model_payload extends the raw service response with a
-        # ``performance`` dict keyed by range.
+        # Default tier is "snapshot" → quote + performance only; the heavier
+        # sections are trimmed from model_payload (but kept in the trace).
         assert result.model_payload["quote"] == _SAMPLE_RESPONSE["quote"]
-        assert result.model_payload["profile"] == _SAMPLE_RESPONSE["profile"]
         assert "performance" in result.model_payload
+        assert set(result.model_payload) == {"quote", "performance"}
 
         assert isinstance(result.ui_block, StatusBlock)
         assert result.ui_block.state == "complete"
@@ -215,6 +224,104 @@ class TestHappyPath:
         assert performance["1W"]["change_abs"] == pytest.approx(79.84)
         # 1Y: first bar close = 150 → change_abs = 39.84
         assert performance["1Y"]["change_abs"] == pytest.approx(39.84)
+
+
+class TestTiering:
+    async def test_snapshot_default_trims_to_quote_and_performance(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL"), ctx
+        )
+
+        assert set(result.model_payload) == {"quote", "performance"}
+
+    async def test_fundamentals_adds_the_fundamentals_bundle(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL", detail="fundamentals"), ctx
+        )
+
+        assert set(result.model_payload) == {
+            "quote",
+            "performance",
+            "ratios",
+            "valuation",
+            "financials",
+            "earnings",
+            "analyst",
+        }
+        # profile + sector_context are full-only.
+        assert "profile" not in result.model_payload
+        assert "sector_context" not in result.model_payload
+
+    async def test_full_returns_every_section(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL", detail="full"), ctx
+        )
+
+        assert set(result.model_payload) == {"performance", *_SAMPLE_RESPONSE}
+
+    async def test_sections_override_returns_exactly_those_plus_base(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL", sections=["earnings"]), ctx
+        )
+
+        assert set(result.model_payload) == {"quote", "performance", "earnings"}
+
+    async def test_sections_override_beats_detail(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL", detail="full", sections=["analyst"]),
+            ctx,
+        )
+
+        assert set(result.model_payload) == {"quote", "performance", "analyst"}
+
+    async def test_empty_sections_falls_through_to_detail(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL", detail="fundamentals", sections=[]),
+            ctx,
+        )
+
+        assert set(result.model_payload) == {
+            "quote",
+            "performance",
+            "ratios",
+            "valuation",
+            "financials",
+            "earnings",
+            "analyst",
+        }
+
+    async def test_internal_trace_keeps_full_payload_when_trimmed(self):
+        md = _market_data_mock()
+        ctx, _ = _make_ctx(market_data=md)
+
+        result = await GetStockInfo().execute(
+            StockInfoInput(ticker="AAPL"), ctx
+        )
+
+        # model_payload is trimmed to the snapshot tier...
+        assert set(result.model_payload) == {"quote", "performance"}
+        # ...but the audit trace carries every section plus performance.
+        assert result.internal_trace is not None
+        raw = result.internal_trace["raw"]
+        assert set(raw) == {"performance", *_SAMPLE_RESPONSE}
 
 
 class TestUnknownTicker:
@@ -324,3 +431,23 @@ class TestInputValidation:
         # itself accepts whatever ticker the model emitted.
         validated = StockInfoInput(ticker="aapl")
         assert validated.ticker == "aapl"
+
+    def test_detail_defaults_to_snapshot(self):
+        validated = StockInfoInput(ticker="AAPL")
+        assert validated.detail == "snapshot"
+        assert validated.sections is None
+
+    def test_invalid_detail_rejected(self):
+        with pytest.raises(ValidationError):
+            StockInfoInput(ticker="AAPL", detail="everything")
+
+    def test_unknown_section_rejected(self):
+        with pytest.raises(ValidationError):
+            StockInfoInput(ticker="AAPL", sections=["bogus"])
+
+    def test_valid_detail_and_sections_accepted(self):
+        validated = StockInfoInput(
+            ticker="AAPL", detail="full", sections=["earnings", "analyst"]
+        )
+        assert validated.detail == "full"
+        assert validated.sections == ["earnings", "analyst"]

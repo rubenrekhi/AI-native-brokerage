@@ -1,13 +1,13 @@
 # `get_stock_info`
 
-Registered agent tool that reads **live market data for one US-equity ticker** — quote, company profile, TTM fundamentals, analyst sentiment, and per-range performance — and hands the data to the model. It produces no card; the data is for the model's reasoning. It is part of the harness tool layer — see [`../ai-harness.md`](../ai-harness.md) §6 for the generic `Tool` contract, dispatch, and audit flow. Its sibling [`display_stock_card`](display_stock_card.md) renders the same data as a visual card for the user; the two are independent decisions.
+Registered agent tool that reads **live market data for one US-equity ticker** — quote, company profile, fundamentals, valuation, earnings, analyst sentiment, sector context, and per-range performance — and hands the data to the model, trimmed to a requested `detail` tier. It produces no card; the data is for the model's reasoning. It is part of the harness tool layer — see [`../ai-harness.md`](../ai-harness.md) §6 for the generic `Tool` contract, dispatch, and audit flow. Its sibling [`display_stock_card`](display_stock_card.md) renders the same data as a visual card for the user; the two are independent decisions.
 
 File paths are relative to `sevino-api/`.
 
 | | |
 |---|---|
 | File · class | `app/ai/tools/stock_info.py` · `GetStockInfo` |
-| Reads | quote + fundamentals + analyst (`MarketDataService.get_stock_info`) and one chart per range (`get_chart`), all fetched concurrently |
+| Reads | quote + fundamentals + analyst (`MarketDataService.get_stock_info`) and one chart per range (`get_chart`), all fetched concurrently — then **trimmed to the requested `detail`/`sections`** before the model sees them |
 | Freshness | quote ~15s cached (1800s when the market is closed); fundamentals ~12h; charts 60s intraday / 1h daily |
 | Status pill | "Pulling data on {TICKER}" |
 | Output target | the **model** (`model_payload`) — not a UI card |
@@ -23,23 +23,40 @@ It does not re-implement the FMP/Alpaca calls — it reuses `MarketDataService` 
 | Field | Type | Default | Meaning |
 |---|---|---|---|
 | `ticker` | `str` (1–10 chars) | — (required) | US-equity ticker. Case-insensitive — the tool uppercases it. One symbol per call. |
+| `detail` | `"snapshot" \| "fundamentals" \| "full"` | `"snapshot"` | Tier of data to return. snapshot → quote + performance; fundamentals → adds ratios, valuation, financials, earnings, analyst; full → every section, incl. profile + sector_context. |
+| `sections` | `list[…] \| None` | `None` | Optional explicit sections; when set, returns exactly these and **overrides** `detail`. `quote` + `performance` are always included. |
 
 ---
 
 ## Output — `model_payload`
 
-The full dict returned by `MarketDataService.get_stock_info`, **plus** a `performance` map the tool computes. Top-level sections:
+The sections selected by `detail`/`sections`, **plus** a `performance` map the tool computes. `quote` and `performance` are always present; the rest are gated by the tier (or the explicit `sections` list). The full service dict is **trimmed at the tool boundary** — the `MarketDataService` still fetches all eight sections; the tool just emits the requested subset.
+
+**Tiers** (`detail`) — a monotonic depth dial:
+
+| `detail` | Sections returned (besides the always-on `quote` + `performance`) |
+|---|---|
+| `snapshot` (default) | *(none — quote + performance only)* |
+| `fundamentals` | `ratios`, `valuation`, `financials`, `earnings`, `analyst` |
+| `full` | + `profile`, `sector_context` (every section) |
+
+A non-empty `sections` overrides `detail` and returns exactly those sections (plus the always-on `quote` + `performance` base).
+
+**Sections:**
 
 | Section | Carries |
 |---|---|
 | `quote` | `price`, `change`, `change_percent`, `open`, `day_high`, `day_low`, `previous_close`, `year_high`, `year_low`, `price_avg_50`, `price_avg_200`, `volume`, `avg_volume`, `market_cap`, `pe_ratio`, `eps`, `shares_outstanding`, `earnings_announcement`, `timestamp`. |
+| `performance` | **Added by the tool.** Per-range `{change_abs, change_pct}` for each of `1D`, `1W`, `1M`, `3M`, `6M`, `1Y` whose chart fetched successfully. A range whose chart failed is **omitted** (the model falls back to the daily change). |
 | `profile` | `name`, `sector`, `industry`, `description`, `ceo`, `website`, `employees`, `beta`, `ipo_date`, `exchange`, `logo_url`. |
 | `ratios` | TTM fundamentals: `dividend_yield`, `payout_ratio`, `roe`, `roa`, `profit_margin`, `operating_margin`, `gross_margin`, `debt_to_equity`, `current_ratio`, `price_to_book`, `price_to_sales`, `ev_to_ebitda`, `free_cash_flow_yield`, `peg_ratio`. |
+| `financials` | TTM income / balance / cash-flow (`revenue`, `net_income`, `ebitda`, `cash_and_short_term_investments`, `total_debt`, `net_debt`, `free_cash_flow`, `capital_expenditure`, …) plus a 4-year `annual_trend` and YoY growth. |
+| `valuation` | `pe` vs. `sector_pe` / `industry_pe` (`pe_vs_sector`, `pe_vs_industry`), the 5-year P/E range (`pe_5y_low/high/median`), and `valuation_history`. |
+| `earnings` | Forward estimates (`revenue_estimate_*`, `eps_estimate_*`, `num_analysts`), the last 4 `quarterly` actuals with beat/miss surprise %, and `avg_post_earnings_move_pct`. |
+| `sector_context` | `sector_change_pct`, `industry_change_pct`, `market_change_pct`, `sector_vs_market_pct`, and `peers` with `rank_by_change` / `rank_by_market_cap`. |
 | `analyst` | Wall-Street targets and ratings: `target_high`, `target_low`, `target_consensus`, `target_median`, and the `strong_buy` / `buy` / `hold` / `sell` / `strong_sell` counts. |
-| `financials`, `valuation`, `earnings` | Additional sections the service returns. The tool description advertises only the four above to keep the model focused, **but these ride along in the payload** and the model sees them. |
-| `performance` | **Added by the tool.** Per-range `{change_abs, change_pct}` for each of `1D`, `1W`, `1M`, `3M`, `6M`, `1Y` whose chart fetched successfully. A range whose chart failed is **omitted** (the model falls back to the daily change). |
 
-`internal_trace` (audit only) carries the full payload under `{"raw": ...}`.
+`internal_trace` (audit only) carries the **full, untrimmed** payload — every section plus `performance` — under `{"raw": ...}`, regardless of the tier returned to the model.
 
 ---
 
