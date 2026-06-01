@@ -84,8 +84,6 @@ _EARNINGS_REACTION_LOOKBACK_DAYS = 730
 # they're cached per exchange with a daily TTL and shared across every symbol
 # on that exchange (rather than refetched into each symbol's fundamentals blob).
 _SECTOR_PE_TTL = 86400
-# Sector/industry *performance* snapshots follow the same per-exchange daily
-# cache pattern as the P/E snapshots above.
 _SECTOR_PERF_TTL = 86400
 # Cap FMP's noisy peer list to the largest few comparables by market cap.
 _MAX_PEERS = 6
@@ -540,8 +538,7 @@ class MarketDataService:
     async def _get_sector_perf_cached(
         self, exchange: str
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
-        # One key for both snapshots so they share a single atomic expiry, and
-        # cached only when neither leg hit a transient error (see below).
+        # One key for both snapshots so they share a single atomic expiry.
         cache_key = f"market:sector_perf:{exchange}"
         cached = await self._cache_get(cache_key)
         if cached is not None:
@@ -564,7 +561,13 @@ class MarketDataService:
         industry_rows, industry_date, industry_ok = _unwrap_snapshot(
             industry_result, exchange, "industry_perf"
         )
-        as_of_date = sector_date or industry_date
+        # The two snapshots walk back independently; when they land on different
+        # sessions, report the earlier date so as_of_date never overstates the
+        # freshness of the older figure.
+        if sector_date and industry_date and sector_date != industry_date:
+            as_of_date = min(sector_date, industry_date)
+        else:
+            as_of_date = sector_date or industry_date
         if sector_ok and industry_ok:
             await self._cache_set(
                 cache_key,
@@ -871,6 +874,11 @@ def _unwrap_snapshot(
     transient failure.
     """
     if isinstance(result, BaseException):
+        # CancelledError isn't an `Exception` subclass; let it (and other
+        # non-Exception signals) propagate rather than masking a cancelled task
+        # as a benign data miss.
+        if not isinstance(result, Exception):
+            raise result
         logger.warning(
             "market_data_snapshot_unavailable",
             exchange=exchange,

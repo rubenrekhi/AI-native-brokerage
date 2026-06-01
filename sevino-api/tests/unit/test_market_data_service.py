@@ -1,5 +1,6 @@
 """Unit tests for app.services.market_data.MarketDataService."""
 
+import asyncio
 import json
 from collections.abc import Callable
 from datetime import datetime, timezone
@@ -24,6 +25,7 @@ from app.services.fmp import FmpClient
 from app.services.market_data import (
     MarketDataService,
     _empty_sector_context,
+    _unwrap_snapshot,
     get_market_data_service,
 )
 
@@ -1004,6 +1006,56 @@ class TestSectorContext:
         assert block["industry_change_pct"] == "0.5"
         # A partial-with-error snapshot is not cached, so the next request retries.
         assert "market:sector_perf:NASDAQ" not in redis.store
+
+    async def test_mixed_session_dates_report_earlier_as_of(self):
+        """Sector and industry walking back to different sessions reports the
+        earlier date, so as_of_date never overstates the older figure."""
+        sector_dates: list[str] = []
+        industry_dates: list[str] = []
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/sector-performance-snapshot"):
+                sector_dates.append(request.url.params["date"])
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"sector": "Technology", "averageChange": 1.0},
+                        {"sector": "Energy", "averageChange": -1.0},
+                    ],
+                )
+            if path.endswith("/industry-performance-snapshot"):
+                industry_dates.append(request.url.params["date"])
+                # Empty on the first (latest) date, data one session earlier.
+                if len(industry_dates) == 1:
+                    return httpx.Response(200, json=[])
+                return httpx.Response(
+                    200,
+                    json=[{"industry": "Consumer Electronics", "averageChange": 0.5}],
+                )
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert sector_dates[0] != industry_dates[1]
+        assert block["as_of_date"] == min(sector_dates[0], industry_dates[1])
+        assert block["as_of_date"] == industry_dates[1]
+
+
+class TestUnwrapSnapshot:
+    def test_cancelled_error_propagates_not_swallowed(self):
+        with pytest.raises(asyncio.CancelledError):
+            _unwrap_snapshot(asyncio.CancelledError(), "NASDAQ", "sector_perf")
+
+    def test_regular_upstream_error_degrades(self):
+        rows, on_date, ok = _unwrap_snapshot(
+            MarketDataUpstreamError(status_code=500), "NASDAQ", "sector_perf"
+        )
+        assert rows == []
+        assert on_date is None
+        assert ok is False
 
 
 # ── get_batch_quotes ───────────────────────────────────────
