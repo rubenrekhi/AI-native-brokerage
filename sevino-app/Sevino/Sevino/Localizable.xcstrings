@@ -550,6 +550,226 @@
         }
       }
     },
+    "chat.comparison_asset_a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@, change %2$@, market price %3$@"
+          }
+        }
+      }
+    },
+    "chat.comparison_chart_a11y" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Price comparison chart of %1$@ over %2$@"
+          }
+        }
+      }
+    },
+    "chat.comparison_col_asset" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Asset"
+          }
+        }
+      }
+    },
+    "chat.comparison_col_change" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change"
+          }
+        }
+      }
+    },
+    "chat.comparison_col_price" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Market price"
+          }
+        }
+      }
+    },
+    "chat.comparison_holdings_overlap" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Holdings overlap: %@"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_aum" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AUM"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_beta" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beta"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_dividend_yield" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dividend Yield"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_earnings_growth" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earnings Growth"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_expense_ratio" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expense Ratio"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_holdings_count" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "# Holdings"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_index" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Index"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_index_tracked" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Index Tracked"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_market_cap" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Market Cap"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_pe" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "P/E"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_revenue_growth" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Revenue Growth"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_sector" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sector"
+          }
+        }
+      }
+    },
+    "chat.comparison_metric_top_sectors" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Top Sectors"
+          }
+        }
+      }
+    },
+    "chat.comparison_sector_exposure" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sector exposure"
+          }
+        }
+      }
+    },
+    "chat.comparison_type_etf" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ETF"
+          }
+        }
+      }
+    },
+    "chat.comparison_type_stock" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stock"
+          }
+        }
+      }
+    },
     "chat.context_cash" : {
       "localizations" : {
         "en" : {

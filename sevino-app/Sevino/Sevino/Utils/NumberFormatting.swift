@@ -18,6 +18,37 @@ extension Decimal {
         percentFormatter(locale: locale, signed: true).string(from: nsDecimal) ?? "\(self)"
     }
 
+    /// "27.31%" / "0.03%" / "100%" — unsigned, for ratios and weights
+    /// (input is a factor of 1). `maximumFractionDigits` trims trailing
+    /// precision so a sector weight reads "30%" while an expense ratio
+    /// keeps "0.03%".
+    func asPercent(maximumFractionDigits: Int = 2, locale: Locale = .current) -> String {
+        plainPercentFormatter(locale: locale, maximumFractionDigits: maximumFractionDigits)
+            .string(from: nsDecimal) ?? "\(self)"
+    }
+
+    /// "$3.50T" / "$184.0B" / "$950.0M" — compact magnitude for large money
+    /// values (market cap, AUM). Display-only; the magnitude rounding is
+    /// intentionally lossy, so never feed the result back into a calculation.
+    func asAbbreviatedCurrency(locale: Locale = .current) -> String {
+        let value = nsDecimal.doubleValue
+        let magnitude = Swift.abs(value)
+        let sign = value < 0 ? "-" : ""
+        let scaled: Double
+        let suffix: String
+        switch magnitude {
+        case 1e12...: scaled = magnitude / 1e12; suffix = "T"
+        case 1e9...: scaled = magnitude / 1e9; suffix = "B"
+        case 1e6...: scaled = magnitude / 1e6; suffix = "M"
+        case 1e3...: scaled = magnitude / 1e3; suffix = "K"
+        default: return asCurrency(locale: locale)
+        }
+        let digits = scaled >= 100 ? 0 : (scaled >= 10 ? 1 : 2)
+        let number = abbreviatedFormatter(locale: locale, fractionDigits: digits)
+            .string(from: NSNumber(value: scaled)) ?? "\(scaled)"
+        return "\(sign)$\(number)\(suffix)"
+    }
+
     /// "57" or "0.125"
     func asShareCount(locale: Locale = .current) -> String {
         shareFormatter(locale: locale).string(from: nsDecimal) ?? "\(self)"
@@ -59,6 +90,31 @@ private func percentFormatter(locale: Locale, signed: Bool) -> NumberFormatter {
     f.minimumFractionDigits = 2
     f.maximumFractionDigits = 2
     if signed { f.positivePrefix = f.plusSign }
+    _cache.setObject(f, forKey: key)
+    return f
+}
+
+private func plainPercentFormatter(locale: Locale, maximumFractionDigits: Int) -> NumberFormatter {
+    let key = "pctplain-\(locale.identifier)-\(maximumFractionDigits)" as NSString
+    if let f = _cache.object(forKey: key) { return f }
+    let f = NumberFormatter()
+    f.numberStyle = .percent
+    f.locale = locale
+    f.minimumFractionDigits = 0
+    f.maximumFractionDigits = maximumFractionDigits
+    _cache.setObject(f, forKey: key)
+    return f
+}
+
+private func abbreviatedFormatter(locale: Locale, fractionDigits: Int) -> NumberFormatter {
+    let key = "abbr-\(locale.identifier)-\(fractionDigits)" as NSString
+    if let f = _cache.object(forKey: key) { return f }
+    let f = NumberFormatter()
+    f.numberStyle = .decimal
+    f.locale = locale
+    f.minimumFractionDigits = fractionDigits
+    f.maximumFractionDigits = fractionDigits
+    f.usesGroupingSeparator = false
     _cache.setObject(f, forKey: key)
     return f
 }

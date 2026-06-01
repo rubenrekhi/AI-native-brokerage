@@ -489,6 +489,356 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertNil(stats.peRatio)
     }
 
+    // MARK: - Stock comparison (SEV-658)
+
+    private static let comparisonStocksJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_stocks",
+      "assets": [
+        {
+          "symbol": "AAPL",
+          "name": "Apple Inc.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "229.87",
+          "change_pct": "0.0124",
+          "series": [
+            {"timestamp": "2026-04-27T13:30:00Z", "price": "221.00"},
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "225.40"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "229.87"}
+          ],
+          "metrics": {
+            "pe_ratio": "34.2",
+            "market_cap": "3480000000000",
+            "revenue_growth_pct": "0.061",
+            "earnings_growth_pct": "0.078",
+            "beta": "1.21",
+            "sector": "Technology",
+            "one_line_distinction": "Services margin keeps expanding."
+          }
+        },
+        {
+          "symbol": "MSFT",
+          "name": "Microsoft Corp.",
+          "asset_type": "stock",
+          "color_hex": "#30D158",
+          "current_price": "430.16",
+          "change_pct": "-0.0042",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "431.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "430.16"}
+          ],
+          "metrics": {
+            "pe_ratio": "36.8",
+            "market_cap": "3200000000000",
+            "revenue_growth_pct": "0.155",
+            "earnings_growth_pct": "0.102",
+            "beta": "0.92",
+            "sector": "Technology",
+            "one_line_distinction": "Azure remains the growth engine."
+          }
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"]
+    }
+    """
+
+    private static let comparisonETFsJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_etfs",
+      "assets": [
+        {
+          "symbol": "VOO",
+          "name": "Vanguard S&P 500 ETF",
+          "asset_type": "etf",
+          "color_hex": "#0A84FF",
+          "current_price": "512.34",
+          "change_pct": "0.0031",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "511.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "512.34"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0003",
+            "aum": "1300000000000",
+            "dividend_yield_pct": "0.0131",
+            "holdings_count": 503,
+            "index_tracked": "S&P 500",
+            "top_sectors": [
+              {"name": "Tech", "weight_pct": "0.31"},
+              {"name": "Financials", "weight_pct": "0.13"}
+            ],
+            "one_line_distinction": "Pure large-cap S&P 500 exposure."
+          }
+        },
+        {
+          "symbol": "VTI",
+          "name": "Vanguard Total Stock Market ETF",
+          "asset_type": "etf",
+          "color_hex": "#FF9F0A",
+          "current_price": "287.91",
+          "change_pct": "0.0028",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "287.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "287.91"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0003",
+            "aum": "450000000000",
+            "dividend_yield_pct": "0.0128",
+            "holdings_count": 3700,
+            "index_tracked": "CRSP US Total Market",
+            "top_sectors": [
+              {"name": "Tech", "weight_pct": "0.29"},
+              {"name": "Financials", "weight_pct": "0.13"}
+            ]
+          }
+        }
+      ],
+      "range": "3M",
+      "available_ranges": ["1M", "3M", "YTD", "1Y", "5Y"],
+      "holdings_overlap_pct": "0.84"
+    }
+    """
+
+    private static let comparisonAsymmetricJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_mixed",
+      "assets": [
+        {
+          "symbol": "NVDA",
+          "name": "NVIDIA Corp.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "138.07",
+          "change_pct": "0.0212",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "137.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "138.07"}
+          ],
+          "metrics": {
+            "pe_ratio": "64.5",
+            "revenue_growth_pct": "0.94",
+            "beta": "1.68",
+            "sector": "Technology",
+            "one_line_distinction": "Highest beta, highest growth."
+          }
+        },
+        {
+          "symbol": "SMH",
+          "name": "VanEck Semiconductor ETF",
+          "asset_type": "etf",
+          "color_hex": "#FF9F0A",
+          "current_price": "248.55",
+          "change_pct": "0.0156",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "247.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "248.55"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0035",
+            "holdings_count": 25,
+            "dividend_yield_pct": "0.006",
+            "index_tracked": "MVIS US Listed Semiconductor 25",
+            "top_sectors": [
+              {"name": "Semis", "weight_pct": "0.78"},
+              {"name": "Equipment", "weight_pct": "0.18"}
+            ]
+          }
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"],
+      "narration": "NVDA is a single stock; SMH is a semiconductor ETF holding NVDA plus 24 peers."
+    }
+    """
+
+    private static let comparisonThreeStocksJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_three",
+      "assets": [
+        {
+          "symbol": "NVDA",
+          "name": "NVIDIA Corp.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "138.07",
+          "change_pct": "0.0212",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "138.07"}],
+          "metrics": {"pe_ratio": "64.5", "beta": "1.68", "sector": "Technology"}
+        },
+        {
+          "symbol": "AMD",
+          "name": "Advanced Micro Devices",
+          "asset_type": "stock",
+          "color_hex": "#30D158",
+          "current_price": "164.08",
+          "change_pct": "0.0087",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "164.08"}],
+          "metrics": {"pe_ratio": "47.3", "beta": "1.74", "sector": "Technology"}
+        },
+        {
+          "symbol": "INTC",
+          "name": "Intel Corp.",
+          "asset_type": "stock",
+          "color_hex": "#FF453A",
+          "current_price": "23.41",
+          "change_pct": "-0.0153",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "23.41"}],
+          "metrics": {"beta": "1.05", "sector": "Technology"}
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"]
+    }
+    """
+
+    @discardableResult
+    private func decodeComparison(
+        _ json: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> StockComparisonBlock {
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .stockComparison(let block) = decoded else {
+            XCTFail("expected .stockComparison variant, got \(decoded)", file: file, line: line)
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "wrong variant"))
+        }
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded, "round trip changed the block", file: file, line: line)
+        return block
+    }
+
+    func testComparisonStocksRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonStocksJSON)
+        XCTAssertEqual(block.blockId, "cmp_stocks")
+        XCTAssertEqual(block.range, "1M")
+        XCTAssertEqual(block.availableRanges, ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"])
+        XCTAssertNil(block.narration)
+        XCTAssertNil(block.holdingsOverlapPct)
+        XCTAssertEqual(block.assets.count, 2)
+
+        let aapl = block.assets[0]
+        XCTAssertEqual(aapl.symbol, "AAPL")
+        XCTAssertEqual(aapl.assetType, .stock)
+        XCTAssertEqual(aapl.colorHex, "#5E5CE6")
+        XCTAssertEqual(aapl.currentPrice, Decimal(string: "229.87"))
+        XCTAssertEqual(aapl.changePct, Decimal(string: "0.0124"))
+        XCTAssertEqual(aapl.series.count, 3)
+        XCTAssertEqual(aapl.series[2].price, Decimal(string: "229.87"))
+        XCTAssertEqual(aapl.metrics.peRatio, Decimal(string: "34.2"))
+        XCTAssertEqual(aapl.metrics.marketCap, Decimal(string: "3480000000000"))
+        XCTAssertEqual(aapl.metrics.sector, "Technology")
+        XCTAssertNil(aapl.metrics.expenseRatioPct)
+        XCTAssertNil(aapl.metrics.topSectors)
+    }
+
+    func testComparisonETFsRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonETFsJSON)
+        XCTAssertEqual(block.holdingsOverlapPct, Decimal(string: "0.84"))
+        XCTAssertEqual(block.assets.map(\.assetType), [.etf, .etf])
+
+        let voo = block.assets[0]
+        XCTAssertEqual(voo.metrics.expenseRatioPct, Decimal(string: "0.0003"))
+        XCTAssertEqual(voo.metrics.aum, Decimal(string: "1300000000000"))
+        XCTAssertEqual(voo.metrics.holdingsCount, 503)
+        XCTAssertEqual(voo.metrics.indexTracked, "S&P 500")
+        let sectors = try XCTUnwrap(voo.metrics.topSectors)
+        XCTAssertEqual(sectors.map(\.name), ["Tech", "Financials"])
+        XCTAssertEqual(sectors[0].weightPct, Decimal(string: "0.31"))
+        XCTAssertNil(voo.metrics.peRatio)
+    }
+
+    func testComparisonAsymmetricRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonAsymmetricJSON)
+        XCTAssertEqual(block.narration, "NVDA is a single stock; SMH is a semiconductor ETF holding NVDA plus 24 peers.")
+        XCTAssertEqual(block.assets.map(\.assetType), [.stock, .etf])
+        XCTAssertEqual(block.assets[0].metrics.peRatio, Decimal(string: "64.5"))
+        XCTAssertEqual(block.assets[1].metrics.holdingsCount, 25)
+        XCTAssertNil(block.assets[0].metrics.expenseRatioPct)
+        XCTAssertNil(block.assets[1].metrics.peRatio)
+    }
+
+    func testComparisonThreeStocksRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonThreeStocksJSON)
+        XCTAssertEqual(block.assets.count, 3)
+        XCTAssertEqual(block.assets.map(\.symbol), ["NVDA", "AMD", "INTC"])
+        // INTC omits pe_ratio / market_cap — those decode to nil, not a failure.
+        XCTAssertNil(block.assets[2].metrics.peRatio)
+        XCTAssertNil(block.assets[2].metrics.marketCap)
+        XCTAssertEqual(block.assets[2].metrics.beta, Decimal(string: "1.05"))
+    }
+
+    func testComparisonUnknownAssetTypeFailsClosed() {
+        // A malformed `asset_type` must reject the whole block rather than
+        // defaulting to a type and mis-rendering the metric panel.
+        let json = Data("""
+        {
+          "type": "stock_comparison",
+          "block_id": "cmp_bad",
+          "assets": [
+            {
+              "symbol": "BTC", "name": "Bitcoin", "asset_type": "crypto",
+              "color_hex": "#F7931A", "current_price": "1.0", "change_pct": "0.0",
+              "series": [], "metrics": {}
+            }
+          ],
+          "range": "1M",
+          "available_ranges": ["1M"]
+        }
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testComparisonEmptyMetricsDecodeToNil() throws {
+        let json = """
+        {
+          "type": "stock_comparison",
+          "block_id": "cmp_minimal",
+          "assets": [
+            {
+              "symbol": "X", "name": "X", "asset_type": "stock",
+              "color_hex": "#FFFFFF", "current_price": "1.0", "change_pct": "0.0",
+              "series": [], "metrics": {}
+            }
+          ],
+          "range": "1M",
+          "available_ranges": ["1M"]
+        }
+        """
+        let block = try decodeComparison(json)
+        let metrics = block.assets[0].metrics
+        XCTAssertNil(metrics.peRatio)
+        XCTAssertNil(metrics.marketCap)
+        XCTAssertNil(metrics.revenueGrowthPct)
+        XCTAssertNil(metrics.beta)
+        XCTAssertNil(metrics.sector)
+        XCTAssertNil(metrics.expenseRatioPct)
+        XCTAssertNil(metrics.aum)
+        XCTAssertNil(metrics.holdingsCount)
+        XCTAssertNil(metrics.dividendYieldPct)
+        XCTAssertNil(metrics.indexTracked)
+        XCTAssertNil(metrics.topSectors)
+        XCTAssertNil(metrics.oneLineDistinction)
+    }
+
+    func testComparisonTypeEncodesAsSnakeCaseString() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.comparisonStocksJSON.utf8)
+        )
+        let json = try JSONEncoder.sevino().encode(decoded)
+        let dict = try JSONSerialization.jsonObject(with: json) as? [String: Any]
+        XCTAssertEqual(dict?["type"] as? String, "stock_comparison")
+    }
+
     // MARK: - List round trip
 
     func testListRoundTripPreservesOrderAndVariants() throws {

@@ -83,6 +83,8 @@ struct MessageRowView: View {
             StatusPillView(block: sb, scale: scale)
         case .stockCard(let scb):
             SingleStockCard(block: scb, scale: scale)
+        case .stockComparison(let scb):
+            StockComparisonCard(block: scb, scale: scale)
         case .thinking(let tb):
             ThinkingBlockView(block: tb, scale: scale)
         }

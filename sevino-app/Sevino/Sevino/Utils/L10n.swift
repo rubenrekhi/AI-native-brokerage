@@ -578,6 +578,34 @@ enum L10n {
         }
         static let cardKindEarnings = String(localized: "chat.card_kind_earnings")
         static let cardKindOrderActivity = String(localized: "chat.card_kind_order_activity")
+        static let comparisonColAsset = String(localized: "chat.comparison_col_asset")
+        static let comparisonColChange = String(localized: "chat.comparison_col_change")
+        static let comparisonColPrice = String(localized: "chat.comparison_col_price")
+        static let comparisonMetricPe = String(localized: "chat.comparison_metric_pe")
+        static let comparisonMetricMarketCap = String(localized: "chat.comparison_metric_market_cap")
+        static let comparisonMetricRevenueGrowth = String(localized: "chat.comparison_metric_revenue_growth")
+        static let comparisonMetricEarningsGrowth = String(localized: "chat.comparison_metric_earnings_growth")
+        static let comparisonMetricBeta = String(localized: "chat.comparison_metric_beta")
+        static let comparisonMetricSector = String(localized: "chat.comparison_metric_sector")
+        static let comparisonMetricExpenseRatio = String(localized: "chat.comparison_metric_expense_ratio")
+        static let comparisonMetricAum = String(localized: "chat.comparison_metric_aum")
+        static let comparisonMetricDividendYield = String(localized: "chat.comparison_metric_dividend_yield")
+        static let comparisonMetricHoldingsCount = String(localized: "chat.comparison_metric_holdings_count")
+        static let comparisonMetricIndex = String(localized: "chat.comparison_metric_index")
+        static let comparisonMetricIndexTracked = String(localized: "chat.comparison_metric_index_tracked")
+        static let comparisonMetricTopSectors = String(localized: "chat.comparison_metric_top_sectors")
+        static let comparisonSectorExposure = String(localized: "chat.comparison_sector_exposure")
+        static let comparisonTypeStock = String(localized: "chat.comparison_type_stock")
+        static let comparisonTypeEtf = String(localized: "chat.comparison_type_etf")
+        static func comparisonHoldingsOverlap(_ pct: String) -> String {
+            String(format: String(localized: "chat.comparison_holdings_overlap"), pct)
+        }
+        static func comparisonChartA11y(_ symbols: String, _ range: String) -> String {
+            String(format: String(localized: "chat.comparison_chart_a11y"), symbols, range)
+        }
+        static func comparisonAssetA11y(_ name: String, _ change: String, _ price: String) -> String {
+            String(format: String(localized: "chat.comparison_asset_a11y"), name, change, price)
+        }
         static let statusInProgress = String(localized: "chat.status_in_progress")
         static let statusComplete = String(localized: "chat.status_complete")
         static let statusFailed = String(localized: "chat.status_failed")
