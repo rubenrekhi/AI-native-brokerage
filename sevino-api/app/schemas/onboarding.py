@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, field_validator
 
+from app.schemas._states import USStateCode
+
 
 class OnboardingStep(str, Enum):
     """Every screen in the onboarding flow that persists data or marks progress."""
@@ -80,7 +82,7 @@ class OnboardingPatchRequest(BaseModel):
     last_name: str | None = None
     street_address: list[str] | None = None
     city: str | None = None
-    state: str | None = None
+    state: USStateCode | None = None
     postal_code: str | None = None
     country_of_citizenship: str | None = None
     country_of_birth: str | None = None

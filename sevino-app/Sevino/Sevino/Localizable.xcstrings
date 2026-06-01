@@ -3102,6 +3102,26 @@
         }
       }
     },
+    "onboarding.alpaca_address_non_us_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevino is currently available to US residents only. Please choose a US address."
+          }
+        }
+      }
+    },
+    "onboarding.alpaca_address_parse_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "We couldn't verify that address. Please pick another from the suggestions."
+          }
+        }
+      }
+    },
     "onboarding.alpaca_address_placeholder" : {
       "localizations" : {
         "en" : {
@@ -6124,6 +6144,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fill in street, city, state, and postal code to save."
+          }
+        }
+      }
+    },
+    "settings.edit_address_non_us_error" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sevino is currently available to US residents only. Please choose a US address."
           }
         }
       }

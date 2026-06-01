@@ -6,6 +6,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.schemas._states import USStateCode
 from app.schemas.onboarding import FinancialProfileData, ProfileData
 
 
@@ -108,7 +109,7 @@ class ProfileUpdateRequest(BaseModel):
     phone_number: str | None = Field(default=None, min_length=1)
     street_address: list[str] | None = Field(default=None, min_length=1)
     city: str | None = Field(default=None, min_length=1)
-    state: str | None = Field(default=None, min_length=1)
+    state: USStateCode | None = None
     postal_code: str | None = Field(default=None, min_length=1)
 
     @field_validator(

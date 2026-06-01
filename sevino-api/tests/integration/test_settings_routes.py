@@ -395,8 +395,8 @@ class TestUpdateProfile:
             "last_name": "Lovelace",
             "phone_number": "+15551112222",
             "street_address": ["1 Analytical Way"],
-            "city": "London",
-            "state": "LN",
+            "city": "New York",
+            "state": "NY",
             "postal_code": "10001",
         }
 
@@ -412,8 +412,8 @@ class TestUpdateProfile:
                 "contact": {
                     "phone_number": "+15551112222",
                     "street_address": ["1 Analytical Way"],
-                    "city": "London",
-                    "state": "LN",
+                    "city": "New York",
+                    "state": "NY",
                     "postal_code": "10001",
                 },
                 "identity": {

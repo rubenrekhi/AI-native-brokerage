@@ -58,6 +58,13 @@ final class EditProfileViewModel {
             return
         }
 
+        // Backend rejects non-US state codes (PATCH /v1/settings/profile);
+        // gate here so a Canadian pick surfaces a message instead of a raw 422.
+        guard USStateCodes.isValid(trimmedState) else {
+            error = L10n.Settings.editAddressNonUSError
+            return
+        }
+
         var request = ProfileUpdateRequest()
         request.streetAddress = trimmedStreet
         request.city = trimmedCity
