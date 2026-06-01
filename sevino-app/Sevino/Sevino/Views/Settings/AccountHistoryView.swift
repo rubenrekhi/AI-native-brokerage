@@ -569,5 +569,6 @@ private final class PreviewAccountHistoryFundingService: FundingServiceProtocol,
     func listTransfers() async throws -> [TransferResponse] { transfersFixture }
     func listDividends(limit _: Int, offset _: Int) async throws -> [DividendResponse] { dividendsFixture }
     func getCashInterest() async throws -> CashInterestResponse { throw PreviewUnimplemented() }
+    func enrollCashInterest() async throws -> CashInterestResponse { throw PreviewUnimplemented() }
 }
 #endif

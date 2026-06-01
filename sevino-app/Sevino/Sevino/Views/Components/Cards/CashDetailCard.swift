@@ -8,7 +8,6 @@ struct CashDetailCard: View {
     var onLinkBank: (() -> Void)?
     var onReconnectBank: (() -> Void)?
     var onInfoTap: (() -> Void)?
-    var onShowEnrollmentStatus: (() -> Void)?
     var isPrimaryActionDisabled: Bool = false
 
     private var balanceText: String {
@@ -111,7 +110,8 @@ struct CashDetailCard: View {
                     tint: Color.sevinoWarning,
                     accessibilityLabel: L10n.Home.couldBeEarningApyAccessibility(apyText)
                 )
-                enrollmentWarningButton
+                warningIcon
+                    .accessibilityHidden(true)
             }
             .accessibilityElement(children: .combine)
         case .unavailable:
@@ -144,22 +144,6 @@ struct CashDetailCard: View {
         Image(systemName: "exclamationmark.triangle.fill")
             .font(.system(size: 15 * scale, weight: .semibold))
             .foregroundStyle(Color.sevinoWarning)
-    }
-
-    @ViewBuilder
-    private var enrollmentWarningButton: some View {
-        if let onShowEnrollmentStatus {
-            Button(action: onShowEnrollmentStatus) {
-                warningIcon
-                    .frame(minWidth: 44 * scale, minHeight: 44 * scale)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel(L10n.Home.enrollmentStatusAccessibility)
-            .accessibilityHint(L10n.Home.enrollmentStatusHint)
-        } else {
-            warningIcon
-                .accessibilityHidden(true)
-        }
     }
 
     private var statCards: some View {
@@ -482,8 +466,7 @@ private extension CashCardData {
     ZStack {
         Color.sevinoPrimary.ignoresSafeArea()
         CashDetailCard(
-            data: .previewLinked.with(enrollmentState: .notEnrolled),
-            onShowEnrollmentStatus: { print("show enrollment status tapped") }
+            data: .previewLinked.with(enrollmentState: .notEnrolled)
         )
         .padding(20)
     }

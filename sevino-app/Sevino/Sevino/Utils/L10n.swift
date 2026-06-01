@@ -519,8 +519,6 @@ enum L10n {
         }
         static let enrollmentPending = String(localized: "home.enrollment_pending")
         static let enrollmentPendingAccessibility = String(localized: "home.enrollment_pending_accessibility")
-        static let enrollmentStatusAccessibility = String(localized: "home.enrollment_status_accessibility")
-        static let enrollmentStatusHint = String(localized: "home.enrollment_status_hint")
         static let thisMonth = String(localized: "home.this_month")
         static func daysAccrued(_ days: String) -> String {
             String(format: String(localized: "home.days_accrued"), days)
@@ -675,6 +673,7 @@ enum L10n {
         static let legalAccessibility = String(localized: "settings.legal_accessibility")
         static let legalTitle = String(localized: "settings.legal_title")
         static let accounts = String(localized: "settings.accounts")
+        static let cashInterest = String(localized: "settings.cash_interest")
         static let loginSecurity = String(localized: "settings.login_security")
         static let personalInfo = String(localized: "settings.personal_info")
         static let appearance = String(localized: "settings.appearance")
@@ -883,6 +882,29 @@ enum L10n {
         static let editRiskToleranceDerivation = String(localized: "settings.edit_risk_tolerance_derivation")
         static let editRiskToleranceMaxLossLabel = String(localized: "settings.edit_risk_tolerance_max_loss_label")
         static let editRiskToleranceScenarioLabel = String(localized: "settings.edit_risk_tolerance_scenario_label")
+    }
+
+    enum CashEnrollmentStatus {
+        static let title = String(localized: "cash_enrollment_status.title")
+        static let intro = String(localized: "cash_enrollment_status.intro")
+        static let refreshAccessibility = String(localized: "cash_enrollment_status.refresh_accessibility")
+        static let pillActive = String(localized: "cash_enrollment_status.pill_active")
+        static let pillPending = String(localized: "cash_enrollment_status.pill_pending")
+        static let pillNotEnrolled = String(localized: "cash_enrollment_status.pill_not_enrolled")
+        static let pillUnavailable = String(localized: "cash_enrollment_status.pill_unavailable")
+        static func statusActive(_ apy: String) -> String {
+            String(format: String(localized: "cash_enrollment_status.status_active"), apy)
+        }
+        static let statusPending = String(localized: "cash_enrollment_status.status_pending")
+        static let statusNotEnrolled = String(localized: "cash_enrollment_status.status_not_enrolled")
+        static let statusUnavailable = String(localized: "cash_enrollment_status.status_unavailable")
+        static let enrolledSince = String(localized: "cash_enrollment_status.enrolled_since")
+        static let lastAttempt = String(localized: "cash_enrollment_status.last_attempt")
+        static let currentApy = String(localized: "cash_enrollment_status.current_apy")
+        static let potentialApy = String(localized: "cash_enrollment_status.potential_apy")
+        static let reenroll = String(localized: "cash_enrollment_status.reenroll")
+        static let enrollmentInProgress = String(localized: "cash_enrollment_status.enrollment_in_progress")
+        static let pendingHint = String(localized: "cash_enrollment_status.pending_hint")
     }
 
     enum RecurringInvestment {

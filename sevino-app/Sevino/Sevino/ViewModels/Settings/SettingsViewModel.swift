@@ -9,6 +9,7 @@ final class SettingsViewModel {
 
     private(set) var profile: SettingsProfileResponse?
     private(set) var accountValue: AccountValueResponse?
+    private(set) var cashEnrollmentState: EnrollmentState = .unavailable
     private(set) var isLoading = false
     private(set) var isDeletingAccount = false
     private(set) var isClosingBrokerage = false
@@ -62,6 +63,7 @@ final class SettingsViewModel {
         error = nil
         isLoading = true
         defer { isLoading = false }
+        async let cashState: Void = loadCashEnrollmentState()
         do {
             async let profileResult = settingsService.getProfile()
             async let accountValueResult = settingsService.getAccountValue()
@@ -70,6 +72,14 @@ final class SettingsViewModel {
         } catch {
             self.error = error.localizedDescription
         }
+        await cashState
+    }
+
+    /// Best-effort — a failure leaves the row hidden rather than blocking the
+    /// rest of the Settings screen, so it must not propagate out of `load()`.
+    private func loadCashEnrollmentState() async {
+        guard let cash = try? await fundingService.getCashInterest() else { return }
+        cashEnrollmentState = cash.enrollmentState ?? .unavailable
     }
 
     func reload() async {

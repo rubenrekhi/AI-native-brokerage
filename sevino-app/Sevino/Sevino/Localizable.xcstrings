@@ -812,6 +812,186 @@
     "Change" : {
 
     },
+    "cash_enrollment_status.current_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Current APY"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.enrolled_since" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enrolled since"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.enrollment_in_progress" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enrollment in progress…"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.intro" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your uninvested cash is automatically swept into FDIC-insured program banks, where it earns interest until you invest it."
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.last_attempt" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Last attempt"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.pending_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This usually takes a few minutes."
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.pill_active" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.pill_not_enrolled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not enrolled"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.pill_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pending"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.pill_unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unavailable"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.potential_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Potential APY"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.reenroll" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Re-enroll"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.refresh_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh enrollment status"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.status_active" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Active — Earning %@ APY"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.status_not_enrolled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not enrolled"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.status_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enrollment pending"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.status_unavailable" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account not yet active"
+          }
+        }
+      }
+    },
+    "cash_enrollment_status.title" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cash Interest"
+          }
+        }
+      }
+    },
     "chat.card_context_source_with_symbol" : {
       "localizations" : {
         "en" : {
@@ -2116,26 +2296,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Enrollment pending, check back soon"
-          }
-        }
-      }
-    },
-    "home.enrollment_status_accessibility" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "View enrollment status"
-          }
-        }
-      }
-    },
-    "home.enrollment_status_hint" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Opens cash interest settings"
           }
         }
       }
@@ -6044,6 +6204,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Growth"
+          }
+        }
+      }
+    },
+    "settings.cash_interest" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cash Interest"
           }
         }
       }

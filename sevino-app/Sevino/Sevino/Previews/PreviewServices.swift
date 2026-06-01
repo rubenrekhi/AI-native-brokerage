@@ -176,5 +176,8 @@ final class PreviewNoopFundingService: FundingServiceProtocol, @unchecked Sendab
             enrollmentState: .active
         )
     }
+    func enrollCashInterest() async throws -> CashInterestResponse {
+        try await getCashInterest()
+    }
 }
 #endif
