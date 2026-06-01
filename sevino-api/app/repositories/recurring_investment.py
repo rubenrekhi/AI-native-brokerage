@@ -71,6 +71,22 @@ class RecurringInvestmentRepository:
         return list(result.scalars().all())
 
     @staticmethod
+    async def list_due(
+        db: AsyncSession, as_of: date
+    ) -> list[RecurringInvestment]:
+        """Active plans whose next run is due (today or earlier), ordered by id
+        for a stable sweep."""
+        result = await db.execute(
+            select(RecurringInvestment)
+            .where(
+                RecurringInvestment.status == STATUS_ACTIVE,
+                RecurringInvestment.next_run_date <= as_of,
+            )
+            .order_by(RecurringInvestment.id)
+        )
+        return list(result.scalars().all())
+
+    @staticmethod
     async def get_by_id_for_user(
         db: AsyncSession, item_id: uuid.UUID, user_id: uuid.UUID
     ) -> RecurringInvestment | None:

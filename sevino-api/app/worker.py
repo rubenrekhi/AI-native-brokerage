@@ -28,6 +28,10 @@ from app.tasks.generate_daily_digest import generate_daily_digest
 from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
 from app.tasks.listener_liveness import check_listener_liveness
+from app.tasks.process_due_recurring import (
+    PROCESS_DUE_RECURRING_MAX_TRIES,
+    process_due_recurring,
+)
 from app.tasks.reconcile_funding import reconcile_funding
 from app.tasks.refresh_due_radar import refresh_due_radar
 from app.tasks.sweep_digest_snapshots import sweep_digest_snapshots
@@ -289,6 +293,11 @@ class WorkerSettings:
             name="enroll_cash_interest",
             max_tries=ENROLL_CASH_INTEREST_MAX_TRIES,
         ),
+        func(
+            process_due_recurring,
+            name="process_due_recurring",
+            max_tries=PROCESS_DUE_RECURRING_MAX_TRIES,
+        ),
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),
@@ -305,6 +314,9 @@ class WorkerSettings:
         cron(generate_daily_digest, hour={13, 14}, minute={0}),
         # Retain one week of digest snapshots.
         cron(sweep_digest_snapshots, hour={4}, minute={0}),
+        # Before the US open in both DST states (open is 13:30/14:30 UTC);
+        # Alpaca queues the market-day buys to the open.
+        cron(process_due_recurring, hour={13}, minute={0}),
     ]
     on_startup = startup
     on_shutdown = shutdown

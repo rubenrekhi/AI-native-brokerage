@@ -28,6 +28,7 @@ from app.models import (  # noqa: F401, E402
     PlaidItem,
     RadarItem,
     RecurringInvestment,
+    RecurringInvestmentExecution,
     SseCheckpoint,
     ToolExecution,
     UserFinancialProfile,
