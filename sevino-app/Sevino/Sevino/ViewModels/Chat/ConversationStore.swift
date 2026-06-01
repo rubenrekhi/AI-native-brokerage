@@ -309,6 +309,10 @@ final class ConversationStore {
                     Self.logger.error(
                         "text_delta targeted .stockCard block id=\(payload.blockId, privacy: .public)"
                     )
+                case .recurringInvestmentSetup:
+                    Self.logger.error(
+                        "text_delta targeted .recurringInvestmentSetup block id=\(payload.blockId, privacy: .public)"
+                    )
                 case .cancelTransfer:
                     Self.logger.error(
                         "text_delta targeted .cancelTransfer block id=\(payload.blockId, privacy: .public)"

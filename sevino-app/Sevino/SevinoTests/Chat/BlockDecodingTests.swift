@@ -489,6 +489,135 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertNil(stats.peRatio)
     }
 
+    // MARK: - Recurring investment setup (SEV-661)
+
+    private static func recurringJSON(frequency: String, endCondition: String) -> String {
+        """
+        {
+          "type": "recurring_investment_setup",
+          "block_id": "blk_ri",
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "exchange": "NASDAQ",
+          "current_price": "195.20",
+          "default_amount": "200.00",
+          "default_frequency": "\(frequency)",
+          "default_start_date": "2026-06-14T00:00:00Z",
+          "default_end_condition": \(endCondition),
+          "disclaimer": "Recurring buys execute at the next market open on each scheduled date."
+        }
+        """
+    }
+
+    func testRecurringInvestmentRoundTripsAllFrequencies() throws {
+        for frequency in ["weekly", "biweekly", "monthly"] {
+            let json = Self.recurringJSON(frequency: frequency, endCondition: #"{"kind":"never"}"#)
+            let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+            guard case .recurringInvestmentSetup(let block) = decoded else {
+                return XCTFail("expected .recurringInvestmentSetup for \(frequency), got \(decoded)")
+            }
+            XCTAssertEqual(block.defaultFrequency.rawValue, frequency)
+
+            let reEncoded = try JSONEncoder.sevino().encode(decoded)
+            let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+            XCTAssertEqual(reDecoded, decoded)
+        }
+    }
+
+    func testRecurringInvestmentRoundTripsAllEndConditions() throws {
+        let conditions = [
+            #"{"kind":"never"}"#,
+            #"{"kind":"on_date","date":"2026-12-01T00:00:00Z"}"#,
+            #"{"kind":"after_count","count":24}"#,
+        ]
+        for condition in conditions {
+            let json = Self.recurringJSON(frequency: "biweekly", endCondition: condition)
+            let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+            guard case .recurringInvestmentSetup = decoded else {
+                return XCTFail("expected .recurringInvestmentSetup for \(condition), got \(decoded)")
+            }
+
+            let reEncoded = try JSONEncoder.sevino().encode(decoded)
+            let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+            XCTAssertEqual(reDecoded, decoded)
+        }
+    }
+
+    func testRecurringInvestmentDecodesFields() throws {
+        let json = Self.recurringJSON(frequency: "monthly", endCondition: #"{"kind":"after_count","count":24}"#)
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup(let block) = decoded else {
+            return XCTFail("expected .recurringInvestmentSetup, got \(decoded)")
+        }
+        XCTAssertEqual(block.blockId, "blk_ri")
+        XCTAssertEqual(block.id, "blk_ri")
+        XCTAssertEqual(block.ticker, "AAPL")
+        XCTAssertEqual(block.companyName, "Apple Inc.")
+        XCTAssertEqual(block.exchange, "NASDAQ")
+        XCTAssertEqual(block.currentPrice, Decimal(string: "195.20")!)
+        XCTAssertEqual(block.defaultAmount, Decimal(string: "200.00")!)
+        XCTAssertEqual(block.defaultFrequency, .monthly)
+        XCTAssertEqual(block.defaultEndCondition, .afterCount(24))
+    }
+
+    func testRecurringInvestmentOnDateEndConditionPreservesDate() throws {
+        let json = Self.recurringJSON(
+            frequency: "weekly",
+            endCondition: #"{"kind":"on_date","date":"2026-12-01T00:00:00Z"}"#
+        )
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup(let block) = decoded,
+              case .onDate(let date) = block.defaultEndCondition
+        else {
+            return XCTFail("expected on_date end condition, got \(decoded)")
+        }
+        XCTAssertEqual(date, ISO8601DateFormatter().date(from: "2026-12-01T00:00:00Z"))
+    }
+
+    func testRecurringInvestmentTypeAndKindEncodeAsLiterals() throws {
+        let json = Self.recurringJSON(frequency: "weekly", endCondition: #"{"kind":"never"}"#)
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let dict = try JSONSerialization.jsonObject(with: reEncoded) as? [String: Any]
+        XCTAssertEqual(dict?["type"] as? String, "recurring_investment_setup")
+        // The `kind` value is a literal — convertToSnakeCase rewrites keys, not values.
+        let endCondition = dict?["default_end_condition"] as? [String: Any]
+        XCTAssertEqual(endCondition?["kind"] as? String, "never")
+    }
+
+    func testRecurringInvestmentUnknownFrequencyFailsClosed() {
+        let json = Self.recurringJSON(frequency: "daily", endCondition: #"{"kind":"never"}"#)
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8)))
+    }
+
+    func testRecurringInvestmentUnknownEndConditionKindFailsClosed() {
+        let json = Self.recurringJSON(frequency: "weekly", endCondition: #"{"kind":"on_anniversary"}"#)
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8)))
+    }
+
+    func testRecurringInvestmentIgnoresUnknownFields() throws {
+        let json = """
+        {
+          "type": "recurring_investment_setup",
+          "block_id": "blk_ri",
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "exchange": "NASDAQ",
+          "current_price": "195.20",
+          "default_amount": "200.00",
+          "default_frequency": "weekly",
+          "default_start_date": "2026-06-14T00:00:00Z",
+          "default_end_condition": {"kind": "never"},
+          "disclaimer": "x",
+          "future_field": "ignored by the decoder"
+        }
+        """
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup = decoded else {
+            return XCTFail("expected .recurringInvestmentSetup, got \(decoded)")
+        }
+    }
+
     // MARK: - Cancel order block
 
     private static let cancelOrderLimitBuyPartialJSON = """

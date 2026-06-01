@@ -20,6 +20,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
     case stockCard(StockCardBlock)
     case stockComparison(StockComparisonBlock)
     case thinking(ThinkingBlock)
+    case recurringInvestmentSetup(RecurringInvestmentSetupBlock)
     case cancelTransfer(CancelTransferBlock)
     case cancelOrder(CancelOrderBlock)
 
@@ -32,6 +33,7 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
         case .stockCard(let block): return block.blockId
         case .stockComparison(let block): return block.blockId
         case .thinking(let block): return block.blockId
+        case .recurringInvestmentSetup(let block): return block.blockId
         case .cancelTransfer(let block): return block.blockId
         case .cancelOrder(let block): return block.blockId
         }
@@ -57,6 +59,8 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             self = .stockComparison(try StockComparisonBlock(from: decoder))
         case "thinking":
             self = .thinking(try ThinkingBlock(from: decoder))
+        case "recurring_investment_setup":
+            self = .recurringInvestmentSetup(try RecurringInvestmentSetupBlock(from: decoder))
         case "cancel_transfer":
             self = .cancelTransfer(try CancelTransferBlock(from: decoder))
         case "cancel_order":
@@ -91,6 +95,9 @@ enum Block: Codable, Identifiable, Equatable, Sendable {
             try block.encode(to: encoder)
         case .thinking(let block):
             try typeContainer.encode("thinking", forKey: .type)
+            try block.encode(to: encoder)
+        case .recurringInvestmentSetup(let block):
+            try typeContainer.encode("recurring_investment_setup", forKey: .type)
             try block.encode(to: encoder)
         case .cancelTransfer(let block):
             try typeContainer.encode("cancel_transfer", forKey: .type)
@@ -343,6 +350,26 @@ enum ThinkingState: String, Codable, Sendable {
     case complete
 }
 
+/// Chat gen-UI card for setting up a recurring buy. Mirrors the
+/// `TradeExecutionCard` chrome + hold-to-confirm gesture but adds recurrence
+/// inputs (frequency, start date, end condition).
+///
+/// The schema is iOS-defined for now; the backend will mirror this shape later.
+struct RecurringInvestmentSetupBlock: Codable, Equatable, Sendable, Identifiable {
+    let blockId: String
+    let ticker: String
+    let companyName: String
+    let exchange: String
+    @DecimalString var currentPrice: Decimal
+    @DecimalString var defaultAmount: Decimal
+    let defaultFrequency: RecurringFrequency
+    @ISO8601DateString var defaultStartDate: Date
+    let defaultEndCondition: RecurringEndCondition
+    let disclaimer: String
+
+    var id: String { blockId }
+}
+
 /// A pending ACH transfer the user can cancel with a hold-to-confirm gesture.
 /// Renders the transfer as a receipt and, while `status == .pending`, offers
 /// the cancel action.
@@ -362,6 +389,63 @@ struct CancelTransferBlock: Codable, Equatable, Sendable, Identifiable {
     let status: TransferStatus
 
     var id: String { blockId }
+}
+
+enum RecurringFrequency: String, Codable, Equatable, Sendable, CaseIterable {
+    case weekly
+    case biweekly
+    case monthly
+}
+
+/// When a recurring buy stops. Flattened on the wire as a `kind`-tagged object
+/// so the eventual backend schema can mirror it exactly:
+/// - `{ "kind": "never" }`
+/// - `{ "kind": "on_date", "date": "2026-12-01T00:00:00Z" }`
+/// - `{ "kind": "after_count", "count": 24 }`
+///
+/// `kind` values are literal snake_case strings — `convertFromSnakeCase` only
+/// rewrites keys, not values, so they must match byte-for-byte.
+enum RecurringEndCondition: Codable, Equatable, Sendable {
+    case never
+    case onDate(Date)
+    case afterCount(Int)
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, date, count
+    }
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let kind = try container.decode(String.self, forKey: .kind)
+        switch kind {
+        case "never":
+            self = .never
+        case "on_date":
+            self = .onDate(try container.decode(ISO8601DateString.self, forKey: .date).wrappedValue)
+        case "after_count":
+            self = .afterCount(try container.decode(Int.self, forKey: .count))
+        default:
+            throw DecodingError.dataCorruptedError(
+                forKey: .kind,
+                in: container,
+                debugDescription: "Unknown recurring end condition kind: \(kind)"
+            )
+        }
+    }
+
+    func encode(to encoder: any Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        switch self {
+        case .never:
+            try container.encode("never", forKey: .kind)
+        case .onDate(let date):
+            try container.encode("on_date", forKey: .kind)
+            try container.encode(ISO8601DateString(wrappedValue: date), forKey: .date)
+        case .afterCount(let count):
+            try container.encode("after_count", forKey: .kind)
+            try container.encode(count, forKey: .count)
+        }
+    }
 }
 
 enum TransferStatus: String, Codable, Sendable {

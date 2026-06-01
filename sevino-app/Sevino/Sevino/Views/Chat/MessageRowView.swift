@@ -87,6 +87,10 @@ struct MessageRowView: View {
             StockComparisonCard(block: scb, scale: scale)
         case .thinking(let tb):
             ThinkingBlockView(block: tb, scale: scale)
+        case .recurringInvestmentSetup(let risb):
+            // TODO: inject a real onSubmit once the backend recurring-buy endpoint
+            // ships — the card's default handler fakes success with no network call.
+            RecurringInvestmentCard(block: risb, scale: scale)
         case .cancelTransfer(let ctb):
             CancelTransferCard(block: ctb, scale: scale)
         case .cancelOrder(let cob):

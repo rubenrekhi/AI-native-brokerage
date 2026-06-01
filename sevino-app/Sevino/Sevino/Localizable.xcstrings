@@ -7468,6 +7468,306 @@
         }
       }
     },
+    "recurring_investment.after_count" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After"
+          }
+        }
+      }
+    },
+    "recurring_investment.amount_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Amount per buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.biweekly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Biweekly"
+          }
+        }
+      }
+    },
+    "recurring_investment.cadence_biweekly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "every other week"
+          }
+        }
+      }
+    },
+    "recurring_investment.cadence_monthly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "every month"
+          }
+        }
+      }
+    },
+    "recurring_investment.cadence_weekly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "every week"
+          }
+        }
+      }
+    },
+    "recurring_investment.ends" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ends"
+          }
+        }
+      }
+    },
+    "recurring_investment.first_buy_on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First buy %@"
+          }
+        }
+      }
+    },
+    "recurring_investment.frequency_label" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frequency"
+          }
+        }
+      }
+    },
+    "recurring_investment.header" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recurring buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.hold_to_schedule" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to schedule"
+          }
+        }
+      }
+    },
+    "recurring_investment.hold_to_schedule_a11y_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press and hold for two seconds to schedule this recurring buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.invalid_amount" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter an amount greater than $0"
+          }
+        }
+      }
+    },
+    "recurring_investment.invalid_end_date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The end date must be after the start date"
+          }
+        }
+      }
+    },
+    "recurring_investment.invalid_occurrence_count" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schedule at least one buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.invalid_start_date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a start date that isn't in the past"
+          }
+        }
+      }
+    },
+    "recurring_investment.monthly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Monthly"
+          }
+        }
+      }
+    },
+    "recurring_investment.never" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Never"
+          }
+        }
+      }
+    },
+    "recurring_investment.occurrences_value" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld buys"
+          }
+        }
+      }
+    },
+    "recurring_investment.on_date" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On date"
+          }
+        }
+      }
+    },
+    "recurring_investment.retry" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold again to retry"
+          }
+        }
+      }
+    },
+    "recurring_investment.schedule_failed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn't schedule recurring buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.scheduled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scheduled"
+          }
+        }
+      }
+    },
+    "recurring_investment.scheduling" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scheduling recurring buy"
+          }
+        }
+      }
+    },
+    "recurring_investment.shares_subline" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %1$@ shares at %2$@"
+          }
+        }
+      }
+    },
+    "recurring_investment.starts_on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starts on"
+          }
+        }
+      }
+    },
+    "recurring_investment.summary_ends_after" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", ends after %lld buys"
+          }
+        }
+      }
+    },
+    "recurring_investment.summary_ends_on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", ends %@"
+          }
+        }
+      }
+    },
+    "recurring_investment.summary_format" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@ %2$@ starting %3$@%4$@"
+          }
+        }
+      }
+    },
+    "recurring_investment.weekly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weekly"
+          }
+        }
+      }
+    },
     "trade_execution.error_submitting_order" : {
       "localizations" : {
         "en" : {

@@ -879,6 +879,51 @@ enum L10n {
         static let editRiskToleranceScenarioLabel = String(localized: "settings.edit_risk_tolerance_scenario_label")
     }
 
+    enum RecurringInvestment {
+        static let header = String(localized: "recurring_investment.header")
+        static let amountLabel = String(localized: "recurring_investment.amount_label")
+        static let frequencyLabel = String(localized: "recurring_investment.frequency_label")
+        static let weekly = String(localized: "recurring_investment.weekly")
+        static let biweekly = String(localized: "recurring_investment.biweekly")
+        static let monthly = String(localized: "recurring_investment.monthly")
+        static let startsOn = String(localized: "recurring_investment.starts_on")
+        static let ends = String(localized: "recurring_investment.ends")
+        static let never = String(localized: "recurring_investment.never")
+        static let onDate = String(localized: "recurring_investment.on_date")
+        static let afterCount = String(localized: "recurring_investment.after_count")
+        static let holdToSchedule = String(localized: "recurring_investment.hold_to_schedule")
+        static let holdToScheduleA11yHint = String(localized: "recurring_investment.hold_to_schedule_a11y_hint")
+        static let scheduled = String(localized: "recurring_investment.scheduled")
+        static let scheduling = String(localized: "recurring_investment.scheduling")
+        static func firstBuyOn(_ date: String) -> String {
+            String(format: String(localized: "recurring_investment.first_buy_on"), date)
+        }
+        static let scheduleFailed = String(localized: "recurring_investment.schedule_failed")
+        static let retry = String(localized: "recurring_investment.retry")
+        static let invalidAmount = String(localized: "recurring_investment.invalid_amount")
+        static let invalidStartDate = String(localized: "recurring_investment.invalid_start_date")
+        static let invalidEndDate = String(localized: "recurring_investment.invalid_end_date")
+        static let invalidOccurrenceCount = String(localized: "recurring_investment.invalid_occurrence_count")
+        static func sharesSubline(_ shares: String, _ price: String) -> String {
+            String(format: String(localized: "recurring_investment.shares_subline"), shares, price)
+        }
+        static func occurrencesValue(_ count: Int) -> String {
+            String(format: String(localized: "recurring_investment.occurrences_value"), count)
+        }
+        static let cadenceWeekly = String(localized: "recurring_investment.cadence_weekly")
+        static let cadenceBiweekly = String(localized: "recurring_investment.cadence_biweekly")
+        static let cadenceMonthly = String(localized: "recurring_investment.cadence_monthly")
+        static func summary(amount: String, cadence: String, start: String, endClause: String) -> String {
+            String(format: String(localized: "recurring_investment.summary_format"), amount, cadence, start, endClause)
+        }
+        static func summaryEndsOn(_ date: String) -> String {
+            String(format: String(localized: "recurring_investment.summary_ends_on"), date)
+        }
+        static func summaryEndsAfter(_ count: Int) -> String {
+            String(format: String(localized: "recurring_investment.summary_ends_after"), count)
+        }
+    }
+
     enum CancelTransfer {
         static let headerDeposit = String(localized: "cancel_transfer.header_deposit")
         static let headerWithdrawal = String(localized: "cancel_transfer.header_withdrawal")
