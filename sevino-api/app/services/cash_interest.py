@@ -11,13 +11,17 @@ import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.schemas.cash_interest import CashInterestResponse
+from app.repositories.brokerage_account import (
+    STATUS_ACTIVE,
+    SWEEP_STATUS_ACTIVE,
+    SWEEP_STATUS_PENDING_CHANGE,
+)
+from app.schemas.cash_interest import CashInterestResponse, EnrollmentState
 from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerService
 from app.services.brokerage import require_brokerage
 
 logger = structlog.get_logger(__name__)
 
-_SWEEP_ACTIVE_STATUS = "ACTIVE"
 _SWEEP_ACTIVITY_SUB_TYPE = "SWP"
 _TWO_PLACES = Decimal("0.01")
 _FOUR_PLACES = Decimal("0.0001")
@@ -34,16 +38,18 @@ class CashInterestService:
         brokerage = await require_brokerage(db, user_id)
 
         alpaca_id = brokerage.alpaca_account_id
-        if brokerage.sweep_status == _SWEEP_ACTIVE_STATUS:
+        # APY is surfaced on every response so iOS can render a prospective
+        # rate even for non-enrolled users ("You could be earning X% APY").
+        # Skip the APR-tiers RTT only when no tier name is configured — the
+        # lookup would always miss and return zero. Default ALPACA_APR_TIER_NAME
+        # is "" until ops sets it post-Alpaca-provision.
+        tiers_coro = (
+            _safe_get_apr_tiers(alpaca, user_id)
+            if settings.alpaca_apr_tier_name
+            else _none_coro()
+        )
+        if brokerage.sweep_status == SWEEP_STATUS_ACTIVE:
             today = datetime.now(timezone.utc).date()
-            # Skip the APR-tiers RTT entirely when no tier name is configured
-            # — the lookup would always miss and return zero anyway. Default
-            # ALPACA_APR_TIER_NAME is "" until ops sets it post-Alpaca-provision.
-            tiers_coro = (
-                _safe_get_apr_tiers(alpaca, user_id)
-                if settings.alpaca_apr_tier_name
-                else _none_coro()
-            )
             trading, eod_records, tiers_resp, activities = await asyncio.gather(
                 alpaca.get_trading_account(alpaca_id),
                 _safe_get_eod(alpaca, alpaca_id, today, user_id),
@@ -64,9 +70,14 @@ class CashInterestService:
                 "lifetime_earned": _format_money(lifetime_earned),
             }
         else:
-            trading = await alpaca.get_trading_account(alpaca_id)
+            # Not enrolled: APY is still fetched so the prospective rate
+            # renders; earned figures are zero.
+            trading, tiers_resp = await asyncio.gather(
+                alpaca.get_trading_account(alpaca_id),
+                tiers_coro,
+            )
             interest_fields = {
-                "apy": _format_apy(Decimal("0")),
+                "apy": _apy_from_tiers(tiers_resp),
                 "this_month_earned": _format_money(Decimal("0")),
                 "days_accrued": 0,
                 "lifetime_earned": _format_money(Decimal("0")),
@@ -80,6 +91,7 @@ class CashInterestService:
             interest_paid_out=settings.cash_sweep_payout_cadence,
             fdic_insured_limit=settings.cash_sweep_fdic_insured_limit,
             sweep_status=brokerage.sweep_status,
+            enrollment_state=_enrollment_state(brokerage),
             **interest_fields,
         )
 
@@ -87,6 +99,23 @@ class CashInterestService:
 async def _none_coro() -> None:
     """No-op coroutine used to skip a gather slot without changing call shape."""
     return None
+
+
+def _enrollment_state(brokerage: Any) -> EnrollmentState:
+    """Fold account + sweep status into the client-facing enrollment state.
+
+    iOS keys off this instead of the raw ``sweep_status`` (SEV-655):
+    ``unavailable`` when the account isn't ACTIVE yet (the screen hides the
+    row), ``active``/``pending`` mirror the sweep, and INACTIVE or NULL on an
+    otherwise-active account is ``not_enrolled``.
+    """
+    if brokerage.account_status != STATUS_ACTIVE:
+        return "unavailable"
+    if brokerage.sweep_status == SWEEP_STATUS_ACTIVE:
+        return "active"
+    if brokerage.sweep_status == SWEEP_STATUS_PENDING_CHANGE:
+        return "pending"
+    return "not_enrolled"
 
 
 async def _safe_get_eod(

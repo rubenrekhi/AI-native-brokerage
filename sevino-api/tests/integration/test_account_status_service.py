@@ -5,9 +5,9 @@ Covers the SEV-327 contract: first-time ACTIVE transition flips the
 user_profile.onboarding_completed flag atomically with the brokerage_account
 status update, and replays are no-ops. Also covers SEV-529's sweep helper.
 
-Also covers the SEV-528 contract: the same first-time ACTIVE transition
-PATCHes Alpaca to enroll the account in the configured FDIC sweep tier,
-recording `sweep_status` / `sweep_enrolled_at` on the row.
+Also covers the SEV-655 contract: the same first-time ACTIVE transition marks
+the sweep `PENDING_CHANGE` / stamps `sweep_enrolled_at` and enqueues the
+background enrollment task — no inline Alpaca PATCH from the SSE handler.
 
 Requires: Docker + `make infra` + `make migrate`.
 Skipped automatically if Postgres is unavailable.
@@ -25,7 +25,6 @@ from app.services.account_status import (
     apply_account_status_change,
     apply_sweep_status_change,
 )
-from app.services.alpaca_broker import AlpacaBrokerError
 from tests.integration.conftest import TEST_USER_ID, _pg_available_sync
 
 pytestmark = pytest.mark.skipif(
@@ -171,12 +170,13 @@ class TestAccountStatusActiveFlipsOnboarding:
 
 
 class TestSweepEnrollmentPersistence:
-    """SEV-528: first-time ACTIVE transition writes ``sweep_status`` and
-    ``sweep_enrolled_at`` to the row in the same transaction. Tests use a
-    mocked Alpaca client (no live broker call) but a real DB so the
-    ``update_status(**fields)`` -> column write path is exercised end-to-end."""
+    """SEV-655: first-time ACTIVE transition marks the sweep ``PENDING_CHANGE``
+    / stamps ``sweep_enrolled_at`` and enqueues the background enrollment task
+    in the same transaction. Tests use a mocked ARQ pool (no live broker call)
+    but a real DB so the ``update_status(**fields)`` -> column write path is
+    exercised end-to-end."""
 
-    async def test_active_transition_persists_sweep_columns(
+    async def test_active_transition_persists_pending_and_enqueues(
         self,
         db_session: AsyncSession,
         test_user: uuid.UUID,
@@ -188,8 +188,7 @@ class TestSweepEnrollmentPersistence:
         )
         alpaca_id = f"acct-{uuid.uuid4()}"
         await _insert_brokerage_account(db_session, test_user, alpaca_id)
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock(return_value={})
+        arq = AsyncMock()
         event_time = datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc)
 
         await apply_account_status_change(
@@ -197,16 +196,12 @@ class TestSweepEnrollmentPersistence:
             alpaca_account_id=alpaca_id,
             new_status="ACTIVE",
             event_time=event_time,
-            alpaca=alpaca,
+            arq=arq,
         )
 
-        alpaca.update_account.assert_awaited_once_with(
-            alpaca_id,
-            {"cash_interest": {"USD": {"apr_tier_name": "standard"}}},
-        )
         row = await db_session.execute(
             text(
-                "SELECT sweep_status, sweep_enrolled_at "
+                "SELECT id, sweep_status, sweep_enrolled_at "
                 "FROM brokerage_accounts WHERE alpaca_account_id = :aid"
             ),
             {"aid": alpaca_id},
@@ -214,47 +209,9 @@ class TestSweepEnrollmentPersistence:
         result = row.one()
         assert result.sweep_status == "PENDING_CHANGE"
         assert result.sweep_enrolled_at == event_time
-
-    async def test_alpaca_error_persists_inactive_but_still_activates(
-        self,
-        db_session: AsyncSession,
-        test_user: uuid.UUID,
-        monkeypatch,
-    ):
-        """Enrollment failure must NOT roll back account activation —
-        ``account_status`` still goes ACTIVE, ``activated_at`` is stamped,
-        ``sweep_status`` records the failure as INACTIVE."""
-        monkeypatch.setattr(
-            "app.services.account_status.settings.alpaca_apr_tier_name",
-            "standard",
+        arq.enqueue_job.assert_awaited_once_with(
+            "enroll_cash_interest", str(result.id)
         )
-        alpaca_id = f"acct-{uuid.uuid4()}"
-        await _insert_brokerage_account(db_session, test_user, alpaca_id)
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock(
-            side_effect=AlpacaBrokerError(503, "upstream down")
-        )
-
-        await apply_account_status_change(
-            db_session,
-            alpaca_account_id=alpaca_id,
-            new_status="ACTIVE",
-            alpaca=alpaca,
-        )
-
-        row = await db_session.execute(
-            text(
-                "SELECT account_status, activated_at, sweep_status, "
-                "sweep_enrolled_at FROM brokerage_accounts "
-                "WHERE alpaca_account_id = :aid"
-            ),
-            {"aid": alpaca_id},
-        )
-        result = row.one()
-        assert result.account_status == "ACTIVE"
-        assert result.activated_at is not None
-        assert result.sweep_status == "INACTIVE"
-        assert result.sweep_enrolled_at is None
 
     async def test_unconfigured_tier_skips_sweep_columns(
         self,
@@ -267,17 +224,16 @@ class TestSweepEnrollmentPersistence:
         )
         alpaca_id = f"acct-{uuid.uuid4()}"
         await _insert_brokerage_account(db_session, test_user, alpaca_id)
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock()
+        arq = AsyncMock()
 
         await apply_account_status_change(
             db_session,
             alpaca_account_id=alpaca_id,
             new_status="ACTIVE",
-            alpaca=alpaca,
+            arq=arq,
         )
 
-        alpaca.update_account.assert_not_awaited()
+        arq.enqueue_job.assert_not_awaited()
         row = await db_session.execute(
             text(
                 "SELECT sweep_status, sweep_enrolled_at "

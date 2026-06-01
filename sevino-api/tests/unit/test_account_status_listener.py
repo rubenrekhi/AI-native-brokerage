@@ -16,8 +16,13 @@ def broker():
 
 
 @pytest.fixture
-def listener(broker):
-    return AccountStatusListener(broker)
+def arq():
+    return AsyncMock()
+
+
+@pytest.fixture
+def listener(broker, arq):
+    return AccountStatusListener(broker, arq=arq)
 
 
 @pytest.fixture
@@ -26,7 +31,7 @@ def session():
 
 
 async def test_well_formed_event_calls_service_with_parsed_fields(
-    listener, broker, session, monkeypatch
+    listener, arq, session, monkeypatch
 ):
     apply = AsyncMock()
     monkeypatch.setattr(
@@ -52,17 +57,17 @@ async def test_well_formed_event_calls_service_with_parsed_fields(
         new_status="APPROVED",
         kyc_results=None,
         event_time=datetime(2023, 10, 13, 13, 34, 28, 306290, tzinfo=timezone.utc),
-        alpaca=broker,
+        arq=arq,
     )
 
 
-async def test_broker_is_forwarded_as_alpaca_kwarg(
-    listener, broker, session, monkeypatch
+async def test_arq_pool_is_forwarded_as_arq_kwarg(
+    listener, arq, session, monkeypatch
 ):
-    """SEV-318: the listener must forward its base-class ``_broker`` field as
-    the ``alpaca`` kwarg so the service can PATCH the FDIC sweep tier on
-    activation. If ``BaseSSEListener`` ever renames that field, sweep
-    enrollment would silently no-op — this test fails first."""
+    """SEV-655: the listener must forward its ARQ pool as the ``arq`` kwarg so
+    the service can enqueue the FDIC sweep enrollment task on activation. If
+    the wiring breaks, enrollment would silently no-op — this test fails
+    first."""
     apply = AsyncMock()
     monkeypatch.setattr(
         "app.listeners.account_status.apply_account_status_change", apply
@@ -72,7 +77,7 @@ async def test_broker_is_forwarded_as_alpaca_kwarg(
         session, "", {"account_id": "abc", "status_to": "ACTIVE"}
     )
 
-    assert apply.await_args.kwargs["alpaca"] is broker
+    assert apply.await_args.kwargs["arq"] is arq
 
 
 async def test_kyc_results_forwarded(listener, session, monkeypatch):

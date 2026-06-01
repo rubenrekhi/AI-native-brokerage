@@ -129,6 +129,18 @@ class AlpacaBrokerService:
         """PATCH /v1/accounts/{account_id} — update account (e.g. assign APR tier)."""
         return await self._request("PATCH", f"/v1/accounts/{account_id}", json=payload)
 
+    async def assign_apr_tier(self, alpaca_account_id: str, tier_name: str) -> None:
+        """Enroll an account in the FDIC cash sweep by assigning its APR tier.
+
+        Idempotent upstream — PATCHing the same tier twice is a no-op — so the
+        enrollment task can retry safely. Raises ``AlpacaBrokerError`` /
+        ``AlpacaBrokerUnavailableError`` on failure (SEV-655).
+        """
+        await self.update_account(
+            alpaca_account_id,
+            {"cash_interest": {"USD": {"apr_tier_name": tier_name}}},
+        )
+
     async def get_trading_account(self, account_id: str) -> dict[str, Any]:
         """GET /v1/trading/accounts/{account_id}/account — live equity/cash/buying power.
 
