@@ -1,16 +1,13 @@
 import Charts
 import SwiftUI
 
-/// Chat gen-UI card comparing 2–3 assets side by side: an overlay line chart
-/// with crosshair scrub, an asset table, and a metric panel that adapts to the
-/// asset-type mix (all-stock, all-ETF, or asymmetric stock-vs-ETF). Display
-/// only — the range pills reflect the block's range but don't refetch, since a
-/// `StockComparisonBlock` carries a single `series` per asset (SEV-658).
+/// Display-only: range pills don't refetch (SEV-658).
 struct StockComparisonCard: View {
     let block: StockComparisonBlock
     let scale: CGFloat
 
     @State private var scrubDate: Date?
+    @State private var isExpanded: Bool = false
 
     private static let dash = "—"
     private static let fallbackPalette: [Color] = [.sevinoInfo, .sevinoWarning, .sevinoAvatarPurple]
@@ -29,14 +26,55 @@ struct StockComparisonCard: View {
                 rangeSelector
             }
             assetTable
-            metricSection
-            if hasDistinctions {
-                distinctionRows
+            if hasDetails {
+                detailsToggle
+                if isExpanded {
+                    metricSection
+                    if hasDistinctions {
+                        distinctionRows
+                    }
+                }
             }
         }
         .padding(16 * scale)
         .background(GenUICardBackground(cornerRadius: 20 * scale))
         .padding(.horizontal, 16 * scale)
+        .animation(.spring(duration: 0.32, bounce: 0.12), value: isExpanded)
+    }
+
+    private var hasDetails: Bool {
+        block.holdingsOverlapPct != nil || hasAnyMetric || hasDistinctions
+    }
+
+    private var hasAnyMetric: Bool {
+        block.assets.contains { asset in
+            let m = asset.metrics
+            return m.peRatio != nil || m.marketCap != nil || m.revenueGrowthPct != nil
+                || m.earningsGrowthPct != nil || m.beta != nil || m.sector != nil
+                || m.expenseRatioPct != nil || m.aum != nil || m.holdingsCount != nil
+                || m.dividendYieldPct != nil || m.indexTracked != nil
+                || (m.topSectors?.isEmpty == false)
+        }
+    }
+
+    private var detailsToggle: some View {
+        Button(action: { isExpanded.toggle() }) {
+            HStack(spacing: 6 * scale) {
+                Text(isExpanded ? L10n.Chat.comparisonHideDetails : L10n.Chat.comparisonShowDetails)
+                    .font(.system(size: 13 * scale, weight: .medium))
+                    .foregroundStyle(Color.sevinoSecondary)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11 * scale, weight: .semibold))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .accessibilityHidden(true)
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 10 * scale)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint(isExpanded ? L10n.Chat.comparisonHideDetailsHint : L10n.Chat.comparisonShowDetailsHint)
     }
 
     // MARK: - Chart

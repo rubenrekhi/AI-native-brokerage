@@ -898,6 +898,26 @@
         }
       }
     },
+    "chat.comparison_hide_details" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hide details"
+          }
+        }
+      }
+    },
+    "chat.comparison_hide_details_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hides comparison details"
+          }
+        }
+      }
+    },
     "chat.comparison_holdings_overlap" : {
       "localizations" : {
         "en" : {
@@ -1044,6 +1064,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Sector exposure"
+          }
+        }
+      }
+    },
+    "chat.comparison_show_details" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show details"
+          }
+        }
+      }
+    },
+    "chat.comparison_show_details_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shows comparison details"
           }
         }
       }
