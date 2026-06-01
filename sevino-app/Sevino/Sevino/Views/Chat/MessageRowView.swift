@@ -29,6 +29,9 @@ struct MessageRowView: View {
         }.joined()
 
         VStack(alignment: .trailing, spacing: 8 * scale) {
+            if let source = message.cardContextSource {
+                CardContextSourceChip(source: source, scale: scale)
+            }
             if let ctx = message.attachedContext {
                 AttachedContextCardView(context: ctx, scale: scale)
             }
@@ -43,9 +46,6 @@ struct MessageRowView: View {
         let ordinals = textBlockOrdinals(in: message.blocks)
         let lastTextOrdinal = ordinals.values.max() ?? -1
         VStack(alignment: .leading, spacing: 8 * scale) {
-            if let source = message.cardContextSource {
-                CardContextSourceChip(source: source, scale: scale)
-            }
             ForEach(message.blocks) { block in
                 blockView(block, ordinals: ordinals, lastTextOrdinal: lastTextOrdinal)
             }

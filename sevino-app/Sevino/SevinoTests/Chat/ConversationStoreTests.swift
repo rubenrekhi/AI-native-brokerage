@@ -381,7 +381,7 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(cardContext["headline"] as? String, "AMD moved 5%")
     }
 
-    func testDigestCardAddsSourceToAssistantMessage() async throws {
+    func testDigestCardAddsSourceToUserMessage() async throws {
         let client = MockSSEClient(script: [
             .yield(makeRaw(json: turnStartedJSON())),
             .yield(makeRaw(json: blockStartTextJSON(blockId: "b1"))),
@@ -399,9 +399,10 @@ final class ConversationStoreTests: XCTestCase {
         try await store.send(text: "what matters?", digestCard: digestCard)
 
         XCTAssertEqual(
-            store.messages[1].cardContextSource,
+            store.messages[0].cardContextSource,
             CardContextSource(symbol: "AAPL", kind: "earnings_result")
         )
+        XCTAssertNil(store.messages[1].cardContextSource)
     }
 
     func testTurnStartedCardContextSourceOverridesDigestFallback() async throws {
@@ -419,7 +420,7 @@ final class ConversationStoreTests: XCTestCase {
         try await store.send(text: "what matters?", digestCard: digestCard)
 
         XCTAssertEqual(
-            store.messages[1].cardContextSource,
+            store.messages[0].cardContextSource,
             CardContextSource(symbol: "MSFT", kind: "news")
         )
     }
