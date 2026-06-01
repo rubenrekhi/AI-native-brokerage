@@ -16,9 +16,9 @@ protocol FundingServiceProtocol {
     func listTransfers() async throws -> [TransferResponse]
     func listDividends(limit: Int, offset: Int) async throws -> [DividendResponse]
     func getCashInterest() async throws -> CashInterestResponse
+    func enrollCashInterest() async throws -> CashInterestResponse
 }
 
-/// Handles backend communication for the Plaid + ACH funding flows.
 final class FundingService: FundingServiceProtocol {
     static let shared = FundingService()
 
@@ -108,6 +108,10 @@ final class FundingService: FundingServiceProtocol {
 
     func getCashInterest() async throws -> CashInterestResponse {
         try await api.get("/v1/brokerage/cash-interest")
+    }
+
+    func enrollCashInterest() async throws -> CashInterestResponse {
+        try await api.post("/v1/brokerage/cash-interest/enroll")
     }
 }
 

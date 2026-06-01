@@ -29,6 +29,9 @@ struct MessageRowView: View {
         }.joined()
 
         VStack(alignment: .trailing, spacing: 8 * scale) {
+            if let source = message.cardContextSource {
+                CardContextSourceChip(source: source, scale: scale)
+            }
             if let ctx = message.attachedContext {
                 AttachedContextCardView(context: ctx, scale: scale)
             }
@@ -43,9 +46,6 @@ struct MessageRowView: View {
         let ordinals = textBlockOrdinals(in: message.blocks)
         let lastTextOrdinal = ordinals.values.max() ?? -1
         VStack(alignment: .leading, spacing: 8 * scale) {
-            if let source = message.cardContextSource {
-                CardContextSourceChip(source: source, scale: scale)
-            }
             ForEach(message.blocks) { block in
                 blockView(block, ordinals: ordinals, lastTextOrdinal: lastTextOrdinal)
             }
@@ -83,8 +83,18 @@ struct MessageRowView: View {
             StatusPillView(block: sb, scale: scale)
         case .stockCard(let scb):
             SingleStockCard(block: scb, scale: scale)
+        case .stockComparison(let scb):
+            StockComparisonCard(block: scb, scale: scale)
         case .thinking(let tb):
             ThinkingBlockView(block: tb, scale: scale)
+        case .recurringInvestmentSetup(let risb):
+            // TODO: inject a real onSubmit once the backend recurring-buy endpoint
+            // ships — the card's default handler fakes success with no network call.
+            RecurringInvestmentCard(block: risb, scale: scale)
+        case .cancelTransfer(let ctb):
+            CancelTransferCard(block: ctb, scale: scale)
+        case .cancelOrder(let cob):
+            CancelOrderCard(block: cob, scale: scale)
         }
     }
 }

@@ -46,6 +46,13 @@ struct BrokerageSettingsView: View {
                     .padding(.bottom, 24 * scale)
 
                 VStack(spacing: 0) {
+                    if vm.cashEnrollmentState != .unavailable {
+                        navRowWithStatus(
+                            title: L10n.Settings.cashInterest,
+                            state: vm.cashEnrollmentState,
+                            destination: .cashEnrollment
+                        )
+                    }
                     navRow(title: L10n.Settings.accountDocuments, destination: .accountDocuments)
                     navRow(title: L10n.Settings.statements, destination: .statements)
                     navRow(title: L10n.Settings.taxDocuments, destination: .taxDocuments)
@@ -226,6 +233,32 @@ struct BrokerageSettingsView: View {
                         .foregroundStyle(Color.sevinoSecondary)
 
                     Spacer()
+
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13 * scale, weight: .medium))
+                        .foregroundStyle(Color.sevinoGreyContrast)
+                        .accessibilityHidden(true)
+                }
+                .padding(.vertical, 16 * scale)
+                .frame(minHeight: 44)
+
+                Divider()
+                    .foregroundStyle(Color.sevinoGreyAccent.opacity(0.3))
+            }
+        }
+    }
+
+    private func navRowWithStatus(title: String, state: EnrollmentState, destination: SettingsDestination) -> some View {
+        NavigationLink(value: destination) {
+            VStack(spacing: 0) {
+                HStack(spacing: 8 * scale) {
+                    Text(title)
+                        .font(.system(size: 16 * scale))
+                        .foregroundStyle(Color.sevinoSecondary)
+
+                    Spacer()
+
+                    EnrollmentStatusPill(state: state, size: .small, scale: scale)
 
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13 * scale, weight: .medium))

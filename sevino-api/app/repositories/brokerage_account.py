@@ -9,6 +9,10 @@ from app.models.brokerage_account import BrokerageAccount
 STATUS_ACTIVE = "ACTIVE"
 STATUS_ACCOUNT_CLOSED = "ACCOUNT_CLOSED"
 
+SWEEP_STATUS_ACTIVE = "ACTIVE"
+SWEEP_STATUS_PENDING_CHANGE = "PENDING_CHANGE"
+SWEEP_STATUS_INACTIVE = "INACTIVE"
+
 
 class BrokerageAccountRepository:
 
@@ -18,6 +22,15 @@ class BrokerageAccountRepository:
     ) -> BrokerageAccount | None:
         result = await db.execute(
             select(BrokerageAccount).where(BrokerageAccount.user_id == user_id)
+        )
+        return result.scalar_one_or_none()
+
+    @staticmethod
+    async def get_by_id(
+        db: AsyncSession, account_id: uuid.UUID
+    ) -> BrokerageAccount | None:
+        result = await db.execute(
+            select(BrokerageAccount).where(BrokerageAccount.id == account_id)
         )
         return result.scalar_one_or_none()
 

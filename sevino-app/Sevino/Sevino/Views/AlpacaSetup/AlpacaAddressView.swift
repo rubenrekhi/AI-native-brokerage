@@ -14,6 +14,7 @@ struct AlpacaAddressView: View {
     @State private var showPrompt: Bool
     @State private var typed1: String
     @State private var showInput: Bool
+    @State private var addressError: String?
     // Root owner of this @Observable; @State is correct here. Pass to child views as a plain parameter — do not re-wrap.
     @State private var completer = AddressSearchCompleter()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -153,8 +154,15 @@ struct AlpacaAddressView: View {
                 if newValue != selectedAddress {
                     selectedAddress = ""
                     selectedCompletion = nil
+                    addressError = nil
                     completer.search(newValue)
                 }
+            }
+
+            if let addressError {
+                Text(addressError)
+                    .font(.system(size: 13 * scale))
+                    .foregroundStyle(Color.sevinoNegative)
             }
 
             HStack {
@@ -188,6 +196,7 @@ struct AlpacaAddressView: View {
 
     private func submit() {
         guard !selectedAddress.isEmpty else { return }
+        addressError = nil
 
         // Resuming without changing anything — reuse the saved ParsedAddress so
         // we don't re-hit MapKit (which wouldn't be able to geocode our own
@@ -200,16 +209,20 @@ struct AlpacaAddressView: View {
         }
 
         guard let completion = selectedCompletion else { return }
-        let fallback = ParsedAddress(
-            streetAddress: selectedAddress, city: "", state: "", postalCode: "", fullDisplay: selectedAddress
-        )
         Task {
             let request = MKLocalSearch.Request(completion: completion)
             let search = MKLocalSearch(request: request)
             do {
                 let response = try await search.start()
                 guard let placemark = response.mapItems.first?.placemark else {
-                    onContinue(fallback)
+                    showAddressError(L10n.Onboarding.alpacaAddressParseError)
+                    return
+                }
+                // Sevino is US-only; a Canadian pick resolves to e.g. "ON",
+                // which Alpaca rejects. Gate on the same state set the backend
+                // enforces (USStateCodes) rather than continuing.
+                guard USStateCodes.isValid(placemark.administrativeArea ?? "") else {
+                    showAddressError(L10n.Onboarding.alpacaAddressNonUSError)
                     return
                 }
                 let street = [placemark.subThoroughfare, placemark.thoroughfare]
@@ -223,9 +236,15 @@ struct AlpacaAddressView: View {
                     fullDisplay: selectedAddress
                 ))
             } catch {
-                onContinue(fallback)
+                showAddressError(L10n.Onboarding.alpacaAddressParseError)
             }
         }
+    }
+
+    private func showAddressError(_ message: String) {
+        addressError = message
+        selectedAddress = ""
+        selectedCompletion = nil
     }
 
 

@@ -52,6 +52,32 @@ extension Color {
     static let sevinoGradientSky      = Color(red: 0.73, green: 0.85, blue: 1.0)
     static let sevinoGradientRose     = Color(red: 1.0,  green: 0.78, blue: 0.84)
 
+    /// Parses a `"#RRGGBB"` / `"RRGGBB"` (or 8-digit `RRGGBBAA`) hex string.
+    /// Returns `nil` for malformed input so callers fall back to a design
+    /// token rather than rendering an arbitrary color. Used for the
+    /// BE-assigned per-asset line colors on `StockComparisonCard`.
+    init?(hexString: String) {
+        var hex = hexString.trimmingCharacters(in: .whitespacesAndNewlines)
+        if hex.hasPrefix("#") { hex.removeFirst() }
+        guard let value = UInt64(hex, radix: 16) else { return nil }
+        let r, g, b, a: Double
+        switch hex.count {
+        case 6:
+            r = Double((value >> 16) & 0xFF) / 255
+            g = Double((value >> 8) & 0xFF) / 255
+            b = Double(value & 0xFF) / 255
+            a = 1
+        case 8:
+            r = Double((value >> 24) & 0xFF) / 255
+            g = Double((value >> 16) & 0xFF) / 255
+            b = Double((value >> 8) & 0xFF) / 255
+            a = Double(value & 0xFF) / 255
+        default:
+            return nil
+        }
+        self.init(.sRGB, red: r, green: g, blue: b, opacity: a)
+    }
+
     static func adaptive(light: UInt, dark: UInt) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark

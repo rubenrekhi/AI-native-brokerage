@@ -87,13 +87,63 @@ struct CashDetailCard: View {
         }
     }
 
+    @ViewBuilder
     private var earningsBadge: some View {
-        Text(L10n.Home.earningApy(apyText))
-            .font(.system(size: 13 * scale, weight: .semibold))
-            .foregroundStyle(Color.sevinoPositive)
-            .padding(.horizontal, 14 * scale)
-            .padding(.vertical, 6 * scale)
-            .background(Color.sevinoPositive.opacity(0.15), in: .capsule)
+        switch data.enrollmentState {
+        case .active:
+            badgePill(
+                L10n.Home.earningApy(apyText),
+                tint: Color.sevinoPositive,
+                accessibilityLabel: L10n.Home.earningApyAccessibility(apyText)
+            )
+        case .pending:
+            badgePill(
+                L10n.Home.enrollmentPending,
+                tint: Color.sevinoGreyContrast,
+                icon: "clock",
+                accessibilityLabel: L10n.Home.enrollmentPendingAccessibility
+            )
+        case .notEnrolled:
+            HStack(spacing: 6 * scale) {
+                badgePill(
+                    L10n.Home.couldBeEarningApy(apyText),
+                    tint: Color.sevinoWarning,
+                    accessibilityLabel: L10n.Home.couldBeEarningApyAccessibility(apyText)
+                )
+                warningIcon
+                    .accessibilityHidden(true)
+            }
+            .accessibilityElement(children: .combine)
+        case .unavailable:
+            EmptyView()
+        }
+    }
+
+    private func badgePill(
+        _ text: String,
+        tint: Color,
+        icon: String? = nil,
+        accessibilityLabel: String? = nil
+    ) -> some View {
+        HStack(spacing: 5 * scale) {
+            Text(text)
+            if let icon {
+                Image(systemName: icon)
+            }
+        }
+        .font(.system(size: 13 * scale, weight: .semibold))
+        .foregroundStyle(tint)
+        .padding(.horizontal, 14 * scale)
+        .padding(.vertical, 6 * scale)
+        .background(tint.opacity(0.15), in: .capsule)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel ?? text)
+    }
+
+    private var warningIcon: some View {
+        Image(systemName: "exclamationmark.triangle.fill")
+            .font(.system(size: 15 * scale, weight: .semibold))
+            .foregroundStyle(Color.sevinoWarning)
     }
 
     private var statCards: some View {
@@ -277,6 +327,7 @@ private extension CashCardData {
         pendingDeposits: 100.50,
         interestPaidOut: .monthly,
         fdicInsuredLimit: 2_500_000,
+        enrollmentState: .active,
         hasLinkedBank: true,
         reauthRelationshipId: nil
     )
@@ -292,6 +343,7 @@ private extension CashCardData {
         pendingDeposits: 0,
         interestPaidOut: .monthly,
         fdicInsuredLimit: 2_500_000,
+        enrollmentState: .active,
         hasLinkedBank: false,
         reauthRelationshipId: nil
     )
@@ -307,9 +359,28 @@ private extension CashCardData {
         pendingDeposits: 100.50,
         interestPaidOut: .monthly,
         fdicInsuredLimit: 2_500_000,
+        enrollmentState: .active,
         hasLinkedBank: true,
         reauthRelationshipId: UUID()
     )
+
+    func with(enrollmentState: EnrollmentState) -> CashCardData {
+        CashCardData(
+            balance: balance,
+            apy: apy,
+            thisMonthEarned: thisMonthEarned,
+            daysAccrued: daysAccrued,
+            lifetimeEarned: lifetimeEarned,
+            lifetimeSince: lifetimeSince,
+            buyingPower: buyingPower,
+            pendingDeposits: pendingDeposits,
+            interestPaidOut: interestPaidOut,
+            fdicInsuredLimit: fdicInsuredLimit,
+            enrollmentState: enrollmentState,
+            hasLinkedBank: hasLinkedBank,
+            reauthRelationshipId: reauthRelationshipId
+        )
+    }
 }
 
 #Preview("Linked bank") {
@@ -373,4 +444,38 @@ private extension CashCardData {
         .padding(20)
     }
     .preferredColorScheme(.light)
+}
+
+#Preview("Enrollment: active") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(data: .previewLinked.with(enrollmentState: .active))
+            .padding(20)
+    }
+}
+
+#Preview("Enrollment: pending") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(data: .previewLinked.with(enrollmentState: .pending))
+            .padding(20)
+    }
+}
+
+#Preview("Enrollment: not enrolled") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(
+            data: .previewLinked.with(enrollmentState: .notEnrolled)
+        )
+        .padding(20)
+    }
+}
+
+#Preview("Enrollment: unavailable") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        CashDetailCard(data: .previewLinked.with(enrollmentState: .unavailable))
+            .padding(20)
+    }
 }

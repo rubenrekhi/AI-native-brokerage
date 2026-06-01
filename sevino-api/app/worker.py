@@ -6,6 +6,7 @@ import time
 import redis.asyncio as aioredis
 import sentry_sdk
 import structlog
+from arq import func
 from arq import worker as arq_worker
 from arq.cron import cron
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -19,6 +20,10 @@ from app.logging_config import configure_logging
 from app.services.alpaca_broker import AlpacaBrokerService
 from app.services.fmp import FmpClient
 from app.services.market_data import MarketDataService, build_market_data_service
+from app.tasks.cash_interest import (
+    ENROLL_CASH_INTEREST_MAX_TRIES,
+    enroll_cash_interest,
+)
 from app.tasks.generate_daily_digest import generate_daily_digest
 from app.tasks.generate_radar_batch import generate_radar_batch
 from app.tasks.health_ping import health_ping
@@ -150,7 +155,10 @@ async def startup(ctx: dict) -> None:
         decode_responses=True,
         encoding="utf-8",
     )
-    listeners = build_listeners(broker, redis=cache_redis)
+    # ctx["redis"] is the ArqRedis pool the worker started with — the
+    # AccountStatusListener enqueues the FDIC sweep enrollment task onto it
+    # when an account first goes ACTIVE (SEV-655).
+    listeners = build_listeners(broker, redis=cache_redis, arq=ctx.get("redis"))
     listener_tasks = [
         asyncio.create_task(listener.run(), name=f"sse-{listener.stream_name}")
         for listener in listeners
@@ -276,6 +284,11 @@ class WorkerSettings:
         refresh_due_radar,
         generate_daily_digest,
         sweep_digest_snapshots,
+        func(
+            enroll_cash_interest,
+            name="enroll_cash_interest",
+            max_tries=ENROLL_CASH_INTEREST_MAX_TRIES,
+        ),
     ]
     cron_jobs = [
         cron(health_ping, minute={0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55}),

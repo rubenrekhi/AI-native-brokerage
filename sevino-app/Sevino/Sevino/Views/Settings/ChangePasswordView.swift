@@ -200,6 +200,7 @@ private struct ChangePasswordSuccessBanner: View {
     }
 }
 
+#if DEBUG
 #Preview("Dark") {
     NavigationStack {
         ChangePasswordView(vm: ChangePasswordViewModel(authService: PreviewAuthService()))
@@ -213,3 +214,4 @@ private struct ChangePasswordSuccessBanner: View {
     }
     .preferredColorScheme(.light)
 }
+#endif

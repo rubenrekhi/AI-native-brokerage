@@ -8,10 +8,6 @@ from app.services.account_status import (
     apply_account_status_change,
     apply_sweep_status_change,
 )
-from app.services.alpaca_broker import (
-    AlpacaBrokerError,
-    AlpacaBrokerUnavailableError,
-)
 
 
 @pytest.fixture
@@ -454,11 +450,11 @@ async def test_account_status_empty_new_status_is_noop(session, monkeypatch):
 
 
 class TestSweepEnrollmentOnActive:
-    """SEV-318: first ACTIVE transition PATCHes Alpaca to assign the
-    configured FDIC sweep tier, recording the outcome on the brokerage
-    account row."""
+    """SEV-655: first ACTIVE transition optimistically marks the sweep
+    PENDING_CHANGE and enqueues the background enrollment task. The SSE
+    handler no longer PATCHes Alpaca inline."""
 
-    async def test_active_transition_patches_alpaca_with_configured_tier(
+    async def test_active_transition_marks_pending_and_enqueues(
         self, session, monkeypatch
     ):
         account = _account("APPROVED")
@@ -467,8 +463,7 @@ class TestSweepEnrollmentOnActive:
             "app.services.account_status.settings.alpaca_apr_tier_name",
             "standard",
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock(return_value={})
+        arq = AsyncMock()
         event_time = datetime(2026, 5, 6, 12, 0, 0, tzinfo=timezone.utc)
 
         await apply_account_status_change(
@@ -476,79 +471,36 @@ class TestSweepEnrollmentOnActive:
             alpaca_account_id="abc",
             new_status="ACTIVE",
             event_time=event_time,
-            alpaca=alpaca,
+            arq=arq,
         )
 
-        alpaca.update_account.assert_awaited_once_with(
-            "abc",
-            {"cash_interest": {"USD": {"apr_tier_name": "standard"}}},
-        )
         kwargs = update.await_args.kwargs
         assert kwargs["sweep_status"] == "PENDING_CHANGE"
         assert kwargs["sweep_enrolled_at"] == event_time
         assert kwargs["activated_at"] == event_time
+        arq.enqueue_job.assert_awaited_once_with(
+            "enroll_cash_interest", str(account.id)
+        )
 
-    async def test_alpaca_error_marks_sweep_inactive_but_still_activates(
-        self, session, monkeypatch
-    ):
+    async def test_enqueue_happens_after_db_write(self, session, monkeypatch):
+        """The enqueue must run inside the caller's transaction window —
+        after the status flip, so a rollback on enqueue failure unwinds both."""
         account = _account("APPROVED")
-        _, update, profile_update = _patch_repos(monkeypatch, account)
+        _, update, _ = _patch_repos(monkeypatch, account)
         monkeypatch.setattr(
             "app.services.account_status.settings.alpaca_apr_tier_name",
             "standard",
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock(
-            side_effect=AlpacaBrokerError(503, "upstream down")
-        )
+        arq = AsyncMock()
 
         await apply_account_status_change(
-            session,
-            alpaca_account_id="abc",
-            new_status="ACTIVE",
-            alpaca=alpaca,
+            session, alpaca_account_id="abc", new_status="ACTIVE", arq=arq
         )
 
-        kwargs = update.await_args.kwargs
-        assert kwargs["sweep_status"] == "INACTIVE"
-        assert "sweep_enrolled_at" not in kwargs
-        # The account still goes ACTIVE and onboarding still completes —
-        # enrollment failures must not block account activation.
-        assert "activated_at" in kwargs
-        profile_update.assert_awaited_once()
-
-    async def test_alpaca_unavailable_marks_sweep_inactive_but_still_activates(
-        self, session, monkeypatch
-    ):
-        """Transport-level failures (connection refused, DNS, timeout) raise
-        ``AlpacaBrokerUnavailableError`` — a peer of ``AlpacaBrokerError``,
-        not a subclass. If we don't catch both, the exception escapes
-        ``apply_account_status_change`` and ``BaseSSEListener`` rolls back
-        the entire transaction, stalling activation on every transient
-        Alpaca network blip."""
-        account = _account("APPROVED")
-        _, update, profile_update = _patch_repos(monkeypatch, account)
-        monkeypatch.setattr(
-            "app.services.account_status.settings.alpaca_apr_tier_name",
-            "standard",
+        update.assert_awaited_once()
+        arq.enqueue_job.assert_awaited_once_with(
+            "enroll_cash_interest", str(account.id)
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock(
-            side_effect=AlpacaBrokerUnavailableError("connection refused")
-        )
-
-        await apply_account_status_change(
-            session,
-            alpaca_account_id="abc",
-            new_status="ACTIVE",
-            alpaca=alpaca,
-        )
-
-        kwargs = update.await_args.kwargs
-        assert kwargs["sweep_status"] == "INACTIVE"
-        assert "sweep_enrolled_at" not in kwargs
-        assert "activated_at" in kwargs
-        profile_update.assert_awaited_once()
 
     async def test_skips_enrollment_when_tier_name_unconfigured(
         self, session, monkeypatch
@@ -558,26 +510,23 @@ class TestSweepEnrollmentOnActive:
         monkeypatch.setattr(
             "app.services.account_status.settings.alpaca_apr_tier_name", ""
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock()
+        arq = AsyncMock()
 
         await apply_account_status_change(
-            session,
-            alpaca_account_id="abc",
-            new_status="ACTIVE",
-            alpaca=alpaca,
+            session, alpaca_account_id="abc", new_status="ACTIVE", arq=arq
         )
 
-        alpaca.update_account.assert_not_awaited()
+        arq.enqueue_job.assert_not_awaited()
         kwargs = update.await_args.kwargs
         assert "sweep_status" not in kwargs
         assert "sweep_enrolled_at" not in kwargs
 
-    async def test_skips_enrollment_when_alpaca_is_none(
+    async def test_skips_enrollment_when_arq_is_none(
         self, session, monkeypatch
     ):
-        """The ``alpaca`` parameter is optional; when omitted, enrollment
-        must silently skip rather than NoneType-explode."""
+        """The ``arq`` pool is optional (manual KYC-refresh path has no pool);
+        when omitted, enrollment must silently skip rather than
+        NoneType-explode."""
         account = _account("APPROVED")
         _, update, _ = _patch_repos(monkeypatch, account)
         monkeypatch.setattr(
@@ -586,10 +535,7 @@ class TestSweepEnrollmentOnActive:
         )
 
         await apply_account_status_change(
-            session,
-            alpaca_account_id="abc",
-            new_status="ACTIVE",
-            alpaca=None,
+            session, alpaca_account_id="abc", new_status="ACTIVE", arq=None
         )
 
         kwargs = update.await_args.kwargs
@@ -605,38 +551,51 @@ class TestSweepEnrollmentOnActive:
             "app.services.account_status.settings.alpaca_apr_tier_name",
             "standard",
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock()
+        arq = AsyncMock()
 
         await apply_account_status_change(
-            session,
-            alpaca_account_id="abc",
-            new_status="REJECTED",
-            alpaca=alpaca,
+            session, alpaca_account_id="abc", new_status="REJECTED", arq=arq
         )
 
-        alpaca.update_account.assert_not_awaited()
+        arq.enqueue_job.assert_not_awaited()
 
     async def test_active_replay_with_kyc_delta_does_not_re_enroll(
         self, session, monkeypatch
     ):
         """A kyc_results-only event on an already-ACTIVE account must not
-        re-trigger enrollment — only the *first* ACTIVE transition does."""
+        re-enqueue — only the *first* ACTIVE transition does."""
         account = _account("ACTIVE", kyc_results=None)
         _patch_repos(monkeypatch, account)
         monkeypatch.setattr(
             "app.services.account_status.settings.alpaca_apr_tier_name",
             "standard",
         )
-        alpaca = AsyncMock()
-        alpaca.update_account = AsyncMock()
+        arq = AsyncMock()
 
         await apply_account_status_change(
             session,
             alpaca_account_id="abc",
             new_status="ACTIVE",
             kyc_results={"accept": ["CIP retry ok"]},
-            alpaca=alpaca,
+            arq=arq,
         )
 
-        alpaca.update_account.assert_not_awaited()
+        arq.enqueue_job.assert_not_awaited()
+
+    async def test_enqueue_failure_propagates(self, session, monkeypatch):
+        """If the enqueue raises (Redis down), the exception must propagate so
+        ``BaseSSEListener`` rolls back the whole transaction — no stuck
+        PENDING_CHANGE with no job behind it."""
+        account = _account("APPROVED")
+        _patch_repos(monkeypatch, account)
+        monkeypatch.setattr(
+            "app.services.account_status.settings.alpaca_apr_tier_name",
+            "standard",
+        )
+        arq = AsyncMock()
+        arq.enqueue_job.side_effect = ConnectionError("redis down")
+
+        with pytest.raises(ConnectionError):
+            await apply_account_status_change(
+                session, alpaca_account_id="abc", new_status="ACTIVE", arq=arq
+            )

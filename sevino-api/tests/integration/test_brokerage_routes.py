@@ -13,7 +13,7 @@ from app.auth import get_current_user
 from app.config import settings
 from app.database import get_db
 from app.exceptions import register_exception_handlers
-from app.routes.brokerage import get_alpaca, router as brokerage_router
+from app.routes.brokerage import get_alpaca, get_arq, router as brokerage_router
 from app.services.alpaca_broker import AlpacaBrokerError, AlpacaBrokerUnavailableError
 
 TEST_USER_ID = str(uuid.uuid4())
@@ -35,6 +35,11 @@ def alpaca_mock() -> AsyncMock:
 
 
 @pytest.fixture
+def arq_mock() -> AsyncMock:
+    return AsyncMock()
+
+
+@pytest.fixture
 def brokerage():
     return SimpleNamespace(
         id=uuid.uuid4(),
@@ -53,7 +58,7 @@ def patch_brokerage(mocker, brokerage):
 
 
 @pytest.fixture
-async def client(alpaca_mock):
+async def client(alpaca_mock, arq_mock):
     app = _build_app()
 
     async def _override_db():
@@ -62,6 +67,7 @@ async def client(alpaca_mock):
     app.dependency_overrides[get_db] = _override_db
     app.dependency_overrides[get_current_user] = lambda: TEST_USER_ID
     app.dependency_overrides[get_alpaca] = lambda: alpaca_mock
+    app.dependency_overrides[get_arq] = lambda: arq_mock
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -401,9 +407,10 @@ class TestGetCashInterest:
         assert body["interest_paid_out"] == "monthly"
         assert body["fdic_insured_limit"] == "2500000"
         assert body["sweep_status"] == "ACTIVE"
+        assert body["enrollment_state"] == "active"
 
-    async def test_no_sweep_returns_zeros(
-        self, client, patch_cash_brokerage, alpaca_mock
+    async def test_no_sweep_returns_zeros_but_keeps_apy(
+        self, client, patch_cash_brokerage, patch_apr_tier_name, alpaca_mock
     ):
         patch_cash_brokerage(
             _make_cash_brokerage(sweep_status=None, sweep_enrolled_at=None)
@@ -412,6 +419,9 @@ class TestGetCashInterest:
             "cash": "150.00",
             "buying_power": "150.00",
             "pending_transfer_in": "0",
+        }
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
         }
 
         response = await client.get("/v1/brokerage/cash-interest")
@@ -423,12 +433,15 @@ class TestGetCashInterest:
         assert body["this_month_earned"] == "0.00"
         assert body["days_accrued"] == 0
         assert body["lifetime_earned"] == "0.00"
-        assert body["apy"] == "0.0000"
+        # SEV-655: prospective APY is shown even with no enrollment.
+        assert body["apy"] == "0.0425"
         assert body["lifetime_since"] is None
         assert body["sweep_status"] is None
-        # Interest endpoints must not be hit when there's no enrollment.
+        assert body["enrollment_state"] == "not_enrolled"
+        # Accrual/realized endpoints stay un-hit (nothing to report); only the
+        # APR-tiers lookup runs to surface the rate.
+        alpaca_mock.get_apr_tiers.assert_awaited_once()
         alpaca_mock.get_eod_cash_interest.assert_not_called()
-        alpaca_mock.get_apr_tiers.assert_not_called()
         alpaca_mock.get_interest_activities.assert_not_called()
 
     async def test_no_brokerage_returns_404(self, client, patch_cash_brokerage):
@@ -450,7 +463,7 @@ class TestGetCashInterest:
         assert response.json()["code"] == "NOT_FOUND"
 
     async def test_pending_brokerage_no_sweep_returns_zero_shape(
-        self, client, patch_cash_brokerage, alpaca_mock
+        self, client, patch_cash_brokerage, patch_apr_tier_name, alpaca_mock
     ):
         # Freshly-onboarded user: account row exists but isn't ACTIVE yet and
         # sweep is not enrolled. Read-only views should still surface balance.
@@ -462,6 +475,7 @@ class TestGetCashInterest:
         alpaca_mock.get_trading_account.return_value = {
             "cash": "0", "buying_power": "0", "pending_transfer_in": "0",
         }
+        alpaca_mock.get_apr_tiers.return_value = {"apr_tiers": []}
 
         response = await client.get("/v1/brokerage/cash-interest")
 
@@ -469,6 +483,8 @@ class TestGetCashInterest:
         body = response.json()
         assert body["sweep_status"] is None
         assert body["lifetime_earned"] == "0.00"
+        # Account not ACTIVE yet → enrollment is unavailable (iOS hides the row).
+        assert body["enrollment_state"] == "unavailable"
         alpaca_mock.get_eod_cash_interest.assert_not_called()
 
     async def test_eod_failure_degrades_gracefully(
@@ -516,3 +532,196 @@ class TestGetCashInterest:
 
         assert response.status_code == 503
         assert response.json()["code"] == "ALPACA_UNAVAILABLE"
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/brokerage/cash-interest/enroll
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def patch_update_status(mocker):
+    """Patch ``update_status`` to apply the field writes onto the in-memory
+    brokerage stub, so the response built by ``get_cash_interest`` (which
+    re-reads the same patched gate) reflects the new pending state."""
+
+    def _patch(brokerage):
+        async def _apply(db, account_id, status=None, **fields):
+            for key, value in fields.items():
+                setattr(brokerage, key, value)
+            return brokerage
+
+        return mocker.patch(
+            "app.repositories.brokerage_account.BrokerageAccountRepository.update_status",
+            new_callable=AsyncMock,
+            side_effect=_apply,
+        )
+
+    return _patch
+
+
+class TestPostCashInterestEnroll:
+    async def test_happy_path_returns_202_pending(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_update_status,
+        patch_apr_tier_name,
+        alpaca_mock,
+        arq_mock,
+    ):
+        brokerage = _make_cash_brokerage(sweep_status=None, sweep_enrolled_at=None)
+        patch_cash_brokerage(brokerage)
+        patch_update_status(brokerage)
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "500.00",
+            "buying_power": "500.00",
+            "pending_transfer_in": "0",
+        }
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["sweep_status"] == "PENDING_CHANGE"
+        assert body["enrollment_state"] == "pending"
+        # Prospective APY surfaces in the same round-trip.
+        assert body["apy"] == "0.0425"
+        arq_mock.enqueue_job.assert_awaited_once_with(
+            "enroll_cash_interest", str(brokerage.id)
+        )
+
+    async def test_idempotent_when_active_returns_200(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_apr_tier_name,
+        alpaca_mock,
+        arq_mock,
+    ):
+        patch_cash_brokerage(_make_cash_brokerage(sweep_status="ACTIVE"))
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "100.00",
+            "buying_power": "100.00",
+            "pending_transfer_in": "0",
+        }
+        alpaca_mock.get_eod_cash_interest.return_value = []
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
+        alpaca_mock.get_interest_activities.return_value = []
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["enrollment_state"] == "active"
+        assert body["sweep_status"] == "ACTIVE"
+        # Already enrolled: no state change, no job enqueued.
+        arq_mock.enqueue_job.assert_not_awaited()
+
+    async def test_no_brokerage_returns_404(
+        self, client, patch_cash_brokerage, arq_mock
+    ):
+        patch_cash_brokerage(None)
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+        arq_mock.enqueue_job.assert_not_awaited()
+
+    async def test_account_not_active_returns_409(
+        self, client, patch_cash_brokerage, arq_mock
+    ):
+        patch_cash_brokerage(
+            _make_cash_brokerage(account_status="SUBMITTED", sweep_status=None)
+        )
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "ACCOUNT_NOT_ACTIVE"
+        assert body["detail"]["account_status"] == "SUBMITTED"
+        arq_mock.enqueue_job.assert_not_awaited()
+
+    async def test_enqueue_failure_propagates_to_roll_back(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_update_status,
+        patch_apr_tier_name,
+        alpaca_mock,
+        arq_mock,
+    ):
+        # The enqueue failure must NOT be swallowed: it propagates so get_db
+        # rolls back the PENDING_CHANGE flip, leaving no stuck pending state
+        # with no job behind it. (httpx re-raises the unhandled app error.)
+        brokerage = _make_cash_brokerage(sweep_status=None)
+        patch_cash_brokerage(brokerage)
+        patch_update_status(brokerage)
+        arq_mock.enqueue_job.side_effect = ConnectionError("redis down")
+
+        with pytest.raises(ConnectionError):
+            await client.post("/v1/brokerage/cash-interest/enroll")
+
+        arq_mock.enqueue_job.assert_awaited_once_with(
+            "enroll_cash_interest", str(brokerage.id)
+        )
+
+    async def test_idempotent_when_pending_returns_202_no_new_job(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_update_status,
+        patch_apr_tier_name,
+        alpaca_mock,
+        arq_mock,
+    ):
+        brokerage = _make_cash_brokerage(sweep_status="PENDING_CHANGE")
+        patch_cash_brokerage(brokerage)
+        update = patch_update_status(brokerage)
+        alpaca_mock.get_trading_account.return_value = {
+            "cash": "500.00",
+            "buying_power": "500.00",
+            "pending_transfer_in": "0",
+        }
+        alpaca_mock.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["sweep_status"] == "PENDING_CHANGE"
+        assert body["enrollment_state"] == "pending"
+        # Job already in flight: no duplicate enqueue, no state rewrite.
+        update.assert_not_awaited()
+        arq_mock.enqueue_job.assert_not_awaited()
+
+    async def test_unavailable_when_tier_not_configured_returns_409(
+        self,
+        client,
+        patch_cash_brokerage,
+        patch_update_status,
+        arq_mock,
+        monkeypatch,
+    ):
+        monkeypatch.setattr(settings, "alpaca_apr_tier_name", "")
+        brokerage = _make_cash_brokerage(sweep_status=None, sweep_enrolled_at=None)
+        patch_cash_brokerage(brokerage)
+        update = patch_update_status(brokerage)
+
+        response = await client.post("/v1/brokerage/cash-interest/enroll")
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "CASH_INTEREST_UNAVAILABLE"
+        # Tier unconfigured: never flip to PENDING_CHANGE or enqueue, or the row
+        # would strand with no job to clear it.
+        update.assert_not_awaited()
+        arq_mock.enqueue_job.assert_not_awaited()

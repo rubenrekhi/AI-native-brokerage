@@ -89,9 +89,10 @@ def build_iteration_request(
 ) -> dict[str, Any]:
     """Build the ``anthropic.messages.stream`` kwargs for one iteration.
 
-    Server tools and registry tools are concatenated. ``cache_control``
-    on the last tool spec caches the tools array alongside the system
-    prompt, so the cache window covers both across iterations.
+    Server tools and registry tools are concatenated. The tools array carries
+    no ``cache_control`` of its own: it sits before ``system`` in the cache
+    prefix (``tools → system → messages``), so the system-prompt breakpoint
+    already caches it. Empty ``tools`` is omitted (Anthropic 400s on empty).
     """
     create_kwargs: dict[str, Any] = {
         "model": model_config.model_id,
@@ -103,7 +104,6 @@ def build_iteration_request(
             "budget_tokens": hard_caps.thinking_budget_tokens,
         },
     }
-    # Anthropic 400s on empty tools.
     server_tool_specs = build_server_tool_specs(server_tools_config)
     registry_specs: list[dict[str, Any]] = (
         list(tool_registry.to_anthropic_spec())
@@ -112,10 +112,6 @@ def build_iteration_request(
     )
     combined_tools = [*server_tool_specs, *registry_specs]
     if combined_tools:
-        combined_tools[-1] = {
-            **combined_tools[-1],
-            "cache_control": {"type": "ephemeral"},
-        }
         create_kwargs["tools"] = combined_tools
     return create_kwargs
 

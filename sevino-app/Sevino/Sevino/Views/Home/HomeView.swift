@@ -16,7 +16,6 @@ struct HomeView: View {
     @State private var chatInputHeight: CGFloat = 0
     @State private var baseScale: CGFloat = 1
     private var scale: CGFloat { baseScale * textSizeMultiplier }
-    @State private var showDailyDigestPrompt = true
     @State private var showPortfolio = false
     @State private var showFunding = false
     @State private var showHoldings = false
@@ -188,8 +187,7 @@ struct HomeView: View {
                     greeting: viewModel.greeting,
                     isHidden: anyModalOpen,
                     digestAvailable: !digestViewModel.cards.isEmpty,
-                    onTapDigest: digestViewModel.reopenDigest,
-                    showDailyDigestPrompt: $showDailyDigestPrompt
+                    onTapDigest: digestViewModel.reopenDigest
                 )
                 .offset(y: -60 * scale)
                 .allowsHitTesting(!anyModalOpen)

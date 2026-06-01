@@ -93,6 +93,19 @@ final class EditProfileViewModelTests: XCTestCase {
         XCTAssertEqual(service.updateProfileCalls.count, 0)
     }
 
+    func testSaveAddressRejectsNonUSState() async {
+        await viewModel.saveAddress(
+            street: ["123 Main St"],
+            city: "Toronto",
+            state: "ON",
+            postalCode: "M5H 2N2"
+        )
+
+        XCTAssertFalse(viewModel.didSave)
+        XCTAssertEqual(viewModel.error, L10n.Settings.editAddressNonUSError)
+        XCTAssertEqual(service.updateProfileCalls.count, 0)
+    }
+
     func testServiceErrorSurfacesAsLocalizedDescription() async {
         struct ServiceError: LocalizedError {
             var errorDescription: String? { "Backend said no" }

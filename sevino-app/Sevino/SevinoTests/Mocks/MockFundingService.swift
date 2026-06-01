@@ -25,7 +25,24 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
             pendingDeposits: "0",
             interestPaidOut: "monthly",
             fdicInsuredLimit: "2500000",
-            sweepStatus: nil
+            sweepStatus: nil,
+            enrollmentState: .active
+        )
+    )
+    var enrollCashInterestResult: Result<CashInterestResponse, Error> = .success(
+        CashInterestResponse(
+            balance: "0",
+            apy: "0",
+            thisMonthEarned: "0",
+            daysAccrued: 0,
+            lifetimeEarned: "0",
+            lifetimeSince: nil,
+            buyingPower: "0",
+            pendingDeposits: "0",
+            interestPaidOut: "monthly",
+            fdicInsuredLimit: "2500000",
+            sweepStatus: nil,
+            enrollmentState: .pending
         )
     )
 
@@ -40,6 +57,24 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
     private(set) var listTransfersCalls = 0
     private(set) var listDividendsCalls: [(limit: Int, offset: Int)] = []
     private(set) var getCashInterestCalls = 0
+    private(set) var enrollCashInterestCalls = 0
+
+    // When armed, `getCashInterest` / `enrollCashInterest` suspend after
+    // recording the call until `releaseGate()` resumes them, so tests can
+    // observe in-flight view-model state (loading guard, optimistic flip).
+    var isGated = false
+    private var gateContinuations: [CheckedContinuation<Void, Never>] = []
+
+    private func waitIfGated() async {
+        guard isGated else { return }
+        await withCheckedContinuation { gateContinuations.append($0) }
+    }
+
+    func releaseGate() {
+        let continuations = gateContinuations
+        gateContinuations = []
+        for continuation in continuations { continuation.resume() }
+    }
 
     func createLinkToken() async throws -> String {
         createLinkTokenCalls += 1
@@ -98,6 +133,13 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
 
     func getCashInterest() async throws -> CashInterestResponse {
         getCashInterestCalls += 1
+        await waitIfGated()
         return try getCashInterestResult.get()
+    }
+
+    func enrollCashInterest() async throws -> CashInterestResponse {
+        enrollCashInterestCalls += 1
+        await waitIfGated()
+        return try enrollCashInterestResult.get()
     }
 }

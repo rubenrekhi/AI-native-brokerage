@@ -3,7 +3,10 @@ import XCTest
 
 final class CashCardDataTests: XCTestCase {
 
-    private func makeSample(reauthRelationshipId: UUID? = nil) -> CashCardData {
+    private func makeSample(
+        reauthRelationshipId: UUID? = nil,
+        enrollmentState: EnrollmentState = .active
+    ) -> CashCardData {
         CashCardData(
             balance: 2412.08,
             apy: 0.032,
@@ -15,6 +18,7 @@ final class CashCardDataTests: XCTestCase {
             pendingDeposits: 100.50,
             interestPaidOut: .monthly,
             fdicInsuredLimit: 2_500_000,
+            enrollmentState: enrollmentState,
             hasLinkedBank: true,
             reauthRelationshipId: reauthRelationshipId
         )
@@ -37,6 +41,20 @@ final class CashCardDataTests: XCTestCase {
         let decoded = try JSONDecoder().decode(CashCardData.self, from: data)
 
         XCTAssertEqual(decoded, original)
+    }
+
+    func test_enrollmentState_roundTripsAllCases() throws {
+        for state in [EnrollmentState.active, .pending, .notEnrolled, .unavailable] {
+            let original = makeSample(enrollmentState: state)
+            let data = try JSONEncoder().encode(original)
+            let decoded = try JSONDecoder().decode(CashCardData.self, from: data)
+            XCTAssertEqual(decoded.enrollmentState, state, "state: \(state)")
+        }
+    }
+
+    func test_enrollmentState_encodesAsSnakeCaseRawValue() throws {
+        let data = try JSONEncoder().encode(EnrollmentState.notEnrolled)
+        XCTAssertEqual(String(data: data, encoding: .utf8), "\"not_enrolled\"")
     }
 
     func test_paidOutCadence_encodesAsLowercaseRawValue() throws {

@@ -15,16 +15,13 @@ extension JSONDecoder {
         decoder.dateDecodingStrategy = .custom { decoder in
             let container = try decoder.singleValueContainer()
             let raw = try container.decode(String.self)
-            if let date = _iso8601Fractional.date(from: raw) {
-                return date
+            guard let date = ISO8601Coder.parse(raw) else {
+                throw DecodingError.dataCorruptedError(
+                    in: container,
+                    debugDescription: "Invalid ISO 8601 date: \(raw)"
+                )
             }
-            if let date = _iso8601.date(from: raw) {
-                return date
-            }
-            throw DecodingError.dataCorruptedError(
-                in: container,
-                debugDescription: "Invalid ISO 8601 date: \(raw)"
-            )
+            return date
         }
         return decoder
     }
@@ -37,15 +34,3 @@ extension JSONEncoder {
         return encoder
     }
 }
-
-private let _iso8601: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime]
-    return f
-}()
-
-private let _iso8601Fractional: ISO8601DateFormatter = {
-    let f = ISO8601DateFormatter()
-    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-    return f
-}()

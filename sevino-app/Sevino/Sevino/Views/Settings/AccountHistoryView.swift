@@ -265,6 +265,7 @@ private struct AccountHistoryRow: View {
                     Text(directionLabel)
                         .font(.system(size: 15 * scale, weight: .semibold))
                         .foregroundStyle(Color.sevinoSecondary)
+                        .lineLimit(1)
 
                     StatusBadge(kind: statusKind, scale: scale)
                 }
@@ -352,6 +353,7 @@ private struct DividendHistoryRow: View {
                     Text(L10n.Settings.accountHistoryDividendLabel)
                         .font(.system(size: 15 * scale, weight: .semibold))
                         .foregroundStyle(Color.sevinoSecondary)
+                        .lineLimit(1)
 
                     DividendStatusBadge(kind: statusKind, scale: scale)
                 }
@@ -408,6 +410,8 @@ private struct StatusBadge: View {
         Text(label)
             .font(.system(size: 10 * scale, weight: .semibold))
             .tracking(0.5)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(color)
             .padding(.horizontal, 8 * scale)
             .padding(.vertical, 3 * scale)
@@ -440,6 +444,8 @@ private struct DividendStatusBadge: View {
         Text(label)
             .font(.system(size: 10 * scale, weight: .semibold))
             .tracking(0.5)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .foregroundStyle(color)
             .padding(.horizontal, 8 * scale)
             .padding(.vertical, 3 * scale)
@@ -563,5 +569,6 @@ private final class PreviewAccountHistoryFundingService: FundingServiceProtocol,
     func listTransfers() async throws -> [TransferResponse] { transfersFixture }
     func listDividends(limit _: Int, offset _: Int) async throws -> [DividendResponse] { dividendsFixture }
     func getCashInterest() async throws -> CashInterestResponse { throw PreviewUnimplemented() }
+    func enrollCashInterest() async throws -> CashInterestResponse { throw PreviewUnimplemented() }
 }
 #endif

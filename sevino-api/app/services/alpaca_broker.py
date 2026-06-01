@@ -16,6 +16,13 @@ PENDING_TRANSFER_STATUSES = frozenset(
     {"QUEUED", "APPROVAL_PENDING", "PENDING", "SENT_TO_CLEARING"}
 )
 
+# The account-activities endpoint caps a page at 100 entries unless a single
+# `date` is given; an after/until range stays capped, so a wide window must be
+# walked via the cursor. Bound the walk so a pathological account can't fan out
+# into unbounded sequential requests.
+_ACTIVITY_PAGE_SIZE = 100
+_ACTIVITY_MAX_PAGES = 20
+
 
 class AlpacaBrokerError(Exception):
     """Raised when the Alpaca Broker API returns an error."""
@@ -128,6 +135,18 @@ class AlpacaBrokerService:
     ) -> dict[str, Any]:
         """PATCH /v1/accounts/{account_id} — update account (e.g. assign APR tier)."""
         return await self._request("PATCH", f"/v1/accounts/{account_id}", json=payload)
+
+    async def assign_apr_tier(self, alpaca_account_id: str, tier_name: str) -> None:
+        """Enroll an account in the FDIC cash sweep by assigning its APR tier.
+
+        Idempotent upstream — PATCHing the same tier twice is a no-op — so the
+        enrollment task can retry safely. Raises ``AlpacaBrokerError`` /
+        ``AlpacaBrokerUnavailableError`` on failure (SEV-655).
+        """
+        await self.update_account(
+            alpaca_account_id,
+            {"cash_interest": {"USD": {"apr_tier_name": tier_name}}},
+        )
 
     async def get_trading_account(self, account_id: str) -> dict[str, Any]:
         """GET /v1/trading/accounts/{account_id}/account — live equity/cash/buying power.
@@ -430,33 +449,107 @@ class AlpacaBrokerService:
         return response.get("interest", [])
 
     async def get_interest_activities(
-        self, *, account_id: str
+        self,
+        *,
+        account_id: str,
+        after: str | None = None,
+        until: str | None = None,
+        paginate: bool = False,
     ) -> list[dict[str, Any]]:
         """GET /v1/accounts/activities/INT — interest activity history.
 
         Returns all INT activities (SWP sweep interest, MGN margin interest,
         etc.). Filtering by `activity_sub_type` is the caller's responsibility.
+        `after`/`until` bound the window server-side; `paginate` walks every
+        page in that window (see `_get_account_activities`).
         """
-        return await self._request(
-            "GET",
-            "/v1/accounts/activities/INT",
-            params={"account_id": account_id},
+        return await self._get_account_activities(
+            "INT",
+            account_id=account_id,
+            after=after,
+            until=until,
+            paginate=paginate,
         )
 
     async def get_dividend_activities(
-        self, *, account_id: str
+        self,
+        *,
+        account_id: str,
+        after: str | None = None,
+        until: str | None = None,
+        paginate: bool = False,
     ) -> list[dict[str, Any]]:
         """GET /v1/accounts/activities/DIV — dividend activity history.
 
         Returns all DIV activities (regular cash dividends, capital gains
         distributions, withholdings, ADR fees, etc.). Filtering by
         `activity_sub_type` or `net_amount` is the caller's responsibility.
+        `after`/`until` bound the window server-side; `paginate` walks every
+        page in that window (see `_get_account_activities`).
         """
-        return await self._request(
-            "GET",
-            "/v1/accounts/activities/DIV",
-            params={"account_id": account_id},
+        return await self._get_account_activities(
+            "DIV",
+            account_id=account_id,
+            after=after,
+            until=until,
+            paginate=paginate,
         )
+
+    async def _get_account_activities(
+        self,
+        activity_type: str,
+        *,
+        account_id: str,
+        after: str | None = None,
+        until: str | None = None,
+        paginate: bool = False,
+    ) -> list[dict[str, Any]]:
+        """GET /v1/accounts/activities/{activity_type}, optionally paginated.
+
+        Without `paginate`, returns one page (Alpaca's default 100-entry cap) —
+        the legacy behavior for callers that only need the most recent activity.
+        With `paginate`, follows the cursor to gather the full set: the endpoint
+        caps a date-range page at 100, so we re-request with `page_token` set to
+        the last activity's id (desc order returns the next-older page) until a
+        short/empty page or the page cap. Hitting the cap is logged — totals
+        built on the result would otherwise silently under-count.
+        """
+        params: dict[str, Any] = {"account_id": account_id}
+        if after is not None:
+            params["after"] = after
+        if until is not None:
+            params["until"] = until
+
+        path = f"/v1/accounts/activities/{activity_type}"
+        if not paginate:
+            return await self._request("GET", path, params=params)
+
+        params["page_size"] = _ACTIVITY_PAGE_SIZE
+        params["direction"] = "desc"
+        activities: list[dict[str, Any]] = []
+        page_token: str | None = None
+        for _ in range(_ACTIVITY_MAX_PAGES):
+            page_params = dict(params)
+            if page_token is not None:
+                page_params["page_token"] = page_token
+            page = await self._request("GET", path, params=page_params)
+            if not isinstance(page, list) or not page:
+                break
+            activities.extend(page)
+            if len(page) < _ACTIVITY_PAGE_SIZE:
+                break
+            page_token = page[-1].get("id")
+            if not page_token:
+                break
+        else:
+            logger.warning(
+                "alpaca_activities_pagination_capped",
+                activity_type=activity_type,
+                account_id=account_id,
+                max_pages=_ACTIVITY_MAX_PAGES,
+                fetched=len(activities),
+            )
+        return activities
 
     async def _request(
         self,

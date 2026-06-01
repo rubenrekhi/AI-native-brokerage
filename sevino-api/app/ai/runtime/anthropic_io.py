@@ -3,12 +3,24 @@
 ``scrub_blocks`` strips SDK-only fields from response blocks before
 re-sending — the SDK leaks ``parsed_output`` on text blocks (it sets
 ``__api_exclude__`` but ``model_dump`` ignores that), and the API 400s
-when the field re-appears as input. Keep the allowlist in sync with
-``docs.claude.com/en/api/messages``.
+when the field re-appears as input. Server-tool result blocks
+(``web_search``/``web_fetch``/``code_execution``) are likewise stripped of
+output-only fields (e.g. ``caller`` on ``server_tool_use``, per-result
+``text``/``citations``) that the API rejects on replay. Keep the
+allowlist in sync with ``docs.claude.com/en/api/messages``.
 
 ``to_anthropic_content`` adapts Sevino's persisted block shapes back to
 Anthropic input format. ``estimate_thinking_tokens`` is a heuristic for
 the ``thinking_tokens`` audit column.
+
+``append_time_context`` and ``mark_history_cache_breakpoint`` shape the
+per-request ``messages`` list for prompt caching: the former appends the
+live clock as a request-only block on the current user turn, the latter
+marks the end of frozen prior-turn history as an ephemeral cache breakpoint
+so the replayed conversation caches across turns. The Anthropic cache
+prefix is ordered ``tools → system → messages``, so the volatile clock
+must sit *after* the history breakpoint (i.e. on the current user turn) or
+it would invalidate the cached history every turn.
 """
 
 from __future__ import annotations
@@ -17,7 +29,9 @@ from typing import Any, Final
 
 __all__ = [
     "INPUT_FIELDS_BY_BLOCK_TYPE",
+    "append_time_context",
     "estimate_thinking_tokens",
+    "mark_history_cache_breakpoint",
     "scrub_block",
     "scrub_blocks",
     "to_anthropic_content",
@@ -30,11 +44,71 @@ INPUT_FIELDS_BY_BLOCK_TYPE: Final[dict[str, frozenset[str]]] = {
     "thinking": frozenset({"type", "thinking", "signature"}),
     "redacted_thinking": frozenset({"type", "data"}),
     "tool_use": frozenset({"type", "id", "name", "input", "caller", "cache_control"}),
+    "server_tool_use": frozenset({"type", "id", "name", "input", "cache_control"}),
+    "web_search_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
+    "web_fetch_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
+    "code_execution_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
 }
+
+_SERVER_TOOL_RESULT_CONTENT_FIELDS_BY_BLOCK_TYPE: Final[
+    dict[str, frozenset[str]]
+] = {
+    "web_search_result": frozenset(
+        {"type", "title", "url", "encrypted_content", "page_age"}
+    ),
+    "web_search_tool_result_error": frozenset({"type", "error_code"}),
+    "web_fetch_result": frozenset({"type", "url", "content", "retrieved_at"}),
+    "web_fetch_tool_result_error": frozenset({"type", "error_code"}),
+    "code_execution_result": frozenset(
+        {"type", "content", "return_code", "stderr", "stdout"}
+    ),
+    "encrypted_code_execution_result": frozenset(
+        {"type", "content", "encrypted_stdout", "return_code", "stderr"}
+    ),
+    "code_execution_output": frozenset({"type", "file_id"}),
+    "code_execution_tool_result_error": frozenset({"type", "error_code"}),
+}
+
+_SERVER_TOOL_RESULT_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "web_search_tool_result",
+        "web_fetch_tool_result",
+        "code_execution_tool_result",
+    }
+)
 
 # Heuristic for the ``thinking_tokens`` audit column — Anthropic gives no
 # per-block breakdown. Redacted blocks contribute zero.
 _CHARS_PER_TOKEN = 4
+
+
+def _scrub_server_tool_result_content(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_scrub_server_tool_result_content(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    block_type = value.get("type")
+    allowed = (
+        _SERVER_TOOL_RESULT_CONTENT_FIELDS_BY_BLOCK_TYPE.get(block_type)
+        if block_type
+        else None
+    )
+    if allowed is None:
+        return {
+            k: _scrub_server_tool_result_content(v) for k, v in value.items()
+        }
+    return {
+        k: _scrub_server_tool_result_content(v)
+        for k, v in value.items()
+        if k in allowed
+    }
 
 
 def scrub_block(block: dict[str, Any]) -> dict[str, Any]:
@@ -43,7 +117,12 @@ def scrub_block(block: dict[str, Any]) -> dict[str, Any]:
     allowed = INPUT_FIELDS_BY_BLOCK_TYPE.get(block_type) if block_type else None
     if allowed is None:
         return block
-    return {k: v for k, v in block.items() if k in allowed}
+    scrubbed = {k: v for k, v in block.items() if k in allowed}
+    if block_type in _SERVER_TOOL_RESULT_BLOCK_TYPES and "content" in scrubbed:
+        scrubbed["content"] = _scrub_server_tool_result_content(
+            scrubbed["content"]
+        )
+    return scrubbed
 
 
 def scrub_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -69,6 +148,35 @@ def to_anthropic_content(
         for block in content_blocks
         if block.get("type") == "text"
     ]
+
+
+def append_time_context(
+    messages: list[dict[str, Any]], time_context: str | None
+) -> None:
+    """Append the live clock/market block to the current user message.
+
+    A request-only block on ``messages[-1]`` — never persisted, never
+    replayed next turn — so the per-turn timestamp stays *after* the
+    history cache breakpoint and never invalidates the cached prefix.
+    """
+    if time_context and messages and messages[-1]["content"]:
+        messages[-1]["content"].append({"type": "text", "text": time_context})
+
+
+def mark_history_cache_breakpoint(messages: list[dict[str, Any]]) -> None:
+    """Mark the end of frozen prior-turn history as an ephemeral cache
+    breakpoint so the replayed conversation caches across turns.
+
+    Skips the current user turn (``messages[-1]``, which carries the volatile
+    time context) and any empty-content message — a card-only assistant turn
+    whose text ``to_anthropic_content`` stripped to ``[]``. No-op on the first
+    turn, where there is no prior history to cache.
+    """
+    for msg in reversed(messages[:-1]):
+        content = msg["content"]
+        if content:
+            content[-1] = {**content[-1], "cache_control": {"type": "ephemeral"}}
+            return
 
 
 def estimate_thinking_tokens(response_content: list[dict[str, Any]]) -> int:

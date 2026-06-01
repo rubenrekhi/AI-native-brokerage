@@ -1,18 +1,17 @@
 from datetime import datetime, timezone
 from typing import Any
 
-import sentry_sdk
 import structlog
+from arq.connections import ArqRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
-from app.repositories.brokerage_account import BrokerageAccountRepository
-from app.repositories.user_profile import UserProfileRepository
-from app.services.alpaca_broker import (
-    AlpacaBrokerError,
-    AlpacaBrokerService,
-    AlpacaBrokerUnavailableError,
+from app.repositories.brokerage_account import (
+    STATUS_ACTIVE,
+    SWEEP_STATUS_PENDING_CHANGE,
+    BrokerageAccountRepository,
 )
+from app.repositories.user_profile import UserProfileRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -24,7 +23,7 @@ async def apply_account_status_change(
     new_status: str,
     kyc_results: dict[str, Any] | None = None,
     event_time: datetime | None = None,
-    alpaca: AlpacaBrokerService | None = None,
+    arq: ArqRedis | None = None,
 ) -> None:
     """Update one ``brokerage_accounts`` row in response to an Alpaca
     account-lifecycle SSE event.
@@ -40,6 +39,12 @@ async def apply_account_status_change(
     idempotence gate below must compare BOTH status and kyc_results —
     short-circuiting on status alone would drop reviewer-amended rejection
     notes that ride on a same-status event (see SEV-213 review discussion).
+
+    ``arq`` is the ARQ job pool. When the account first goes ACTIVE we mark
+    the sweep ``PENDING_CHANGE`` and enqueue the background enrollment task
+    (SEV-655) instead of PATCHing Alpaca inline — keeping the SSE consumer
+    off the Alpaca round-trip. Callers without a pool (manual KYC refresh)
+    pass ``None`` and skip enrollment.
     """
     if not new_status:
         return
@@ -71,73 +76,21 @@ async def apply_account_status_change(
     # Only set activated_at on the *first* transition into ACTIVE — a
     # kyc_results-only event on an already-ACTIVE account must not
     # overwrite the original activation time.
-    if status_changed and new_status == "ACTIVE":
+    enqueue_enrollment = False
+    if status_changed and new_status == STATUS_ACTIVE:
         activated_at = event_time or datetime.now(timezone.utc)
         update_fields["activated_at"] = activated_at
 
-        # FDIC cash sweep enrollment (SEV-318). Idempotent: PATCHing the
-        # same tier twice is a no-op upstream, so SSE replays after a
-        # checkpoint stall re-issue safely. Non-blocking: if Alpaca
-        # returns an error OR the network is unreachable we still mark
-        # the account ACTIVE — the user just doesn't earn interest until
-        # we retry. Config-gated so this code can ship before Alpaca
-        # provisions our tier.
-        if alpaca is not None and settings.alpaca_apr_tier_name:
-            try:
-                await alpaca.update_account(
-                    alpaca_account_id,
-                    {
-                        "cash_interest": {
-                            "USD": {
-                                "apr_tier_name": settings.alpaca_apr_tier_name
-                            }
-                        }
-                    },
-                )
-                update_fields["sweep_status"] = "PENDING_CHANGE"
-                update_fields["sweep_enrolled_at"] = activated_at
-                logger.info(
-                    "sweep_enrollment_requested",
-                    alpaca_account_id=alpaca_account_id,
-                    user_id=str(account.user_id),
-                    apr_tier_name=settings.alpaca_apr_tier_name,
-                )
-            except (AlpacaBrokerError, AlpacaBrokerUnavailableError) as exc:
-                status_code = getattr(exc, "status_code", None)
-                logger.warning(
-                    "sweep_enrollment_failed",
-                    alpaca_account_id=alpaca_account_id,
-                    user_id=str(account.user_id),
-                    apr_tier_name=settings.alpaca_apr_tier_name,
-                    status_code=status_code,
-                    message=getattr(exc, "message", str(exc)),
-                    exc_type=type(exc).__name__,
-                )
-                # Account is going ACTIVE without sweep — escalate so ops
-                # can find the row and either retry or remediate. The SSE
-                # listener already opens a scope with sse_stream / event id
-                # tags; add account-scoped tags so the event is filterable.
-                with sentry_sdk.new_scope() as scope:
-                    scope.set_tag("alpaca_account_id", alpaca_account_id)
-                    scope.set_tag(
-                        "sweep_failure_status_code",
-                        str(status_code) if status_code is not None else "transport",
-                    )
-                    scope.set_context(
-                        "sweep_enrollment",
-                        {
-                            "alpaca_account_id": alpaca_account_id,
-                            "user_id": str(account.user_id),
-                            "apr_tier_name": settings.alpaca_apr_tier_name,
-                            "exc_type": type(exc).__name__,
-                            "message": getattr(exc, "message", str(exc)),
-                        },
-                    )
-                    sentry_sdk.capture_message(
-                        "FDIC sweep enrollment failed; account activated without sweep",
-                        level="warning",
-                    )
-                update_fields["sweep_status"] = "INACTIVE"
+        # FDIC cash sweep enrollment (SEV-655). Optimistically mark the sweep
+        # PENDING_CHANGE and enqueue the background task that PATCHes Alpaca,
+        # rather than blocking the SSE consumer on the round-trip. The Alpaca
+        # cash_interest SSE event later flips PENDING_CHANGE -> ACTIVE.
+        # Config-gated (ships before Alpaca provisions our tier) and arq-gated
+        # (manual KYC refresh has no pool and skips enrollment).
+        if arq is not None and settings.alpaca_apr_tier_name:
+            update_fields["sweep_status"] = SWEEP_STATUS_PENDING_CHANGE
+            update_fields["sweep_enrolled_at"] = activated_at
+            enqueue_enrollment = True
 
     previous_status = account.account_status
     await BrokerageAccountRepository.update_status(
@@ -147,7 +100,7 @@ async def apply_account_status_change(
     # done (SEV-327) — flip the profile flag in the same transaction. The
     # status_changed guard above makes this idempotent: replays short-circuit
     # before reaching here.
-    if status_changed and new_status == "ACTIVE":
+    if status_changed and new_status == STATUS_ACTIVE:
         await UserProfileRepository.update_fields(
             session, account.user_id, onboarding_completed=True
         )
@@ -156,6 +109,22 @@ async def apply_account_status_change(
             user_id=str(account.user_id),
             alpaca_account_id=alpaca_account_id,
         )
+
+    if enqueue_enrollment:
+        # Enqueue inside the caller's transaction window so a failed enqueue
+        # (Redis down) propagates and rolls back the PENDING_CHANGE write — no
+        # stuck status without a job. The reverse is not atomic: a successful
+        # enqueue followed by a failed commit leaves a job pointing at a row
+        # whose PENDING_CHANGE rolled back. The task re-reads by id and the
+        # Alpaca PATCH is idempotent, so it tolerates firing against that row.
+        await arq.enqueue_job("enroll_cash_interest", str(account.id))
+        logger.info(
+            "cash_interest_enroll_enqueued",
+            alpaca_account_id=alpaca_account_id,
+            user_id=str(account.user_id),
+            brokerage_account_id=str(account.id),
+        )
+
     logger.info(
         "account_status_applied",
         alpaca_account_id=alpaca_account_id,

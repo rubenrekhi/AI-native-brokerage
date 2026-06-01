@@ -242,6 +242,31 @@ class TestWorkerStartup:
         build.assert_called_once()
         assert build.call_args.kwargs["redis"] is fake_cache_redis
 
+    async def test_startup_passes_arq_pool_to_build_listeners(
+        self, monkeypatch
+    ):
+        """The worker's ArqRedis pool (``ctx['redis']``) must thread through
+        build_listeners as the ``arq`` kwarg — that's the pool the
+        AccountStatusListener enqueues the FDIC sweep enrollment task onto
+        (SEV-655)."""
+        fake_arq = AsyncMock()
+        build = MagicMock(return_value=[])
+        monkeypatch.setattr(
+            "app.worker.aioredis.from_url",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr(
+            "app.worker.AlpacaBrokerService",
+            MagicMock(return_value=AsyncMock()),
+        )
+        monkeypatch.setattr("app.worker.build_listeners", build)
+        monkeypatch.setattr(app_worker.settings, "sentry_dsn", "")
+
+        await app_worker.startup({"redis": fake_arq})
+
+        build.assert_called_once()
+        assert build.call_args.kwargs["arq"] is fake_arq
+
     @pytest.mark.parametrize(
         "env_setting,railway_env,expected",
         [

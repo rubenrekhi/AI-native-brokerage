@@ -1,5 +1,6 @@
 """Unit tests for app.services.market_data.MarketDataService."""
 
+import asyncio
 import json
 from collections.abc import Callable
 from datetime import date, datetime, timezone
@@ -23,7 +24,9 @@ from app.services.alpaca_broker import (
 from app.services.fmp import FmpClient
 from app.services.market_data import (
     MarketDataService,
+    _empty_sector_context,
     _market_today,
+    _unwrap_snapshot,
     get_market_data_service,
 )
 
@@ -391,6 +394,7 @@ class TestGetStockInfo:
             "financials",
             "valuation",
             "earnings",
+            "sector_context",
             "analyst",
         }
         assert result["quote"]["symbol"] == "AAPL"
@@ -458,6 +462,7 @@ class TestGetStockInfo:
             "financials": {"revenue": "400000000000"},
             "valuation": {"pe": "25.0"},
             "earnings": {"events_measured": 2},
+            "sector_context": _empty_sector_context(),
             "analyst": {"target_consensus": "200"},
         }
 
@@ -482,6 +487,9 @@ class TestGetStockInfo:
         assert result["valuation"]["valuation_history"] == []
         assert result["earnings"]["next_period_end"] is None
         assert result["earnings"]["quarterly"] == []
+        assert result["sector_context"]["peers"] == []
+        assert result["sector_context"]["peer_count"] is None
+        assert result["sector_context"]["sector_change_pct"] is None
 
     async def test_one_failing_statement_degrades_only_its_fields(self):
         def fmp_handler(request: httpx.Request) -> httpx.Response:
@@ -793,6 +801,285 @@ class TestGetStockInfo:
         assert snapshot_called is False
         assert result["valuation"]["pe"] == "25.0"
         assert result["valuation"]["sector_pe"] is None
+
+
+# ── sector_context ─────────────────────────────────────────
+
+
+def _sector_context_handler(
+    request: httpx.Request,
+) -> httpx.Response:
+    """FMP handler covering every endpoint a populated sector_context needs."""
+    path = request.url.path
+    if path.endswith("/quote"):
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "symbol": "AAPL",
+                    "name": "Apple",
+                    "changePercentage": 1.0,
+                    "marketCap": 4000000000000,
+                    "price": 195.5,
+                }
+            ],
+        )
+    if path.endswith("/profile"):
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "companyName": "Apple Inc.",
+                    "exchange": "NASDAQ",
+                    "sector": "Technology",
+                    "industry": "Consumer Electronics",
+                }
+            ],
+        )
+    if path.endswith("/sector-performance-snapshot"):
+        return httpx.Response(
+            200,
+            json=[
+                {"sector": "Technology", "exchange": "NASDAQ", "averageChange": 1.0},
+                {"sector": "Energy", "exchange": "NASDAQ", "averageChange": -1.0},
+            ],
+        )
+    if path.endswith("/industry-performance-snapshot"):
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "industry": "Consumer Electronics",
+                    "exchange": "NASDAQ",
+                    "averageChange": 0.5,
+                }
+            ],
+        )
+    if path.endswith("/stock-peers"):
+        return httpx.Response(
+            200,
+            json=[
+                {"symbol": "MSFT", "companyName": "Microsoft",
+                 "price": 450.0, "mktCap": 3000000000000},
+                {"symbol": "NVDA", "companyName": "NVIDIA",
+                 "price": 210.0, "mktCap": 5000000000000},
+                # Junk micro-cap + the subject itself: both must be dropped.
+                {"symbol": "RIME", "companyName": "Algorhythm",
+                 "price": 0.77, "mktCap": 1920258},
+                {"symbol": "AAPL", "companyName": "Apple",
+                 "price": 195.5, "mktCap": 4000000000000},
+            ],
+        )
+    if path.endswith("/batch-quote"):
+        return httpx.Response(
+            200,
+            json=[
+                {"symbol": "MSFT", "changePercentage": 0.5,
+                 "marketCap": 3000000000000, "price": 450.0},
+                {"symbol": "NVDA", "changePercentage": 2.0,
+                 "marketCap": 5000000000000, "price": 210.0},
+                {"symbol": "RIME", "changePercentage": -3.0,
+                 "marketCap": 1920258, "price": 0.77},
+            ],
+        )
+    return httpx.Response(200, json=[])
+
+
+class TestSectorContext:
+    async def test_populated_block_sector_vs_market_and_ranked_peers(self):
+        service, _ = _service(fmp_handler=_sector_context_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert block["sector"] == "Technology"
+        assert block["as_of_date"] is not None
+        # Tech +1.0 vs mean of {1.0, -1.0} == 0.0 → +1.0 outperformance.
+        assert block["sector_change_pct"] == "1.0"
+        assert block["market_change_pct"] == "0.0"
+        assert block["sector_vs_market_pct"] == "1.0"
+        assert block["industry_change_pct"] == "0.5"
+        # Subject dropped; remaining peers sorted by market cap (the cap only
+        # trims when the list exceeds _MAX_PEERS — see the _select_peers test).
+        assert [p["symbol"] for p in block["peers"]] == ["NVDA", "MSFT", "RIME"]
+        assert block["peer_count"] == 3
+        # Live change_pct comes from the batch quote, not the peers endpoint.
+        nvda = next(p for p in block["peers"] if p["symbol"] == "NVDA")
+        assert nvda["change_pct"] == "2.0"
+        # Subject +1.0 beats MSFT (+0.5), trails NVDA (+2.0) → rank 2.
+        assert block["rank_by_change"] == 2
+        # Subject 4e12 trails NVDA (5e12), beats MSFT (3e12) → rank 2.
+        assert block["rank_by_market_cap"] == 2
+
+    async def test_perf_snapshot_cached_per_exchange(self):
+        snapshot_calls = 0
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            nonlocal snapshot_calls
+            if request.url.path.endswith("/sector-performance-snapshot"):
+                snapshot_calls += 1
+            return _sector_context_handler(request)
+
+        service, redis = _service(fmp_handler=fmp_handler)
+
+        await service.get_stock_info("AAPL")
+        del redis.store["market:fundamentals:AAPL"]
+        await service.get_stock_info("TSLA")
+
+        assert snapshot_calls == 1
+        assert "market:sector_perf:NASDAQ" in redis.store
+
+    async def test_perf_snapshot_walks_back_to_last_session(self):
+        dates_tried: list[str] = []
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/sector-performance-snapshot"):
+                dates_tried.append(request.url.params["date"])
+                if len(dates_tried) == 1:
+                    return httpx.Response(200, json=[])
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert block["sector_change_pct"] == "1.0"
+        assert block["as_of_date"] == dates_tried[1]
+        assert len(dates_tried) >= 2
+
+    async def test_missing_exchange_skips_perf_fetch(self):
+        snapshot_called = False
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            nonlocal snapshot_called
+            path = request.url.path
+            if path.endswith("/sector-performance-snapshot"):
+                snapshot_called = True
+            if path.endswith("/profile"):
+                return httpx.Response(200, json=[{"companyName": "Apple"}])
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert snapshot_called is False
+        assert block["sector_change_pct"] is None
+        assert block["as_of_date"] is None
+        # Peers are exchange-independent, so they still populate and rank.
+        assert [p["symbol"] for p in block["peers"]] == ["NVDA", "MSFT", "RIME"]
+
+    async def test_peer_quote_failure_degrades_only_live_fields(self):
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/batch-quote"):
+                return httpx.Response(500, text="boom")
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        # Peer identity + the daily sector figures survive...
+        assert [p["symbol"] for p in block["peers"]] == ["NVDA", "MSFT", "RIME"]
+        assert block["sector_vs_market_pct"] == "1.0"
+        # ...but live change + the ranks that depend on it degrade to null.
+        assert all(p["change_pct"] is None for p in block["peers"])
+        assert block["rank_by_change"] is None
+
+    async def test_unnormalizable_peer_symbol_dropped_not_raised(self):
+        """FMP peers our symbol regex rejects must degrade, not 500 the lookup."""
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/stock-peers"):
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"symbol": "MSFT", "mktCap": 3000000000000},
+                        # Both invalid (colon / >10 chars) and larger by cap —
+                        # they'd sort first if not dropped.
+                        {"symbol": "BAD:SYM", "mktCap": 9000000000000},
+                        {"symbol": "TOOLONGTICKER", "mktCap": 8000000000000},
+                    ],
+                )
+            if path.endswith("/batch-quote"):
+                return httpx.Response(
+                    200,
+                    json=[{"symbol": "MSFT", "changePercentage": 0.5,
+                           "marketCap": 3000000000000, "price": 450.0}],
+                )
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert [p["symbol"] for p in block["peers"]] == ["MSFT"]
+
+    async def test_one_failing_perf_snapshot_keeps_the_other(self):
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/sector-performance-snapshot"):
+                return httpx.Response(500, text="boom")
+            return _sector_context_handler(request)
+
+        service, redis = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert block["sector_change_pct"] is None
+        assert block["market_change_pct"] is None
+        assert block["industry_change_pct"] == "0.5"
+        # A partial-with-error snapshot is not cached, so the next request retries.
+        assert "market:sector_perf:NASDAQ" not in redis.store
+
+    async def test_mixed_session_dates_report_earlier_as_of(self):
+        """Sector and industry walking back to different sessions reports the
+        earlier date, so as_of_date never overstates the older figure."""
+        sector_dates: list[str] = []
+        industry_dates: list[str] = []
+
+        def fmp_handler(request: httpx.Request) -> httpx.Response:
+            path = request.url.path
+            if path.endswith("/sector-performance-snapshot"):
+                sector_dates.append(request.url.params["date"])
+                return httpx.Response(
+                    200,
+                    json=[
+                        {"sector": "Technology", "averageChange": 1.0},
+                        {"sector": "Energy", "averageChange": -1.0},
+                    ],
+                )
+            if path.endswith("/industry-performance-snapshot"):
+                industry_dates.append(request.url.params["date"])
+                # Empty on the first (latest) date, data one session earlier.
+                if len(industry_dates) == 1:
+                    return httpx.Response(200, json=[])
+                return httpx.Response(
+                    200,
+                    json=[{"industry": "Consumer Electronics", "averageChange": 0.5}],
+                )
+            return _sector_context_handler(request)
+
+        service, _ = _service(fmp_handler=fmp_handler)
+
+        block = (await service.get_stock_info("AAPL"))["sector_context"]
+
+        assert sector_dates[0] != industry_dates[1]
+        assert block["as_of_date"] == min(sector_dates[0], industry_dates[1])
+        assert block["as_of_date"] == industry_dates[1]
+
+
+class TestUnwrapSnapshot:
+    def test_cancelled_error_propagates_not_swallowed(self):
+        with pytest.raises(asyncio.CancelledError):
+            _unwrap_snapshot(asyncio.CancelledError(), "NASDAQ", "sector_perf")
+
+    def test_regular_upstream_error_degrades(self):
+        rows, on_date, ok = _unwrap_snapshot(
+            MarketDataUpstreamError(status_code=500), "NASDAQ", "sector_perf"
+        )
+        assert rows == []
+        assert on_date is None
+        assert ok is False
 
 
 # ── get_batch_quotes ───────────────────────────────────────

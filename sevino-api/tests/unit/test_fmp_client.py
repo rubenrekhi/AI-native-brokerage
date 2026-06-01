@@ -13,6 +13,7 @@ from app.exceptions import (
 from app.services.fmp import (
     FmpClient,
     compute_earnings_reactions,
+    compute_peer_comparison,
     int_or_zero,
     none_if_blank,
     project_analyst,
@@ -21,6 +22,7 @@ from app.services.fmp import (
     project_profile,
     project_quote,
     project_ratios,
+    project_sector_context,
     project_valuation,
     str_or_none,
 )
@@ -487,6 +489,82 @@ class TestSectorIndustryPe:
         client = _make_client(handler)
         assert await client.sector_pe("NASDAQ", "2026-05-31") == []
         assert await client.industry_pe("NASDAQ", "2026-05-31") == []
+
+
+class TestSectorIndustryPerformance:
+    async def test_sector_performance_passes_date_and_exchange(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[{"sector": "Technology", "exchange": "NASDAQ",
+                       "averageChange": 0.7359}],
+            )
+
+        client = _make_client(handler)
+        result = await client.sector_performance("NASDAQ", "2026-05-29")
+
+        assert captured["path"] == "/stable/sector-performance-snapshot"
+        assert captured["params"]["date"] == "2026-05-29"
+        assert captured["params"]["exchange"] == "NASDAQ"
+        assert result[0]["averageChange"] == 0.7359
+
+    async def test_industry_performance_passes_date_and_exchange(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[{"industry": "Consumer Electronics", "averageChange": 0.29}],
+            )
+
+        client = _make_client(handler)
+        result = await client.industry_performance("NASDAQ", "2026-05-29")
+
+        assert captured["path"] == "/stable/industry-performance-snapshot"
+        assert captured["params"]["exchange"] == "NASDAQ"
+        assert result[0]["industry"] == "Consumer Electronics"
+
+    async def test_empty_snapshot_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.sector_performance("NASDAQ", "2026-05-31") == []
+        assert await client.industry_performance("NASDAQ", "2026-05-31") == []
+
+
+class TestStockPeers:
+    async def test_passes_symbol(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[{"symbol": "MSFT", "companyName": "Microsoft",
+                       "price": 450.0, "mktCap": 3000000000000}],
+            )
+
+        client = _make_client(handler)
+        result = await client.stock_peers("AAPL")
+
+        assert captured["path"] == "/stable/stock-peers"
+        assert captured["params"]["symbol"] == "AAPL"
+        assert result[0]["symbol"] == "MSFT"
+
+    async def test_empty_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.stock_peers("AAPL") == []
 
 
 class TestProjectQuote:
@@ -1377,3 +1455,162 @@ class TestProjectEarnings:
         assert result["quarterly"] == []
         assert result["avg_post_earnings_move_pct"] is None
         assert result["events_measured"] is None
+
+
+class TestProjectSectorContext:
+    def _sector_rows(self) -> list[dict]:
+        return [
+            {"sector": "Technology", "averageChange": 1.0},
+            {"sector": "Energy", "averageChange": -1.0},
+            {"sector": "Utilities", "averageChange": 0.5},
+        ]
+
+    def test_sector_vs_market_and_industry(self):
+        result = project_sector_context(
+            self._sector_rows(),
+            [{"industry": "Consumer Electronics", "averageChange": 0.25}],
+            [],
+            subject_symbol="AAPL",
+            sector="Technology",
+            industry="Consumer Electronics",
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+            max_peers=6,
+        )
+
+        # Mean of {1.0, -1.0, 0.5} == 0.1667; 1.0 - 0.1667 == 0.8333.
+        assert result["sector_change_pct"] == "1.0"
+        assert result["market_change_pct"] == "0.1667"
+        assert result["sector_vs_market_pct"] == "0.8333"
+        assert result["industry_change_pct"] == "0.25"
+        assert result["as_of_date"] == "2026-05-29"
+
+    def test_unmatched_sector_nulls_changes_and_as_of_date(self):
+        result = project_sector_context(
+            self._sector_rows(),
+            [],
+            [],
+            subject_symbol="AAPL",
+            sector="Nonexistent Sector",
+            industry=None,
+            exchange="NASDAQ",
+            as_of_date="2026-05-29",
+            max_peers=6,
+        )
+
+        assert result["sector_change_pct"] is None
+        assert result["sector_vs_market_pct"] is None
+        # No benchmark matched, so the snapshot date is withheld.
+        assert result["as_of_date"] is None
+        # The market proxy still computes from the snapshot rows present.
+        assert result["market_change_pct"] == "0.1667"
+
+    def test_peers_drop_subject_and_junk_then_cap_by_market_cap(self):
+        peer_rows = [
+            {"symbol": "AAPL", "companyName": "Apple", "mktCap": 4_000_000_000_000},
+            {"symbol": "P1", "mktCap": 7},
+            {"symbol": "P2", "mktCap": 6},
+            {"symbol": "P3", "mktCap": 5},
+            {"symbol": "P4", "mktCap": 4},
+            {"symbol": "P5", "mktCap": 3},
+            {"symbol": "P6", "mktCap": 2},
+            {"symbol": "P7", "mktCap": 1},
+            {"symbol": "JUNK", "mktCap": 0},
+            {"symbol": "NEG", "mktCap": -10},
+            {"symbol": "NOCAP"},
+        ]
+
+        result = project_sector_context(
+            [], [], peer_rows,
+            subject_symbol="AAPL",
+            sector=None, industry=None, exchange=None,
+            as_of_date=None, max_peers=6,
+        )
+
+        # Subject excluded; non-positive / missing caps dropped; sorted desc;
+        # capped to max_peers.
+        assert [p["symbol"] for p in result["peers"]] == [
+            "P1", "P2", "P3", "P4", "P5", "P6"
+        ]
+        assert result["peer_count"] == 6
+        # Identity-only at this stage — live fields filled later.
+        assert all(p["change_pct"] is None for p in result["peers"])
+
+    def test_no_peers_yields_null_count(self):
+        result = project_sector_context(
+            [], [], [],
+            subject_symbol="AAPL",
+            sector=None, industry=None, exchange=None,
+            as_of_date=None, max_peers=6,
+        )
+        assert result["peers"] == []
+        assert result["peer_count"] is None
+
+
+class TestComputePeerComparison:
+    def _peers(self) -> list[dict]:
+        return [
+            {"symbol": "MSFT", "company_name": "Microsoft",
+             "market_cap": 3_000_000_000_000, "price": None, "change_pct": None},
+            {"symbol": "NVDA", "company_name": "NVIDIA",
+             "market_cap": 5_000_000_000_000, "price": None, "change_pct": None},
+        ]
+
+    def test_merges_live_quotes_and_ranks_subject(self):
+        peer_quotes = {
+            "MSFT": {"symbol": "MSFT", "change_percent": "0.5",
+                     "price": "450.0", "market_cap": 3_000_000_000_000},
+            "NVDA": {"symbol": "NVDA", "change_percent": "2.0",
+                     "price": "210.0", "market_cap": 5_000_000_000_000},
+        }
+
+        enriched, rank_change, rank_mcap = compute_peer_comparison(
+            subject_change=1.0,
+            subject_market_cap=4_000_000_000_000,
+            peers=self._peers(),
+            peer_quotes=peer_quotes,
+        )
+
+        msft = next(p for p in enriched if p["symbol"] == "MSFT")
+        assert msft["change_pct"] == "0.5"
+        assert msft["price"] == "450.0"
+        # Subject +1.0 trails NVDA (+2.0), beats MSFT (+0.5) → rank 2.
+        assert rank_change == 2
+        # Subject 4e12 trails NVDA (5e12), beats MSFT (3e12) → rank 2.
+        assert rank_mcap == 2
+
+    def test_missing_quote_keeps_stored_cap_and_nulls_change(self):
+        enriched, rank_change, rank_mcap = compute_peer_comparison(
+            subject_change=1.0,
+            subject_market_cap=4_000_000_000_000,
+            peers=self._peers(),
+            peer_quotes={},
+        )
+
+        assert all(p["change_pct"] is None for p in enriched)
+        # Stored market cap survives, so the market-cap rank still computes...
+        assert rank_mcap == 2
+        # ...but no comparable change → the change rank degrades to null.
+        assert rank_change is None
+
+    def test_missing_subject_change_nulls_rank(self):
+        _, rank_change, _ = compute_peer_comparison(
+            subject_change=None,
+            subject_market_cap=4_000_000_000_000,
+            peers=self._peers(),
+            peer_quotes={},
+        )
+        assert rank_change is None
+
+    def test_subject_is_top_performer(self):
+        peer_quotes = {
+            "MSFT": {"symbol": "MSFT", "change_percent": "0.5"},
+            "NVDA": {"symbol": "NVDA", "change_percent": "-2.0"},
+        }
+        _, rank_change, _ = compute_peer_comparison(
+            subject_change=5.0,
+            subject_market_cap=None,
+            peers=self._peers(),
+            peer_quotes=peer_quotes,
+        )
+        assert rank_change == 1

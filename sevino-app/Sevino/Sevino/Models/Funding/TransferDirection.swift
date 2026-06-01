@@ -1,7 +1,7 @@
 import Foundation
 
 /// Direction of an ACH transfer relative to the brokerage account.
-enum TransferDirection: String, Codable, Equatable, Hashable, Identifiable {
+enum TransferDirection: String, Codable, Equatable, Hashable, Identifiable, Sendable {
     /// Bank → brokerage (Alpaca `INCOMING`).
     case deposit
     /// Brokerage → bank (Alpaca `OUTGOING`).

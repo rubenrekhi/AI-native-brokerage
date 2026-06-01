@@ -14,6 +14,9 @@ from app.ai.runtime.db import DbSessionFactory
 from app.ai.transport.events import Event
 
 if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+    from app.services.alpaca_broker import AlpacaBrokerService
     from app.services.market_data import MarketDataService
 
 __all__ = [
@@ -32,8 +35,12 @@ class SSEEmitter(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class ToolHttpClients:
-    # ``market_data`` is None without ``FMP_API_KEY``.
+    # ``market_data`` is None without ``FMP_API_KEY``. ``alpaca`` / ``redis``
+    # back the portfolio tools and are None only when the app booted without
+    # a lifespan (some tests).
     market_data: "MarketDataService | None" = None
+    alpaca: "AlpacaBrokerService | None" = None
+    redis: "Redis | None" = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,9 +102,12 @@ class ToolRegistry:
         return not self._tools
 
     def to_anthropic_spec(self) -> list[dict[str, Any]]:
+        # No ``cache_control`` here: the tools array sits before ``system`` in
+        # the cache prefix (tools → system → messages), so the system-prompt
+        # breakpoint already caches it — a marker here would be redundant.
         if not self._tools:
             return []
-        specs: list[dict[str, Any]] = [
+        return [
             {
                 "name": tool.name,
                 "description": tool.description,
@@ -105,6 +115,3 @@ class ToolRegistry:
             }
             for tool in self._tools.values()
         ]
-        # Cache the tools array alongside the system prompt.
-        specs[-1] = {**specs[-1], "cache_control": {"type": "ephemeral"}}
-        return specs

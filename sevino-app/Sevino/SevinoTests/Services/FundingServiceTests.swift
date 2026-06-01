@@ -204,6 +204,59 @@ final class FundingServiceTests: XCTestCase {
         }
     }
 
+    // MARK: - enrollCashInterest
+
+    func test_enrollCashInterest_postsToCorrectPathAndDecodes() async throws {
+        let responseBody = Data(#"""
+        {
+          "balance": "2412.08",
+          "apy": "0.0425",
+          "this_month_earned": "6.43",
+          "days_accrued": 22,
+          "lifetime_earned": "41.87",
+          "lifetime_since": "2025-10-01T00:00:00+00:00",
+          "buying_power": "2412.08",
+          "pending_deposits": "100.50",
+          "interest_paid_out": "monthly",
+          "fdic_insured_limit": "2500000",
+          "sweep_status": "PENDING_CHANGE",
+          "enrollment_state": "pending"
+        }
+        """#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/brokerage/cash-interest/enroll",
+            response: .success(status: 202, body: responseBody)
+        )
+
+        let service = makeService()
+        let response = try await service.enrollCashInterest()
+
+        XCTAssertEqual(StubURLProtocol.lastRequest()?.httpMethod, "POST")
+        XCTAssertEqual(response.enrollmentState, .pending)
+        XCTAssertEqual(response.apy, "0.0425")
+        XCTAssertEqual(response.sweepStatus, "PENDING_CHANGE")
+    }
+
+    func test_enrollCashInterest_propagatesAPIError() async {
+        let errorBody = Data(#"{"error":"Alpaca down","code":"ALPACA_UNAVAILABLE"}"#.utf8)
+        StubURLProtocol.register(
+            host: "api.example.com",
+            path: "/v1/brokerage/cash-interest/enroll",
+            response: .success(status: 503, body: errorBody)
+        )
+
+        let service = makeService()
+        do {
+            _ = try await service.enrollCashInterest()
+            XCTFail("expected APIError")
+        } catch let error as APIError {
+            XCTAssertEqual(error.code, "ALPACA_UNAVAILABLE")
+        } catch {
+            XCTFail("unexpected error: \(error)")
+        }
+    }
+
     // MARK: - TransferResponse helpers
 
     func test_amountValue_parsesDecimalString() {

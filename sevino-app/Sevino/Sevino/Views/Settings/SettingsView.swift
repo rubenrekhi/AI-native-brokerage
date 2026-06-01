@@ -79,6 +79,8 @@ struct SettingsView: View {
                 switch destination {
                 case .accounts:
                     AccountsSettingsView(settingsVM: settingsVM)
+                case .cashEnrollment:
+                    CashEnrollmentStatusView()
                 case .brokerage:
                     BrokerageSettingsView()
                 case .linkedAccounts:

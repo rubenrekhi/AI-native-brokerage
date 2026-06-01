@@ -29,6 +29,7 @@ struct FundingMorphingView: View {
             pendingDeposits: viewModel.cashPendingDeposits,
             interestPaidOut: viewModel.cashInterestPaidOut,
             fdicInsuredLimit: viewModel.cashFdicInsuredLimit,
+            enrollmentState: viewModel.cashEnrollmentState,
             hasLinkedBank: viewModel.hasLinkedBank,
             reauthRelationshipId: viewModel.firstRequiresReauth?.id
         )

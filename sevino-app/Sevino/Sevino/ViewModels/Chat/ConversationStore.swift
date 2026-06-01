@@ -76,7 +76,6 @@ final class ConversationStore {
     /// stray pre-`turn_started` event can't accidentally mutate the user's
     /// optimistic message.
     private var currentAssistantMessageId: UUID?
-    private var pendingCardContextSource: CardContextSource?
 
     private static let logger = Logger(subsystem: "ai.sevino.Sevino", category: "ConversationStore")
 
@@ -192,19 +191,20 @@ final class ConversationStore {
         attachedContext: AttachedContext? = nil,
         idempotencyKey: String? = nil
     ) async throws {
+        // SEV-615 B: a digest card rides the unified `context` channel as
+        // `kind=digest` (its payload is the opaque `data`), instead of a
+        // separate `digest_card` field. The source chip renders above the
+        // user bubble from this locally-derived source; `turn_started` may
+        // override it with the backend's authoritative value.
         let userMessage = Message(
             id: UUID(),
             role: .user,
             blocks: [.text(TextBlock(blockId: UUID().uuidString, text: text))],
+            cardContextSource: digestCard.flatMap(CardContextSource.init),
             attachedContext: attachedContext
         )
         messages.append(userMessage)
 
-        // SEV-615 B: a digest card rides the unified `context` channel as
-        // `kind=digest` (its payload is the opaque `data`), instead of a
-        // separate `digest_card` field. The source chip still renders from
-        // the locally-derived `pendingCardContextSource`.
-        pendingCardContextSource = digestCard.flatMap(CardContextSource.init)
         let effectiveContext: [String: JSONValue]? = digestCard.map { card in
             ["kind": .string("digest"), "data": .object(card.payload)]
         } ?? context
@@ -220,7 +220,6 @@ final class ConversationStore {
         defer {
             currentAssistantMessageId = nil
             currentTurnId = nil
-            pendingCardContextSource = nil
         }
 
         do {
@@ -257,14 +256,13 @@ final class ConversationStore {
         switch event {
         case .turnStarted(let payload):
             currentTurnId = payload.turnId
+            if let source = payload.cardContextSource,
+               let index = messages.lastIndex(where: { $0.role == .user }) {
+                messages[index].cardContextSource = source
+            }
             let id = UUID()
             currentAssistantMessageId = id
-            messages.append(Message(
-                id: id,
-                role: .assistant,
-                blocks: [],
-                cardContextSource: payload.cardContextSource ?? pendingCardContextSource
-            ))
+            messages.append(Message(id: id, role: .assistant, blocks: []))
 
         case .status:
             // Turn-level status notes are reserved for future use; v0 renders
@@ -308,6 +306,22 @@ final class ConversationStore {
                 case .stockCard:
                     Self.logger.error(
                         "text_delta targeted .stockCard block id=\(payload.blockId, privacy: .public)"
+                    )
+                case .recurringInvestmentSetup:
+                    Self.logger.error(
+                        "text_delta targeted .recurringInvestmentSetup block id=\(payload.blockId, privacy: .public)"
+                    )
+                case .cancelTransfer:
+                    Self.logger.error(
+                        "text_delta targeted .cancelTransfer block id=\(payload.blockId, privacy: .public)"
+                    )
+                case .cancelOrder:
+                    Self.logger.error(
+                        "text_delta targeted .cancelOrder block id=\(payload.blockId, privacy: .public)"
+                    )
+                case .stockComparison:
+                    Self.logger.error(
+                        "text_delta targeted .stockComparison block id=\(payload.blockId, privacy: .public)"
                     )
                 }
             }

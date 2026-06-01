@@ -23,7 +23,9 @@ from __future__ import annotations
 
 from app.ai.runtime.anthropic_io import (
     INPUT_FIELDS_BY_BLOCK_TYPE,
+    append_time_context,
     estimate_thinking_tokens,
+    mark_history_cache_breakpoint,
     scrub_block,
     scrub_blocks,
     to_anthropic_content,
@@ -131,6 +133,110 @@ class TestScrubToolUse:
             "cache_control": {"type": "ephemeral"},
         }
         assert scrub_block(block) == block
+
+
+class TestScrubServerToolBlocks:
+    def test_strips_output_only_fields_from_server_tool_use(self):
+        block = {
+            "type": "server_tool_use",
+            "id": "srvtoolu_1",
+            "name": "web_search",
+            "input": {"query": "AMD"},
+            "caller": {"type": "direct"},
+            "cache_control": {"type": "ephemeral"},
+        }
+        assert scrub_block(block) == {
+            "type": "server_tool_use",
+            "id": "srvtoolu_1",
+            "name": "web_search",
+            "input": {"query": "AMD"},
+            "cache_control": {"type": "ephemeral"},
+        }
+
+    def test_strips_dirty_web_search_result_fields(self):
+        block = {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_1",
+            "caller": {"type": "direct"},
+            "parsed_output": {"sdk": True},
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD earnings",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                    "text": "output-only summary",
+                    "citations": [{"url": "https://example.com/amd"}],
+                }
+            ],
+        }
+        assert scrub_block(block) == {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_1",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD earnings",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                }
+            ],
+        }
+
+    def test_strips_dirty_web_fetch_error_fields(self):
+        block = {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_2",
+            "caller": {"type": "direct"},
+            "content": {
+                "type": "web_fetch_tool_result_error",
+                "error_code": "url_not_in_prior_context",
+                "text": "not allowed",
+                "citations": None,
+            },
+        }
+        assert scrub_block(block) == {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_2",
+            "content": {
+                "type": "web_fetch_tool_result_error",
+                "error_code": "url_not_in_prior_context",
+            },
+        }
+
+    def test_preserves_code_execution_input_fields_only(self):
+        block = {
+            "type": "code_execution_tool_result",
+            "tool_use_id": "srvtoolu_3",
+            "caller": {"type": "direct"},
+            "content": {
+                "type": "code_execution_result",
+                "content": [
+                    {
+                        "type": "code_execution_output",
+                        "file_id": "file_1",
+                        "filename": "plot.png",
+                    }
+                ],
+                "return_code": 0,
+                "stdout": "ok",
+                "stderr": "",
+                "parsed_output": None,
+            },
+        }
+        assert scrub_block(block) == {
+            "type": "code_execution_tool_result",
+            "tool_use_id": "srvtoolu_3",
+            "content": {
+                "type": "code_execution_result",
+                "content": [{"type": "code_execution_output", "file_id": "file_1"}],
+                "return_code": 0,
+                "stdout": "ok",
+                "stderr": "",
+            },
+        }
 
 
 class TestScrubRedactedThinking:
@@ -397,3 +503,137 @@ class TestEstimateThinkingTokens:
 
     def test_empty_input_returns_zero(self):
         assert estimate_thinking_tokens([]) == 0
+
+
+class TestAppendTimeContext:
+    # The live clock rides the current user message as a request-only block,
+    # after every cache breakpoint, so its per-turn value never invalidates
+    # the cached prefix (Anthropic caches in tools → system → messages order).
+
+    def test_appends_as_last_block_of_current_message(self):
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        append_time_context(messages, "It is 3:45 PM EDT.")
+        assert messages[-1]["content"] == [
+            {"type": "text", "text": "hi"},
+            {"type": "text", "text": "It is 3:45 PM EDT."},
+        ]
+
+    def test_appends_after_an_existing_hint(self):
+        # Composes after a render_hint already appended to the current turn.
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "what changed?"},
+                    {"type": "text", "text": "[hint] portfolio open"},
+                ],
+            }
+        ]
+        append_time_context(messages, "It is 3:45 PM EDT.")
+        assert len(messages[-1]["content"]) == 3
+        assert messages[-1]["content"][-1] == {
+            "type": "text",
+            "text": "It is 3:45 PM EDT.",
+        }
+
+    def test_none_is_a_noop(self):
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        append_time_context(messages, None)
+        assert messages[-1]["content"] == [{"type": "text", "text": "hi"}]
+
+    def test_empty_string_is_a_noop(self):
+        messages = [{"role": "user", "content": [{"type": "text", "text": "hi"}]}]
+        append_time_context(messages, "")
+        assert messages[-1]["content"] == [{"type": "text", "text": "hi"}]
+
+    def test_empty_messages_is_a_noop(self):
+        # Unit paths can mock load_history to []; the guard must not IndexError.
+        messages = []
+        append_time_context(messages, "It is 3:45 PM EDT.")
+        assert messages == []
+
+    def test_empty_current_content_is_a_noop(self):
+        messages = [{"role": "user", "content": []}]
+        append_time_context(messages, "It is 3:45 PM EDT.")
+        assert messages[-1]["content"] == []
+
+
+class TestMarkHistoryCacheBreakpoint:
+    # Marks the end of frozen prior-turn history so the replayed conversation
+    # cache-reads across turns. The current user turn (messages[-1]) is never
+    # marked — the volatile time context rides it.
+
+    @staticmethod
+    def _block(text, **extra):
+        return {"type": "text", "text": text, **extra}
+
+    def test_marks_last_block_of_last_prior_message(self):
+        messages = [
+            {"role": "user", "content": [self._block("u1")]},
+            {"role": "assistant", "content": [self._block("a1")]},
+            {"role": "user", "content": [self._block("u2")]},
+        ]
+        mark_history_cache_breakpoint(messages)
+        assert messages[1]["content"][-1] == {
+            "type": "text",
+            "text": "a1",
+            "cache_control": {"type": "ephemeral"},
+        }
+
+    def test_does_not_mark_current_user_turn(self):
+        messages = [
+            {"role": "assistant", "content": [self._block("a1")]},
+            {"role": "user", "content": [self._block("u2")]},
+        ]
+        mark_history_cache_breakpoint(messages)
+        assert "cache_control" not in messages[-1]["content"][-1]
+
+    def test_marks_exactly_one_block(self):
+        messages = [
+            {"role": "user", "content": [self._block("u1")]},
+            {"role": "assistant", "content": [self._block("a1")]},
+            {"role": "user", "content": [self._block("u2")]},
+        ]
+        mark_history_cache_breakpoint(messages)
+        marked = [
+            b for m in messages for b in m["content"] if "cache_control" in b
+        ]
+        assert len(marked) == 1
+
+    def test_first_turn_has_no_breakpoint(self):
+        messages = [{"role": "user", "content": [self._block("u1")]}]
+        mark_history_cache_breakpoint(messages)
+        assert "cache_control" not in messages[0]["content"][0]
+
+    def test_empty_messages_is_a_noop(self):
+        messages = []
+        mark_history_cache_breakpoint(messages)
+        assert messages == []
+
+    def test_skips_empty_content_prior_message(self):
+        # A card-only assistant turn whose text to_anthropic_content stripped
+        # to [] must be skipped; the marker lands on the earlier text message.
+        messages = [
+            {"role": "user", "content": [self._block("u1")]},
+            {"role": "assistant", "content": []},
+            {"role": "user", "content": [self._block("u2")]},
+        ]
+        mark_history_cache_breakpoint(messages)
+        assert messages[0]["content"][-1] == {
+            "type": "text",
+            "text": "u1",
+            "cache_control": {"type": "ephemeral"},
+        }
+        assert messages[1]["content"] == []
+
+    def test_does_not_mutate_original_block_in_place(self):
+        # Copy-then-replace: the original dict (shared with the audit row) is
+        # left untouched; a fresh marked dict takes its slot in the list.
+        original = self._block("a1")
+        messages = [
+            {"role": "assistant", "content": [original]},
+            {"role": "user", "content": [self._block("u2")]},
+        ]
+        mark_history_cache_breakpoint(messages)
+        assert "cache_control" not in original
+        assert messages[0]["content"][0] is not original

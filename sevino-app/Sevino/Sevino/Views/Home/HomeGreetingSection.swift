@@ -7,7 +7,6 @@ struct HomeGreetingSection: View {
     let isHidden: Bool
     let digestAvailable: Bool
     let onTapDigest: () -> Void
-    @Binding var showDailyDigestPrompt: Bool
 
     var body: some View {
         VStack(spacing: 16 * scale) {
@@ -21,31 +20,20 @@ struct HomeGreetingSection: View {
                 .font(.system(size: 28 * scale, weight: .medium))
                 .foregroundStyle(Color.sevinoSecondary)
 
-            if showDailyDigestPrompt && !isHidden && digestAvailable {
-                HStack(spacing: 8 * scale) {
-                    Button(action: onTapDigest) {
-                        HStack(spacing: 6 * scale) {
-                            Image(systemName: "cup.and.saucer.fill")
-                                .font(.system(size: 13 * scale))
-                            Text(L10n.Home.dailyDigestButton)
-                                .font(.system(size: 15 * scale))
-                        }
+            if !isHidden && digestAvailable {
+                Button(action: onTapDigest) {
+                    HStack(spacing: 6 * scale) {
+                        Image(systemName: "cup.and.saucer.fill")
+                            .font(.system(size: 13 * scale))
+                        Text(L10n.Home.dailyDigestButton)
+                            .font(.system(size: 15 * scale))
                     }
-                    .foregroundStyle(Color.sevinoSecondary)
-
-                    Button(L10n.Home.dismissDailyDigestAccessibility, systemImage: "xmark", action: dismissPrompt)
-                        .labelStyle(.iconOnly)
-                        .font(.system(size: 12 * scale, weight: .medium))
-                        .foregroundStyle(Color.sevinoGreyContrast)
                 }
+                .foregroundStyle(Color.sevinoSecondary)
                 .padding(.horizontal, 20 * scale)
                 .padding(.vertical, 10 * scale)
                 .modifier(SevinoGlass.chip)
             }
         }
-    }
-
-    private func dismissPrompt() {
-        withAnimation { showDailyDigestPrompt = false }
     }
 }

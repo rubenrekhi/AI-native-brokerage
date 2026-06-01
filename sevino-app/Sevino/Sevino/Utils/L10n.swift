@@ -290,6 +290,8 @@ enum L10n {
         static let alpacaSsnPlaceholder = String(localized: "onboarding.alpaca_ssn_placeholder")
         static let alpacaAddressResponse1 = String(localized: "onboarding.alpaca_address_response1")
         static let alpacaAddressPlaceholder = String(localized: "onboarding.alpaca_address_placeholder")
+        static let alpacaAddressNonUSError = String(localized: "onboarding.alpaca_address_non_us_error")
+        static let alpacaAddressParseError = String(localized: "onboarding.alpaca_address_parse_error")
         static let alpacaCitizenshipResponse1 = String(localized: "onboarding.alpaca_citizenship_response1")
         static let alpacaCitizenYes = String(localized: "onboarding.alpaca_citizen_yes")
         static let alpacaCitizenResident = String(localized: "onboarding.alpaca_citizen_resident")
@@ -460,7 +462,6 @@ enum L10n {
         static let greetingAfternoonGeneric = String(localized: "home.greeting_afternoon_generic")
         static let greetingEveningGeneric = String(localized: "home.greeting_evening_generic")
         static let dailyDigestButton = String(localized: "home.daily_digest_button")
-        static let dismissDailyDigestAccessibility = String(localized: "home.dismiss_daily_digest_accessibility")
         static let digestErrorTitle = String(localized: "home.digest_error_title")
         static let digestErrorDismiss = String(localized: "home.digest_error_dismiss")
         static let shortcutMore = String(localized: "home.shortcut_more")
@@ -507,6 +508,17 @@ enum L10n {
         static func earningApy(_ apy: String) -> String {
             String(format: String(localized: "home.earning_apy"), apy)
         }
+        static func earningApyAccessibility(_ apy: String) -> String {
+            String(format: String(localized: "home.earning_apy_accessibility"), apy)
+        }
+        static func couldBeEarningApy(_ apy: String) -> String {
+            String(format: String(localized: "home.could_be_earning_apy"), apy)
+        }
+        static func couldBeEarningApyAccessibility(_ apy: String) -> String {
+            String(format: String(localized: "home.could_be_earning_apy_accessibility"), apy)
+        }
+        static let enrollmentPending = String(localized: "home.enrollment_pending")
+        static let enrollmentPendingAccessibility = String(localized: "home.enrollment_pending_accessibility")
         static let thisMonth = String(localized: "home.this_month")
         static func daysAccrued(_ days: String) -> String {
             String(format: String(localized: "home.days_accrued"), days)
@@ -578,6 +590,38 @@ enum L10n {
         }
         static let cardKindEarnings = String(localized: "chat.card_kind_earnings")
         static let cardKindOrderActivity = String(localized: "chat.card_kind_order_activity")
+        static let comparisonColAsset = String(localized: "chat.comparison_col_asset")
+        static let comparisonColChange = String(localized: "chat.comparison_col_change")
+        static let comparisonColPrice = String(localized: "chat.comparison_col_price")
+        static let comparisonHideDetails = String(localized: "chat.comparison_hide_details")
+        static let comparisonHideDetailsHint = String(localized: "chat.comparison_hide_details_hint")
+        static let comparisonShowDetails = String(localized: "chat.comparison_show_details")
+        static let comparisonShowDetailsHint = String(localized: "chat.comparison_show_details_hint")
+        static let comparisonMetricPe = String(localized: "chat.comparison_metric_pe")
+        static let comparisonMetricMarketCap = String(localized: "chat.comparison_metric_market_cap")
+        static let comparisonMetricRevenueGrowth = String(localized: "chat.comparison_metric_revenue_growth")
+        static let comparisonMetricEarningsGrowth = String(localized: "chat.comparison_metric_earnings_growth")
+        static let comparisonMetricBeta = String(localized: "chat.comparison_metric_beta")
+        static let comparisonMetricSector = String(localized: "chat.comparison_metric_sector")
+        static let comparisonMetricExpenseRatio = String(localized: "chat.comparison_metric_expense_ratio")
+        static let comparisonMetricAum = String(localized: "chat.comparison_metric_aum")
+        static let comparisonMetricDividendYield = String(localized: "chat.comparison_metric_dividend_yield")
+        static let comparisonMetricHoldingsCount = String(localized: "chat.comparison_metric_holdings_count")
+        static let comparisonMetricIndex = String(localized: "chat.comparison_metric_index")
+        static let comparisonMetricIndexTracked = String(localized: "chat.comparison_metric_index_tracked")
+        static let comparisonMetricTopSectors = String(localized: "chat.comparison_metric_top_sectors")
+        static let comparisonSectorExposure = String(localized: "chat.comparison_sector_exposure")
+        static let comparisonTypeStock = String(localized: "chat.comparison_type_stock")
+        static let comparisonTypeEtf = String(localized: "chat.comparison_type_etf")
+        static func comparisonHoldingsOverlap(_ pct: String) -> String {
+            String(format: String(localized: "chat.comparison_holdings_overlap"), pct)
+        }
+        static func comparisonChartA11y(_ symbols: String, _ range: String) -> String {
+            String(format: String(localized: "chat.comparison_chart_a11y"), symbols, range)
+        }
+        static func comparisonAssetA11y(_ name: String, _ change: String, _ price: String) -> String {
+            String(format: String(localized: "chat.comparison_asset_a11y"), name, change, price)
+        }
         static let statusInProgress = String(localized: "chat.status_in_progress")
         static let statusComplete = String(localized: "chat.status_complete")
         static let statusFailed = String(localized: "chat.status_failed")
@@ -629,6 +673,7 @@ enum L10n {
         static let legalAccessibility = String(localized: "settings.legal_accessibility")
         static let legalTitle = String(localized: "settings.legal_title")
         static let accounts = String(localized: "settings.accounts")
+        static let cashInterest = String(localized: "settings.cash_interest")
         static let loginSecurity = String(localized: "settings.login_security")
         static let personalInfo = String(localized: "settings.personal_info")
         static let appearance = String(localized: "settings.appearance")
@@ -823,6 +868,7 @@ enum L10n {
         static let editAddressStateLabel = String(localized: "settings.edit_address_state_label")
         static let editAddressPostalLabel = String(localized: "settings.edit_address_postal_label")
         static let editAddressMissingFieldError = String(localized: "settings.edit_address_missing_field_error")
+        static let editAddressNonUSError = String(localized: "settings.edit_address_non_us_error")
         static let editEmailTitle = String(localized: "settings.edit_email_title")
         static let editEmailExplanation = String(localized: "settings.edit_email_explanation")
         static let editPhoneTitle = String(localized: "settings.edit_phone_title")
@@ -836,6 +882,89 @@ enum L10n {
         static let editRiskToleranceDerivation = String(localized: "settings.edit_risk_tolerance_derivation")
         static let editRiskToleranceMaxLossLabel = String(localized: "settings.edit_risk_tolerance_max_loss_label")
         static let editRiskToleranceScenarioLabel = String(localized: "settings.edit_risk_tolerance_scenario_label")
+    }
+
+    enum CashEnrollmentStatus {
+        static let title = String(localized: "cash_enrollment_status.title")
+        static let intro = String(localized: "cash_enrollment_status.intro")
+        static let refreshAccessibility = String(localized: "cash_enrollment_status.refresh_accessibility")
+        static let pillActive = String(localized: "cash_enrollment_status.pill_active")
+        static let pillPending = String(localized: "cash_enrollment_status.pill_pending")
+        static let pillNotEnrolled = String(localized: "cash_enrollment_status.pill_not_enrolled")
+        static let pillUnavailable = String(localized: "cash_enrollment_status.pill_unavailable")
+        static func statusActive(_ apy: String) -> String {
+            String(format: String(localized: "cash_enrollment_status.status_active"), apy)
+        }
+        static let statusPending = String(localized: "cash_enrollment_status.status_pending")
+        static let statusNotEnrolled = String(localized: "cash_enrollment_status.status_not_enrolled")
+        static let statusUnavailable = String(localized: "cash_enrollment_status.status_unavailable")
+        static let enrolledSince = String(localized: "cash_enrollment_status.enrolled_since")
+        static let lastAttempt = String(localized: "cash_enrollment_status.last_attempt")
+        static let currentApy = String(localized: "cash_enrollment_status.current_apy")
+        static let potentialApy = String(localized: "cash_enrollment_status.potential_apy")
+        static let reenroll = String(localized: "cash_enrollment_status.reenroll")
+        static let enrollmentInProgress = String(localized: "cash_enrollment_status.enrollment_in_progress")
+        static let pendingHint = String(localized: "cash_enrollment_status.pending_hint")
+    }
+
+    enum RecurringInvestment {
+        static let header = String(localized: "recurring_investment.header")
+        static let amountLabel = String(localized: "recurring_investment.amount_label")
+        static let frequencyLabel = String(localized: "recurring_investment.frequency_label")
+        static let weekly = String(localized: "recurring_investment.weekly")
+        static let biweekly = String(localized: "recurring_investment.biweekly")
+        static let monthly = String(localized: "recurring_investment.monthly")
+        static let startsOn = String(localized: "recurring_investment.starts_on")
+        static let ends = String(localized: "recurring_investment.ends")
+        static let never = String(localized: "recurring_investment.never")
+        static let onDate = String(localized: "recurring_investment.on_date")
+        static let afterCount = String(localized: "recurring_investment.after_count")
+        static let holdToSchedule = String(localized: "recurring_investment.hold_to_schedule")
+        static let holdToScheduleA11yHint = String(localized: "recurring_investment.hold_to_schedule_a11y_hint")
+        static let scheduled = String(localized: "recurring_investment.scheduled")
+        static let scheduling = String(localized: "recurring_investment.scheduling")
+        static func firstBuyOn(_ date: String) -> String {
+            String(format: String(localized: "recurring_investment.first_buy_on"), date)
+        }
+        static let scheduleFailed = String(localized: "recurring_investment.schedule_failed")
+        static let retry = String(localized: "recurring_investment.retry")
+        static let invalidAmount = String(localized: "recurring_investment.invalid_amount")
+        static let invalidStartDate = String(localized: "recurring_investment.invalid_start_date")
+        static let invalidEndDate = String(localized: "recurring_investment.invalid_end_date")
+        static let invalidOccurrenceCount = String(localized: "recurring_investment.invalid_occurrence_count")
+        static func sharesSubline(_ shares: String, _ price: String) -> String {
+            String(format: String(localized: "recurring_investment.shares_subline"), shares, price)
+        }
+        static func occurrencesValue(_ count: Int) -> String {
+            String(format: String(localized: "recurring_investment.occurrences_value"), count)
+        }
+        static let cadenceWeekly = String(localized: "recurring_investment.cadence_weekly")
+        static let cadenceBiweekly = String(localized: "recurring_investment.cadence_biweekly")
+        static let cadenceMonthly = String(localized: "recurring_investment.cadence_monthly")
+        static func summary(amount: String, cadence: String, start: String, endClause: String) -> String {
+            String(format: String(localized: "recurring_investment.summary_format"), amount, cadence, start, endClause)
+        }
+        static func summaryEndsOn(_ date: String) -> String {
+            String(format: String(localized: "recurring_investment.summary_ends_on"), date)
+        }
+        static func summaryEndsAfter(_ count: Int) -> String {
+            String(format: String(localized: "recurring_investment.summary_ends_after"), count)
+        }
+    }
+
+    enum CancelTransfer {
+        static let headerDeposit = String(localized: "cancel_transfer.header_deposit")
+        static let headerWithdrawal = String(localized: "cancel_transfer.header_withdrawal")
+        static let statusPending = String(localized: "cancel_transfer.status_pending")
+        static let statusCancelled = String(localized: "cancel_transfer.status_cancelled")
+        static let statusFailed = String(localized: "cancel_transfer.status_failed")
+        static func bankAccountFormat(_ name: String, _ mask: String) -> String {
+            String(format: String(localized: "cancel_transfer.bank_account_format"), name, mask)
+        }
+        static let holdToCancel = String(localized: "cancel_transfer.hold_to_cancel")
+        static let holdToCancelA11yHint = String(localized: "cancel_transfer.hold_to_cancel_a11y_hint")
+        static let cancelled = String(localized: "cancel_transfer.cancelled")
+        static let cancellationFailed = String(localized: "cancel_transfer.cancellation_failed")
     }
 
     enum TradeExecution {
@@ -853,6 +982,39 @@ enum L10n {
         static let holdToConfirmA11yHint = String(localized: "trade_execution.hold_to_confirm_a11y_hint")
         static let orderSubmitted = String(localized: "trade_execution.order_submitted")
         static let errorSubmittingOrder = String(localized: "trade_execution.error_submitting_order")
+    }
+
+    enum CancelOrder {
+        static let headerPendingBuy = String(localized: "cancel_order.header_pending_buy")
+        static let headerPendingSell = String(localized: "cancel_order.header_pending_sell")
+        static let statusPending = String(localized: "cancel_order.status_pending")
+        static let statusCancelled = String(localized: "cancel_order.status_cancelled")
+        static let statusFailed = String(localized: "cancel_order.status_failed")
+        static let sideBuy = String(localized: "cancel_order.side_buy")
+        static let sideSell = String(localized: "cancel_order.side_sell")
+        static func sharesAtMarket(_ qty: String) -> String {
+            String(format: String(localized: "cancel_order.shares_at_market"), qty)
+        }
+        static func notionalMarket(_ notional: String) -> String {
+            String(format: String(localized: "cancel_order.notional_market"), notional)
+        }
+        static func sharesAtLimit(_ qty: String, _ limitPrice: String) -> String {
+            String(format: String(localized: "cancel_order.shares_at_limit"), qty, limitPrice)
+        }
+        static func partialFillNote(_ filled: String, _ total: String) -> String {
+            String(format: String(localized: "cancel_order.partial_fill_note"), filled, total)
+        }
+        static func filledShares(_ filled: String) -> String {
+            String(format: String(localized: "cancel_order.filled_shares"), filled)
+        }
+        static let dayOrder = String(localized: "cancel_order.day_order")
+        static let gtcOrder = String(localized: "cancel_order.gtc_order")
+        static func footerFormat(_ orderTerm: String, _ relativeTime: String) -> String {
+            String(format: String(localized: "cancel_order.footer_format"), orderTerm, relativeTime)
+        }
+        static let holdToCancel = String(localized: "cancel_order.hold_to_cancel")
+        static let holdToCancelA11yHint = String(localized: "cancel_order.hold_to_cancel_a11y_hint")
+        static let cancellationFailed = String(localized: "cancel_order.cancellation_failed")
     }
 
     enum Transfer {

@@ -489,6 +489,817 @@ final class BlockDecodingTests: XCTestCase {
         XCTAssertNil(stats.peRatio)
     }
 
+    // MARK: - Recurring investment setup (SEV-661)
+
+    private static func recurringJSON(frequency: String, endCondition: String) -> String {
+        """
+        {
+          "type": "recurring_investment_setup",
+          "block_id": "blk_ri",
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "exchange": "NASDAQ",
+          "current_price": "195.20",
+          "default_amount": "200.00",
+          "default_frequency": "\(frequency)",
+          "default_start_date": "2026-06-14T00:00:00Z",
+          "default_end_condition": \(endCondition),
+          "disclaimer": "Recurring buys execute at the next market open on each scheduled date."
+        }
+        """
+    }
+
+    func testRecurringInvestmentRoundTripsAllFrequencies() throws {
+        for frequency in ["weekly", "biweekly", "monthly"] {
+            let json = Self.recurringJSON(frequency: frequency, endCondition: #"{"kind":"never"}"#)
+            let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+            guard case .recurringInvestmentSetup(let block) = decoded else {
+                return XCTFail("expected .recurringInvestmentSetup for \(frequency), got \(decoded)")
+            }
+            XCTAssertEqual(block.defaultFrequency.rawValue, frequency)
+
+            let reEncoded = try JSONEncoder.sevino().encode(decoded)
+            let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+            XCTAssertEqual(reDecoded, decoded)
+        }
+    }
+
+    func testRecurringInvestmentRoundTripsAllEndConditions() throws {
+        let conditions = [
+            #"{"kind":"never"}"#,
+            #"{"kind":"on_date","date":"2026-12-01T00:00:00Z"}"#,
+            #"{"kind":"after_count","count":24}"#,
+        ]
+        for condition in conditions {
+            let json = Self.recurringJSON(frequency: "biweekly", endCondition: condition)
+            let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+            guard case .recurringInvestmentSetup = decoded else {
+                return XCTFail("expected .recurringInvestmentSetup for \(condition), got \(decoded)")
+            }
+
+            let reEncoded = try JSONEncoder.sevino().encode(decoded)
+            let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+            XCTAssertEqual(reDecoded, decoded)
+        }
+    }
+
+    func testRecurringInvestmentDecodesFields() throws {
+        let json = Self.recurringJSON(frequency: "monthly", endCondition: #"{"kind":"after_count","count":24}"#)
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup(let block) = decoded else {
+            return XCTFail("expected .recurringInvestmentSetup, got \(decoded)")
+        }
+        XCTAssertEqual(block.blockId, "blk_ri")
+        XCTAssertEqual(block.id, "blk_ri")
+        XCTAssertEqual(block.ticker, "AAPL")
+        XCTAssertEqual(block.companyName, "Apple Inc.")
+        XCTAssertEqual(block.exchange, "NASDAQ")
+        XCTAssertEqual(block.currentPrice, Decimal(string: "195.20")!)
+        XCTAssertEqual(block.defaultAmount, Decimal(string: "200.00")!)
+        XCTAssertEqual(block.defaultFrequency, .monthly)
+        XCTAssertEqual(block.defaultEndCondition, .afterCount(24))
+    }
+
+    func testRecurringInvestmentOnDateEndConditionPreservesDate() throws {
+        let json = Self.recurringJSON(
+            frequency: "weekly",
+            endCondition: #"{"kind":"on_date","date":"2026-12-01T00:00:00Z"}"#
+        )
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup(let block) = decoded,
+              case .onDate(let date) = block.defaultEndCondition
+        else {
+            return XCTFail("expected on_date end condition, got \(decoded)")
+        }
+        XCTAssertEqual(date, ISO8601DateFormatter().date(from: "2026-12-01T00:00:00Z"))
+    }
+
+    func testRecurringInvestmentTypeAndKindEncodeAsLiterals() throws {
+        let json = Self.recurringJSON(frequency: "weekly", endCondition: #"{"kind":"never"}"#)
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let dict = try JSONSerialization.jsonObject(with: reEncoded) as? [String: Any]
+        XCTAssertEqual(dict?["type"] as? String, "recurring_investment_setup")
+        // The `kind` value is a literal — convertToSnakeCase rewrites keys, not values.
+        let endCondition = dict?["default_end_condition"] as? [String: Any]
+        XCTAssertEqual(endCondition?["kind"] as? String, "never")
+    }
+
+    func testRecurringInvestmentUnknownFrequencyFailsClosed() {
+        let json = Self.recurringJSON(frequency: "daily", endCondition: #"{"kind":"never"}"#)
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8)))
+    }
+
+    func testRecurringInvestmentUnknownEndConditionKindFailsClosed() {
+        let json = Self.recurringJSON(frequency: "weekly", endCondition: #"{"kind":"on_anniversary"}"#)
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8)))
+    }
+
+    func testRecurringInvestmentIgnoresUnknownFields() throws {
+        let json = """
+        {
+          "type": "recurring_investment_setup",
+          "block_id": "blk_ri",
+          "ticker": "AAPL",
+          "company_name": "Apple Inc.",
+          "exchange": "NASDAQ",
+          "current_price": "195.20",
+          "default_amount": "200.00",
+          "default_frequency": "weekly",
+          "default_start_date": "2026-06-14T00:00:00Z",
+          "default_end_condition": {"kind": "never"},
+          "disclaimer": "x",
+          "future_field": "ignored by the decoder"
+        }
+        """
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .recurringInvestmentSetup = decoded else {
+            return XCTFail("expected .recurringInvestmentSetup, got \(decoded)")
+        }
+    }
+
+    // MARK: - Cancel order block
+
+    private static let cancelOrderLimitBuyPartialJSON = """
+    {
+      "type": "cancel_order",
+      "block_id": "blk_co",
+      "order_id": "ord_co",
+      "symbol": "AAPL",
+      "company_name": "Apple Inc.",
+      "side": "buy",
+      "order_type": "limit",
+      "qty": "10",
+      "notional": null,
+      "limit_price": "190.00",
+      "filled_qty": "3",
+      "time_in_force": "day",
+      "submitted_at": "2026-05-31T17:04:00Z",
+      "status": "pending"
+    }
+    """
+
+    func testCancelOrderLimitBuyPartialFillRoundTrips() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.cancelOrderLimitBuyPartialJSON.utf8)
+        )
+
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.blockId, "blk_co")
+        XCTAssertEqual(block.orderId, "ord_co")
+        XCTAssertEqual(block.symbol, "AAPL")
+        XCTAssertEqual(block.companyName, "Apple Inc.")
+        XCTAssertEqual(block.side, .buy)
+        XCTAssertEqual(block.orderType, .limit)
+        XCTAssertEqual(block.qty, Decimal(10))
+        XCTAssertNil(block.notional)
+        XCTAssertEqual(block.limitPrice, Decimal(string: "190.00"))
+        XCTAssertEqual(block.filledQty, Decimal(3))
+        XCTAssertEqual(block.timeInForce, "day")
+        XCTAssertEqual(block.status, .pending)
+        XCTAssertEqual(block.id, "blk_co")
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderMarketSellByNotionalCancelledRoundTrips() throws {
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_x",
+          "order_id": "ord_x",
+          "symbol": "TSLA",
+          "company_name": "Tesla, Inc.",
+          "side": "sell",
+          "order_type": "market",
+          "notional": "500.00",
+          "filled_qty": "0",
+          "time_in_force": "gtc",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "cancelled"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.side, .sell)
+        XCTAssertEqual(block.orderType, .market)
+        XCTAssertNil(block.qty)
+        XCTAssertEqual(block.notional, Decimal(string: "500.00"))
+        XCTAssertNil(block.limitPrice)
+        XCTAssertEqual(block.filledQty, Decimal(0))
+        XCTAssertEqual(block.status, .cancelled)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderMarketBuyByQtyFailedRoundTrips() throws {
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_f",
+          "order_id": "ord_f",
+          "symbol": "AAPL",
+          "company_name": "Apple Inc.",
+          "side": "buy",
+          "order_type": "market",
+          "qty": "10",
+          "filled_qty": "0",
+          "time_in_force": "day",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "failed"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertEqual(block.orderType, .market)
+        XCTAssertEqual(block.qty, Decimal(10))
+        XCTAssertNil(block.notional)
+        XCTAssertEqual(block.status, .failed)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelOrderDecodesWithoutOptionalCompanyName() throws {
+        // `company_name`, `qty`, `notional`, and `limit_price` are all
+        // optional. A notional market order omits qty/limit; company_name may
+        // be absent. Missing keys must decode as nil, not reject the payload.
+        let json = Data("""
+        {
+          "type": "cancel_order",
+          "block_id": "blk_min",
+          "order_id": "ord_min",
+          "symbol": "AAPL",
+          "side": "buy",
+          "order_type": "market",
+          "notional": "250.00",
+          "filled_qty": "0",
+          "time_in_force": "day",
+          "submitted_at": "2026-05-31T17:04:00Z",
+          "status": "pending"
+        }
+        """.utf8)
+
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: json)
+        guard case .cancelOrder(let block) = decoded else {
+            return XCTFail("expected .cancelOrder variant, got \(decoded)")
+        }
+        XCTAssertNil(block.companyName)
+        XCTAssertNil(block.qty)
+        XCTAssertNil(block.limitPrice)
+        XCTAssertEqual(block.notional, Decimal(string: "250.00"))
+    }
+
+    func testCancelOrderUnknownStatusFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"market","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"bogus"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderUnknownOrderTypeFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"stop","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderUnknownSideFailsClosed() {
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"hold",
+         "order_type":"market","qty":"1","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelOrderInvalidDecimalStringFailsClosed() {
+        // Money / qty fields are decimal strings, never bare numbers. A
+        // non-numeric string must reject the payload rather than coerce.
+        let json = Data("""
+        {"type":"cancel_order","block_id":"x","order_id":"o","symbol":"X","side":"buy",
+         "order_type":"market","qty":"ten","filled_qty":"0","time_in_force":"day",
+         "submitted_at":"2026-05-31T17:04:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    // MARK: - Stock comparison (SEV-658)
+
+    private static let comparisonStocksJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_stocks",
+      "assets": [
+        {
+          "symbol": "AAPL",
+          "name": "Apple Inc.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "229.87",
+          "change_pct": "0.0124",
+          "series": [
+            {"timestamp": "2026-04-27T13:30:00Z", "price": "221.00"},
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "225.40"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "229.87"}
+          ],
+          "metrics": {
+            "pe_ratio": "34.2",
+            "market_cap": "3480000000000",
+            "revenue_growth_pct": "0.061",
+            "earnings_growth_pct": "0.078",
+            "beta": "1.21",
+            "sector": "Technology",
+            "one_line_distinction": "Services margin keeps expanding."
+          }
+        },
+        {
+          "symbol": "MSFT",
+          "name": "Microsoft Corp.",
+          "asset_type": "stock",
+          "color_hex": "#30D158",
+          "current_price": "430.16",
+          "change_pct": "-0.0042",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "431.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "430.16"}
+          ],
+          "metrics": {
+            "pe_ratio": "36.8",
+            "market_cap": "3200000000000",
+            "revenue_growth_pct": "0.155",
+            "earnings_growth_pct": "0.102",
+            "beta": "0.92",
+            "sector": "Technology",
+            "one_line_distinction": "Azure remains the growth engine."
+          }
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"]
+    }
+    """
+
+    private static let comparisonETFsJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_etfs",
+      "assets": [
+        {
+          "symbol": "VOO",
+          "name": "Vanguard S&P 500 ETF",
+          "asset_type": "etf",
+          "color_hex": "#0A84FF",
+          "current_price": "512.34",
+          "change_pct": "0.0031",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "511.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "512.34"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0003",
+            "aum": "1300000000000",
+            "dividend_yield_pct": "0.0131",
+            "holdings_count": 503,
+            "index_tracked": "S&P 500",
+            "top_sectors": [
+              {"name": "Tech", "weight_pct": "0.31"},
+              {"name": "Financials", "weight_pct": "0.13"}
+            ],
+            "one_line_distinction": "Pure large-cap S&P 500 exposure."
+          }
+        },
+        {
+          "symbol": "VTI",
+          "name": "Vanguard Total Stock Market ETF",
+          "asset_type": "etf",
+          "color_hex": "#FF9F0A",
+          "current_price": "287.91",
+          "change_pct": "0.0028",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "287.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "287.91"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0003",
+            "aum": "450000000000",
+            "dividend_yield_pct": "0.0128",
+            "holdings_count": 3700,
+            "index_tracked": "CRSP US Total Market",
+            "top_sectors": [
+              {"name": "Tech", "weight_pct": "0.29"},
+              {"name": "Financials", "weight_pct": "0.13"}
+            ]
+          }
+        }
+      ],
+      "range": "3M",
+      "available_ranges": ["1M", "3M", "YTD", "1Y", "5Y"],
+      "holdings_overlap_pct": "0.84"
+    }
+    """
+
+    private static let comparisonAsymmetricJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_mixed",
+      "assets": [
+        {
+          "symbol": "NVDA",
+          "name": "NVIDIA Corp.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "138.07",
+          "change_pct": "0.0212",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "137.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "138.07"}
+          ],
+          "metrics": {
+            "pe_ratio": "64.5",
+            "revenue_growth_pct": "0.94",
+            "beta": "1.68",
+            "sector": "Technology",
+            "one_line_distinction": "Highest beta, highest growth."
+          }
+        },
+        {
+          "symbol": "SMH",
+          "name": "VanEck Semiconductor ETF",
+          "asset_type": "etf",
+          "color_hex": "#FF9F0A",
+          "current_price": "248.55",
+          "change_pct": "0.0156",
+          "series": [
+            {"timestamp": "2026-04-28T13:30:00Z", "price": "247.00"},
+            {"timestamp": "2026-04-29T13:30:00Z", "price": "248.55"}
+          ],
+          "metrics": {
+            "expense_ratio_pct": "0.0035",
+            "holdings_count": 25,
+            "dividend_yield_pct": "0.006",
+            "index_tracked": "MVIS US Listed Semiconductor 25",
+            "top_sectors": [
+              {"name": "Semis", "weight_pct": "0.78"},
+              {"name": "Equipment", "weight_pct": "0.18"}
+            ]
+          }
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"],
+      "narration": "NVDA is a single stock; SMH is a semiconductor ETF holding NVDA plus 24 peers."
+    }
+    """
+
+    private static let comparisonThreeStocksJSON = """
+    {
+      "type": "stock_comparison",
+      "block_id": "cmp_three",
+      "assets": [
+        {
+          "symbol": "NVDA",
+          "name": "NVIDIA Corp.",
+          "asset_type": "stock",
+          "color_hex": "#5E5CE6",
+          "current_price": "138.07",
+          "change_pct": "0.0212",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "138.07"}],
+          "metrics": {"pe_ratio": "64.5", "beta": "1.68", "sector": "Technology"}
+        },
+        {
+          "symbol": "AMD",
+          "name": "Advanced Micro Devices",
+          "asset_type": "stock",
+          "color_hex": "#30D158",
+          "current_price": "164.08",
+          "change_pct": "0.0087",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "164.08"}],
+          "metrics": {"pe_ratio": "47.3", "beta": "1.74", "sector": "Technology"}
+        },
+        {
+          "symbol": "INTC",
+          "name": "Intel Corp.",
+          "asset_type": "stock",
+          "color_hex": "#FF453A",
+          "current_price": "23.41",
+          "change_pct": "-0.0153",
+          "series": [{"timestamp": "2026-04-29T13:30:00Z", "price": "23.41"}],
+          "metrics": {"beta": "1.05", "sector": "Technology"}
+        }
+      ],
+      "range": "1M",
+      "available_ranges": ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"]
+    }
+    """
+
+    @discardableResult
+    private func decodeComparison(
+        _ json: String,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws -> StockComparisonBlock {
+        let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
+        guard case .stockComparison(let block) = decoded else {
+            XCTFail("expected .stockComparison variant, got \(decoded)", file: file, line: line)
+            throw DecodingError.dataCorrupted(.init(codingPath: [], debugDescription: "wrong variant"))
+        }
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded, "round trip changed the block", file: file, line: line)
+        return block
+    }
+
+    func testComparisonStocksRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonStocksJSON)
+        XCTAssertEqual(block.blockId, "cmp_stocks")
+        XCTAssertEqual(block.range, "1M")
+        XCTAssertEqual(block.availableRanges, ["1D", "1W", "1M", "3M", "YTD", "1Y", "5Y"])
+        XCTAssertNil(block.narration)
+        XCTAssertNil(block.holdingsOverlapPct)
+        XCTAssertEqual(block.assets.count, 2)
+
+        let aapl = block.assets[0]
+        XCTAssertEqual(aapl.symbol, "AAPL")
+        XCTAssertEqual(aapl.assetType, .stock)
+        XCTAssertEqual(aapl.colorHex, "#5E5CE6")
+        XCTAssertEqual(aapl.currentPrice, Decimal(string: "229.87"))
+        XCTAssertEqual(aapl.changePct, Decimal(string: "0.0124"))
+        XCTAssertEqual(aapl.series.count, 3)
+        XCTAssertEqual(aapl.series[2].price, Decimal(string: "229.87"))
+        XCTAssertEqual(aapl.metrics.peRatio, Decimal(string: "34.2"))
+        XCTAssertEqual(aapl.metrics.marketCap, Decimal(string: "3480000000000"))
+        XCTAssertEqual(aapl.metrics.sector, "Technology")
+        XCTAssertNil(aapl.metrics.expenseRatioPct)
+        XCTAssertNil(aapl.metrics.topSectors)
+    }
+
+    func testComparisonETFsRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonETFsJSON)
+        XCTAssertEqual(block.holdingsOverlapPct, Decimal(string: "0.84"))
+        XCTAssertEqual(block.assets.map(\.assetType), [.etf, .etf])
+
+        let voo = block.assets[0]
+        XCTAssertEqual(voo.metrics.expenseRatioPct, Decimal(string: "0.0003"))
+        XCTAssertEqual(voo.metrics.aum, Decimal(string: "1300000000000"))
+        XCTAssertEqual(voo.metrics.holdingsCount, 503)
+        XCTAssertEqual(voo.metrics.indexTracked, "S&P 500")
+        let sectors = try XCTUnwrap(voo.metrics.topSectors)
+        XCTAssertEqual(sectors.map(\.name), ["Tech", "Financials"])
+        XCTAssertEqual(sectors[0].weightPct, Decimal(string: "0.31"))
+        XCTAssertNil(voo.metrics.peRatio)
+    }
+
+    func testComparisonAsymmetricRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonAsymmetricJSON)
+        XCTAssertEqual(block.narration, "NVDA is a single stock; SMH is a semiconductor ETF holding NVDA plus 24 peers.")
+        XCTAssertEqual(block.assets.map(\.assetType), [.stock, .etf])
+        XCTAssertEqual(block.assets[0].metrics.peRatio, Decimal(string: "64.5"))
+        XCTAssertEqual(block.assets[1].metrics.holdingsCount, 25)
+        XCTAssertNil(block.assets[0].metrics.expenseRatioPct)
+        XCTAssertNil(block.assets[1].metrics.peRatio)
+    }
+
+    func testComparisonThreeStocksRoundTrip() throws {
+        let block = try decodeComparison(Self.comparisonThreeStocksJSON)
+        XCTAssertEqual(block.assets.count, 3)
+        XCTAssertEqual(block.assets.map(\.symbol), ["NVDA", "AMD", "INTC"])
+        // INTC omits pe_ratio / market_cap — those decode to nil, not a failure.
+        XCTAssertNil(block.assets[2].metrics.peRatio)
+        XCTAssertNil(block.assets[2].metrics.marketCap)
+        XCTAssertEqual(block.assets[2].metrics.beta, Decimal(string: "1.05"))
+    }
+
+    func testComparisonUnknownAssetTypeFailsClosed() {
+        // A malformed `asset_type` must reject the whole block rather than
+        // defaulting to a type and mis-rendering the metric panel.
+        let json = Data("""
+        {
+          "type": "stock_comparison",
+          "block_id": "cmp_bad",
+          "assets": [
+            {
+              "symbol": "BTC", "name": "Bitcoin", "asset_type": "crypto",
+              "color_hex": "#F7931A", "current_price": "1.0", "change_pct": "0.0",
+              "series": [], "metrics": {}
+            }
+          ],
+          "range": "1M",
+          "available_ranges": ["1M"]
+        }
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testComparisonEmptyMetricsDecodeToNil() throws {
+        let json = """
+        {
+          "type": "stock_comparison",
+          "block_id": "cmp_minimal",
+          "assets": [
+            {
+              "symbol": "X", "name": "X", "asset_type": "stock",
+              "color_hex": "#FFFFFF", "current_price": "1.0", "change_pct": "0.0",
+              "series": [], "metrics": {}
+            }
+          ],
+          "range": "1M",
+          "available_ranges": ["1M"]
+        }
+        """
+        let block = try decodeComparison(json)
+        let metrics = block.assets[0].metrics
+        XCTAssertNil(metrics.peRatio)
+        XCTAssertNil(metrics.marketCap)
+        XCTAssertNil(metrics.revenueGrowthPct)
+        XCTAssertNil(metrics.beta)
+        XCTAssertNil(metrics.sector)
+        XCTAssertNil(metrics.expenseRatioPct)
+        XCTAssertNil(metrics.aum)
+        XCTAssertNil(metrics.holdingsCount)
+        XCTAssertNil(metrics.dividendYieldPct)
+        XCTAssertNil(metrics.indexTracked)
+        XCTAssertNil(metrics.topSectors)
+        XCTAssertNil(metrics.oneLineDistinction)
+    }
+
+    func testComparisonTypeEncodesAsSnakeCaseString() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.comparisonStocksJSON.utf8)
+        )
+        let json = try JSONEncoder.sevino().encode(decoded)
+        let dict = try JSONSerialization.jsonObject(with: json) as? [String: Any]
+        XCTAssertEqual(dict?["type"] as? String, "stock_comparison")
+    }
+
+    // MARK: - CancelTransferBlock decoding
+
+    private static let cancelTransferPendingJSON = """
+    {
+      "type": "cancel_transfer",
+      "block_id": "blk_xfer_1",
+      "transfer_id": "trf_abc123",
+      "direction": "deposit",
+      "amount": "500.00",
+      "bank_name": "Chase",
+      "bank_mask": "1234",
+      "initiated_at": "2026-05-31T14:30:00Z",
+      "status": "pending"
+    }
+    """
+
+    private func cancelTransferJSON(
+        direction: String,
+        status: String,
+        includeMask: Bool = true
+    ) -> Data {
+        let maskLine = includeMask ? "\"bank_mask\": \"5678\"," : ""
+        return Data("""
+        {
+          "type": "cancel_transfer",
+          "block_id": "blk_x",
+          "transfer_id": "trf_x",
+          "direction": "\(direction)",
+          "amount": "200.00",
+          "bank_name": "Wells Fargo",
+          \(maskLine)
+          "initiated_at": "2026-05-31T14:30:00Z",
+          "status": "\(status)"
+        }
+        """.utf8)
+    }
+
+    func testCancelTransferPendingDepositRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: Data(Self.cancelTransferPendingJSON.utf8)
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.blockId, "blk_xfer_1")
+        XCTAssertEqual(ctb.transferId, "trf_abc123")
+        XCTAssertEqual(ctb.direction, .deposit)
+        XCTAssertEqual(ctb.amount, Decimal(string: "500.00"))
+        XCTAssertEqual(ctb.bankName, "Chase")
+        XCTAssertEqual(ctb.bankMask, "1234")
+        XCTAssertEqual(ctb.status, .pending)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferWithdrawalCancelledRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "withdraw", status: "cancelled")
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.direction, .withdraw)
+        XCTAssertEqual(ctb.status, .cancelled)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferFailedStatusRoundTrip() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "deposit", status: "failed")
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertEqual(ctb.status, .failed)
+
+        let reEncoded = try JSONEncoder.sevino().encode(decoded)
+        let reDecoded = try JSONDecoder.sevino().decode(Block.self, from: reEncoded)
+        XCTAssertEqual(reDecoded, decoded)
+    }
+
+    func testCancelTransferUnknownStatusIsRejected() {
+        // The status literal is a closed set on the wire — an unrecognized
+        // value must fail closed rather than silently degrade.
+        XCTAssertThrowsError(
+            try JSONDecoder.sevino().decode(
+                Block.self,
+                from: cancelTransferJSON(direction: "deposit", status: "settled")
+            )
+        )
+    }
+
+    func testCancelTransferUnknownDirectionIsRejected() {
+        XCTAssertThrowsError(
+            try JSONDecoder.sevino().decode(
+                Block.self,
+                from: cancelTransferJSON(direction: "swap", status: "pending")
+            )
+        )
+    }
+
+    func testCancelTransferMissingBankMaskDecodesToNil() throws {
+        let decoded = try JSONDecoder.sevino().decode(
+            Block.self,
+            from: cancelTransferJSON(direction: "deposit", status: "pending", includeMask: false)
+        )
+
+        guard case .cancelTransfer(let ctb) = decoded else {
+            return XCTFail("expected .cancelTransfer variant, got \(decoded)")
+        }
+        XCTAssertNil(ctb.bankMask)
+    }
+
+    func testCancelTransferNumericAmountIsRejected() {
+        // Decimal-on-the-wire: amount must arrive as a string. A JSON number
+        // would let a Double mediate the money value, so it must be rejected.
+        let json = Data("""
+        {"type":"cancel_transfer","block_id":"x","transfer_id":"t","direction":"deposit",
+         "amount":500.00,"bank_name":"Chase","initiated_at":"2026-05-31T14:30:00Z","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
+    func testCancelTransferInvalidInitiatedAtIsRejected() {
+        let json = Data("""
+        {"type":"cancel_transfer","block_id":"x","transfer_id":"t","direction":"deposit",
+         "amount":"500.00","bank_name":"Chase","initiated_at":"not-a-date","status":"pending"}
+        """.utf8)
+
+        XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: json))
+    }
+
     // MARK: - List round trip
 
     func testListRoundTripPreservesOrderAndVariants() throws {

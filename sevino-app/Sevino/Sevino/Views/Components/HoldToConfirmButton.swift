@@ -12,6 +12,7 @@ struct HoldToConfirmButton: View {
     let title: String
     var isEnabled: Bool = true
     var scale: CGFloat = 1
+    var accessibilityHint: String = L10n.TradeExecution.holdToConfirmA11yHint
     let action: () -> Void
 
     @State private var progress: Double = 0
@@ -74,7 +75,7 @@ struct HoldToConfirmButton: View {
         .disabled(!isEnabled)
         .sensoryFeedback(.success, trigger: fireCount)
         .accessibilityLabel(title)
-        .accessibilityHint(L10n.TradeExecution.holdToConfirmA11yHint)
+        .accessibilityHint(accessibilityHint)
         .accessibilityAddTraits(.isButton)
     }
 }

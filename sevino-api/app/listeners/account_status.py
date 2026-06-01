@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any
 
 import structlog
+from arq.connections import ArqRedis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.listeners.base_sse import BaseSSEListener
@@ -9,6 +10,7 @@ from app.services.account_status import (
     apply_account_status_change,
     apply_sweep_status_change,
 )
+from app.services.alpaca_broker import AlpacaBrokerService
 
 logger = structlog.get_logger(__name__)
 
@@ -47,6 +49,12 @@ class AccountStatusListener(BaseSSEListener):
     stream_name = "account_status_sse"
     endpoint_path = "/v1/events/accounts/status"
 
+    def __init__(
+        self, broker: AlpacaBrokerService, arq: ArqRedis | None = None
+    ) -> None:
+        super().__init__(broker)
+        self._arq = arq
+
     async def handle_event(
         self,
         session: AsyncSession,
@@ -71,8 +79,8 @@ class AccountStatusListener(BaseSSEListener):
         event_time = _parse_alpaca_timestamp(data.get("at"))
 
         # Path 1: account-lifecycle status change (KYC / account_status).
-        # ``alpaca=self._broker`` is forwarded so the service can PATCH the
-        # FDIC sweep tier on the first ACTIVE transition (SEV-318/SEV-528).
+        # ``arq=self._arq`` is forwarded so the service can enqueue the FDIC
+        # sweep enrollment task on the first ACTIVE transition (SEV-655).
         if data.get("status_to"):
             await apply_account_status_change(
                 session,
@@ -80,7 +88,7 @@ class AccountStatusListener(BaseSSEListener):
                 new_status=data["status_to"],
                 kyc_results=data.get("kyc_results"),
                 event_time=event_time,
-                alpaca=self._broker,
+                arq=self._arq,
             )
             return
 

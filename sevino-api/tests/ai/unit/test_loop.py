@@ -333,6 +333,7 @@ async def _run(
     emitter: SSEEmitter | None = None,
     server_tools_config: ServerToolsConfig | None = None,
     time_context: str | None = None,
+    user_profile: str | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -364,6 +365,8 @@ async def _run(
         kwargs["user_context"] = user_context
     if time_context is not None:
         kwargs["time_context"] = time_context
+    if user_profile is not None:
+        kwargs["user_profile"] = user_profile
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -519,12 +522,19 @@ class TestHappyPath:
             "kind": "big_move",
         }
 
-    async def test_time_context_appended_as_uncached_second_system_block(
+    async def test_time_context_rides_current_user_message_not_system(
         self, repo_mocks
     ):
-        # The live clock must sit *after* the cache breakpoint so it never
-        # invalidates the cached static prompt: a second block, no marker.
+        # The live clock must sit *after* every cache breakpoint so it never
+        # invalidates the cached prefix: it rides the current user message as
+        # the last block, and the system prompt stays a single cached block.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "u", "text": "hello"}
+            )
+        ]
         client = _make_client(_make_response())
+        captured = _capture_messages(client)
 
         await _run(client, repo_mocks, time_context="It is 3:45 PM EDT.")
 
@@ -534,9 +544,12 @@ class TestHappyPath:
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
-            },
-            {"type": "text", "text": "It is 3:45 PM EDT."},
+            }
         ]
+        assert captured["messages"][-1]["content"][-1] == {
+            "type": "text",
+            "text": "It is 3:45 PM EDT.",
+        }
 
     async def test_no_time_context_keeps_single_cached_system_block(
         self, repo_mocks
@@ -944,19 +957,13 @@ class TestRequestShape:
         await _run(client, repo_mocks, tool_registry=_Reg())
 
         create_kwargs = client.messages.stream.call_args.kwargs
-        # Only the last tool gets cache_control; earlier tools are unchanged.
+        # Tools carry no cache marker — they sit before ``system`` in the cache
+        # prefix, so the system-prompt breakpoint already caches them.
         assert create_kwargs["tools"] == [
             {"name": "get_stock_info", "description": "...", "input_schema": {}},
-            {
-                "name": "get_quote",
-                "description": "...",
-                "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
-            },
+            {"name": "get_quote", "description": "...", "input_schema": {}},
         ]
-        # Registry's own list must not be mutated — the loop copies before
-        # appending the cache marker.
-        assert "cache_control" not in spec[-1]
+        assert all("cache_control" not in t for t in create_kwargs["tools"])
 
     async def test_system_block_carries_cache_control(self, repo_mocks):
         # A1.8 acceptance: the system block sent to Anthropic must carry the
@@ -973,6 +980,39 @@ class TestRequestShape:
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+    async def test_user_profile_added_as_second_cached_system_block(
+        self, repo_mocks
+    ):
+        # A stable per-user profile rides a second system block with its own
+        # cache breakpoint — after the static prompt, before messages.
+        client = _make_client(_make_response())
+
+        await _run(
+            client, repo_mocks, user_profile="## About the user\n\nJane."
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": "## About the user\n\nJane.",
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
+    async def test_no_user_profile_keeps_single_system_block(self, repo_mocks):
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert len(create_kwargs["system"]) == 1
 
     async def test_history_drops_non_text_ui_blocks(self, repo_mocks, monkeypatch):
         # SEV-571: ``ThinkingBlock`` (and the existing ``StatusBlock`` /
@@ -1051,10 +1091,15 @@ class TestRequestShape:
         assert len(captured) == 1
         sent_messages = captured[0]
         # The thinking + status blocks are dropped; only the text block
-        # survives — and without its ``block_id``, which Anthropic's
-        # content-block schema rejects.
+        # survives — without its ``block_id`` (which Anthropic's content-block
+        # schema rejects), and carrying the history cache breakpoint since it
+        # is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
 
     async def test_history_assistant_text_blocks_strip_block_id(
@@ -1130,11 +1175,17 @@ class TestRequestShape:
             "assistant",
             "user",
         ]
-        # Anthropic-shape only — no ``block_id``.
+        # Anthropic-shape only — no ``block_id``. Carries the history cache
+        # breakpoint: it is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
-        # User blocks pass through unchanged — they never carry a block_id.
+        # User blocks pass through unchanged — they never carry a block_id,
+        # and this one is before the breakpoint so it stays unmarked.
         assert sent_messages[0]["content"] == [
             {"type": "text", "text": "first turn"}
         ]
@@ -2091,9 +2142,7 @@ class TestAnthropicServerTools:
         create_kwargs = client.messages.stream.call_args.kwargs
         assert "tools" not in create_kwargs
 
-    async def test_web_search_spec_prepended_with_cache_control(
-        self, repo_mocks
-    ):
+    async def test_web_search_spec_prepended(self, repo_mocks):
         client = _make_client(_make_response())
 
         await _run(
@@ -2106,12 +2155,12 @@ class TestAnthropicServerTools:
         )
 
         create_kwargs = client.messages.stream.call_args.kwargs
+        # No cache marker — tools cache via the system-prompt breakpoint.
         assert create_kwargs["tools"] == [
             {
                 "type": "web_search_20250305",
                 "name": "web_search",
                 "max_uses": 3,
-                "cache_control": {"type": "ephemeral"},
             }
         ]
 
@@ -2145,7 +2194,6 @@ class TestAnthropicServerTools:
             {
                 "type": "code_execution_20250825",
                 "name": "code_execution",
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
@@ -2185,7 +2233,6 @@ class TestAnthropicServerTools:
                 "name": "get_stock_info",
                 "description": "...",
                 "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
@@ -2682,6 +2729,133 @@ class TestAnthropicServerTools:
         ]
         assert len(status_blocks) == 1
         assert status_blocks[0]["state"] == "complete"
+
+    async def test_replay_scrubs_server_tool_result_before_next_model_call(
+        self, repo_mocks, monkeypatch
+    ):
+        from anthropic.types import (
+            ServerToolUseBlock,
+            ToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        from app.ai.runtime.loop import _ToolDispatchOutcome
+
+        server_use = ServerToolUseBlock.model_construct(
+            id="srvtoolu_dirty",
+            input={"query": "AMD news"},
+            name="web_search",
+            type="server_tool_use",
+            caller={"type": "direct"},
+        )
+        dirty_search_result = WebSearchToolResultBlock.model_construct(
+            type="web_search_tool_result",
+            tool_use_id="srvtoolu_dirty",
+            caller={"type": "direct"},
+            parsed_output={"sdk": True},
+            text="output-only top-level text",
+            content=[
+                WebSearchResultBlock.model_construct(
+                    type="web_search_result",
+                    title="AMD beats",
+                    url="https://example.com/amd",
+                    encrypted_content="enc",
+                    text="output-only nested text",
+                    citations=[{"url": "https://example.com/amd"}],
+                )
+            ],
+        )
+        iter0 = _make_response(
+            text="checking",
+            stop_reason="tool_use",
+            extra_blocks=[
+                server_use,
+                dirty_search_result,
+                ToolUseBlock(
+                    id="toolu_custom",
+                    name="get_stock_info",
+                    input={"symbol": "AMD"},
+                    type="tool_use",
+                ),
+            ],
+        )
+        iter1 = _make_response(text="done", stop_reason="end_turn")
+
+        async def _stub_dispatch(**kwargs: Any) -> _ToolDispatchOutcome:
+            outcome = _ToolDispatchOutcome()
+            outcome.tool_call_count = 1
+            outcome.tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_custom",
+                    "content": "{\"ok\": true}",
+                }
+            )
+            return outcome
+
+        monkeypatch.setattr(
+            "app.ai.runtime.flow.iteration.dispatch_tool_uses", _stub_dispatch
+        )
+
+        client = _make_client([iter0, iter1])
+        captured_messages: list[list[dict[str, Any]]] = []
+        original_stream = client.messages.stream
+
+        def capture_stream(**kwargs: Any) -> Any:
+            captured_messages.append(json.loads(json.dumps(kwargs["messages"])))
+            return original_stream(**kwargs)
+
+        client.messages.stream = MagicMock(side_effect=capture_stream)
+
+        result, _events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 2
+        assert len(captured_messages) == 2
+
+        replayed_assistant = captured_messages[1][-2]
+        assert replayed_assistant["role"] == "assistant"
+        replayed_content = replayed_assistant["content"]
+        replayed_server_use = next(
+            b for b in replayed_content if b["type"] == "server_tool_use"
+        )
+        assert replayed_server_use == {
+            "type": "server_tool_use",
+            "id": "srvtoolu_dirty",
+            "name": "web_search",
+            "input": {"query": "AMD news"},
+        }
+        replayed_result = next(
+            b for b in replayed_content if b["type"] == "web_search_tool_result"
+        )
+        assert replayed_result == {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_dirty",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD beats",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                }
+            ],
+        }
+
+        replayed_user = captured_messages[1][-1]
+        assert replayed_user["role"] == "user"
+        assert replayed_user["content"] == [
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_custom",
+                "content": "{\"ok\": true}",
+            }
+        ]
 
     async def test_orphan_pill_closes_failed_when_result_never_arrives(
         self, repo_mocks

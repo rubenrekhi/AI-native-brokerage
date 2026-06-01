@@ -156,6 +156,7 @@ class TestActiveSweep:
         assert result.interest_paid_out == "monthly"
         assert result.fdic_insured_limit == "2500000"
         assert result.sweep_status == "ACTIVE"
+        assert result.enrollment_state == "active"
 
     async def test_eod_records_summed_to_two_decimals(
         self, db, alpaca, patch_brokerage
@@ -398,33 +399,81 @@ class TestAprTierLookup:
 
 class TestInactiveSweep:
     @pytest.mark.parametrize(
-        "sweep_status", [None, "INACTIVE", "PENDING_CHANGE"]
+        "sweep_status,expected_state",
+        [
+            (None, "not_enrolled"),
+            ("INACTIVE", "not_enrolled"),
+            ("PENDING_CHANGE", "pending"),
+        ],
     )
-    async def test_returns_zeros_and_skips_interest_calls(
-        self, db, alpaca, patch_brokerage, sweep_status
+    async def test_zeros_earned_but_still_fetches_apy(
+        self,
+        db,
+        alpaca,
+        patch_brokerage,
+        configured_apr_tier,
+        sweep_status,
+        expected_state,
     ):
         patch_brokerage(_make_brokerage(sweep_status=sweep_status))
+        alpaca.get_apr_tiers.return_value = {
+            "apr_tiers": [{"name": "standard", "account_rate_bps": 425}]
+        }
 
         result = await CashInterestService.get_cash_interest(
             db, alpaca=alpaca, user_id=USER_ID
         )
 
-        # Trading account still queried for balance/buying_power.
+        # Trading account + APR tiers are queried (APY is the prospective rate
+        # shown to non-enrolled users). Accrual/realized endpoints are skipped
+        # — no enrollment to report on yet.
         alpaca.get_trading_account.assert_awaited_once_with(ALPACA_ACCOUNT_ID)
-        # Interest endpoints skipped entirely — no point hitting them when
-        # there's no sweep enrollment to report on.
+        alpaca.get_apr_tiers.assert_awaited_once()
         alpaca.get_eod_cash_interest.assert_not_called()
-        alpaca.get_apr_tiers.assert_not_called()
         alpaca.get_interest_activities.assert_not_called()
 
         assert result.balance == "2412.08"
         assert result.buying_power == "2412.08"
         assert result.pending_deposits == "100.00"
-        assert result.apy == "0.0000"
+        # SEV-655: APY is populated even though sweep_status is not ACTIVE.
+        assert result.apy == "0.0425"
         assert result.this_month_earned == "0.00"
         assert result.days_accrued == 0
         assert result.lifetime_earned == "0.00"
         assert result.sweep_status == sweep_status
+        assert result.enrollment_state == expected_state
+
+    async def test_skips_apr_call_when_tier_name_unconfigured(
+        self, db, alpaca, patch_brokerage, monkeypatch
+    ):
+        # No tier configured → skip the APR RTT entirely; APY reports zero.
+        monkeypatch.setattr(settings, "alpaca_apr_tier_name", "")
+        patch_brokerage(_make_brokerage(sweep_status=None))
+
+        result = await CashInterestService.get_cash_interest(
+            db, alpaca=alpaca, user_id=USER_ID
+        )
+
+        alpaca.get_apr_tiers.assert_not_called()
+        alpaca.get_eod_cash_interest.assert_not_called()
+        alpaca.get_interest_activities.assert_not_called()
+        assert result.apy == "0.0000"
+        assert result.enrollment_state == "not_enrolled"
+
+    async def test_unavailable_state_when_account_not_active(
+        self, db, alpaca, patch_brokerage, configured_apr_tier
+    ):
+        # Account not yet ACTIVE (e.g. SUBMITTED): the sweep can't be enrolled,
+        # so enrollment_state is "unavailable" regardless of sweep_status.
+        patch_brokerage(
+            _make_brokerage(account_status="SUBMITTED", sweep_status=None)
+        )
+
+        result = await CashInterestService.get_cash_interest(
+            db, alpaca=alpaca, user_id=USER_ID
+        )
+
+        assert result.enrollment_state == "unavailable"
 
 
 # ---------------------------------------------------------------------------

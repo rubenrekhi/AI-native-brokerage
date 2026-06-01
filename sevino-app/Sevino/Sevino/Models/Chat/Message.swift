@@ -19,8 +19,9 @@ struct Message: Identifiable, Equatable, Sendable {
     let id: UUID
     let role: Role
     var blocks: [Block]
-    /// Optional Daily Digest source for assistant responses that were started
-    /// from a digest card handoff.
+    /// Optional Daily Digest source for a user message sent from a digest card
+    /// handoff. Rendered as a chip above the user bubble. `nil` for assistant
+    /// messages and user messages sent without a digest card.
     var cardContextSource: CardContextSource? = nil
     /// Structured context attached when the user sent the message with a
     /// modal open (portfolio, holdings, etc.). Rendered as a card attachment
