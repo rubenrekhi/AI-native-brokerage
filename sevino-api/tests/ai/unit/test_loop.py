@@ -333,6 +333,7 @@ async def _run(
     emitter: SSEEmitter | None = None,
     server_tools_config: ServerToolsConfig | None = None,
     time_context: str | None = None,
+    user_profile: str | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -364,6 +365,8 @@ async def _run(
         kwargs["user_context"] = user_context
     if time_context is not None:
         kwargs["time_context"] = time_context
+    if user_profile is not None:
+        kwargs["user_profile"] = user_profile
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -519,12 +522,19 @@ class TestHappyPath:
             "kind": "big_move",
         }
 
-    async def test_time_context_appended_as_uncached_second_system_block(
+    async def test_time_context_rides_current_user_message_not_system(
         self, repo_mocks
     ):
-        # The live clock must sit *after* the cache breakpoint so it never
-        # invalidates the cached static prompt: a second block, no marker.
+        # The live clock must sit *after* every cache breakpoint so it never
+        # invalidates the cached prefix: it rides the current user message as
+        # the last block, and the system prompt stays a single cached block.
+        repo_mocks["load_history"].return_value = [
+            _history_user_msg(
+                {"type": "text", "block_id": "u", "text": "hello"}
+            )
+        ]
         client = _make_client(_make_response())
+        captured = _capture_messages(client)
 
         await _run(client, repo_mocks, time_context="It is 3:45 PM EDT.")
 
@@ -534,9 +544,12 @@ class TestHappyPath:
                 "type": "text",
                 "text": SYSTEM_PROMPT.text,
                 "cache_control": {"type": "ephemeral"},
-            },
-            {"type": "text", "text": "It is 3:45 PM EDT."},
+            }
         ]
+        assert captured["messages"][-1]["content"][-1] == {
+            "type": "text",
+            "text": "It is 3:45 PM EDT.",
+        }
 
     async def test_no_time_context_keeps_single_cached_system_block(
         self, repo_mocks
@@ -944,19 +957,13 @@ class TestRequestShape:
         await _run(client, repo_mocks, tool_registry=_Reg())
 
         create_kwargs = client.messages.stream.call_args.kwargs
-        # Only the last tool gets cache_control; earlier tools are unchanged.
+        # Tools carry no cache marker — they sit before ``system`` in the cache
+        # prefix, so the system-prompt breakpoint already caches them.
         assert create_kwargs["tools"] == [
             {"name": "get_stock_info", "description": "...", "input_schema": {}},
-            {
-                "name": "get_quote",
-                "description": "...",
-                "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
-            },
+            {"name": "get_quote", "description": "...", "input_schema": {}},
         ]
-        # Registry's own list must not be mutated — the loop copies before
-        # appending the cache marker.
-        assert "cache_control" not in spec[-1]
+        assert all("cache_control" not in t for t in create_kwargs["tools"])
 
     async def test_system_block_carries_cache_control(self, repo_mocks):
         # A1.8 acceptance: the system block sent to Anthropic must carry the
@@ -973,6 +980,39 @@ class TestRequestShape:
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+    async def test_user_profile_added_as_second_cached_system_block(
+        self, repo_mocks
+    ):
+        # A stable per-user profile rides a second system block with its own
+        # cache breakpoint — after the static prompt, before messages.
+        client = _make_client(_make_response())
+
+        await _run(
+            client, repo_mocks, user_profile="## About the user\n\nJane."
+        )
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert create_kwargs["system"] == [
+            {
+                "type": "text",
+                "text": SYSTEM_PROMPT.text,
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": "## About the user\n\nJane.",
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+
+    async def test_no_user_profile_keeps_single_system_block(self, repo_mocks):
+        client = _make_client(_make_response())
+
+        await _run(client, repo_mocks)
+
+        create_kwargs = client.messages.stream.call_args.kwargs
+        assert len(create_kwargs["system"]) == 1
 
     async def test_history_drops_non_text_ui_blocks(self, repo_mocks, monkeypatch):
         # SEV-571: ``ThinkingBlock`` (and the existing ``StatusBlock`` /
@@ -1051,10 +1091,15 @@ class TestRequestShape:
         assert len(captured) == 1
         sent_messages = captured[0]
         # The thinking + status blocks are dropped; only the text block
-        # survives — and without its ``block_id``, which Anthropic's
-        # content-block schema rejects.
+        # survives — without its ``block_id`` (which Anthropic's content-block
+        # schema rejects), and carrying the history cache breakpoint since it
+        # is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
 
     async def test_history_assistant_text_blocks_strip_block_id(
@@ -1130,11 +1175,17 @@ class TestRequestShape:
             "assistant",
             "user",
         ]
-        # Anthropic-shape only — no ``block_id``.
+        # Anthropic-shape only — no ``block_id``. Carries the history cache
+        # breakpoint: it is the last prior-turn message.
         assert sent_messages[1]["content"] == [
-            {"type": "text", "text": "first answer"}
+            {
+                "type": "text",
+                "text": "first answer",
+                "cache_control": {"type": "ephemeral"},
+            }
         ]
-        # User blocks pass through unchanged — they never carry a block_id.
+        # User blocks pass through unchanged — they never carry a block_id,
+        # and this one is before the breakpoint so it stays unmarked.
         assert sent_messages[0]["content"] == [
             {"type": "text", "text": "first turn"}
         ]
@@ -2091,9 +2142,7 @@ class TestAnthropicServerTools:
         create_kwargs = client.messages.stream.call_args.kwargs
         assert "tools" not in create_kwargs
 
-    async def test_web_search_spec_prepended_with_cache_control(
-        self, repo_mocks
-    ):
+    async def test_web_search_spec_prepended(self, repo_mocks):
         client = _make_client(_make_response())
 
         await _run(
@@ -2106,12 +2155,12 @@ class TestAnthropicServerTools:
         )
 
         create_kwargs = client.messages.stream.call_args.kwargs
+        # No cache marker — tools cache via the system-prompt breakpoint.
         assert create_kwargs["tools"] == [
             {
                 "type": "web_search_20250305",
                 "name": "web_search",
                 "max_uses": 3,
-                "cache_control": {"type": "ephemeral"},
             }
         ]
 
@@ -2145,7 +2194,6 @@ class TestAnthropicServerTools:
             {
                 "type": "code_execution_20250825",
                 "name": "code_execution",
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 
@@ -2185,7 +2233,6 @@ class TestAnthropicServerTools:
                 "name": "get_stock_info",
                 "description": "...",
                 "input_schema": {},
-                "cache_control": {"type": "ephemeral"},
             },
         ]
 

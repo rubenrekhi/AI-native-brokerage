@@ -102,9 +102,12 @@ class ToolRegistry:
         return not self._tools
 
     def to_anthropic_spec(self) -> list[dict[str, Any]]:
+        # No ``cache_control`` here: the tools array sits before ``system`` in
+        # the cache prefix (tools → system → messages), so the system-prompt
+        # breakpoint already caches it — a marker here would be redundant.
         if not self._tools:
             return []
-        specs: list[dict[str, Any]] = [
+        return [
             {
                 "name": tool.name,
                 "description": tool.description,
@@ -112,6 +115,3 @@ class ToolRegistry:
             }
             for tool in self._tools.values()
         ]
-        # Cache the tools array alongside the system prompt.
-        specs[-1] = {**specs[-1], "cache_control": {"type": "ephemeral"}}
-        return specs
