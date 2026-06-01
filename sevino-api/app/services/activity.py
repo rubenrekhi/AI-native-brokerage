@@ -110,6 +110,12 @@ class ActivityService:
 
         fetchers: list[tuple[str, Any]] = []
         if "trade" in wanted:
+            # Alpaca windows orders on ``submitted_at``, but ``_trade_row`` sorts
+            # and re-windows on ``filled_at``: an order filled just outside a
+            # window it was submitted into is dropped client-side, and one
+            # submitted before the window but filled inside it is never fetched.
+            # Bites only multi-day orders straddling a boundary; same-day fills
+            # (the common case) are unaffected.
             fetchers.append(
                 (
                     "trade",
@@ -305,8 +311,7 @@ def _trade_row(o: dict[str, Any]) -> tuple[datetime | None, dict[str, Any]] | No
     )
     amount = None
     if value:
-        # Buy spends cash (negative); sell returns cash (positive). Falsy/zero
-        # value (a working order with no fill yet) leaves amount null.
+        # Falsy value (a working order with no fill yet) leaves amount null.
         amount = _money(-value) if side == "buy" else _money(value)
     ts = _first_dt(o, ("filled_at", "submitted_at", "created_at"))
     limit_price = o.get("limit_price")
@@ -424,6 +429,8 @@ def _totals(
         totals["deposited"] = _money(
             _sum(a["amount"] for a in activities if a["type"] == "deposit")
         )
+        # Withdrawal rows carry a negative amount; negate the sum so
+        # ``withdrawn`` reads as a positive dollar magnitude.
         totals["withdrawn"] = _money(
             -_sum(a["amount"] for a in activities if a["type"] == "withdrawal")
         )
