@@ -277,6 +277,15 @@ def repo_mocks(monkeypatch):
         monkeypatch.setattr(
             "app.ai.runtime.loop.ConversationRepository." + name, mocks[name]
         )
+    # The supersede sweep runs in initialize_turn against the stub session;
+    # patch it so unit tests don't need a real DB.
+    supersede = AsyncMock(return_value=0)
+    mocks["supersede_pending_for_conversation"] = supersede
+    monkeypatch.setattr(
+        "app.ai.runtime.flow.turn_lifecycle."
+        "PendingActionRepository.supersede_pending_for_conversation",
+        supersede,
+    )
     return mocks
 
 

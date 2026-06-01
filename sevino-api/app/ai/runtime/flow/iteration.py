@@ -125,6 +125,8 @@ async def _decide_after_response(
     assistant_blocks: list[dict[str, Any]],
     tool_registry: ToolRegistry,
     user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
     db_factory: DbSessionFactory,
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
@@ -148,6 +150,8 @@ async def _decide_after_response(
             response_blocks=response.content,
             tool_registry=tool_registry,
             user_id=user_id,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
             db_factory=db_factory,
             sse_emitter=sse_emitter,
             http_clients=http_clients,
@@ -171,6 +175,16 @@ async def _decide_after_response(
             )
         assistant_blocks.extend(tool_outcomes.ui_block_dicts)
         state.tool_calls += tool_outcomes.tool_call_count
+        if tool_outcomes.proposal_raised:
+            # HIL gate: a tool proposed a consequential action. End the turn
+            # awaiting the user's tap — do not append tool_results or
+            # continue. The confirmation card is already in assistant_blocks;
+            # the confirm endpoint drives the follow-up (docs/ai/hil-actions.md).
+            return IterationOutcome(
+                action="break",
+                terminal_state="awaiting_confirmation",
+                invocation_id=invocation_id,
+            )
         # Anthropic expects tool_results on a follow-up ``user`` message.
         messages.append(
             {"role": "user", "content": tool_outcomes.tool_result_blocks}
@@ -370,6 +384,8 @@ async def run_one_iteration(
         assistant_blocks=assistant_blocks,
         tool_registry=tool_registry,
         user_id=user_id,
+        conversation_id=conversation_id,
+        turn_id=turn_id,
         db_factory=db_factory,
         sse_emitter=sse_emitter,
         http_clients=http_clients,

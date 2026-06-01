@@ -92,6 +92,7 @@ from app.repositories.conversation import (
     extract_text_preview,
 )
 from app.repositories.financial_profile import FinancialProfileRepository
+from app.repositories.pending_action import PendingActionRepository
 from app.repositories.user_profile import UserProfileRepository
 from app.schemas.conversations import (
     ChatTurnRequest,
@@ -299,28 +300,89 @@ async def list_conversation_messages(
         cursor_id=cursor_id,
     )
 
-    items: list[MessageItem] = []
+    returned = messages[:limit]
     next_cursor: str | None = None
-    for index, message in enumerate(messages):
-        if index >= limit:
-            last_returned = messages[limit - 1]
-            next_cursor = _encode_cursor(
-                {
-                    "created_at": last_returned.created_at.isoformat(),
-                    "id": str(last_returned.id),
-                }
-            )
-            break
-        items.append(
-            MessageItem(
-                id=message.id,
-                role=message.role,
-                created_at=message.created_at,
-                content_blocks=message.content_blocks,
-            )
+    if len(messages) > limit:
+        last_returned = messages[limit - 1]
+        next_cursor = _encode_cursor(
+            {
+                "created_at": last_returned.created_at.isoformat(),
+                "id": str(last_returned.id),
+            }
         )
 
+    # Read-time HIL card resolution: a confirmation block's persisted status is
+    # always "pending"; overlay the live effective_status so a confirmed /
+    # superseded / expired card renders non-interactive (docs/ai/hil-actions.md).
+    statuses = await _resolve_confirmation_statuses(db, returned)
+    items = [
+        MessageItem(
+            id=message.id,
+            role=message.role,
+            created_at=message.created_at,
+            content_blocks=_overlay_confirmation_status(
+                message.content_blocks, statuses
+            ),
+        )
+        for message in returned
+    ]
+
     return ConversationMessagesResponse(items=items, next_cursor=next_cursor)
+
+
+def _confirmation_action_ids(
+    content_blocks: list[dict[str, Any]],
+) -> list[uuid.UUID]:
+    ids: list[uuid.UUID] = []
+    for block in content_blocks:
+        if isinstance(block, dict) and block.get("type") == "confirmation":
+            raw = block.get("action_id")
+            if isinstance(raw, str):
+                try:
+                    ids.append(uuid.UUID(raw))
+                except ValueError:
+                    continue
+    return ids
+
+
+async def _resolve_confirmation_statuses(
+    db: AsyncSession, messages: list[Any]
+) -> dict[uuid.UUID, str]:
+    action_ids: list[uuid.UUID] = []
+    for message in messages:
+        action_ids.extend(_confirmation_action_ids(message.content_blocks))
+    if not action_ids:
+        return {}
+    return await PendingActionRepository.effective_statuses(
+        db, action_ids=action_ids
+    )
+
+
+def _overlay_confirmation_status(
+    content_blocks: list[dict[str, Any]],
+    statuses: dict[uuid.UUID, str],
+) -> list[dict[str, Any]]:
+    """Return content_blocks with confirmation cards' live status stamped in.
+
+    Builds fresh dicts for confirmation blocks so the ORM-attached JSONB is
+    never mutated; all other blocks pass through unchanged.
+    """
+    if not statuses:
+        return content_blocks
+    out: list[dict[str, Any]] = []
+    for block in content_blocks:
+        if isinstance(block, dict) and block.get("type") == "confirmation":
+            raw = block.get("action_id")
+            resolved: str | None = None
+            if isinstance(raw, str):
+                try:
+                    resolved = statuses.get(uuid.UUID(raw))
+                except ValueError:
+                    resolved = None
+            if resolved is not None:
+                block = {**block, "status": resolved}
+        out.append(block)
+    return out
 
 
 async def _build_turn_time_context(

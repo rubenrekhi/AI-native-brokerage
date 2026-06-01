@@ -31,6 +31,7 @@ from app.ai.runtime.types import ModelConfig
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import Error, TurnCompleted
 from app.repositories.conversation import ConversationRepository
+from app.repositories.pending_action import PendingActionRepository
 from app.schemas.conversations import AttachedContextRequest
 
 __all__ = [
@@ -106,6 +107,12 @@ async def initialize_turn(
     that breakpoint, never invalidates the cached prefix.
     """
     async with db_factory() as db:
+        # Any new user message supersedes a hanging proposal in this
+        # conversation — deterministic HIL safety sweep, before the model runs
+        # (docs/ai/hil-actions.md §"Sending a message cancels live proposals").
+        await PendingActionRepository.supersede_pending_for_conversation(
+            db, conversation_id=conversation_id
+        )
         content_blocks: list[dict[str, Any]] = [
             {
                 "type": "text",

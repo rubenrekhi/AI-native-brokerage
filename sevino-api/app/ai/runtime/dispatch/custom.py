@@ -16,6 +16,7 @@ import json
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import pydantic
@@ -24,10 +25,11 @@ import structlog
 from app.ai.runtime.db import DbSessionFactory
 from app.ai.runtime.errors import ErrorCode
 from app.ai.runtime.types import ToolRegistry
-from app.ai.tools.base import ToolContext, ToolHttpClients
+from app.ai.tools.base import ProposedAction, ToolContext, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import BlockEnd, BlockStart, Event
 from app.repositories.conversation import ConversationRepository
+from app.repositories.pending_action import PendingActionRepository
 
 __all__ = [
     "RecordingEmitter",
@@ -51,6 +53,39 @@ async def record_tool_execution(
     """
     async with db_factory() as db:
         await ConversationRepository.record_tool_execution(db, **kwargs)
+
+
+async def _persist_pending_action(
+    db_factory: DbSessionFactory,
+    *,
+    proposal: ProposedAction,
+    preview: dict[str, Any],
+    user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
+    tool_use_id: str,
+) -> None:
+    """Persist a HIL ``pending_actions`` row for a proposed action.
+
+    Called before the confirmation card is emitted so a user can never tap a
+    confirmation that has no backing row.
+    """
+    expires_at = datetime.now(timezone.utc) + timedelta(
+        seconds=proposal.expires_in_s
+    )
+    async with db_factory() as db:
+        await PendingActionRepository.create(
+            db,
+            action_id=uuid.UUID(proposal.action_id),
+            user_id=user_id,
+            conversation_id=conversation_id,
+            agent_turn_id=turn_id,
+            tool_use_id=tool_use_id,
+            action_type=proposal.action_type,
+            payload=proposal.payload,
+            preview=preview,
+            expires_at=expires_at,
+        )
 
 
 class RecordingEmitter:
@@ -84,6 +119,7 @@ class ToolDispatchOutcome:
         "tool_result_blocks",
         "ui_block_dicts",
         "tool_call_count",
+        "proposal_raised",
     )
 
     def __init__(self) -> None:
@@ -91,6 +127,9 @@ class ToolDispatchOutcome:
         self.tool_result_blocks: list[dict[str, Any]] = []
         self.ui_block_dicts: list[dict[str, Any]] = []
         self.tool_call_count: int = 0
+        # A tool proposed a consequential action — the loop ends the turn
+        # ``awaiting_confirmation`` instead of continuing (HIL gate).
+        self.proposal_raised: bool = False
 
 
 @dataclass(slots=True)
@@ -102,6 +141,7 @@ class _PerToolResult:
     ui_block_dict: dict[str, Any] | None
     counted: bool
     error_code: ErrorCode | None
+    proposal_raised: bool = False
 
 
 async def _dispatch_one_tool_use(
@@ -109,6 +149,8 @@ async def _dispatch_one_tool_use(
     block: Any,
     tool_registry: ToolRegistry,
     user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
     db_factory: DbSessionFactory,
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
@@ -207,17 +249,58 @@ async def _dispatch_one_tool_use(
         )
     tool_latency_ms = int((time.monotonic() - tool_started) * 1000)
 
-    # Emit block_start only if the tool didn't already.
     ui_block_dict: dict[str, Any] | None = None
     ui_blocks_emitted_for_row: list[dict[str, Any]] | None = None
     if tool_result.ui_block is not None:
         ui_block_dict = tool_result.ui_block.model_dump(mode="json")
+        ui_blocks_emitted_for_row = [ui_block_dict]
+
+    # HIL gate: persist the pending action BEFORE emitting its confirmation
+    # card. A persist failure degrades to a tool error (no card, no gate)
+    # rather than leaving a tappable card with no backing row.
+    proposal_raised = False
+    if tool_result.proposal is not None:
+        try:
+            await _persist_pending_action(
+                db_factory,
+                proposal=tool_result.proposal,
+                preview=ui_block_dict or {},
+                user_id=user_id,
+                conversation_id=conversation_id,
+                turn_id=turn_id,
+                tool_use_id=tool_use_id,
+            )
+            proposal_raised = True
+        except Exception as exc:
+            logger.exception(
+                "loop_pending_action_persist_failed",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
+            await record_tool_execution(
+                db_factory,
+                model_invocation_id=invocation_id,
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+                input_payload=input_payload,
+                status="error",
+                error_message=f"pending_action persist failed: {exc}",
+                latency_ms=tool_latency_ms,
+            )
+            return _PerToolResult(
+                tool_result_block=None,
+                ui_block_dict=None,
+                counted=False,
+                error_code=ErrorCode.TOOL_ERROR,
+            )
+
+    # Emit block_start only if the tool didn't already.
+    if ui_block_dict is not None:
         block_id = ui_block_dict.get("block_id")
         if isinstance(block_id, str) and block_id:
             if block_id not in recording_emitter.started_block_ids:
                 await sse_emitter.emit(BlockStart(block=ui_block_dict))
             await sse_emitter.emit(BlockEnd(block_id=block_id))
-        ui_blocks_emitted_for_row = [ui_block_dict]
 
     await record_tool_execution(
         db_factory,
@@ -243,6 +326,7 @@ async def _dispatch_one_tool_use(
         ui_block_dict=ui_block_dict,
         counted=True,
         error_code=None,
+        proposal_raised=proposal_raised,
     )
 
 
@@ -251,6 +335,8 @@ async def dispatch_tool_uses(
     response_blocks: list[Any],
     tool_registry: ToolRegistry,
     user_id: uuid.UUID,
+    conversation_id: uuid.UUID,
+    turn_id: uuid.UUID,
     db_factory: DbSessionFactory,
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
@@ -277,6 +363,8 @@ async def dispatch_tool_uses(
             block=block,
             tool_registry=tool_registry,
             user_id=user_id,
+            conversation_id=conversation_id,
+            turn_id=turn_id,
             db_factory=db_factory,
             sse_emitter=sse_emitter,
             http_clients=http_clients,
@@ -296,5 +384,17 @@ async def dispatch_tool_uses(
             outcome.tool_result_blocks.append(result.tool_result_block)
         if result.counted:
             outcome.tool_call_count += 1
+        if result.proposal_raised:
+            outcome.proposal_raised = True
+
+    # A proposal ends the turn awaiting confirmation, so any sibling tool's
+    # result is dropped from the model's view. Expected to be rare (the prompt
+    # steers one proposal per turn); log it so the dropped-result / orphan-row
+    # case is observable rather than silent.
+    if outcome.proposal_raised and len(tool_use_blocks) > 1:
+        logger.warning(
+            "loop_proposal_with_sibling_tools",
+            tool_count=len(tool_use_blocks),
+        )
 
     return outcome

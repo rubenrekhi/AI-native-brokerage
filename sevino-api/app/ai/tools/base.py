@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from app.services.market_data import MarketDataService
 
 __all__ = [
+    "ProposedAction",
     "SSEEmitter",
     "Tool",
     "ToolContext",
@@ -52,9 +53,26 @@ class ToolContext:
     parent_emitter: SSEEmitter | None = None
 
 
+class ProposedAction(BaseModel):
+    """A consequential action a tool proposes instead of performing.
+
+    Its presence on a ``ToolResult`` raises the human-in-the-loop gate: the
+    runtime persists a ``pending_actions`` row and ends the turn
+    ``awaiting_confirmation`` (see docs/ai/hil-actions.md). ``action_type``
+    selects the executor in ``app.ai.actions``; ``payload`` is the resolved,
+    deterministic args executed verbatim on confirm; ``action_id`` matches the
+    ``ConfirmationBlock.action_id`` the user taps.
+    """
+
+    action_id: str
+    action_type: str
+    payload: dict[str, Any]
+    expires_in_s: int = 300
+
+
 class ToolResult(BaseModel):
     """Tool output: model_payload (back to Anthropic), ui_block (to user),
-    internal_trace (audit only).
+    internal_trace (audit only), proposal (raises the HIL gate).
     """
 
     # ``protected_namespaces=()`` lets us use the ``model_payload`` field name.
@@ -63,6 +81,7 @@ class ToolResult(BaseModel):
     model_payload: dict[str, Any]
     ui_block: Block | None = Field(default=None)
     internal_trace: dict[str, Any] | None = None
+    proposal: ProposedAction | None = None
 
 
 InputT = TypeVar("InputT", bound=BaseModel)

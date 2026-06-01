@@ -22,6 +22,7 @@ from app.middleware import (
     UserActivityMiddleware,
 )
 from app.rate_limit import limiter
+from app.routes.actions import router as actions_router
 from app.routes.admin_radar import router as admin_radar_router
 from app.routes.assets import router as assets_router
 from app.routes.brokerage import router as brokerage_router
@@ -145,6 +146,11 @@ def include_routers(app: FastAPI) -> None:
     app.include_router(digest_router, prefix="/v1/digest", tags=["digest"])
     app.include_router(
         conversations_router, prefix="/v1/conversations", tags=["conversations"]
+    )
+    # HIL confirmation endpoint — shares the /v1/conversations prefix
+    # (POST /v1/conversations/{id}/actions/{action_id}).
+    app.include_router(
+        actions_router, prefix="/v1/conversations", tags=["actions"]
     )
     app.include_router(
         plaid_webhooks_router, prefix="/v1/plaid/webhooks", tags=["plaid"]

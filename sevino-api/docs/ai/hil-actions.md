@@ -1,0 +1,277 @@
+# Human-in-the-loop (HIL) actions
+
+> Target architecture (not yet implemented). Trades are the first planned consumer; the
+> examples below are illustrative — the system is feature-agnostic.
+
+Some actions the AI can take are consequential: placing a trade, moving money, cancelling an
+order, changing KYC details. These must never happen on the model's say-so alone — a human
+has to explicitly approve each one. The HIL framework is the shared machinery that lets the
+AI *propose* such an action and have it execute only after the user taps **Confirm** in the
+app.
+
+It is deliberately generic. A feature opts in by describing *what* it wants confirmed and
+*how* to perform it; everything else — persistence, the confirmation card, the approval
+endpoint, cancellation, the follow-up narration — is shared and identical across features.
+Trades are the first consumer; transfers, order cancel/replace, position closes, and profile
+changes are expected to follow, each as just another `action_type`.
+
+## Propose, confirm, narrate
+
+The lifecycle spans two backend turns with a user tap in between:
+
+```
+TURN 1 (user-initiated)                 CONFIRM (button tap)        TURN 2 (system-initiated)
+─────────────────────────               ──────────────────          ─────────────────────────
+user asks for an action                 user taps Confirm           (no user message)
+ model calls a propose_* tool           POST /actions/{id}           seeded w/ action_result ctx
+   runtime persists pending_action        atomic CAS pending→confirmed  model narrates outcome
+   streams a ConfirmationBlock card       executor performs the action    result card (executor facts)
+ model emits closing text               streams the result via SSE
+ turn ends: awaiting_confirmation
+        (e.g. "buy $500 AAPL", "withdraw $200 to my bank", "cancel order #123")
+```
+
+A "turn" is a backend accounting unit — one `agent_turn` row, one run of the model loop. It
+is **not** a UX unit. The user sees a single continuous chat thread; the seam between the
+two turns is invisible, for two reasons:
+
+- Tapping **Confirm** is a button press, not a chat message, so no user bubble appears.
+- The confirm request streams the assistant's reply back into the *same* thread immediately,
+  so the bot simply "keeps talking" after the tap.
+
+The crucial property: **the model is never given a tool that mutates anything.** It can only
+*propose*. The actual side effect runs server-side in the confirm step, from a payload the
+server persisted at propose time. The client sends only an `action_id` and a decision — it
+cannot alter what executes between proposing and confirming. This holds for every action type.
+
+## One conversation, two turns — not a suspended loop
+
+It would seem natural to "pause" the agent loop while waiting for the tap and resume it after.
+The app deliberately does not. Cross-turn history is **text-only**: when a new turn replays
+the conversation, `to_anthropic_content` keeps only `text` blocks and drops tool calls and UI
+blocks (its own note: *"tool-use context is also lost across turns; the assistant text is
+sufficient continuity"*). So there is nothing to resume — turn 1 finishes cleanly, and turn 2
+starts as a fresh message list seeded with what happened.
+
+This keeps the system stateless and crash-safe. The only thing that survives between the tap
+and the response is one database row; there is no in-memory loop state to checkpoint, and no
+dangling tool call to stitch across the boundary.
+
+## The pending action
+
+A proposed-but-not-yet-executed action is a row in `pending_actions` (Postgres). It lives in
+the database rather than Redis because it is a durable financial and audit record, not
+ephemeral cache state — the same reason `cache.py` keeps authoritative values out of the cache.
+
+```
+id              uuid pk
+user_id         uuid
+conversation_id uuid
+agent_turn_id   uuid
+tool_use_id     text          -- the proposing tool call (audit linkage)
+action_type     text          -- "place_order", "ach_transfer", ... — selects the executor
+payload         jsonb         -- resolved, deterministic args; executed verbatim server-side
+preview         jsonb         -- exactly what the card showed the user (audit / tamper evidence)
+status          text          -- written events only (see below)
+result          jsonb         -- the executor's outcome
+expires_at      timestamptz   -- per-action window
+confirmed_at / executed_at / rejected_at / superseded_at
+created_at / updated_at
+```
+
+`action_type` is the only field that varies between features — the table and every transition
+are identical for all of them. Each action chooses its own expiry window: a trade is short
+(prices move), a profile change can be long.
+
+### Status is partly written, partly derived
+
+There are two kinds of "how a proposal ends," and they are represented differently:
+
+- **Expiry is time-derived.** Whether a proposal has timed out is a pure function of
+  `expires_at` and the current time, so it is never stored — it is computed on read.
+- **Everything else is event-driven.** Confirming, rejecting, or superseding is caused by a
+  tap or a message, so it is written to `status`.
+
+```python
+def effective_status(row) -> str:
+    if row.status == "pending" and row.expires_at <= now():
+        return "expired"                 # derived (time)
+    return row.status                    # written: pending|confirmed|rejected|superseded|executed|failed
+```
+
+Because expiry is derived, nothing needs to sweep the table to mark rows expired — there is no
+cron. (One could be added later purely so `expired` becomes a queryable stored value for
+analytics, but it is not required for correctness.)
+
+### Lifecycle
+
+```
+pending ──► confirmed ──► executed | failed   (user tapped Confirm)
+        ──► rejected                            (user tapped Cancel)
+        ──► superseded                          (user sent another message instead)
+        ──► expired (derived)                   (window lapsed, untouched)
+```
+
+The three "did not happen" outcomes are kept distinct on purpose: `rejected` is an active
+decline, `superseded` is the user moving on without deciding, and `expired` is a timeout. They
+look the same to the user (a dead card) but mean different things in the audit trail.
+
+## Atomic confirmation — the correctness backbone
+
+Every state change is a guarded compare-and-swap on `status='pending'`, serialized by the
+row lock:
+
+```sql
+UPDATE pending_actions SET status='confirmed', confirmed_at=now()
+WHERE id=:id AND status='pending' AND expires_at>now()
+RETURNING *;        -- 0 rows => already confirmed / expired / superseded / gone
+```
+
+This one pattern is what makes the whole system safe. A double-tap, a tap after expiry, and a
+tap that races against cancellation all resolve to "exactly one transition wins" without any
+extra locking. An action can only execute if its CAS to `confirmed` succeeded, so a stale or
+already-resolved proposal physically cannot fire.
+
+## Cancellation and safety
+
+### Sending a message cancels live proposals
+
+A proposal is meant to be confirmed *now*. If the user types another message instead of
+tapping, the proposal is cancelled rather than left hanging. This happens deterministically at
+the start of every **user-initiated** turn, before the model runs:
+
+```sql
+UPDATE pending_actions SET status='superseded', superseded_at=now()
+WHERE conversation_id=:cid AND status='pending' AND expires_at>now();
+```
+
+It is a server-side rule, not a model decision — the same principle as execution being
+server-authoritative. The system-initiated confirm turn (which has no user message) does not
+trigger it, and an action already mid-confirmation is untouched because its CAS has already
+moved it off `pending`.
+
+### Cards stop being clickable
+
+A `ConfirmationBlock` is streamed in turn 1 and persisted in the conversation history, so a
+dead proposal's card must not remain tappable. The card therefore does **not** store its own
+status; it stores only the `action_id`. The live status is resolved when history is read — the
+serializer joins `pending_actions` and stamps the current `effective_status`, and the card is
+interactive only while that is `pending`. This stays correct after a reload or on a second
+device.
+
+During a live session the app also deadens the card locally the instant the user taps Send, so
+the feedback is immediate; the read-time resolution is the durable source of truth. (The two
+agree because both react to the same event — the new message.) This avoids trying to mutate a
+closed historical block over the stream, which the wire format does not support.
+
+### Confirmation is button-only
+
+A consequential action never executes from natural-language consent — only from an explicit
+tap on a live proposal. If the user types "yes, do it" instead of tapping, two things combine:
+the supersede rule has already killed the original card, and the model (guided by its system
+prompt) responds by explaining that an explicit tap is required *and* re-proposing a fresh
+card. Re-proposing rebuilds the proposal from current state — re-pricing a trade, re-checking a
+limit — so the user never confirms something stale.
+
+The safety rule stays simple and content-blind (any message supersedes), while the helpful
+part (explain, then offer a fresh card) lives in the model's reply. Notably, even if the model
+misbehaves here, the worst case is a redundant re-proposal — it has no way to execute anything,
+because it has no execution tool.
+
+## Executing and narrating the result
+
+When a confirmation succeeds, the runtime dispatches on `action_type` to the matching executor,
+which performs the side effect and returns a **structured, authoritative result**. The result
+card the user sees is rendered from that result — never from model free-text — so a confirmed
+action can never be described with a hallucinated price, amount, or id. When the model does
+speak, it only frames the authoritative card.
+
+The narration turn can be deterministic (the confirm step emits a result card and a templated
+line with no model call) or model-driven (a system-initiated turn seeded with the result as
+input-only context, letting the model respond conversationally). Both render the same way into
+the thread, so one can replace the other without any client change. If execution fails (a
+precondition changed, a downstream API rejected it), the streamed turn corrects the optimistic
+local state — the card shows `failed` and the reply explains what happened.
+
+## How features extend the system
+
+The framework owns everything generic: the `pending_actions` table and its transitions, the
+runtime gate that turns a proposal into a persisted row + a streamed card + an
+`awaiting_confirmation` turn end, the confirm endpoint, cancellation, expiry, and narration.
+
+A feature contributes just two things:
+
+- **A propose tool** — a normal AI tool that does the safe preparation (validate inputs,
+  compute a preview/estimate) and, instead of acting, returns a `ProposedAction` describing
+  what should execute, alongside the `ConfirmationBlock` the user will see.
+- **An executor** — a function registered under the action's `action_type` that re-validates
+  preconditions and performs the side effect, returning an `ActionResult`.
+
+Optionally it adds a bespoke card `kind` (with a matching iOS layout) and a system-prompt
+snippet describing when to propose the action; absent those, the generic card layout is used.
+
+The seams are these contracts:
+
+```python
+class ProposedAction(BaseModel):
+    action_type: str            # selects the executor
+    payload: dict[str, Any]     # resolved, deterministic args
+    expires_in_s: int = 300     # per-action window
+
+# A tool signals "gate this turn" by returning a proposal on its result:
+class ToolResult(BaseModel):
+    model_payload: dict[str, Any]
+    ui_block: Block | None = None
+    internal_trace: dict[str, Any] | None = None
+    proposal: ProposedAction | None = None     # presence raises the HIL gate
+
+class ConfirmationBlock(BaseModel):            # the gen-UI card (in the Block union)
+    type: Literal["confirmation"] = "confirmation"
+    block_id: str
+    action_id: str                             # what Confirm posts back
+    kind: str                                  # iOS picks a layout; generic fallback
+    title: str
+    rows: list[ConfirmationRow]                # label/value lines, used by all actions
+    details: dict[str, Any] = {}               # kind-specific payload, opaque to framework
+    confirm_label: str = "Confirm"
+    cancel_label: str = "Cancel"
+    hold_to_confirm: bool = True               # iOS renders hold-to-confirm vs. tap
+    status: str = "pending"                    # on the wire; re-stamped at read time
+
+class ActionResult(BaseModel):
+    status: Literal["executed", "failed"]
+    result_card: Block | None                  # authoritative, data-driven
+    summary: dict[str, Any]                     # for narration + persistence
+
+ActionExecutor = Callable[[dict, ActionContext], Awaitable[ActionResult]]
+ACTION_EXECUTORS: dict[str, ActionExecutor] = {
+    "place_order": execute_place_order,
+    # "ach_transfer": execute_ach_transfer,
+    # "cancel_order":  execute_cancel_order,
+}
+```
+
+### Worked example: trades
+
+Trades are an ordinary instance of the above. A `ProposeTrade` tool validates the symbol,
+checks buying power, prices the order, and returns a `ProposedAction(action_type="place_order")`
+with a `ConfirmationBlock(kind="trade")`. Its executor, `execute_place_order`, re-validates
+(account active, buying power, market hours), calls the existing
+`TradingService.place_order()` → Alpaca, and returns the fill as the result card.
+`OrderEvent.conversation_id` already ties the resulting order back to the conversation, so the
+audit chain is `pending_action` → `OrderEvent` → `tool_executions`. No confirmation plumbing is
+specific to trades; a transfer consumer would be the same shape against the transfer APIs.
+
+## How it maps onto the codebase
+
+| Concept | Location |
+|---|---|
+| `ConfirmationBlock` (+ iOS mirror) | `app/ai/blocks.py`, `Models/Chat/Block.swift` |
+| Proposal interrupt on tool results | `app/ai/tools/base.py` (`ProposedAction`, `ToolResult.proposal`) |
+| The gate (proposal → persisted row + card + turn end) | tool dispatch in `app/ai/runtime/dispatch`, `runtime/flow/iteration.py` |
+| `awaiting_confirmation` turn end, system-initiated narration turn | `app/ai/runtime/loop.py` |
+| Supersede sweep at turn start | `app/ai/runtime/flow/turn_lifecycle.py` |
+| Read-time card-status resolution | conversation/message history serialization |
+| Pending-action state + transitions | `app/models/pending_action.py` + repository |
+| Executor registry + `ActionResult` | `app/ai/actions/` |
+| Confirm endpoint | `app/routes/actions.py` (`POST /v1/conversations/{id}/actions/{action_id}`) |
