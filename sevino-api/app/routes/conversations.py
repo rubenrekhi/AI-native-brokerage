@@ -453,7 +453,11 @@ async def post_turn(
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=DEFAULT_REGISTRY,
-                http_clients=ToolHttpClients(market_data=market_data),
+                http_clients=ToolHttpClients(
+                    market_data=market_data,
+                    alpaca=getattr(request.app.state, "alpaca", None),
+                    redis=getattr(request.app.state, "redis", None),
+                ),
                 system_prompt=system_prompt_for(server_tools_config),
                 time_context=time_context,
                 model_config=model_config,
