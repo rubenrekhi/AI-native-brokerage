@@ -7,13 +7,16 @@ tailoring-relevant fields — never raw PII.
 
 from __future__ import annotations
 
+from datetime import date
 from types import SimpleNamespace
 
 from app.ai.utils.user_profile import build_user_profile_context
 
 
-def _profile(preferred_name=None, first_name=None):
-    return SimpleNamespace(preferred_name=preferred_name, first_name=first_name)
+def _profile(preferred_name=None, first_name=None, **extra):
+    return SimpleNamespace(
+        preferred_name=preferred_name, first_name=first_name, **extra
+    )
 
 
 def _financial(**fields):
@@ -128,3 +131,49 @@ class TestBuildUserProfileContext:
             _financial(investment_goals=["grow_wealth", None, 123, ""]),
         )
         assert "- Investing goals: grow wealth" in block
+
+    def test_excludes_pii_even_when_columns_populated(self):
+        """PII must never reach the LLM, even when the columns hold data.
+
+        The render is allowlist-based, so contact details, address, DOB, and
+        SSN-last-4 should leave no trace. This locks in the compliance intent:
+        a future edit that adds one of these columns to the field lists fails
+        here.
+        """
+        block = build_user_profile_context(
+            _profile(
+                preferred_name="Jane",
+                email="jane-pii@example.com",
+                date_of_birth=date(1990, 5, 14),
+                phone_number="+15558675309",
+                street_address=["999 Secret Street", "Unit 56"],
+                city="Confidentialville",
+                state="ZZ",
+                postal_code="PIIZIP",
+                tax_id_last_4="6789",
+            ),
+            _financial(
+                risk_tolerance="moderate",
+                date_of_birth=date(1990, 5, 14),
+                employment_info={"employer_name": "AcmeSecretCorp"},
+                funding_sources=["SecretInheritanceFund"],
+                risk_scenario_response="WouldSellEverythingInPanic",
+            ),
+        )
+        assert block is not None
+        assert "- Risk tolerance: moderate" in block
+        # Underscore-free canaries: _humanize would otherwise rewrite them, so
+        # an underscored value could slip past a substring check.
+        for pii in (
+            "jane-pii@example.com",
+            "1990",
+            "8675309",
+            "Secret Street",
+            "Confidentialville",
+            "PIIZIP",
+            "6789",
+            "AcmeSecretCorp",
+            "SecretInheritanceFund",
+            "WouldSellEverythingInPanic",
+        ):
+            assert pii not in block
