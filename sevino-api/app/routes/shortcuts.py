@@ -2,7 +2,7 @@
 
 Serves the iOS home-screen chat suggestions: a time-bucket-aware mix of
 onboarding and evergreen prompts. Auth-gated; rate-limited via the global
-per-user default. Responses are cached per user for 30s.
+per-user default. Responses are cached per user for 2 minutes.
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from app.services.shortcuts.time_buckets import ET, current_bucket
 
 router = APIRouter()
 
-_CACHE_TTL = 30
+_CACHE_TTL = 120
 
 
 def _get_alpaca(request: Request) -> AlpacaBrokerService | None:
@@ -63,7 +63,7 @@ async def list_shortcuts(
         return response.model_dump(mode="json")
 
     # Key on (day, bucket) so feed content turns over exactly at bucket
-    # boundaries instead of lingering for up to the 30s TTL.
+    # boundaries instead of lingering for up to the 2min TTL.
     cache_key = f"shortcuts:{user_id}:{day.isoformat()}:{bucket.value}"
     cached = await cache_get_or_set(redis, cache_key, _CACHE_TTL, fetch)
     return ShortcutsResponse.model_validate(cached)
