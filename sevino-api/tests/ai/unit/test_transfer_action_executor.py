@@ -1,4 +1,4 @@
-"""Unit tests for the ``transfer`` action executor."""
+"""Unit tests for the ``transfer`` action handler."""
 
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
@@ -7,8 +7,7 @@ from uuid import uuid4
 import pytest
 
 from app.ai.actions.base import ActionContext
-from app.ai.actions.transfer import execute_transfer
-from app.ai.blocks import ConfirmationBlock
+from app.ai.actions.transfer import TransferActionHandler
 from app.ai.tools.base import ToolHttpClients
 from app.exceptions import ConflictError
 from app.services.alpaca_broker import (
@@ -46,71 +45,68 @@ def _patch_create(monkeypatch, *, return_value=None, side_effect=None):
     )
 
 
-async def test_execute_success_returns_executed_receipt(monkeypatch):
+async def test_execute_success_returns_executed_resume_prompt(monkeypatch):
     _patch_create(
-        monkeypatch,
-        return_value={
-            "id": "xfer_1",
-            "status": "QUEUED",
-            "amount": "500.00",
-            "direction": "INCOMING",
-        },
+        monkeypatch, return_value={"id": "xfer_1", "status": "QUEUED"}
     )
-    result = await execute_transfer(_PAYLOAD, _ctx())
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
     assert result.status == "executed"
-    assert result.summary["transfer_id"] == "xfer_1"
-    assert isinstance(result.result_block, ConfirmationBlock)
-    assert result.result_block.status == "executed"
-    assert result.result_block.hold_to_confirm is False
-    assert "500.00" in result.narration
+    assert "$500.00" in result.resume_prompt
+    # The seed instructs the model to narrate success (not assert it itself).
+    assert "went through" in result.resume_prompt
+    assert result.summary == {"amount": "500.00", "direction": "INCOMING"}
 
 
-async def test_execute_business_error_returns_failed(monkeypatch):
+async def test_execute_business_error_uses_curated_reason(monkeypatch):
     _patch_create(
         monkeypatch,
         side_effect=ConflictError(
-            "The linked bank is still being verified.",
+            "This bank is still being verified.",
             code="RELATIONSHIP_NOT_APPROVED",
         ),
     )
-    result = await execute_transfer(_PAYLOAD, _ctx())
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
     assert result.status == "failed"
-    assert result.result_block.status == "failed"
-    assert "still being verified" in result.narration
-    assert "error" in result.summary
+    assert "still being verified" in result.resume_prompt
+    assert "do not claim the transfer succeeded".lower() in result.resume_prompt.lower()
 
 
-async def test_upstream_error_uses_generic_reason_not_raw_text(monkeypatch):
-    _patch_create(
-        monkeypatch,
-        side_effect=AlpacaBrokerUnavailableError("Connection timeout to host"),
-    )
-    result = await execute_transfer(_PAYLOAD, _ctx())
-    assert result.status == "failed"
-    # Raw upstream/network text must not leak to the user.
-    assert "Connection timeout" not in result.narration
-    assert "brokerage" in result.narration.lower()
-
-
-async def test_alpaca_4xx_does_not_leak_upstream_message(monkeypatch):
+async def test_execute_alpaca_error_does_not_leak_raw_text(monkeypatch):
     _patch_create(
         monkeypatch,
         side_effect=AlpacaBrokerError(422, "internal alpaca phrasing xyz"),
     )
-    result = await execute_transfer(_PAYLOAD, _ctx())
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
     assert result.status == "failed"
-    assert "xyz" not in result.narration
+    assert "xyz" not in result.resume_prompt
 
 
-async def test_unexpected_exception_degrades_to_failed_receipt(monkeypatch):
+async def test_execute_unavailable_does_not_leak(monkeypatch):
+    _patch_create(
+        monkeypatch,
+        side_effect=AlpacaBrokerUnavailableError("Connection timeout to host"),
+    )
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
+    assert result.status == "failed"
+    assert "Connection timeout" not in result.resume_prompt
+
+
+async def test_execute_unexpected_error_degrades(monkeypatch):
     _patch_create(monkeypatch, side_effect=RuntimeError("db exploded"))
-    result = await execute_transfer(_PAYLOAD, _ctx())
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
     assert result.status == "failed"
-    assert result.result_block is not None
-    assert "db exploded" not in result.narration
+    assert "db exploded" not in result.resume_prompt
 
 
-async def test_execute_without_alpaca_fails_gracefully():
-    result = await execute_transfer(_PAYLOAD, _ctx(alpaca=None))
+async def test_execute_without_alpaca_fails():
+    result = await TransferActionHandler().execute(
+        _PAYLOAD, _ctx(alpaca=None)
+    )
     assert result.status == "failed"
-    assert result.result_block is not None
+
+
+def test_reject_prompt_is_per_type():
+    rp = TransferActionHandler().reject_prompt(_PAYLOAD)
+    assert "declined" in rp
+    assert "deposit" in rp
+    assert "$500.00" in rp

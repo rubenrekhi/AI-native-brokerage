@@ -110,6 +110,7 @@ async def run_agent_turn(
     conversation_id: uuid.UUID,
     user_message: str,
     user_context: AttachedContextRequest | None = None,
+    persist_user_message: bool = True,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
@@ -182,6 +183,7 @@ async def run_agent_turn(
             model_config=model_config,
             db_factory=db_factory,
             time_context=time_context,
+            persist_user_message=persist_user_message,
         )
 
         # Emitted here (not in ``initialize_turn``) so that a cancel on

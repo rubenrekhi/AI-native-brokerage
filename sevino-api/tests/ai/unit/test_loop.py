@@ -343,6 +343,7 @@ async def _run(
     server_tools_config: ServerToolsConfig | None = None,
     time_context: str | None = None,
     user_profile: str | None = None,
+    persist_user_message: bool | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -376,6 +377,8 @@ async def _run(
         kwargs["time_context"] = time_context
     if user_profile is not None:
         kwargs["user_profile"] = user_profile
+    if persist_user_message is not None:
+        kwargs["persist_user_message"] = persist_user_message
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -431,6 +434,28 @@ class TestHappyPath:
         assert kwargs["prompt_hash"] == SYSTEM_PROMPT.hash
         assert kwargs["model_id"] == MODEL_ID
         assert kwargs["user_message_id"] == repo_mocks["_ids"]["user_msg_id"]
+
+    async def test_system_initiated_turn_skips_user_bubble_and_supersede(
+        self, repo_mocks
+    ):
+        # A HIL confirm seeds a turn without persisting a user bubble or
+        # superseding sibling proposals; the agent_turn has no user_message_id.
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            user_message="[the user confirmed the deposit; result: success]",
+            persist_user_message=False,
+        )
+
+        repo_mocks["append_user_message"].assert_not_awaited()
+        repo_mocks["supersede_pending_for_conversation"].assert_not_awaited()
+        repo_mocks["start_agent_turn"].assert_awaited_once()
+        assert (
+            repo_mocks["start_agent_turn"].call_args.kwargs["user_message_id"]
+            is None
+        )
 
     async def test_records_model_invocation_with_full_request_response(
         self, repo_mocks

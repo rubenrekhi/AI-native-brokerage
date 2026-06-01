@@ -20,13 +20,13 @@ changes are expected to follow, each as just another `action_type`.
 The lifecycle spans two backend turns with a user tap in between:
 
 ```
-TURN 1 (user-initiated)                 CONFIRM (button tap)        TURN 2 (system-initiated)
-─────────────────────────               ──────────────────          ─────────────────────────
-user asks for an action                 user taps Confirm           (no user message)
- model calls a propose_* tool           POST /actions/{id}           seeded w/ action_result ctx
-   runtime persists pending_action        atomic CAS pending→confirmed  model narrates outcome
-   streams a ConfirmationBlock card       executor performs the action    result card (executor facts)
- model emits closing text               streams the result via SSE
+TURN 1 (user-initiated)                 CONFIRM (button tap)         TURN 2 (system-initiated)
+─────────────────────────               ──────────────────           ─────────────────────────
+user asks for an action                 user taps Confirm            (no user bubble)
+ model calls a propose_* tool           POST /actions/{id}            run_agent_turn seeded with
+   runtime persists pending_action        atomic CAS pending→confirmed   the handler's resume_prompt
+   streams a ConfirmationBlock card       handler.execute (side effect)  → model narrates + may
+ model emits closing text                drives a full agent turn ──────→  call more tools
  turn ends: awaiting_confirmation
         (e.g. "buy $500 AAPL", "withdraw $200 to my bank", "cancel order #123")
 ```
@@ -178,20 +178,25 @@ part (explain, then offer a fresh card) lives in the model's reply. Notably, eve
 misbehaves here, the worst case is a redundant re-proposal — it has no way to execute anything,
 because it has no execution tool.
 
-## Executing and narrating the result
+## Executing and resuming the conversation
 
-When a confirmation succeeds, the runtime dispatches on `action_type` to the matching executor,
-which performs the side effect and returns a **structured, authoritative result**. The result
-card the user sees is rendered from that result — never from model free-text — so a confirmed
-action can never be described with a hallucinated price, amount, or id. When the model does
-speak, it only frames the authoritative card.
+A confirmation resumes the chat as a **full, system-initiated agent turn**. To the user it
+looks like the agent paused for them to confirm, they held to confirm, and the agent picked the
+conversation back up — and it can call more tools. There is no canned line.
 
-The narration turn can be deterministic (the confirm step emits a result card and a templated
-line with no model call) or model-driven (a system-initiated turn seeded with the result as
-input-only context, letting the model respond conversationally). Both render the same way into
-the thread, so one can replace the other without any client change. If execution fails (a
-precondition changed, a downstream API rejected it), the streamed turn corrects the optimistic
-local state — the card shows `failed` and the reply explains what happened.
+On confirm, the runtime dispatches on `action_type` to the matching handler, runs its side
+effect (`execute`), then drives `run_agent_turn` seeded with the handler's `resume_prompt` — a
+synthetic, model-only message describing what the user confirmed and how it went ("the user
+confirmed the $500 deposit you proposed; it went through"). The model narrates from that and may
+call further tools. The seed is **per-action-type**, not generic: each handler writes its own
+success/failure phrasing, and the authoritative facts live in that seed (sourced from the
+executor's result), so the model relays them rather than inventing.
+
+The turn is system-initiated: no user bubble is persisted (the user tapped a button, not typed)
+and the supersede sweep is skipped (the confirmed action is already off `pending`, and a confirm
+shouldn't cancel unrelated proposals). On **reject**, the same kind of turn is driven, seeded
+with the handler's `reject_prompt`. If execution fails, the seed says so and the model explains
+what happened and what to do next — never claiming success.
 
 ## How features extend the system
 
@@ -204,8 +209,10 @@ A feature contributes just two things:
 - **A propose tool** — a normal AI tool that does the safe preparation (validate inputs,
   compute a preview/estimate) and, instead of acting, returns a `ProposedAction` describing
   what should execute, alongside the `ConfirmationBlock` the user will see.
-- **An executor** — a function registered under the action's `action_type` that re-validates
-  preconditions and performs the side effect, returning an `ActionResult`.
+- **A handler** — registered under the action's `action_type`. It performs the side effect
+  (`execute`, returning an `ActionResult` whose `resume_prompt` seeds the follow-up turn) and
+  supplies the `reject_prompt` for the cancel path. Both messages are the handler's own —
+  distinct per action type, not generic.
 
 Optionally it adds a bespoke card `kind` (with a matching iOS layout) and a system-prompt
 snippet describing when to propose the action; absent those, the generic card layout is used.
@@ -214,7 +221,7 @@ The seams are these contracts:
 
 ```python
 class ProposedAction(BaseModel):
-    action_type: str            # selects the executor
+    action_type: str            # selects the handler
     payload: dict[str, Any]     # resolved, deterministic args
     expires_in_s: int = 300     # per-action window
 
@@ -238,29 +245,31 @@ class ConfirmationBlock(BaseModel):            # the gen-UI card (in the Block u
     hold_to_confirm: bool = True               # iOS renders hold-to-confirm vs. tap
     status: str = "pending"                    # on the wire; re-stamped at read time
 
-class ActionResult(BaseModel):
+class ActionResult(BaseModel):                 # outcome of execute()
     status: Literal["executed", "failed"]
-    result_card: Block | None                  # authoritative, data-driven
-    summary: dict[str, Any]                     # for narration + persistence
+    resume_prompt: str                         # per-type seed for the follow-up turn
+    summary: dict[str, Any]                    # persisted to pending_actions.result
 
-ActionExecutor = Callable[[dict, ActionContext], Awaitable[ActionResult]]
-ACTION_EXECUTORS: dict[str, ActionExecutor] = {
-    "place_order": execute_place_order,
-    # "ach_transfer": execute_ach_transfer,
-    # "cancel_order":  execute_cancel_order,
+class ActionHandler(Protocol):                 # one per action_type
+    async def execute(self, payload, ctx) -> ActionResult: ...
+    def reject_prompt(self, payload) -> str: ...
+
+ACTION_HANDLERS: dict[str, ActionHandler] = {
+    "transfer": TransferActionHandler(),
+    # "place_order": PlaceOrderActionHandler(),
 }
 ```
 
-### Worked example: trades
+### Worked example: transfers (the first consumer)
 
-Trades are an ordinary instance of the above. A `ProposeTrade` tool validates the symbol,
-checks buying power, prices the order, and returns a `ProposedAction(action_type="place_order")`
-with a `ConfirmationBlock(kind="trade")`. Its executor, `execute_place_order`, re-validates
-(account active, buying power, market hours), calls the existing
-`TradingService.place_order()` → Alpaca, and returns the fill as the result card.
-`OrderEvent.conversation_id` already ties the resulting order back to the conversation, so the
-audit chain is `pending_action` → `OrderEvent` → `tool_executions`. No confirmation plumbing is
-specific to trades; a transfer consumer would be the same shape against the transfer APIs.
+Deposits/withdrawals are an ordinary instance of the above. A `TransferOperations` tool
+validates the amount and resolves the source bank (asking which when the user has several),
+returning a `ProposedAction(action_type="transfer")` with a `ConfirmationBlock(kind="transfer")`.
+Its handler, `TransferActionHandler`, calls the existing `FundingService.create_transfer` →
+Alpaca on confirm and returns an `ActionResult` whose `resume_prompt` tells the model the
+transfer went through — or, on failure, a user-safe reason (raw Alpaca/network text is logged,
+never surfaced); `reject_prompt` covers the cancel path. No confirmation plumbing is specific to
+transfers; a trade or order-cancel consumer would be the same shape against its own APIs.
 
 ## How it maps onto the codebase
 
@@ -269,9 +278,9 @@ specific to trades; a transfer consumer would be the same shape against the tran
 | `ConfirmationBlock` (+ iOS mirror) | `app/ai/blocks.py`, `Models/Chat/Block.swift` |
 | Proposal interrupt on tool results | `app/ai/tools/base.py` (`ProposedAction`, `ToolResult.proposal`) |
 | The gate (proposal → persisted row + card + turn end) | tool dispatch in `app/ai/runtime/dispatch`, `runtime/flow/iteration.py` |
-| `awaiting_confirmation` turn end, system-initiated narration turn | `app/ai/runtime/loop.py` |
+| `awaiting_confirmation` turn end; system-initiated turn (`persist_user_message=False`) | `app/ai/runtime/loop.py`, `runtime/flow/turn_lifecycle.py` |
 | Supersede sweep at turn start | `app/ai/runtime/flow/turn_lifecycle.py` |
 | Read-time card-status resolution | conversation/message history serialization |
 | Pending-action state + transitions | `app/models/pending_action.py` + repository |
-| Executor registry + `ActionResult` | `app/ai/actions/` |
+| Handler registry (`ActionHandler` + `ActionResult`) | `app/ai/actions/` (`transfer.py` = first handler) |
 | Confirm endpoint | `app/routes/actions.py` (`POST /v1/conversations/{id}/actions/{action_id}`) |

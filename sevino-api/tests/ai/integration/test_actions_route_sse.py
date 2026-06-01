@@ -1,16 +1,19 @@
 """Integration tests for the HIL confirm endpoint
 ``POST /v1/conversations/{id}/actions/{action_id}``.
 
-Drives the reverse channel end to end against the real DB with a stub executor
-registered for a test ``action_type``: confirm runs the executor, streams the
-result into the conversation, and marks the row executed; reject acks; a
-stale/expired/foreign action is refused.
+The endpoint claims the pending action, runs the handler's side effect, and
+drives a full follow-up agent turn seeded by the handler's per-type prompt.
+``run_agent_turn`` is patched (it has its own exhaustive coverage in
+test_loop / test_chat_endpoint_sse) so these tests focus on the route's logic:
+CAS, handler dispatch, marking, and that the turn is driven with the right
+seed + ``persist_user_message=False``.
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -18,13 +21,10 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.actions import (
-    ACTION_EXECUTORS,
-    ActionContext,
-    ActionResult,
-    register_action_executor,
-)
-from app.ai.blocks import ConfirmationBlock, ConfirmationRow
+from app.ai.actions import ACTION_HANDLERS, register_action_handler
+from app.ai.actions.base import ActionResult
+from app.ai.anthropic_client import get_anthropic
+from app.ai.observability.langfuse import _NoopLangfuse, get_langfuse
 from app.ai.runtime.db import get_db_factory, make_session_factory
 from app.ai.transport.events import (
     BlockEnd,
@@ -36,7 +36,6 @@ from app.ai.transport.events import (
 )
 from app.auth import get_current_user
 from app.main import app
-from app.models.message import Message as MessageRow
 from app.models.pending_action import PendingAction, PendingActionStatus
 from app.repositories.conversation import ConversationRepository
 from app.repositories.pending_action import PendingActionRepository
@@ -51,26 +50,58 @@ pytestmark = pytest.mark.skipif(
     reason="Local Supabase Postgres not available (run `make infra`)",
 )
 
-_TEST_ACTION_TYPE = "test_transfer"
-_EXECUTOR_CALLS: list[tuple[dict[str, Any], ActionContext]] = []
+_TEST_ACTION_TYPE = "test_action"
+_HANDLER_CALLS: list[tuple[str, dict[str, Any]]] = []
+_RUN_CALLS: list[dict[str, Any]] = []
 
 
-async def _stub_executor(
-    payload: dict[str, Any], ctx: ActionContext
-) -> ActionResult:
-    _EXECUTOR_CALLS.append((payload, ctx))
-    return ActionResult(
-        status="executed",
-        result_block=ConfirmationBlock(
-            block_id="res1",
-            action_id="res",
-            kind="transfer",
-            title="Deposit submitted",
-            rows=[ConfirmationRow(label="Amount", value="$10.00")],
+class _StubHandler:
+    async def execute(self, payload, ctx) -> ActionResult:
+        _HANDLER_CALLS.append(("execute", payload))
+        return ActionResult(
             status="executed",
-        ),
-        summary={"transfer_id": "xfer_1", "status": "QUEUED"},
-        narration="Your $10.00 deposit is on its way ✅",
+            resume_prompt="RESUME_SEED",
+            summary={"transfer_id": "xfer_1"},
+        )
+
+    def reject_prompt(self, payload) -> str:
+        _HANDLER_CALLS.append(("reject", payload))
+        return "REJECT_SEED"
+
+
+async def _fake_run_agent_turn(**kwargs):
+    _RUN_CALLS.append(kwargs)
+    emitter = kwargs["sse_emitter"]
+    tid = uuid.uuid4()
+    await emitter.emit(
+        TurnStarted(
+            turn_id=tid,
+            conversation_id=kwargs["conversation_id"],
+            card_context_source=None,
+        )
+    )
+    await emitter.emit(
+        BlockStart(
+            block={"type": "text", "block_id": "b1", "text": "Done."}
+        )
+    )
+    await emitter.emit(BlockEnd(block_id="b1"))
+    await emitter.emit(
+        TurnCompleted(
+            turn_id=tid,
+            terminal_state="end_turn",
+            total_cost_usd_micros=0,
+            iterations_count=1,
+        )
+    )
+    return SimpleNamespace(
+        turn_id=tid,
+        terminal_state="end_turn",
+        assistant_message_blocks=[
+            {"type": "text", "block_id": "b1", "text": "Done."}
+        ],
+        total_cost_usd_micros=0,
+        iterations_count=1,
     )
 
 
@@ -79,14 +110,10 @@ async def _consume_sse(
 ) -> list[Event]:
     async with client.stream("POST", url, json=json) as response:
         assert response.status_code == 200, await response.aread()
-        assert response.headers["content-type"].startswith(
-            "text/event-stream"
-        )
         body = (await response.aread()).decode("utf-8")
-    normalised = body.replace("\r\n", "\n")
     return [
         parse_wire_frame(frame)
-        for frame in normalised.split("\n\n")
+        for frame in body.replace("\r\n", "\n").split("\n\n")
         if frame.strip()
     ]
 
@@ -100,40 +127,34 @@ class _Fixture:
 
     async def cleanup(self) -> None:
         async with AsyncSession(bind=self.engine) as c:
-            await c.execute(
-                text(
-                    "DELETE FROM pending_actions WHERE conversation_id = :id"
-                ),
-                {"id": self.conversation_id},
-            )
-            await c.execute(
-                text("DELETE FROM messages WHERE conversation_id = :id"),
-                {"id": self.conversation_id},
-            )
-            await c.execute(
-                text("DELETE FROM conversations WHERE id = :id"),
-                {"id": self.conversation_id},
-            )
-            await c.execute(
-                text("DELETE FROM user_profiles WHERE id = :id"),
-                {"id": self.user_id},
-            )
-            await c.execute(
-                text("DELETE FROM auth.users WHERE id = :id"),
-                {"id": self.user_id},
-            )
+            for table, col, val in (
+                ("pending_actions", "conversation_id", self.conversation_id),
+                ("messages", "conversation_id", self.conversation_id),
+                ("agent_turns", "conversation_id", self.conversation_id),
+                ("conversations", "id", self.conversation_id),
+                ("user_profiles", "id", self.user_id),
+                ("auth.users", "id", self.user_id),
+            ):
+                await c.execute(
+                    text(f"DELETE FROM {table} WHERE {col} = :v"), {"v": val}
+                )
             await c.commit()
 
 
 async def _seed(
-    engine, *, expires_in_s: int = 300, status: str | None = None
+    engine,
+    *,
+    expires_in_s: int = 300,
+    status: str | None = None,
+    action_type: str = _TEST_ACTION_TYPE,
 ) -> _Fixture:
     user_id = uuid.uuid4()
     conversation_id = uuid.uuid4()
     action_id = uuid.uuid4()
-    email = f"actions-{user_id}@test.local"
     async with AsyncSession(bind=engine, expire_on_commit=False) as setup:
-        await insert_auth_user(setup, user_id=user_id, email=email)
+        await insert_auth_user(
+            setup, user_id=user_id, email=f"actions-{user_id}@test.local"
+        )
         await ConversationRepository.create_conversation(
             setup, conversation_id=conversation_id, user_id=user_id
         )
@@ -144,7 +165,7 @@ async def _seed(
             conversation_id=conversation_id,
             agent_turn_id=None,
             tool_use_id="tu_1",
-            action_type=_TEST_ACTION_TYPE,
+            action_type=action_type,
             payload={"amount": "10.00", "direction": "INCOMING"},
             preview={"action_id": str(action_id)},
             expires_at=datetime.now(timezone.utc)
@@ -152,9 +173,7 @@ async def _seed(
         )
         if status is not None:
             await setup.execute(
-                text(
-                    "UPDATE pending_actions SET status = :s WHERE id = :id"
-                ),
+                text("UPDATE pending_actions SET status=:s WHERE id=:id"),
                 {"s": status, "id": action_id},
             )
         await setup.commit()
@@ -167,27 +186,34 @@ async def _seed(
 
 
 @pytest.fixture(autouse=True)
-def _register_executor():
-    _EXECUTOR_CALLS.clear()
-    if _TEST_ACTION_TYPE not in ACTION_EXECUTORS:
-        register_action_executor(_TEST_ACTION_TYPE, _stub_executor)
+def _wire(monkeypatch):
+    _HANDLER_CALLS.clear()
+    _RUN_CALLS.clear()
+    if _TEST_ACTION_TYPE not in ACTION_HANDLERS:
+        register_action_handler(_TEST_ACTION_TYPE, _StubHandler())
+    monkeypatch.setattr(
+        "app.routes.actions.run_agent_turn", _fake_run_agent_turn
+    )
     yield
-    ACTION_EXECUTORS.pop(_TEST_ACTION_TYPE, None)
-    _EXECUTOR_CALLS.clear()
+    ACTION_HANDLERS.pop(_TEST_ACTION_TYPE, None)
+    _HANDLER_CALLS.clear()
+    _RUN_CALLS.clear()
 
 
 @pytest.fixture
 async def client(db_engine):
     db_factory = make_session_factory(db_engine)
     app.dependency_overrides[get_db_factory] = lambda: db_factory
+    app.dependency_overrides[get_anthropic] = lambda: object()
+    app.dependency_overrides[get_langfuse] = lambda: _NoopLangfuse()
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
         headers={"X-API-Key": TEST_API_KEY},
     ) as ac:
         yield ac
-    app.dependency_overrides.pop(get_db_factory, None)
-    app.dependency_overrides.pop(get_current_user, None)
+    for dep in (get_db_factory, get_anthropic, get_langfuse, get_current_user):
+        app.dependency_overrides.pop(dep, None)
 
 
 def _auth_as(user_id: uuid.UUID) -> None:
@@ -196,41 +222,29 @@ def _auth_as(user_id: uuid.UUID) -> None:
 
 def _url(fix: _Fixture) -> str:
     return (
-        f"/v1/conversations/{fix.conversation_id}"
-        f"/actions/{fix.action_id}"
+        f"/v1/conversations/{fix.conversation_id}/actions/{fix.action_id}"
     )
 
 
 class TestConfirm:
-    async def test_confirm_e2e(self, db_engine, client):
+    async def test_confirm_executes_then_drives_seeded_turn(
+        self, db_engine, client
+    ):
         fix = await _seed(db_engine)
         _auth_as(fix.user_id)
         try:
             events = await _consume_sse(
                 client, _url(fix), json={"decision": "confirm"}
             )
+            assert type(events[0]) is TurnStarted
+            assert type(events[-1]) is TurnCompleted
 
-            types = [type(e) for e in events]
-            assert types[0] is TurnStarted
-            assert types[-1] is TurnCompleted
-            assert BlockStart in types and BlockEnd in types
-
-            completed = events[-1]
-            assert isinstance(completed, TurnCompleted)
-            assert completed.terminal_state == "executed"
-
-            # Executor ran with the server-persisted payload.
-            assert len(_EXECUTOR_CALLS) == 1
-            payload, _ctx = _EXECUTOR_CALLS[0]
-            assert payload == {"amount": "10.00", "direction": "INCOMING"}
-
-            # A confirmation result card was streamed.
-            starts = [e for e in events if isinstance(e, BlockStart)]
-            assert any(
-                s.block.get("type") == "confirmation"
-                and s.block.get("status") == "executed"
-                for s in starts
-            )
+            # Handler side effect ran with the persisted payload.
+            assert ("execute", {"amount": "10.00", "direction": "INCOMING"}) in _HANDLER_CALLS
+            # A full follow-up turn was driven, seeded + system-initiated.
+            assert len(_RUN_CALLS) == 1
+            assert _RUN_CALLS[0]["user_message"] == "RESUME_SEED"
+            assert _RUN_CALLS[0]["persist_user_message"] is False
 
             async with AsyncSession(bind=db_engine) as q:
                 row = (
@@ -241,22 +255,7 @@ class TestConfirm:
                     )
                 ).scalar_one()
                 assert row.status == PendingActionStatus.EXECUTED
-                assert row.result == {
-                    "transfer_id": "xfer_1",
-                    "status": "QUEUED",
-                }
-
-                msgs = (
-                    await q.execute(
-                        select(MessageRow).where(
-                            MessageRow.conversation_id == fix.conversation_id
-                        )
-                    )
-                ).scalars().all()
-                assert len(msgs) == 1
-                assert msgs[0].role == "assistant"
-                kinds = [b.get("type") for b in msgs[0].content_blocks]
-                assert "text" in kinds and "confirmation" in kinds
+                assert row.result == {"transfer_id": "xfer_1"}
         finally:
             await fix.cleanup()
 
@@ -264,9 +263,7 @@ class TestConfirm:
         fix = await _seed(db_engine)
         _auth_as(fix.user_id)
         try:
-            await _consume_sse(
-                client, _url(fix), json={"decision": "confirm"}
-            )
+            await _consume_sse(client, _url(fix), json={"decision": "confirm"})
             resp = await client.post(_url(fix), json={"decision": "confirm"})
             assert resp.status_code == 409
             assert resp.json()["code"] == "ACTION_NOT_AVAILABLE"
@@ -279,8 +276,7 @@ class TestConfirm:
         try:
             resp = await client.post(_url(fix), json={"decision": "confirm"})
             assert resp.status_code == 409
-            assert resp.json()["code"] == "ACTION_NOT_AVAILABLE"
-            assert not _EXECUTOR_CALLS
+            assert not _HANDLER_CALLS
         finally:
             await fix.cleanup()
 
@@ -297,19 +293,32 @@ class TestConfirm:
         finally:
             await fix.cleanup()
 
+    async def test_unsupported_action_type_is_refused(self, db_engine, client):
+        fix = await _seed(db_engine, action_type="no_such_handler")
+        _auth_as(fix.user_id)
+        try:
+            resp = await client.post(_url(fix), json={"decision": "confirm"})
+            assert resp.status_code == 409
+            assert resp.json()["code"] == "ACTION_UNSUPPORTED"
+            assert not _RUN_CALLS
+        finally:
+            await fix.cleanup()
+
 
 class TestReject:
-    async def test_reject_acks_and_marks_rejected(self, db_engine, client):
+    async def test_reject_drives_turn_with_reject_seed(
+        self, db_engine, client
+    ):
         fix = await _seed(db_engine)
         _auth_as(fix.user_id)
         try:
             events = await _consume_sse(
                 client, _url(fix), json={"decision": "reject"}
             )
-            completed = events[-1]
-            assert isinstance(completed, TurnCompleted)
-            assert completed.terminal_state == "rejected"
-            assert not _EXECUTOR_CALLS
+            assert type(events[-1]) is TurnCompleted
+            assert ("reject", {"amount": "10.00", "direction": "INCOMING"}) in _HANDLER_CALLS
+            assert _RUN_CALLS[0]["user_message"] == "REJECT_SEED"
+            assert _RUN_CALLS[0]["persist_user_message"] is False
 
             async with AsyncSession(bind=db_engine) as q:
                 row = (

@@ -1,12 +1,16 @@
 """Human-in-the-loop confirmation endpoint.
 
-``POST /v1/conversations/{conversation_id}/actions/{action_id}`` is the
-reverse channel for the HIL framework: the client confirms (or rejects) a
-proposal the AI streamed earlier. On confirm we atomically claim the pending
-action, run its executor, and stream the result back into the same
-conversation as an assistant turn (see docs/ai/hil-actions.md). The client
-sends only a decision — the executed parameters are the server-persisted
-``payload``, never client input.
+``POST /v1/conversations/{conversation_id}/actions/{action_id}`` is the reverse
+channel for the HIL framework. The client sends only a decision; the executed
+parameters are the server-persisted ``payload``, never client input.
+
+On **confirm** we atomically claim the action, run its handler's side effect,
+then drive a **full follow-up agent turn** seeded with the handler's per-type
+``resume_prompt`` (a system-initiated turn — no user bubble). On **reject** we
+mark it rejected and drive the same kind of turn seeded with ``reject_prompt``.
+Either way the model resumes the conversation naturally and may call further
+tools — so to the user the agent simply paused for the tap and continued (see
+docs/ai/hil-actions.md).
 """
 
 from __future__ import annotations
@@ -17,28 +21,26 @@ from typing import Any, AsyncIterator
 
 import sentry_sdk
 import structlog
+from anthropic import AsyncAnthropic
 from fastapi import APIRouter, Depends, Request
 from sse_starlette.event import ServerSentEvent
 from sse_starlette.sse import EventSourceResponse
-from ulid import ULID
 
-from app.ai.actions import (
-    ACTION_EXECUTORS,
-    ActionContext,
-    get_action_executor,
-)
+from app.ai.actions import ACTION_HANDLERS, ActionContext, get_action_handler
+from app.ai.anthropic_client import get_anthropic
+from app.ai.models import get_default_model_config
+from app.ai.observability.langfuse import LangfuseClient, get_langfuse
+from app.ai.prompts import system_prompt_for
+from app.ai.runtime.caps import HardCaps, get_hard_caps
 from app.ai.runtime.db import DbSessionFactory, get_db_factory
-from app.ai.runtime.errors import ErrorCode, to_error_code
-from app.ai.tools import ToolHttpClients
+from app.ai.runtime.errors import to_error_code
+from app.ai.runtime.loop import run_agent_turn
+from app.ai.runtime.types import ModelConfig, ServerToolsConfig
+from app.ai.tools import DEFAULT_REGISTRY, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
-from app.ai.transport.events import (
-    BlockEnd,
-    BlockStart,
-    Error,
-    TurnCompleted,
-    TurnStarted,
-)
+from app.ai.transport.events import Error
 from app.auth import get_current_user
+from app.config import settings
 from app.exceptions import ConflictError
 from app.rate_limit import limiter
 from app.repositories.conversation import ConversationRepository
@@ -50,18 +52,6 @@ logger = structlog.get_logger(__name__)
 router = APIRouter()
 
 
-def _text_block(text: str) -> dict[str, Any]:
-    return {"type": "text", "block_id": str(ULID()), "text": text}
-
-
-async def _emit_block(emitter: SSEEmitter, block: dict[str, Any]) -> None:
-    """Stream a fully-formed block (no deltas) — matches the tool ui_block path."""
-    await emitter.emit(BlockStart(block=block))
-    block_id = block.get("block_id")
-    if isinstance(block_id, str):
-        await emitter.emit(BlockEnd(block_id=block_id))
-
-
 @router.post("/{conversation_id}/actions/{action_id}")
 @limiter.limit("30/minute")
 async def submit_action(
@@ -71,10 +61,14 @@ async def submit_action(
     body: ActionDecisionRequest,
     user_id: str = Depends(get_current_user),
     db_factory: DbSessionFactory = Depends(get_db_factory),
+    anthropic_client: AsyncAnthropic = Depends(get_anthropic),
+    langfuse: LangfuseClient = Depends(get_langfuse),
+    model_config: ModelConfig = Depends(get_default_model_config),
+    hard_caps: HardCaps = Depends(get_hard_caps),
 ) -> EventSourceResponse:
     user_uuid = uuid.UUID(user_id)
 
-    # Ownership + existence (404 on either) and load the action's type while
+    # Ownership + existence (404 on either) and load the action's fields while
     # the row is attached to the session.
     async with db_factory() as db:
         await ConversationRepository.ensure_owned_conversation(
@@ -87,214 +81,140 @@ async def submit_action(
             conversation_id=conversation_id,
         )
         action_type = action.action_type
+        payload = dict(action.payload)
 
-    if body.decision == "reject":
-        async with db_factory() as db:
-            await PendingActionRepository.reject(db, action_id=action_id)
-        return _single_message_stream(
-            conversation_id=conversation_id,
-            db_factory=db_factory,
-            blocks=[
-                _text_block(
-                    "Okay — I've cancelled that. Just let me know if you "
-                    "change your mind."
-                )
-            ],
-            terminal_state="rejected",
-        )
-
-    # Refuse confirm if no executor is registered — otherwise the CAS below
-    # would strand the row in ``confirmed`` with no way to run or retry it.
-    if action_type not in ACTION_EXECUTORS:
+    # No handler → can't execute or describe the outcome. Refuse before the CAS
+    # so the row isn't stranded in a terminal state with nothing to run it.
+    if action_type not in ACTION_HANDLERS:
         raise ConflictError(
             "This action can no longer be completed.",
             code="ACTION_UNSUPPORTED",
             resource="pending_action",
         )
-
-    # Confirm: atomic CAS. None => expired / superseded / already acted. Read
-    # the payload inside the session — the row detaches once it commits.
-    async with db_factory() as db:
-        confirmed = await PendingActionRepository.confirm(
-            db, action_id=action_id
-        )
-        payload = None if confirmed is None else dict(confirmed.payload)
-    if payload is None:
-        raise ConflictError(
-            "This confirmation is no longer available — it may have expired "
-            "or already been handled.",
-            code="ACTION_NOT_AVAILABLE",
-            resource="pending_action",
-        )
-
+    handler = get_action_handler(action_type)
     http_clients = ToolHttpClients(
         market_data=getattr(request.app.state, "market_data", None),
         alpaca=getattr(request.app.state, "alpaca", None),
         redis=getattr(request.app.state, "redis", None),
     )
-    action_ctx = ActionContext(
-        user_id=user_uuid, db_factory=db_factory, http_clients=http_clients
-    )
 
-    emitter = SSEEmitter()
-
-    async def _execute_and_record() -> tuple[Any, list[dict[str, Any]]]:
-        """Run the side effect and persist its outcome.
-
-        Awaited under ``asyncio.shield``: once the action is confirmed, the
-        executor and its bookkeeping run to completion even if the client
-        disconnects mid-stream — the one place a dropped write would lose a
-        real side effect.
-        """
-        try:
-            executor = get_action_executor(action_type)
-            result = await executor(payload, action_ctx)
-        except Exception as exc:
-            logger.exception(
-                "action_execute_failed",
-                action_id=str(action_id),
-                action_type=action_type,
+    if body.decision == "reject":
+        async with db_factory() as db:
+            rejected = await PendingActionRepository.reject(
+                db, action_id=action_id
             )
-            await _safe_mark(
-                db_factory,
-                action_id=action_id,
-                executed=False,
-                result={"error": f"{type(exc).__name__}: {exc}"},
+        if rejected is None:
+            raise ConflictError(
+                "This confirmation is no longer available.",
+                code="ACTION_NOT_AVAILABLE",
+                resource="pending_action",
             )
-            raise
+        seed_prompt = handler.reject_prompt(payload)
+    else:
+        # Confirm: atomic CAS. None => expired / superseded / already acted.
+        async with db_factory() as db:
+            confirmed = await PendingActionRepository.confirm(
+                db, action_id=action_id
+            )
+        if confirmed is None:
+            raise ConflictError(
+                "This confirmation is no longer available — it may have "
+                "expired or already been handled.",
+                code="ACTION_NOT_AVAILABLE",
+                resource="pending_action",
+            )
+        # The side effect runs here, before the stream opens, so a client
+        # disconnect mid-stream can't abort an already-claimed money move.
+        result = await handler.execute(
+            payload,
+            ActionContext(
+                user_id=user_uuid,
+                db_factory=db_factory,
+                http_clients=http_clients,
+            ),
+        )
         await _safe_mark(
             db_factory,
             action_id=action_id,
             executed=result.status == "executed",
             result=result.summary,
         )
-        blocks: list[dict[str, Any]] = [_text_block(result.narration)]
-        if result.result_block is not None:
-            blocks.append(result.result_block.model_dump(mode="json"))
-        await _safe_append_assistant(
-            db_factory, conversation_id=conversation_id, blocks=blocks
-        )
-        logger.info(
-            "action_confirmed_executed",
-            action_id=str(action_id),
-            action_type=action_type,
-            terminal_state=result.status,
-            conversation_id=str(conversation_id),
-        )
-        return result, blocks
+        seed_prompt = result.resume_prompt
 
-    async def _drive() -> None:
-        turn_id = uuid.uuid4()
-        try:
-            await emitter.emit(
-                TurnStarted(
-                    turn_id=turn_id,
-                    conversation_id=conversation_id,
-                    card_context_source=None,
-                )
-            )
-            try:
-                result, blocks = await asyncio.shield(_execute_and_record())
-            except Exception as exc:
-                await emitter.emit(
-                    Error(code=to_error_code(exc), message=str(exc))
-                )
-                return
-            for block in blocks:
-                await _emit_block(emitter, block)
-            await emitter.emit(
-                TurnCompleted(
-                    turn_id=turn_id,
-                    terminal_state=result.status,
-                    total_cost_usd_micros=0,
-                    iterations_count=0,
-                )
-            )
-        except asyncio.CancelledError:
-            # The shielded execute+record keeps running to completion; flag the
-            # cut stream so a row stuck mid-confirm is observable in Sentry.
-            sentry_sdk.capture_message(
-                "action_confirm_stream_cancelled_after_confirm",
-                level="warning",
-            )
-            logger.warning(
-                "action_confirm_stream_cancelled",
-                action_id=str(action_id),
-                action_type=action_type,
-            )
-            raise
-        except Exception:
-            logger.exception(
-                "action_drive_failed", action_id=str(action_id)
-            )
-            await emitter.emit(
-                Error(
-                    code=ErrorCode.INTERNAL_ERROR,
-                    message="Something went wrong completing that action.",
-                )
-            )
-        finally:
-            await emitter.close()
-
-    async def _stream() -> AsyncIterator[ServerSentEvent]:
-        task = asyncio.create_task(_drive())
-        try:
-            async for event in emitter.iter_events():
-                yield ServerSentEvent(
-                    data=event.model_dump_json(),
-                    event=event.type,
-                    id=event.id,
-                )
-        finally:
-            if not task.done():
-                task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
-    return EventSourceResponse(_stream())
+    return _stream_resume_turn(
+        request=request,
+        user_uuid=user_uuid,
+        conversation_id=conversation_id,
+        action_id=action_id,
+        seed_prompt=seed_prompt,
+        http_clients=http_clients,
+        anthropic_client=anthropic_client,
+        db_factory=db_factory,
+        langfuse=langfuse,
+        model_config=model_config,
+        hard_caps=hard_caps,
+    )
 
 
-def _single_message_stream(
+def _stream_resume_turn(
     *,
+    request: Request,
+    user_uuid: uuid.UUID,
     conversation_id: uuid.UUID,
+    action_id: uuid.UUID,
+    seed_prompt: str,
+    http_clients: ToolHttpClients,
+    anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
-    blocks: list[dict[str, Any]],
-    terminal_state: str,
+    langfuse: LangfuseClient,
+    model_config: ModelConfig,
+    hard_caps: HardCaps,
 ) -> EventSourceResponse:
-    """Stream a fixed set of assistant blocks as one turn (e.g. reject ack)."""
+    """Drive a full, system-initiated agent turn seeded by ``seed_prompt`` and
+    stream its events. Same transport/driver shape as the chat-turn route."""
     emitter = SSEEmitter()
 
     async def _drive() -> None:
-        turn_id = uuid.uuid4()
         try:
-            await emitter.emit(
-                TurnStarted(
-                    turn_id=turn_id,
-                    conversation_id=conversation_id,
-                    card_context_source=None,
-                )
+            server_tools_config = ServerToolsConfig(
+                web_search_enabled=settings.anthropic_enable_web_search,
+                web_fetch_enabled=settings.anthropic_enable_web_fetch,
+                code_execution_enabled=settings.anthropic_enable_code_execution,
+                web_search_max_uses=settings.anthropic_web_search_max_uses,
+                web_fetch_max_uses=settings.anthropic_web_fetch_max_uses,
             )
-            for block in blocks:
-                await _emit_block(emitter, block)
-            await _safe_append_assistant(
-                db_factory, conversation_id=conversation_id, blocks=blocks
+            result = await run_agent_turn(
+                user_id=user_uuid,
+                conversation_id=conversation_id,
+                user_message=seed_prompt,
+                persist_user_message=False,
+                anthropic_client=anthropic_client,
+                db_factory=db_factory,
+                tool_registry=DEFAULT_REGISTRY,
+                http_clients=http_clients,
+                system_prompt=system_prompt_for(server_tools_config),
+                model_config=model_config,
+                hard_caps=hard_caps,
+                langfuse=langfuse,
+                environment=settings.environment,
+                sse_emitter=emitter,
+                server_tools_config=server_tools_config,
             )
-            await emitter.emit(
-                TurnCompleted(
-                    turn_id=turn_id,
-                    terminal_state=terminal_state,
-                    total_cost_usd_micros=0,
-                    iterations_count=0,
-                )
+            logger.info(
+                "action_resume_turn_completed",
+                action_id=str(action_id),
+                conversation_id=str(conversation_id),
+                terminal_state=result.terminal_state,
             )
         except asyncio.CancelledError:
             raise
-        except Exception:
-            logger.exception("action_ack_stream_failed")
+        except Exception as exc:
+            sentry_sdk.capture_exception(exc)
+            logger.exception(
+                "action_resume_turn_failed", action_id=str(action_id)
+            )
             await emitter.emit(
-                Error(code=ErrorCode.INTERNAL_ERROR, message=None)
+                Error(code=to_error_code(exc), message=str(exc))
             )
         finally:
             await emitter.close()
@@ -327,7 +247,7 @@ async def _safe_mark(
     result: dict[str, Any],
 ) -> None:
     """Best-effort bookkeeping. The side effect already happened in the
-    executor; a failed mark must not abort the stream."""
+    handler; a failed mark must not abort the stream."""
     try:
         async with db_factory() as db:
             if executed:
@@ -341,24 +261,6 @@ async def _safe_mark(
     except Exception:
         logger.exception(
             "pending_action_mark_failed", action_id=str(action_id)
-        )
-
-
-async def _safe_append_assistant(
-    db_factory: DbSessionFactory,
-    *,
-    conversation_id: uuid.UUID,
-    blocks: list[dict[str, Any]],
-) -> None:
-    try:
-        async with db_factory() as db:
-            await ConversationRepository.append_assistant_message(
-                db, conversation_id=conversation_id, content_blocks=blocks
-            )
-    except Exception:
-        logger.exception(
-            "action_assistant_persist_failed",
-            conversation_id=str(conversation_id),
         )
 
 
