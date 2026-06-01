@@ -170,7 +170,8 @@ final class FundingViewModelTests: XCTestCase {
         pendingDeposits: String = "100.50",
         interestPaidOut: String = "monthly",
         fdicInsuredLimit: String = "2500000",
-        sweepStatus: String? = "ACTIVE"
+        sweepStatus: String? = "ACTIVE",
+        enrollmentState: EnrollmentState? = .active
     ) -> CashInterestResponse {
         CashInterestResponse(
             balance: balance,
@@ -183,8 +184,28 @@ final class FundingViewModelTests: XCTestCase {
             pendingDeposits: pendingDeposits,
             interestPaidOut: interestPaidOut,
             fdicInsuredLimit: fdicInsuredLimit,
-            sweepStatus: sweepStatus
+            sweepStatus: sweepStatus,
+            enrollmentState: enrollmentState
         )
+    }
+
+    private func cashInterestJSON(enrollmentState: String?) -> Data {
+        let enrollmentField = enrollmentState.map { ",\n          \"enrollment_state\": \"\($0)\"" } ?? ""
+        return """
+        {
+          "balance": "0",
+          "apy": "0.0425",
+          "this_month_earned": "0",
+          "days_accrued": 0,
+          "lifetime_earned": "0",
+          "lifetime_since": null,
+          "buying_power": "0",
+          "pending_deposits": "0",
+          "interest_paid_out": "monthly",
+          "fdic_insured_limit": "2500000",
+          "sweep_status": null\(enrollmentField)
+        }
+        """.data(using: .utf8)!
     }
 
     func test_loadCashInterest_mapsAllFieldsFromResponse() async {
@@ -202,6 +223,7 @@ final class FundingViewModelTests: XCTestCase {
         XCTAssertEqual(sut.cashPendingDeposits, Decimal(string: "100.50"))
         XCTAssertEqual(sut.cashFdicInsuredLimit, Decimal(string: "2500000"))
         XCTAssertEqual(sut.cashInterestPaidOut, .monthly)
+        XCTAssertEqual(sut.cashEnrollmentState, .active)
 
         let expected = DateComponents(
             calendar: Calendar(identifier: .gregorian),
@@ -209,6 +231,31 @@ final class FundingViewModelTests: XCTestCase {
             year: 2025, month: 10, day: 1
         ).date
         XCTAssertEqual(sut.cashLifetimeSince, expected)
+    }
+
+    func test_loadCashInterest_setsEnrollmentStateFromResponse() async {
+        for state in [EnrollmentState.active, .pending, .notEnrolled, .unavailable] {
+            let (sut, mock) = makeSUT()
+            mock.getCashInterestResult = .success(makeCashResponse(enrollmentState: state))
+
+            await sut.loadCashInterest()
+
+            XCTAssertEqual(sut.cashEnrollmentState, state, "state: \(state)")
+        }
+    }
+
+    func test_loadCashInterest_missingEnrollmentStateFallsBackToUnavailable() async {
+        let (sut, mock) = makeSUT()
+        mock.getCashInterestResult = .success(makeCashResponse(enrollmentState: nil))
+
+        await sut.loadCashInterest()
+
+        XCTAssertEqual(sut.cashEnrollmentState, .unavailable)
+    }
+
+    func test_cashEnrollmentState_defaultsToUnavailableBeforeLoad() {
+        let (sut, _) = makeSUT()
+        XCTAssertEqual(sut.cashEnrollmentState, .unavailable)
     }
 
     func test_loadCashInterest_parsesISO8601WithFractionalSeconds() async {
@@ -373,7 +420,8 @@ final class FundingViewModelTests: XCTestCase {
           "pending_deposits": "100.50",
           "interest_paid_out": "monthly",
           "fdic_insured_limit": "2500000",
-          "sweep_status": "ACTIVE"
+          "sweep_status": "ACTIVE",
+          "enrollment_state": "active"
         }
         """.data(using: .utf8)!
 
@@ -390,6 +438,7 @@ final class FundingViewModelTests: XCTestCase {
         XCTAssertEqual(dto.interestPaidOut, "monthly")
         XCTAssertEqual(dto.fdicInsuredLimit, "2500000")
         XCTAssertEqual(dto.sweepStatus, "ACTIVE")
+        XCTAssertEqual(dto.enrollmentState, .active)
     }
 
     func test_cashInterestResponse_decodesWithNullableOptionals() throws {
@@ -405,7 +454,8 @@ final class FundingViewModelTests: XCTestCase {
           "pending_deposits": "0",
           "interest_paid_out": "monthly",
           "fdic_insured_limit": "2500000",
-          "sweep_status": null
+          "sweep_status": null,
+          "enrollment_state": "unavailable"
         }
         """.data(using: .utf8)!
 
@@ -413,5 +463,33 @@ final class FundingViewModelTests: XCTestCase {
 
         XCTAssertNil(dto.lifetimeSince)
         XCTAssertNil(dto.sweepStatus)
+        XCTAssertEqual(dto.enrollmentState, .unavailable)
+    }
+
+    func test_cashInterestResponse_decodesAllEnrollmentStates() throws {
+        let cases: [(wire: String, expected: EnrollmentState)] = [
+            ("active", .active),
+            ("pending", .pending),
+            ("not_enrolled", .notEnrolled),
+            ("unavailable", .unavailable),
+        ]
+
+        for (wire, expected) in cases {
+            let json = cashInterestJSON(enrollmentState: wire)
+            let dto = try JSONDecoder.sevino().decode(CashInterestResponse.self, from: json)
+            XCTAssertEqual(dto.enrollmentState, expected, "wire value \(wire)")
+        }
+    }
+
+    func test_cashInterestResponse_decodesWithMissingEnrollmentState() throws {
+        let json = cashInterestJSON(enrollmentState: nil)
+        let dto = try JSONDecoder.sevino().decode(CashInterestResponse.self, from: json)
+        XCTAssertNil(dto.enrollmentState)
+    }
+
+    func test_cashInterestResponse_unknownEnrollmentStateFallsBackToUnavailable() throws {
+        let json = cashInterestJSON(enrollmentState: "some_future_state")
+        let dto = try JSONDecoder.sevino().decode(CashInterestResponse.self, from: json)
+        XCTAssertEqual(dto.enrollmentState, .unavailable)
     }
 }

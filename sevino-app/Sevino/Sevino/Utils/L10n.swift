@@ -507,6 +507,19 @@ enum L10n {
         static func earningApy(_ apy: String) -> String {
             String(format: String(localized: "home.earning_apy"), apy)
         }
+        static func earningApyAccessibility(_ apy: String) -> String {
+            String(format: String(localized: "home.earning_apy_accessibility"), apy)
+        }
+        static func couldBeEarningApy(_ apy: String) -> String {
+            String(format: String(localized: "home.could_be_earning_apy"), apy)
+        }
+        static func couldBeEarningApyAccessibility(_ apy: String) -> String {
+            String(format: String(localized: "home.could_be_earning_apy_accessibility"), apy)
+        }
+        static let enrollmentPending = String(localized: "home.enrollment_pending")
+        static let enrollmentPendingAccessibility = String(localized: "home.enrollment_pending_accessibility")
+        static let enrollmentStatusAccessibility = String(localized: "home.enrollment_status_accessibility")
+        static let enrollmentStatusHint = String(localized: "home.enrollment_status_hint")
         static let thisMonth = String(localized: "home.this_month")
         static func daysAccrued(_ days: String) -> String {
             String(format: String(localized: "home.days_accrued"), days)

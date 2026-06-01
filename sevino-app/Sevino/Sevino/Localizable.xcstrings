@@ -1882,6 +1882,26 @@
         }
       }
     },
+    "home.could_be_earning_apy" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You could be earning %@ APY"
+          }
+        }
+      }
+    },
+    "home.could_be_earning_apy_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You could be earning %@ annual percentage yield"
+          }
+        }
+      }
+    },
     "home.current_apy" : {
       "localizations" : {
         "en" : {
@@ -2028,6 +2048,56 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Earning %@ APY"
+          }
+        }
+      }
+    },
+    "home.earning_apy_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Earning %@ annual percentage yield"
+          }
+        }
+      }
+    },
+    "home.enrollment_pending" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enrollment pending"
+          }
+        }
+      }
+    },
+    "home.enrollment_pending_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enrollment pending, check back soon"
+          }
+        }
+      }
+    },
+    "home.enrollment_status_accessibility" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View enrollment status"
+          }
+        }
+      }
+    },
+    "home.enrollment_status_hint" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opens cash interest settings"
           }
         }
       }

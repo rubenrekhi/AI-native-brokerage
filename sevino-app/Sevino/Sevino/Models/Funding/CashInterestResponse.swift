@@ -1,7 +1,22 @@
 import Foundation
 
-/// Response from GET /v1/brokerage/cash-interest. Mirrors
-/// `app/schemas/cash_interest.py::CashInterestResponse` on the backend.
+/// FDIC sweep enrollment state the client renders off of. Folds Alpaca account
+/// status + sweep status into the four states iOS keys badge copy on.
+/// Unknown wire values decode to `.unavailable` so a new backend state hides the
+/// badge rather than breaking the whole response decode.
+enum EnrollmentState: String, Codable {
+    case active
+    case pending
+    case notEnrolled = "not_enrolled"
+    case unavailable
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = EnrollmentState(rawValue: raw) ?? .unavailable
+    }
+}
+
+/// Response from GET /v1/brokerage/cash-interest.
 ///
 /// Monetary values are wire-format string decimals (matches `AccountValueResponse`)
 /// and are converted to `Decimal` by the ViewModel. `apy` is a decimal fraction
@@ -18,6 +33,7 @@ struct CashInterestResponse: Decodable, Equatable {
     let interestPaidOut: String
     let fdicInsuredLimit: String
     let sweepStatus: String?
+    let enrollmentState: EnrollmentState?
 
     /// Pydantic emits `2025-10-01T00:00:00+00:00` (no fractional seconds) but
     /// other timestamps in the codebase carry microseconds — accept both.

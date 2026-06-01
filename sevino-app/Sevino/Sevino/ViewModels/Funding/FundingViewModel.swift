@@ -26,6 +26,7 @@ final class FundingViewModel {
     private(set) var cashPendingDeposits: Decimal = 0
     private(set) var cashInterestPaidOut: PaidOutCadence = .monthly
     private(set) var cashFdicInsuredLimit: Decimal = 2_500_000
+    private(set) var cashEnrollmentState: EnrollmentState = .unavailable
 
     private let service: any FundingServiceProtocol
 
@@ -89,6 +90,7 @@ final class FundingViewModel {
             cashFdicInsuredLimit = Decimal(string: response.fdicInsuredLimit) ?? 2_500_000
             cashLifetimeSince = response.lifetimeSinceDate
             cashInterestPaidOut = PaidOutCadence(rawValue: response.interestPaidOut) ?? .monthly
+            cashEnrollmentState = response.enrollmentState ?? .unavailable
         } catch let apiError as APIError {
             serverError = apiError
         } catch {

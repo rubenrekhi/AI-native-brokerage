@@ -172,7 +172,8 @@ final class PreviewNoopFundingService: FundingServiceProtocol, @unchecked Sendab
             pendingDeposits: "0",
             interestPaidOut: "monthly",
             fdicInsuredLimit: "2500000",
-            sweepStatus: nil
+            sweepStatus: nil,
+            enrollmentState: .active
         )
     }
 }

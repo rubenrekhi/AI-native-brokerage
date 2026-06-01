@@ -9,6 +9,7 @@ struct FundingMorphingView: View {
     let onDismiss: () -> Void
     var onDeposit: (() -> Void)?
     var onWithdraw: (() -> Void)?
+    var onShowEnrollmentStatus: (() -> Void)?
 
     @Namespace private var morphNamespace
 
@@ -29,6 +30,7 @@ struct FundingMorphingView: View {
             pendingDeposits: viewModel.cashPendingDeposits,
             interestPaidOut: viewModel.cashInterestPaidOut,
             fdicInsuredLimit: viewModel.cashFdicInsuredLimit,
+            enrollmentState: viewModel.cashEnrollmentState,
             hasLinkedBank: viewModel.hasLinkedBank,
             reauthRelationshipId: viewModel.firstRequiresReauth?.id
         )
@@ -74,6 +76,7 @@ struct FundingMorphingView: View {
             onWithdraw: onWithdraw,
             onLinkBank: plaidLink.requestBankLink,
             onReconnectBank: reconnectAction(plaidLink: plaidLink),
+            onShowEnrollmentStatus: onShowEnrollmentStatus,
             isPrimaryActionDisabled: viewModel.isLoading || plaidLink.isLoading
         )
         .padding(20 * scale)

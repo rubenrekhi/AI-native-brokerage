@@ -11,6 +11,7 @@ struct CashCardData: Codable, Equatable {
     let pendingDeposits: Decimal
     let interestPaidOut: PaidOutCadence
     let fdicInsuredLimit: Decimal
+    let enrollmentState: EnrollmentState
     let hasLinkedBank: Bool
     /// Non-nil when the bank needs Plaid re-auth. Transfers on a broken
     /// connection fail silently and create dispute resolution work, so

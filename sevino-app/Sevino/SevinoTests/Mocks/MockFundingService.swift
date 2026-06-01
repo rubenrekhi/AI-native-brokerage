@@ -25,7 +25,8 @@ final class MockFundingService: FundingServiceProtocol, @unchecked Sendable {
             pendingDeposits: "0",
             interestPaidOut: "monthly",
             fdicInsuredLimit: "2500000",
-            sweepStatus: nil
+            sweepStatus: nil,
+            enrollmentState: .active
         )
     )
 
