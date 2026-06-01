@@ -99,7 +99,7 @@ class TestToolRegistryRegisterAndGet:
 
 
 class TestToAnthropicSpec:
-    def test_single_tool_spec_includes_name_description_input_schema_and_cache(
+    def test_single_tool_spec_includes_name_description_and_input_schema(
         self,
     ):
         registry = ToolRegistry()
@@ -111,13 +111,14 @@ class TestToAnthropicSpec:
         assert spec["description"] == _EchoTool.description
         # ``input_schema`` is the pydantic JSON schema for ``Input``.
         assert spec["input_schema"] == _EchoInput.model_json_schema()
-        # A1.8: trailing tool carries the ephemeral cache marker so the
-        # tools array caches alongside the system prompt.
-        assert spec["cache_control"] == {"type": "ephemeral"}
+        # No cache marker on tools: they sit before ``system`` in the cache
+        # prefix, so the system-prompt breakpoint already caches them.
+        assert "cache_control" not in spec
 
-    def test_multiple_tools_only_last_carries_cache_control(self):
-        # Anthropic caches everything up to and including the marker —
-        # placing it on any earlier tool would shrink the cached prefix.
+    def test_tools_carry_no_cache_control(self):
+        # Tools precede ``system`` in the cache prefix (tools → system →
+        # messages), so the system-prompt breakpoint caches the whole tools
+        # array — marking a tool here would be redundant.
         registry = ToolRegistry()
         registry.register(_EchoTool())
         registry.register(_AnotherTool())
@@ -125,13 +126,11 @@ class TestToAnthropicSpec:
         specs = registry.to_anthropic_spec()
 
         assert [s["name"] for s in specs] == ["echo", "another"]
-        assert "cache_control" not in specs[0]
-        assert specs[1]["cache_control"] == {"type": "ephemeral"}
+        assert all("cache_control" not in s for s in specs)
 
     def test_spec_calls_are_independent(self):
-        # Calling ``to_anthropic_spec`` twice must not accumulate
-        # cache_control on earlier tools — the loop reads the spec once
-        # per turn and we want each turn's request to be identical.
+        # Calling ``to_anthropic_spec`` twice must produce identical specs so
+        # each turn's request is byte-stable.
         registry = ToolRegistry()
         registry.register(_EchoTool())
         registry.register(_AnotherTool())
@@ -140,7 +139,7 @@ class TestToAnthropicSpec:
         second = registry.to_anthropic_spec()
 
         assert first == second
-        assert "cache_control" not in second[0]
+        assert all("cache_control" not in s for s in second)
 
 
 class TestToolResultJsonRoundTrip:
