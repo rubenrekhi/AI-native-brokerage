@@ -175,7 +175,7 @@ struct CashDetailCard: View {
                     .foregroundStyle(Color.sevinoGreyContrast)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(12 * scale)
         .background(Color.sevinoGreyAccent.opacity(0.15), in: .rect(cornerRadius: 12 * scale))
     }
