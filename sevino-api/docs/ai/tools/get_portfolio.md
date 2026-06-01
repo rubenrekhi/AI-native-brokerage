@@ -29,7 +29,7 @@ It does not re-implement the Alpaca calls — it reuses `PortfolioService` (the 
 
 ## Output — `model_payload`
 
-Every mode returns the **balance header**: `as_of`, `account_status`, `equity`, `cash`, `buying_power`, `invested` (total market value), `day_change_abs`, `day_change_pct`. Then, by mode:
+Every mode returns the **balance header**: `as_of`, `account_status`, `equity`, `cash`, `buying_power`, `holdings_value` (current market value of all holdings), `total_cost_basis` (what was paid for them), `total_unrealized_pl` and `total_unrealized_pl_pct` (the portfolio's overall return — gain over cost, a fraction of 1), `day_change_abs`, `day_change_pct`. The overall return is **server-computed from the full position set** so the model quotes it directly instead of deriving it (which is where dividing by the wrong denominator crept in). Then, by mode:
 
 ### `detail="overview"` (default)
 
@@ -37,7 +37,7 @@ Adds a `holdings` rollup:
 
 - `count` — number of open positions.
 - `top` — up to 5 positions by market value, each `{symbol, name, value, weight, day_change_pct}`.
-- `concentration_note` — e.g. `"Top 3 of 12 positions make up 64% of invested value."`
+- `concentration_note` — e.g. `"Top 3 of 12 positions make up 64% of holdings value."`
 
 An all-cash account returns `count: 0`, an empty `top`, and a "entirely cash" note.
 

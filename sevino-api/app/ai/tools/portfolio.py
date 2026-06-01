@@ -39,13 +39,13 @@ _CONCENTRATION_N = 3
 _MAX_FULL_POSITIONS = 20
 
 
-_TOOL_DESCRIPTION = """Read the user's current portfolio from their brokerage account: balances (equity, cash, buying power), today's change, and their holdings.
+_TOOL_DESCRIPTION = """Read the user's current portfolio from their brokerage account: balances (equity, cash, buying power), today's change, total cost basis, overall unrealized gain/loss, and their holdings.
 
 Use detail="overview" (the default) for "how am I doing", "how much do I have", "am I up today", or "what's my biggest position" — it returns balances, today's change, and a rollup of the largest holdings with their portfolio weight and concentration.
 
 Use detail="positions" for the full holdings list with per-position cost basis, market value, and unrealized gain/loss. The 20 largest holdings by market value come back with full detail; any beyond that are listed by ticker only in "omitted_symbols" — pass those tickers in symbols=[...] to get their full detail. Pass symbols=["NVDA","AAPL"] for detail on specific holdings only ("how's my NVDA doing?"); requested symbols the user doesn't hold come back in "not_held".
 
-All money, quantity, and percentage values are strings (e.g. "1204.10", "0.0117") representing exact decimals — never round them yourself or convert to a float. Percentages are fractions of 1 ("0.0117" = 1.17%). The result includes "as_of" (UTC fetch time); balances and holdings are real-time.
+All money, quantity, and percentage values are strings (e.g. "1204.10", "0.0117") representing exact decimals — never round them yourself or convert to a float. Percentages are fractions of 1 ("0.0117" = 1.17%). "holdings_value" is the current market value of all holdings and "total_cost_basis" is what was paid for them; the portfolio's overall return is given as "total_unrealized_pl" and "total_unrealized_pl_pct" (gain over cost) — quote these directly, do not compute the overall return yourself. The result includes "as_of" (UTC fetch time); balances and holdings are real-time.
 
 Returns {"error": "...", "code": "ACCOUNT_NOT_ACTIVE" | "BROKERAGE_UNAVAILABLE" | "PORTFOLIO_UNAVAILABLE"} when the data can't be read — explain the situation to the user; do not retry repeatedly.
 
@@ -123,13 +123,22 @@ def _build_portfolio_payload(
 ) -> dict[str, Any]:
     total = Decimal(hold.get("total_market_value") or "0")
     positions: list[dict[str, Any]] = hold.get("positions") or []
+    total_cost = sum(
+        (Decimal(p["cost_basis"] or "0") for p in positions), Decimal("0")
+    )
+    total_pl = sum(
+        (Decimal(p["unrealized_pl"] or "0") for p in positions), Decimal("0")
+    )
     payload: dict[str, Any] = {
         "as_of": now_iso(),
         "account_status": snap["account_status"],
         "equity": snap["equity"],
         "cash": snap["cash"],
         "buying_power": snap["buying_power"],
-        "invested": hold["total_market_value"],
+        "holdings_value": hold["total_market_value"],
+        "total_cost_basis": _money(total_cost),
+        "total_unrealized_pl": _money(total_pl),
+        "total_unrealized_pl_pct": _pct(total_pl, total_cost),
         "day_change_abs": snap["daily_change_abs"],
         "day_change_pct": snap["daily_change_pct"],
     }
@@ -194,7 +203,7 @@ def _holdings_summary(
     pct = (top_sum / total * 100) if total > 0 else Decimal("0")
     note = (
         f"Top {k} of {count} position{'s' if count != 1 else ''} make up "
-        f"{pct:.0f}% of invested value."
+        f"{pct:.0f}% of holdings value."
     )
     return {"count": count, "top": top, "concentration_note": note}
 
@@ -216,7 +225,15 @@ def _position_entry(p: dict[str, Any], total: Decimal) -> dict[str, Any]:
     }
 
 
-def _weight(market_value: str | None, total: Decimal) -> str:
-    if total <= 0:
+def _money(value: Decimal) -> str:
+    return str(value.quantize(Decimal("0.01")))
+
+
+def _pct(numerator: Decimal, denominator: Decimal) -> str:
+    if denominator <= 0:
         return "0.0000"
-    return str((Decimal(market_value or "0") / total).quantize(Decimal("0.0001")))
+    return str((numerator / denominator).quantize(Decimal("0.0001")))
+
+
+def _weight(market_value: str | None, total: Decimal) -> str:
+    return _pct(Decimal(market_value or "0"), total)

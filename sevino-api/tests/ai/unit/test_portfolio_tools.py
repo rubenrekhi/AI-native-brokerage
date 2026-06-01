@@ -225,7 +225,7 @@ class TestPortfolioOverview:
         assert p["equity"] == "18432.55"
         assert p["cash"] == "1204.10"
         assert p["buying_power"] == "2408.20"
-        assert p["invested"] == "10870.50"
+        assert p["holdings_value"] == "10870.50"
         assert p["day_change_pct"] == "0.0117"
         assert "as_of" in p
         # Overview is lean: the full per-position list is NOT included.
@@ -265,10 +265,37 @@ class TestPortfolioOverview:
 
         result = await GetPortfolio().execute(PortfolioInput(), ctx)
 
-        h = result.model_payload["holdings"]
+        p = result.model_payload
+        assert p["holdings_value"] == "0.00"
+        assert p["total_cost_basis"] == "0.00"
+        assert p["total_unrealized_pl"] == "0.00"
+        assert p["total_unrealized_pl_pct"] == "0.0000"
+        h = p["holdings"]
         assert h["count"] == 0
         assert h["top"] == []
         assert "cash" in h["concentration_note"].lower()
+
+    async def test_overall_return_is_on_cost_basis_not_market_value(
+        self, monkeypatch
+    ):
+        positions = [
+            _position("TSLA", market_value="697.60", cost_basis="600.00", unrealized_pl="97.60"),
+            _position("AAPL", market_value="627.24", cost_basis="537.47", unrealized_pl="89.77"),
+            _position("MSFT", market_value="5.31", cost_basis="5.00", unrealized_pl="0.31"),
+        ]
+        svc = _service(snapshot=_snapshot(), holdings=_holdings(positions))
+        _patch(monkeypatch, account=_account(), service=svc)
+        ctx, _ = _make_ctx()
+
+        result = await GetPortfolio().execute(PortfolioInput(), ctx)
+
+        p = result.model_payload
+        assert p["holdings_value"] == "1330.15"
+        assert p["total_cost_basis"] == "1142.47"
+        assert p["total_unrealized_pl"] == "187.68"
+        # Return is gain / cost (0.1643), NOT gain / market value (0.1411).
+        assert p["total_unrealized_pl_pct"] == "0.1643"
+        assert "invested" not in p
 
 
 class TestPortfolioPositions:
