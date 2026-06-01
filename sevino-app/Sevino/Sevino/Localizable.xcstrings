@@ -5574,6 +5574,16 @@
         }
       }
     },
+    "recurring_investment.cadence_daily" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "every day"
+          }
+        }
+      }
+    },
     "recurring_investment.cadence_monthly" : {
       "localizations" : {
         "en" : {
@@ -5590,6 +5600,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "every week"
+          }
+        }
+      }
+    },
+    "recurring_investment.daily" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daily"
           }
         }
       }

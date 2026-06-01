@@ -392,6 +392,7 @@ struct CancelTransferBlock: Codable, Equatable, Sendable, Identifiable {
 }
 
 enum RecurringFrequency: String, Codable, Equatable, Sendable, CaseIterable {
+    case daily
     case weekly
     case biweekly
     case monthly

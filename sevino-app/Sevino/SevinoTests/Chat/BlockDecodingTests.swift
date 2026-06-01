@@ -510,7 +510,7 @@ final class BlockDecodingTests: XCTestCase {
     }
 
     func testRecurringInvestmentRoundTripsAllFrequencies() throws {
-        for frequency in ["weekly", "biweekly", "monthly"] {
+        for frequency in ["daily", "weekly", "biweekly", "monthly"] {
             let json = Self.recurringJSON(frequency: frequency, endCondition: #"{"kind":"never"}"#)
             let decoded = try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8))
             guard case .recurringInvestmentSetup(let block) = decoded else {
@@ -586,7 +586,7 @@ final class BlockDecodingTests: XCTestCase {
     }
 
     func testRecurringInvestmentUnknownFrequencyFailsClosed() {
-        let json = Self.recurringJSON(frequency: "daily", endCondition: #"{"kind":"never"}"#)
+        let json = Self.recurringJSON(frequency: "quarterly", endCondition: #"{"kind":"never"}"#)
         XCTAssertThrowsError(try JSONDecoder.sevino().decode(Block.self, from: Data(json.utf8)))
     }
 

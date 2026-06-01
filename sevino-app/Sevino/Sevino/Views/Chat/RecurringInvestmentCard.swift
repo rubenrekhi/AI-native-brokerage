@@ -167,6 +167,7 @@ private struct RecurringFrequencySection: View {
         VStack(alignment: .leading, spacing: 8 * scale) {
             RecurringFieldLabel(L10n.RecurringInvestment.frequencyLabel, scale: scale)
             Picker(L10n.RecurringInvestment.frequencyLabel, selection: $model.frequency) {
+                Text(L10n.RecurringInvestment.daily).tag(RecurringFrequency.daily)
                 Text(L10n.RecurringInvestment.weekly).tag(RecurringFrequency.weekly)
                 Text(L10n.RecurringInvestment.biweekly).tag(RecurringFrequency.biweekly)
                 Text(L10n.RecurringInvestment.monthly).tag(RecurringFrequency.monthly)

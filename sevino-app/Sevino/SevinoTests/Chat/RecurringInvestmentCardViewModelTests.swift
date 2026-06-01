@@ -124,6 +124,12 @@ final class RecurringInvestmentCardViewModelTests: XCTestCase {
         XCTAssertEqual(captured?.endCondition, .never)
     }
 
+    func testDailyFrequencyUsesDailyCadenceInSummary() {
+        let model = makeModel(block: makeBlock(frequency: .daily))
+        XCTAssertEqual(model.frequency, .daily)
+        XCTAssertTrue(model.summaryLine.contains(L10n.RecurringInvestment.cadenceDaily))
+    }
+
     func testSubmitFailureTransitionsToFailedAndReenablesForm() async {
         struct StubError: LocalizedError { var errorDescription: String? { "scheduler offline" } }
         let model = makeModel(onSubmit: { _ in throw StubError() })

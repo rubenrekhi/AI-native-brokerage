@@ -911,6 +911,7 @@ enum L10n {
         static let header = String(localized: "recurring_investment.header")
         static let amountLabel = String(localized: "recurring_investment.amount_label")
         static let frequencyLabel = String(localized: "recurring_investment.frequency_label")
+        static let daily = String(localized: "recurring_investment.daily")
         static let weekly = String(localized: "recurring_investment.weekly")
         static let biweekly = String(localized: "recurring_investment.biweekly")
         static let monthly = String(localized: "recurring_investment.monthly")
@@ -938,6 +939,7 @@ enum L10n {
         static func occurrencesValue(_ count: Int) -> String {
             String(format: String(localized: "recurring_investment.occurrences_value"), count)
         }
+        static let cadenceDaily = String(localized: "recurring_investment.cadence_daily")
         static let cadenceWeekly = String(localized: "recurring_investment.cadence_weekly")
         static let cadenceBiweekly = String(localized: "recurring_investment.cadence_biweekly")
         static let cadenceMonthly = String(localized: "recurring_investment.cadence_monthly")

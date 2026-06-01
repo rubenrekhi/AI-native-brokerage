@@ -173,6 +173,7 @@ final class RecurringInvestmentCardViewModel {
 
     private static func cadencePhrase(for frequency: RecurringFrequency) -> String {
         switch frequency {
+        case .daily: return L10n.RecurringInvestment.cadenceDaily
         case .weekly: return L10n.RecurringInvestment.cadenceWeekly
         case .biweekly: return L10n.RecurringInvestment.cadenceBiweekly
         case .monthly: return L10n.RecurringInvestment.cadenceMonthly
