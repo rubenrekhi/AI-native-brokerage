@@ -266,6 +266,7 @@ private struct StatusCheckRetryView: View {
 
 // MARK: - Previews
 
+#if DEBUG
 #Preview("Logged Out") {
     ContentView()
 }
@@ -285,3 +286,4 @@ private struct StatusCheckRetryView: View {
 #Preview("Loading Logo") {
     LoadingLogoView()
 }
+#endif
