@@ -3,8 +3,11 @@
 ``scrub_blocks`` strips SDK-only fields from response blocks before
 re-sending — the SDK leaks ``parsed_output`` on text blocks (it sets
 ``__api_exclude__`` but ``model_dump`` ignores that), and the API 400s
-when the field re-appears as input. Keep the allowlist in sync with
-``docs.claude.com/en/api/messages``.
+when the field re-appears as input. Server-tool result blocks
+(``web_search``/``web_fetch``/``code_execution``) are likewise stripped of
+output-only fields (e.g. ``caller`` on ``server_tool_use``, per-result
+``text``/``citations``) that the API rejects on replay. Keep the
+allowlist in sync with ``docs.claude.com/en/api/messages``.
 
 ``to_anthropic_content`` adapts Sevino's persisted block shapes back to
 Anthropic input format. ``estimate_thinking_tokens`` is a heuristic for
@@ -30,11 +33,71 @@ INPUT_FIELDS_BY_BLOCK_TYPE: Final[dict[str, frozenset[str]]] = {
     "thinking": frozenset({"type", "thinking", "signature"}),
     "redacted_thinking": frozenset({"type", "data"}),
     "tool_use": frozenset({"type", "id", "name", "input", "caller", "cache_control"}),
+    "server_tool_use": frozenset({"type", "id", "name", "input", "cache_control"}),
+    "web_search_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
+    "web_fetch_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
+    "code_execution_tool_result": frozenset(
+        {"type", "tool_use_id", "content", "cache_control"}
+    ),
 }
+
+_SERVER_TOOL_RESULT_CONTENT_FIELDS_BY_BLOCK_TYPE: Final[
+    dict[str, frozenset[str]]
+] = {
+    "web_search_result": frozenset(
+        {"type", "title", "url", "encrypted_content", "page_age"}
+    ),
+    "web_search_tool_result_error": frozenset({"type", "error_code"}),
+    "web_fetch_result": frozenset({"type", "url", "content", "retrieved_at"}),
+    "web_fetch_tool_result_error": frozenset({"type", "error_code"}),
+    "code_execution_result": frozenset(
+        {"type", "content", "return_code", "stderr", "stdout"}
+    ),
+    "encrypted_code_execution_result": frozenset(
+        {"type", "content", "encrypted_stdout", "return_code", "stderr"}
+    ),
+    "code_execution_output": frozenset({"type", "file_id"}),
+    "code_execution_tool_result_error": frozenset({"type", "error_code"}),
+}
+
+_SERVER_TOOL_RESULT_BLOCK_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "web_search_tool_result",
+        "web_fetch_tool_result",
+        "code_execution_tool_result",
+    }
+)
 
 # Heuristic for the ``thinking_tokens`` audit column — Anthropic gives no
 # per-block breakdown. Redacted blocks contribute zero.
 _CHARS_PER_TOKEN = 4
+
+
+def _scrub_server_tool_result_content(value: Any) -> Any:
+    if isinstance(value, list):
+        return [_scrub_server_tool_result_content(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    block_type = value.get("type")
+    allowed = (
+        _SERVER_TOOL_RESULT_CONTENT_FIELDS_BY_BLOCK_TYPE.get(block_type)
+        if block_type
+        else None
+    )
+    if allowed is None:
+        return {
+            k: _scrub_server_tool_result_content(v) for k, v in value.items()
+        }
+    return {
+        k: _scrub_server_tool_result_content(v)
+        for k, v in value.items()
+        if k in allowed
+    }
 
 
 def scrub_block(block: dict[str, Any]) -> dict[str, Any]:
@@ -43,7 +106,12 @@ def scrub_block(block: dict[str, Any]) -> dict[str, Any]:
     allowed = INPUT_FIELDS_BY_BLOCK_TYPE.get(block_type) if block_type else None
     if allowed is None:
         return block
-    return {k: v for k, v in block.items() if k in allowed}
+    scrubbed = {k: v for k, v in block.items() if k in allowed}
+    if block_type in _SERVER_TOOL_RESULT_BLOCK_TYPES and "content" in scrubbed:
+        scrubbed["content"] = _scrub_server_tool_result_content(
+            scrubbed["content"]
+        )
+    return scrubbed
 
 
 def scrub_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:

@@ -20,6 +20,7 @@ import asyncio
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
 
@@ -144,6 +145,49 @@ async def _drain(emitter: SSEEmitter) -> list[Event]:
     async for event in emitter.iter_events():
         events.append(event)
     return events
+
+
+class TestRecordExecutions:
+    async def test_web_fetch_error_dict_content_records_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        tracker = ServerToolTracker()
+        server_use = SimpleNamespace(
+            type="server_tool_use",
+            id="srvtoolu_fetch",
+            name="web_fetch",
+            input={"url": "https://example.com/not-prior"},
+        )
+        error_result = SimpleNamespace(
+            type="web_fetch_tool_result",
+            tool_use_id="srvtoolu_fetch",
+            content={
+                "type": "web_fetch_tool_result_error",
+                "error_code": "url_not_in_prior_context",
+            },
+        )
+        record_mock = AsyncMock()
+        monkeypatch.setattr(
+            "app.ai.runtime.dispatch.server.ConversationRepository.record_tool_execution",
+            record_mock,
+        )
+
+        invocation_id = uuid.uuid4()
+        await tracker.record_executions(
+            response_blocks=[server_use, error_result],
+            invocation_id=invocation_id,
+            db_factory=_make_db_factory(),
+            turn_id=uuid.uuid4(),
+            conversation_id=uuid.uuid4(),
+        )
+
+        record_mock.assert_awaited_once()
+        kwargs = record_mock.call_args.kwargs
+        assert kwargs["tool_name"] == "anthropic:web_fetch"
+        assert kwargs["tool_use_id"] == "srvtoolu_fetch"
+        assert kwargs["status"] == "error"
+        assert kwargs["output_payload"] is None
+        assert kwargs["error_message"] == "url_not_in_prior_context"
 
 
 class TestFlushOrphansNoInvocation:

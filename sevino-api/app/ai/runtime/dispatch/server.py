@@ -66,12 +66,20 @@ def _server_tool_status_label(name: str | None) -> str:
 
 def _result_block_status_state(result_block: Any) -> str:
     content = getattr(result_block, "content", None)
-    content_type = (
-        getattr(content, "type", None) if content is not None else None
-    )
-    if isinstance(content_type, str) and content_type.endswith("_error"):
+    content_type = _content_block_type(content)
+    if content_type is not None and content_type.endswith("_error"):
         return "failed"
     return "complete"
+
+
+def _content_block_type(content: Any) -> str | None:
+    if content is None:
+        return None
+    if isinstance(content, dict):
+        content_type = content.get("type")
+        return content_type if isinstance(content_type, str) else None
+    content_type = getattr(content, "type", None)
+    return content_type if isinstance(content_type, str) else None
 
 
 def build_server_tool_specs(config: ServerToolsConfig) -> list[dict[str, Any]]:
@@ -265,12 +273,8 @@ class ServerToolTracker:
                 continue
 
             content = getattr(block, "content", None)
-            content_type = (
-                getattr(content, "type", None) if content is not None else None
-            )
-            is_error = isinstance(content_type, str) and content_type.endswith(
-                "_error"
-            )
+            content_type = _content_block_type(content)
+            is_error = content_type is not None and content_type.endswith("_error")
             try:
                 if hasattr(content, "model_dump"):
                     dumped_content = content.model_dump(mode="json")
@@ -305,9 +309,9 @@ class ServerToolTracker:
             if is_error:
                 status = "error"
                 error_code = (
-                    getattr(content, "error_code", None)
-                    if content is not None
-                    else None
+                    content.get("error_code")
+                    if isinstance(content, dict)
+                    else getattr(content, "error_code", None)
                 )
                 error_message = (
                     str(error_code) if error_code is not None else "unknown_error"
