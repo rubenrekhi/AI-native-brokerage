@@ -145,6 +145,35 @@
     "avg_post_earnings_move_pct": "0.0365",
     "events_measured": 8
   },
+  "sector_context": {
+    "sector": "Technology",
+    "industry": "Consumer Electronics",
+    "exchange": "NASDAQ",
+    "as_of_date": "2026-05-29",
+    "sector_change_pct": "0.7359",
+    "industry_change_pct": "0.2921",
+    "market_change_pct": "-0.323",
+    "sector_vs_market_pct": "1.0589",
+    "peers": [
+      {
+        "symbol": "MSFT",
+        "company_name": "Microsoft Corporation",
+        "price": "450.24",
+        "change_pct": "0.85",
+        "market_cap": 3344576323200
+      },
+      {
+        "symbol": "NVDA",
+        "company_name": "NVIDIA Corporation",
+        "price": "211.14",
+        "change_pct": "-1.45",
+        "market_cap": 5114021940000
+      }
+    ],
+    "peer_count": 2,
+    "rank_by_change": 1,
+    "rank_by_market_cap": 2
+  },
   "analyst": {
     "target_high": "230.00",
     "target_low": "150.00",
