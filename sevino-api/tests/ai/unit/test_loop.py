@@ -2683,6 +2683,133 @@ class TestAnthropicServerTools:
         assert len(status_blocks) == 1
         assert status_blocks[0]["state"] == "complete"
 
+    async def test_replay_scrubs_server_tool_result_before_next_model_call(
+        self, repo_mocks, monkeypatch
+    ):
+        from anthropic.types import (
+            ServerToolUseBlock,
+            ToolUseBlock,
+            WebSearchToolResultBlock,
+        )
+        from anthropic.types.web_search_result_block import WebSearchResultBlock
+
+        from app.ai.runtime.loop import _ToolDispatchOutcome
+
+        server_use = ServerToolUseBlock.model_construct(
+            id="srvtoolu_dirty",
+            input={"query": "AMD news"},
+            name="web_search",
+            type="server_tool_use",
+            caller={"type": "direct"},
+        )
+        dirty_search_result = WebSearchToolResultBlock.model_construct(
+            type="web_search_tool_result",
+            tool_use_id="srvtoolu_dirty",
+            caller={"type": "direct"},
+            parsed_output={"sdk": True},
+            text="output-only top-level text",
+            content=[
+                WebSearchResultBlock.model_construct(
+                    type="web_search_result",
+                    title="AMD beats",
+                    url="https://example.com/amd",
+                    encrypted_content="enc",
+                    text="output-only nested text",
+                    citations=[{"url": "https://example.com/amd"}],
+                )
+            ],
+        )
+        iter0 = _make_response(
+            text="checking",
+            stop_reason="tool_use",
+            extra_blocks=[
+                server_use,
+                dirty_search_result,
+                ToolUseBlock(
+                    id="toolu_custom",
+                    name="get_stock_info",
+                    input={"symbol": "AMD"},
+                    type="tool_use",
+                ),
+            ],
+        )
+        iter1 = _make_response(text="done", stop_reason="end_turn")
+
+        async def _stub_dispatch(**kwargs: Any) -> _ToolDispatchOutcome:
+            outcome = _ToolDispatchOutcome()
+            outcome.tool_call_count = 1
+            outcome.tool_result_blocks.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_custom",
+                    "content": "{\"ok\": true}",
+                }
+            )
+            return outcome
+
+        monkeypatch.setattr(
+            "app.ai.runtime.flow.iteration.dispatch_tool_uses", _stub_dispatch
+        )
+
+        client = _make_client([iter0, iter1])
+        captured_messages: list[list[dict[str, Any]]] = []
+        original_stream = client.messages.stream
+
+        def capture_stream(**kwargs: Any) -> Any:
+            captured_messages.append(json.loads(json.dumps(kwargs["messages"])))
+            return original_stream(**kwargs)
+
+        client.messages.stream = MagicMock(side_effect=capture_stream)
+
+        result, _events = await _run(
+            client,
+            repo_mocks,
+            server_tools_config=ServerToolsConfig(web_search_enabled=True),
+        )
+
+        assert result.terminal_state == "end_turn"
+        assert result.iterations_count == 2
+        assert len(captured_messages) == 2
+
+        replayed_assistant = captured_messages[1][-2]
+        assert replayed_assistant["role"] == "assistant"
+        replayed_content = replayed_assistant["content"]
+        replayed_server_use = next(
+            b for b in replayed_content if b["type"] == "server_tool_use"
+        )
+        assert replayed_server_use == {
+            "type": "server_tool_use",
+            "id": "srvtoolu_dirty",
+            "name": "web_search",
+            "input": {"query": "AMD news"},
+        }
+        replayed_result = next(
+            b for b in replayed_content if b["type"] == "web_search_tool_result"
+        )
+        assert replayed_result == {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_dirty",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD beats",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                }
+            ],
+        }
+
+        replayed_user = captured_messages[1][-1]
+        assert replayed_user["role"] == "user"
+        assert replayed_user["content"] == [
+            {
+                "type": "tool_result",
+                "tool_use_id": "toolu_custom",
+                "content": "{\"ok\": true}",
+            }
+        ]
+
     async def test_orphan_pill_closes_failed_when_result_never_arrives(
         self, repo_mocks
     ):

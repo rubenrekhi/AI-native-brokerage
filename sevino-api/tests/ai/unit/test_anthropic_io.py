@@ -133,6 +133,110 @@ class TestScrubToolUse:
         assert scrub_block(block) == block
 
 
+class TestScrubServerToolBlocks:
+    def test_strips_output_only_fields_from_server_tool_use(self):
+        block = {
+            "type": "server_tool_use",
+            "id": "srvtoolu_1",
+            "name": "web_search",
+            "input": {"query": "AMD"},
+            "caller": {"type": "direct"},
+            "cache_control": {"type": "ephemeral"},
+        }
+        assert scrub_block(block) == {
+            "type": "server_tool_use",
+            "id": "srvtoolu_1",
+            "name": "web_search",
+            "input": {"query": "AMD"},
+            "cache_control": {"type": "ephemeral"},
+        }
+
+    def test_strips_dirty_web_search_result_fields(self):
+        block = {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_1",
+            "caller": {"type": "direct"},
+            "parsed_output": {"sdk": True},
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD earnings",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                    "text": "output-only summary",
+                    "citations": [{"url": "https://example.com/amd"}],
+                }
+            ],
+        }
+        assert scrub_block(block) == {
+            "type": "web_search_tool_result",
+            "tool_use_id": "srvtoolu_1",
+            "content": [
+                {
+                    "type": "web_search_result",
+                    "title": "AMD earnings",
+                    "url": "https://example.com/amd",
+                    "encrypted_content": "enc",
+                    "page_age": None,
+                }
+            ],
+        }
+
+    def test_strips_dirty_web_fetch_error_fields(self):
+        block = {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_2",
+            "caller": {"type": "direct"},
+            "content": {
+                "type": "web_fetch_tool_result_error",
+                "error_code": "url_not_in_prior_context",
+                "text": "not allowed",
+                "citations": None,
+            },
+        }
+        assert scrub_block(block) == {
+            "type": "web_fetch_tool_result",
+            "tool_use_id": "srvtoolu_2",
+            "content": {
+                "type": "web_fetch_tool_result_error",
+                "error_code": "url_not_in_prior_context",
+            },
+        }
+
+    def test_preserves_code_execution_input_fields_only(self):
+        block = {
+            "type": "code_execution_tool_result",
+            "tool_use_id": "srvtoolu_3",
+            "caller": {"type": "direct"},
+            "content": {
+                "type": "code_execution_result",
+                "content": [
+                    {
+                        "type": "code_execution_output",
+                        "file_id": "file_1",
+                        "filename": "plot.png",
+                    }
+                ],
+                "return_code": 0,
+                "stdout": "ok",
+                "stderr": "",
+                "parsed_output": None,
+            },
+        }
+        assert scrub_block(block) == {
+            "type": "code_execution_tool_result",
+            "tool_use_id": "srvtoolu_3",
+            "content": {
+                "type": "code_execution_result",
+                "content": [{"type": "code_execution_output", "file_id": "file_1"}],
+                "return_code": 0,
+                "stdout": "ok",
+                "stderr": "",
+            },
+        }
+
+
 class TestScrubRedactedThinking:
     def test_preserves_data_field(self):
         block = {
