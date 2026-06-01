@@ -4,6 +4,7 @@ import re
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 import httpx
 import sentry_sdk
@@ -108,6 +109,12 @@ _MARKET_STATUS_TTL = 60
 _SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9.\-]{0,9}$")
 
 _MARKET_STATUS_KEY = "market:status"
+
+# US equities trade on US Eastern, so "today's trading day" must be anchored
+# there, not UTC — otherwise late-evening US time (already tomorrow in UTC) asks
+# for the wrong session. `ZoneInfo` resolves EST vs EDT per instant, so a fixed
+# -5 offset (an hour off under daylight saving) is intentionally avoided.
+_MARKET_TZ = ZoneInfo("America/New_York")
 
 
 class AccessTokenProvider(Protocol):
@@ -415,7 +422,7 @@ class MarketDataService:
             earnings_rows,
             estimate_rows,
             reactions,
-            as_of=datetime.now(timezone.utc).date(),
+            as_of=_market_today(),
             actuals_limit=_EARNINGS_ACTUALS,
         )
 
@@ -642,7 +649,7 @@ class MarketDataService:
         exchange: str,
     ) -> tuple[list[dict[str, Any]], str | None]:
         """Walk back from today to the last session that has snapshot rows."""
-        today = datetime.now(timezone.utc).date()
+        today = _market_today()
         for delta in range(_TRADING_DAY_LOOKBACK + 1):
             on_date = (today - timedelta(days=delta)).isoformat()
             rows = await fetcher(exchange, on_date)
@@ -908,6 +915,11 @@ def _normalize_peer_rows(peer_rows: list[dict[str, Any]]) -> list[dict[str, Any]
             continue
         cleaned.append({**row, "symbol": symbol})
     return cleaned
+
+
+def _market_today() -> date:
+    """Today's date on the US market clock (Eastern), for last-session walk-backs."""
+    return datetime.now(_MARKET_TZ).date()
 
 
 def _normalize_symbol(symbol: str) -> str:
