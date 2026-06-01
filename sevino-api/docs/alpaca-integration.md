@@ -804,6 +804,7 @@ If a user's account gets flagged as a Pattern Day Trader:
 | `/v1/accounts/{id}/ach_relationships/{rel_id}` | `DELETE` | Unlink (cancel) an ACH relationship. Transfer history is retained. |
 | `/v1/accounts/{id}/transfers` | `POST` | Initiate ACH deposit or withdrawal |
 | `/v1/accounts/{id}/transfers` | `GET` | List transfers and their statuses |
+| `/v1/accounts/{id}/transfers/{transfer_id}` | `DELETE` | Cancel an in-flight transfer. Only cancelable while `QUEUED`/`APPROVAL_PENDING`/`PENDING`; `SENT_TO_CLEARING` and later return `422 {"code":40010001,"message":"transfer is not cancelable"}` (verified in sandbox; undocumented upstream). |
 | `/v2/events/funding/status` | `GET` (SSE) | Stream transfer status change events. Note: `/v1/events/transfers/status` is deprecated. |
 
 ### Trading

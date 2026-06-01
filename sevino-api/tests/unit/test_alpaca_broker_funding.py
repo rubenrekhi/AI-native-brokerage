@@ -12,6 +12,7 @@ FIXTURES = Path(__file__).parent.parent / "fixtures" / "mock_responses"
 
 ACCOUNT_ID = "9d587d7a-1b4c-4b3a-95bb-0e8e0d5e7777"
 REL_ID = "794c3c51-d831-4e8c-a0e1-0bad1a9f0123"
+TRANSFER_ID = "b1d2c3e4-5f6a-7b8c-9d0e-1f2a3b4c5d6e"
 
 
 def _load(name: str) -> dict:
@@ -147,6 +148,61 @@ class TestListTransfers:
         await service.list_transfers(ACCOUNT_ID)
 
         assert captured["query"] == ""
+
+
+class TestCancelTransfer:
+    async def test_204_returns_cleanly(self, make_alpaca_service):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["method"] = request.method
+            captured["url"] = str(request.url)
+            return httpx.Response(204)
+
+        service = make_alpaca_service(handler)
+        result = await service.cancel_transfer(ACCOUNT_ID, TRANSFER_ID)
+
+        assert result is None
+        assert captured["method"] == "DELETE"
+        assert captured["url"].endswith(
+            f"/v1/accounts/{ACCOUNT_ID}/transfers/{TRANSFER_ID}"
+        )
+
+    async def test_200_empty_body_returns_cleanly(self, make_alpaca_service):
+        # Alpaca's cancel DELETE can answer 200 with no body (vs the 204 other
+        # DELETEs use) — must not blow up on `.json()`.
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200)
+
+        service = make_alpaca_service(handler)
+        result = await service.cancel_transfer(ACCOUNT_ID, TRANSFER_ID)
+
+        assert result is None
+
+    async def test_404_raises_not_found(self, make_alpaca_service):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(404, json={"message": "transfer not found"})
+
+        service = make_alpaca_service(handler)
+        with pytest.raises(NotFoundError):
+            await service.cancel_transfer(ACCOUNT_ID, TRANSFER_ID)
+
+    async def test_422_not_cancelable_carries_alpaca_code(self, make_alpaca_service):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                422,
+                json={"code": 40010001, "message": "transfer is not cancelable"},
+            )
+
+        service = make_alpaca_service(handler)
+        with pytest.raises(AlpacaBrokerError) as info:
+            await service.cancel_transfer(ACCOUNT_ID, TRANSFER_ID)
+
+        assert info.value.status_code == 422
+        assert info.value.detail == {
+            "code": 40010001,
+            "message": "transfer is not cancelable",
+        }
 
 
 class TestGetTradingAccount:
