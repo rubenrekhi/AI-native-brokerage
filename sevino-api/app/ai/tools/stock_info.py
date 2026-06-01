@@ -1,12 +1,15 @@
-"""``get_stock_info`` — fetch live quote/profile/ratios/analyst for one ticker.
+"""``get_stock_info`` — fetch live, tiered data for one ticker.
 
-Shows a "Pulling data on X" pill; data goes to the model, not a card.
+Shows a "Pulling data on X" pill; data goes to the model, not a card. The
+``detail`` tier (or an explicit ``sections`` list) selects how much of the
+assembled payload reaches the model; ``quote`` + ``performance`` always ride
+along.
 """
 
 from __future__ import annotations
 
 import asyncio
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal, get_args
 
 import structlog
 from pydantic import BaseModel, Field
@@ -30,18 +33,60 @@ from app.exceptions import (
 logger = structlog.get_logger(__name__)
 
 
-_TOOL_DESCRIPTION = """Look up live US-equity stock data for a single ticker symbol. Use this when the user asks about a specific stock or company — price, valuation, fundamentals, analyst sentiment, performance vs. 52-week range, etc.
+StockSection = Literal[
+    "quote",
+    "profile",
+    "ratios",
+    "financials",
+    "valuation",
+    "earnings",
+    "sector_context",
+    "analyst",
+]
 
-Always call this tool before stating any numeric value (price, market cap, P/E, EPS, etc.); training-data values may be stale.
+_SECTION_ORDER: tuple[StockSection, ...] = get_args(StockSection)
 
-Input:
-  ticker — uppercase US-equity ticker (e.g. "AAPL"). One symbol per call.
+# ``quote`` is always seeded into the payload base, so it is never gated here.
+_TRIMMABLE_SECTIONS: tuple[StockSection, ...] = tuple(
+    s for s in _SECTION_ORDER if s != "quote"
+)
 
-Returns a JSON object with four sections:
-  quote    — current price, daily change, day high/low, 52-week high/low, 50/200-day moving averages, volume, market cap, P/E, EPS, shares outstanding, earnings announcement timestamp.
-  profile  — company name, sector, industry, description, CEO, website, employees, beta, IPO date, exchange, logo URL.
-  ratios   — TTM fundamentals: dividend yield, payout ratio, ROE, ROA, margins (profit / operating / gross), debt/equity, current ratio, P/B, P/S, EV/EBITDA, FCF yield, PEG.
-  analyst  — Wall Street targets and ratings: target high/low/median/consensus, counts of strong-buy/buy/hold/sell/strong-sell.
+# Monotonic depth dial: each tier is a superset of the previous. ``quote`` +
+# ``performance`` always ride along (see ``_build_stock_info_payload``), so the
+# snapshot tier adds nothing on top of that base.
+_TIERS: dict[str, frozenset[str]] = {
+    "snapshot": frozenset(),
+    "fundamentals": frozenset(
+        {"ratios", "valuation", "financials", "earnings", "analyst"}
+    ),
+    "full": frozenset(_SECTION_ORDER),
+}
+
+
+_TOOL_DESCRIPTION = """Look up live US-equity data for a single ticker. Use this whenever the user asks about a specific stock or company — price, valuation, fundamentals, earnings, analyst sentiment, performance vs. the 52-week range, etc.
+
+Always call this tool before stating any numeric value (price, market cap, P/E, EPS, revenue, etc.); training-data values may be stale.
+
+Inputs:
+  ticker   — uppercase US-equity ticker (e.g. "AAPL"). One symbol per call.
+  detail   — how much to return (default "snapshot"):
+      "snapshot"     → live quote + performance only. The default; use for price and "how's X doing / is it up today" questions.
+      "fundamentals" → adds ratios, valuation, financials, earnings, and analyst ratings. Use for "is it cheap / healthy / a good buy", margins, earnings.
+      "full"         → every section, plus company profile and sector/peer context. Use for deep dives, company background, and comparisons.
+  sections — optional explicit list (e.g. ["earnings"]) for a surgical pull; overrides detail and returns exactly those sections. quote + performance are always included.
+
+Re-calling at a higher tier is a full round-trip, so pick the smallest tier that answers the question up front.
+
+Sections (quote + performance are always returned):
+  quote          — price, daily change, day high/low, 52-week high/low, 50/200-day moving averages, volume, market cap, P/E, EPS, shares outstanding, next-earnings date.
+  performance    — price change over 1D / 1W / 1M / 3M / 6M / 1Y (absolute + percent).
+  profile        — company name, sector, industry, description, CEO, website, employees, beta, IPO date, exchange, logo URL.
+  ratios         — TTM: dividend yield, payout ratio, ROE, ROA, margins (gross / operating / profit), debt/equity, current ratio, P/B, P/S, EV/EBITDA, FCF yield, PEG.
+  financials     — TTM income/balance/cash-flow (revenue, net income, EBITDA, cash, total/net debt, free cash flow, capex) plus a 4-year annual trend and YoY growth.
+  valuation      — P/E vs. sector and industry medians (premium/discount), plus the stock's own 5-year P/E range and P/E·P/S·P/B history.
+  earnings       — forward revenue/EPS estimates, the last 4 quarters of actuals with beat/miss surprise %, and the typical post-earnings price move.
+  sector_context — the sector's performance vs. the broader market, and how the stock ranks against its peers (live).
+  analyst        — Wall Street price targets (high/low/median/consensus) and buy/hold/sell rating counts.
 
 Returns {"error": "...", "ticker": "..."} on unknown ticker or upstream failure — surface a short apology to the user and ask them to confirm the ticker. Do not retry the same ticker repeatedly."""
 
@@ -55,6 +100,25 @@ class StockInfoInput(BaseModel):
         ),
         min_length=1,
         max_length=10,
+    )
+    detail: Literal["snapshot", "fundamentals", "full"] = Field(
+        default="snapshot",
+        description=(
+            '"snapshot" (default) → live quote + performance only; use for '
+            'price and "how is X doing" questions. "fundamentals" → adds '
+            "ratios, valuation, financials, earnings, and analyst ratings; "
+            'use for "is it cheap / healthy / a good buy". "full" → every '
+            "section, incl. company profile and sector/peer context; use for "
+            "deep dives and comparisons."
+        ),
+    )
+    sections: list[StockSection] | None = Field(
+        default=None,
+        description=(
+            'Optional explicit sections to return (e.g. ["earnings"]). When '
+            "set, returns exactly these sections and overrides detail; quote "
+            "and performance are always included regardless."
+        ),
     )
 
 
@@ -212,7 +276,12 @@ class GetStockInfo(Tool[StockInfoInput]):
                 "change_pct": change_pct,
             }
 
-        data["performance"] = performance
+        payload = _build_stock_info_payload(
+            detail=input.detail,
+            sections=input.sections,
+            data=data,
+            performance=performance,
+        )
 
         complete_pill = StatusBlock(
             block_id=block_id, label=label, state="complete"
@@ -224,9 +293,9 @@ class GetStockInfo(Tool[StockInfoInput]):
             )
         )
         return ToolResult(
-            model_payload=data,
+            model_payload=payload,
             ui_block=complete_pill,
-            internal_trace={"raw": data},
+            internal_trace={"raw": {**data, "performance": performance}},
         )
 
     @staticmethod
@@ -247,3 +316,26 @@ class GetStockInfo(Tool[StockInfoInput]):
             )
         )
         return ToolResult(model_payload=payload, ui_block=failed_pill)
+
+
+def _build_stock_info_payload(
+    *,
+    detail: str,
+    sections: list[str] | None,
+    data: dict[str, Any],
+    performance: dict[str, dict[str, float]],
+) -> dict[str, Any]:
+    """Trim the assembled stock-info dict to the requested tier or sections.
+
+    Builds a fresh dict so the caller's full ``data`` stays intact for the
+    internal trace.
+    """
+    wanted = set(sections) if sections else set(_TIERS[detail])
+    payload: dict[str, Any] = {
+        "quote": data.get("quote", {}),
+        "performance": performance,
+    }
+    for name in _TRIMMABLE_SECTIONS:
+        if name in wanted and name in data:
+            payload[name] = data[name]
+    return payload
