@@ -218,6 +218,47 @@ class StockEarnings(BaseModel):
     events_measured: int | None = None
 
 
+class PeerComparison(BaseModel):
+    symbol: str
+    company_name: str | None = None
+    price: str | None = None
+    change_pct: str | None = None
+    market_cap: int | None = None
+
+
+class StockSectorContext(BaseModel):
+    """How the stock's sector is doing vs. the broader market, and how the stock
+    ranks against comparable companies.
+
+    Two halves on different time bases. The sector/industry/market figures come
+    from FMP's per-exchange daily performance snapshot for the last completed
+    session (``as_of_date``): ``*_change_pct`` are that session's average
+    constituent move in **percent** (``0.74`` == +0.74%), ``market_change_pct``
+    is the mean across every sector in that snapshot, and
+    ``sector_vs_market_pct`` reads positive when the sector outpaced the
+    exchange-wide average that day. The peer figures are live intraday —
+    ``peers`` carry each comparable's current ``change_pct`` and ``market_cap``,
+    and ``rank_by_change`` / ``rank_by_market_cap`` place the subject (``1`` ==
+    best/highest) among itself plus its peers. Every field is null when FMP
+    omits it, so the block degrades cleanly rather than failing the lookup.
+    """
+
+    sector: str | None = None
+    industry: str | None = None
+    exchange: str | None = None
+    as_of_date: str | None = None
+
+    sector_change_pct: str | None = None
+    industry_change_pct: str | None = None
+    market_change_pct: str | None = None
+    sector_vs_market_pct: str | None = None
+
+    peers: list[PeerComparison] = Field(default_factory=list)
+    peer_count: int | None = None
+    rank_by_change: int | None = None
+    rank_by_market_cap: int | None = None
+
+
 class StockInfoResponse(BaseModel):
     quote: StockQuote
     profile: StockProfile
@@ -225,6 +266,7 @@ class StockInfoResponse(BaseModel):
     financials: StockFinancials = Field(default_factory=StockFinancials)
     valuation: StockValuation = Field(default_factory=StockValuation)
     earnings: StockEarnings = Field(default_factory=StockEarnings)
+    sector_context: StockSectorContext = Field(default_factory=StockSectorContext)
     analyst: StockAnalyst
 
 

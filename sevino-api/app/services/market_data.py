@@ -25,14 +25,17 @@ from app.services.alpaca_broker import (
 )
 from app.services.fmp import (
     FmpClient,
+    _as_number,
     _parse_iso_date,
     compute_earnings_reactions,
+    compute_peer_comparison,
     project_analyst,
     project_earnings,
     project_financials,
     project_profile,
     project_quote,
     project_ratios,
+    project_sector_context,
     project_valuation,
 )
 
@@ -81,6 +84,9 @@ _EARNINGS_REACTION_LOOKBACK_DAYS = 730
 # they're cached per exchange with a daily TTL and shared across every symbol
 # on that exchange (rather than refetched into each symbol's fundamentals blob).
 _SECTOR_PE_TTL = 86400
+_SECTOR_PERF_TTL = 86400
+# Cap FMP's noisy peer list to the largest few comparables by market cap.
+_MAX_PEERS = 6
 # Snapshots are empty on weekends/holidays; walk back this many calendar days
 # to the last session before giving up (covers a long-weekend closure).
 _TRADING_DAY_LOOKBACK = 4
@@ -157,6 +163,9 @@ class MarketDataService:
             self._get_fundamentals_cached(symbol),
             self._get_analyst_cached(symbol),
         )
+        sector_context = await self._enrich_sector_context(
+            fundamentals["sector_context"], subject_quote=quote
+        )
         return {
             "quote": quote,
             "profile": fundamentals["profile"],
@@ -164,6 +173,7 @@ class MarketDataService:
             "financials": fundamentals["financials"],
             "valuation": fundamentals["valuation"],
             "earnings": fundamentals["earnings"],
+            "sector_context": sector_context,
             "analyst": analyst,
         }
 
@@ -281,6 +291,7 @@ class MarketDataService:
             cached.setdefault("financials", _empty_financials())
             cached.setdefault("valuation", _empty_valuation())
             cached.setdefault("earnings", _empty_earnings())
+            cached.setdefault("sector_context", _empty_sector_context())
             return cached
 
         logger.info("market_data_cache_miss", key=cache_key)
@@ -297,12 +308,20 @@ class MarketDataService:
             self._fetch_annual_ratios(symbol),
             self._fetch_earnings(symbol),
         )
-        valuation = await self._fetch_valuation(
-            ratios_raw,
-            annual_ratios,
-            sector=profile_raw.get("sector"),
-            industry=profile_raw.get("industry"),
-            exchange=profile_raw.get("exchange"),
+        valuation, sector_context = await asyncio.gather(
+            self._fetch_valuation(
+                ratios_raw,
+                annual_ratios,
+                sector=profile_raw.get("sector"),
+                industry=profile_raw.get("industry"),
+                exchange=profile_raw.get("exchange"),
+            ),
+            self._fetch_sector_context(
+                symbol,
+                sector=profile_raw.get("sector"),
+                industry=profile_raw.get("industry"),
+                exchange=profile_raw.get("exchange"),
+            ),
         )
         fundamentals = {
             "profile": project_profile(profile_raw),
@@ -310,6 +329,7 @@ class MarketDataService:
             "financials": financials,
             "valuation": valuation,
             "earnings": earnings,
+            "sector_context": sector_context,
         }
         await self._cache_set(cache_key, fundamentals, _FUNDAMENTALS_TTL)
         return fundamentals
@@ -479,6 +499,142 @@ class MarketDataService:
                 _SECTOR_PE_TTL,
             )
         return sector_rows, industry_rows, as_of_date
+
+    async def _fetch_sector_context(
+        self,
+        symbol: str,
+        *,
+        sector: str | None,
+        industry: str | None,
+        exchange: str | None,
+    ) -> dict[str, Any]:
+        """Build the sector-context block's slow-moving half. Best-effort.
+
+        The sector/industry performance snapshot is exchange-scoped and shared
+        across symbols (per-exchange daily cache); the peer list is folded into
+        the symbol's 12h fundamentals blob. Live peer changes and the subject's
+        rank are layered on at request time in ``_enrich_sector_context``.
+        """
+        sector_rows: list[dict[str, Any]] = []
+        industry_rows: list[dict[str, Any]] = []
+        as_of_date: str | None = None
+        if exchange:
+            sector_rows, industry_rows, as_of_date = (
+                await self._get_sector_perf_cached(exchange)
+            )
+        peer_rows = _normalize_peer_rows(await self._fetch_peers(symbol))
+        return project_sector_context(
+            sector_rows,
+            industry_rows,
+            peer_rows,
+            subject_symbol=symbol,
+            sector=sector,
+            industry=industry,
+            exchange=exchange,
+            as_of_date=as_of_date,
+            max_peers=_MAX_PEERS,
+        )
+
+    async def _get_sector_perf_cached(
+        self, exchange: str
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str | None]:
+        # One key for both snapshots so they share a single atomic expiry.
+        cache_key = f"market:sector_perf:{exchange}"
+        cached = await self._cache_get(cache_key)
+        if cached is not None:
+            logger.info("market_data_cache_hit", key=cache_key)
+            return (
+                cached.get("sector_rows", []),
+                cached.get("industry_rows", []),
+                cached.get("as_of_date"),
+            )
+
+        logger.info("market_data_cache_miss", key=cache_key)
+        sector_result, industry_result = await asyncio.gather(
+            self._snapshot_with_fallback(self._fmp.sector_performance, exchange),
+            self._snapshot_with_fallback(self._fmp.industry_performance, exchange),
+            return_exceptions=True,
+        )
+        sector_rows, sector_date, sector_ok = _unwrap_snapshot(
+            sector_result, exchange, "sector_perf"
+        )
+        industry_rows, industry_date, industry_ok = _unwrap_snapshot(
+            industry_result, exchange, "industry_perf"
+        )
+        # The two snapshots walk back independently; when they land on different
+        # sessions, report the earlier date so as_of_date never overstates the
+        # freshness of the older figure.
+        if sector_date and industry_date and sector_date != industry_date:
+            as_of_date = min(sector_date, industry_date)
+        else:
+            as_of_date = sector_date or industry_date
+        if sector_ok and industry_ok:
+            await self._cache_set(
+                cache_key,
+                {
+                    "sector_rows": sector_rows,
+                    "industry_rows": industry_rows,
+                    "as_of_date": as_of_date,
+                },
+                _SECTOR_PERF_TTL,
+            )
+        return sector_rows, industry_rows, as_of_date
+
+    async def _fetch_peers(self, symbol: str) -> list[dict[str, Any]]:
+        """Comparable-company list for the peer comparison. Best-effort."""
+        try:
+            return await self._fmp.stock_peers(symbol)
+        except _FMP_FETCH_ERRORS as exc:
+            logger.warning(
+                "market_data_peers_unavailable",
+                symbol=symbol,
+                error=str(exc),
+                exc_type=type(exc).__name__,
+            )
+            return []
+
+    async def _enrich_sector_context(
+        self, block: dict[str, Any], *, subject_quote: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Layer live peer changes + the subject's rank onto the stored block.
+
+        Peer ``change_pct`` is an intraday figure, so it's fetched fresh through
+        the cache-aware batch-quote path at request time (rather than frozen into
+        the 12h fundamentals blob) and the subject is ranked within that single
+        consistent snapshot. A batch-quote failure degrades only the live fields.
+        """
+        peers = block.get("peers", [])
+        if not peers:
+            return block
+
+        peer_symbols = [peer["symbol"] for peer in peers if peer.get("symbol")]
+        peer_quotes: dict[str, dict[str, Any]] = {}
+        try:
+            result = await self.get_batch_quotes(peer_symbols)
+            peer_quotes = {
+                quote["symbol"]: quote
+                for quote in result.get("quotes", [])
+                if quote.get("symbol")
+            }
+        except _FMP_FETCH_ERRORS as exc:
+            logger.warning(
+                "market_data_peer_quotes_unavailable",
+                error=str(exc),
+                exc_type=type(exc).__name__,
+            )
+
+        enriched_peers, rank_by_change, rank_by_market_cap = compute_peer_comparison(
+            subject_change=_as_number(subject_quote.get("change_percent")),
+            subject_market_cap=_as_number(subject_quote.get("market_cap")),
+            peers=peers,
+            peer_quotes=peer_quotes,
+        )
+        return {
+            **block,
+            "peers": enriched_peers,
+            "rank_by_change": rank_by_change,
+            "rank_by_market_cap": rank_by_market_cap,
+        }
 
     async def _snapshot_with_fallback(
         self,
@@ -674,6 +830,20 @@ def _empty_earnings() -> dict[str, Any]:
     return project_earnings([], [], {}, as_of=date.min)
 
 
+def _empty_sector_context() -> dict[str, Any]:
+    return project_sector_context(
+        [],
+        [],
+        [],
+        subject_symbol=None,
+        sector=None,
+        industry=None,
+        exchange=None,
+        as_of_date=None,
+        max_peers=_MAX_PEERS,
+    )
+
+
 def _earnings_rows_or_empty(
     result: Any, symbol: str, source: str
 ) -> list[dict[str, Any]]:
@@ -704,8 +874,13 @@ def _unwrap_snapshot(
     transient failure.
     """
     if isinstance(result, BaseException):
+        # CancelledError isn't an `Exception` subclass; let it (and other
+        # non-Exception signals) propagate rather than masking a cancelled task
+        # as a benign data miss.
+        if not isinstance(result, Exception):
+            raise result
         logger.warning(
-            "market_data_sector_pe_unavailable",
+            "market_data_snapshot_unavailable",
             exchange=exchange,
             snapshot=label,
             error=str(result),
@@ -714,6 +889,25 @@ def _unwrap_snapshot(
         return [], None, False
     rows, on_date = result
     return rows, on_date, True
+
+
+def _normalize_peer_rows(peer_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Canonicalize peer symbols and drop any the cache/upstream URLs reject.
+
+    FMP's peer list can carry symbols that fail `_normalize_symbol` (foreign
+    suffixes, over-length tickers). Left in, they'd make the live batch-quote
+    fetch raise `MarketDataInvalidInputError` — which isn't a best-effort error
+    type — and fail the whole stock-info lookup instead of degrading. Canonical-
+    izing here also keeps the peer-quote join keys consistent with the cache.
+    """
+    cleaned: list[dict[str, Any]] = []
+    for row in peer_rows:
+        try:
+            symbol = _normalize_symbol(row.get("symbol", ""))
+        except MarketDataInvalidInputError:
+            continue
+        cleaned.append({**row, "symbol": symbol})
+    return cleaned
 
 
 def _normalize_symbol(symbol: str) -> str:

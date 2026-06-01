@@ -11,6 +11,7 @@ from app.schemas.market_data import (
     ChartTimeframe,
     FinancialTrendPoint,
     MarketStatusResponse,
+    PeerComparison,
     PriceBar,
     QuarterlyEarning,
     StockAnalyst,
@@ -20,6 +21,7 @@ from app.schemas.market_data import (
     StockProfile,
     StockQuote,
     StockRatios,
+    StockSectorContext,
     StockValuation,
     ValuationHistoryPoint,
 )
@@ -300,6 +302,53 @@ class TestStockEarnings:
         assert result.quarterly[1].eps_actual is None
 
 
+class TestStockSectorContext:
+    def test_empty_dict_yields_all_none_and_empty_peers(self):
+        result = StockSectorContext.model_validate({})
+
+        assert result.sector is None
+        assert result.sector_vs_market_pct is None
+        assert result.peers == []
+        assert result.peer_count is None
+        assert result.rank_by_change is None
+
+    def test_partial_fields_validate(self):
+        result = StockSectorContext.model_validate(
+            {
+                "sector": "Technology",
+                "sector_change_pct": "0.74",
+                "market_change_pct": "-0.32",
+                "sector_vs_market_pct": "1.06",
+            }
+        )
+
+        assert result.sector == "Technology"
+        assert result.sector_vs_market_pct == "1.06"
+
+    def test_peer_points_validate(self):
+        result = StockSectorContext.model_validate(
+            {
+                "peers": [
+                    {
+                        "symbol": "MSFT",
+                        "company_name": "Microsoft Corporation",
+                        "price": "450.24",
+                        "change_pct": "0.85",
+                        "market_cap": 3344576323200,
+                    }
+                ],
+                "peer_count": 1,
+                "rank_by_change": 2,
+                "rank_by_market_cap": 1,
+            }
+        )
+
+        assert isinstance(result.peers[0], PeerComparison)
+        assert result.peers[0].symbol == "MSFT"
+        assert result.peers[0].market_cap == 3344576323200
+        assert result.rank_by_change == 2
+
+
 class TestStockInfoResponse:
     def test_well_formed_dict_validates(self):
         data = {
@@ -393,6 +442,39 @@ class TestStockInfoResponse:
 
         assert result.earnings.next_period_end == "2026-09-28"
         assert result.earnings.num_analysts == 12
+
+    def test_sector_context_defaults_to_empty_block_when_omitted(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert isinstance(result.sector_context, StockSectorContext)
+        assert result.sector_context.peers == []
+        assert result.sector_context.sector_vs_market_pct is None
+
+    def test_sector_context_block_validates_when_present(self):
+        data = {
+            "quote": _quote(),
+            "profile": {"name": "Apple Inc.", "exchange": "NASDAQ"},
+            "ratios": {},
+            "sector_context": {
+                "sector": "Technology",
+                "sector_vs_market_pct": "1.06",
+                "peers": [{"symbol": "MSFT", "change_pct": "0.85"}],
+                "peer_count": 1,
+            },
+            "analyst": {},
+        }
+
+        result = StockInfoResponse.model_validate(data)
+
+        assert result.sector_context.sector_vs_market_pct == "1.06"
+        assert result.sector_context.peers[0].symbol == "MSFT"
 
     @pytest.mark.parametrize(
         "field", ["quote", "profile", "ratios", "analyst"]

@@ -370,6 +370,40 @@ class FmpClient:
         )
         return data or []
 
+    async def sector_performance(
+        self, exchange: str, on_date: str
+    ) -> list[dict[str, Any]]:
+        """Per-sector average price change for an exchange on a date. Empty → ``[]``.
+
+        Like the P/E snapshots, non-trading days return no rows, so callers walk
+        the date back to the last session rather than treating empty as an error.
+        ``averageChange`` is a percent figure (``0.74`` == +0.74%).
+        """
+        data = await self._request(
+            "/sector-performance-snapshot",
+            {"date": on_date, "exchange": exchange},
+        )
+        return data or []
+
+    async def industry_performance(
+        self, exchange: str, on_date: str
+    ) -> list[dict[str, Any]]:
+        """Per-industry average price change for an exchange on a date. Empty → ``[]``."""
+        data = await self._request(
+            "/industry-performance-snapshot",
+            {"date": on_date, "exchange": exchange},
+        )
+        return data or []
+
+    async def stock_peers(self, symbol: str) -> list[dict[str, Any]]:
+        """Comparable companies for a symbol (name, price, market cap). Empty → ``[]``.
+
+        FMP's peer list is noisy — it mixes mega-caps with micro-caps — so
+        callers cap it by market cap rather than trusting the full list.
+        """
+        data = await self._request("/stock-peers", {"symbol": symbol})
+        return data or []
+
     async def earnings(
         self, symbol: str, *, limit: int = 8
     ) -> list[dict[str, Any]]:
@@ -799,6 +833,177 @@ def project_valuation(
         "pe_5y_median": str_or_none(_median(pe_series)),
         "valuation_history": _build_valuation_history(annual_ratios),
     }
+
+
+def _match_change(
+    rows: list[dict[str, Any]], key: str, value: str | None
+) -> float | None:
+    if not value:
+        return None
+    for row in rows:
+        if row.get(key) == value:
+            return _as_number(row.get("averageChange"))
+    return None
+
+
+def _mean_change(rows: list[dict[str, Any]]) -> float | None:
+    """Mean ``averageChange`` across a performance snapshot, as a market proxy.
+
+    An equal-weight average of every sector on the exchange — a neutral,
+    internally-consistent baseline (same exchange, same methodology) the
+    subject's sector is measured against.
+    """
+    changes = [
+        change
+        for row in rows
+        if (change := _as_number(row.get("averageChange"))) is not None
+    ]
+    if not changes:
+        return None
+    return round(sum(changes) / len(changes), 4)
+
+
+def _select_peers(
+    peer_rows: list[dict[str, Any]],
+    *,
+    subject_symbol: str | None,
+    max_peers: int,
+) -> list[dict[str, Any]]:
+    """Top peers by market cap, dropping the subject and junk (non-positive cap).
+
+    Capping by market cap keeps the comparison to genuinely comparable names
+    rather than the micro-caps FMP mixes into its peer list. ``price`` and
+    ``change_pct`` are left null here and filled live in
+    :func:`compute_peer_comparison`.
+    """
+    candidates: list[tuple[float, dict[str, Any]]] = []
+    for row in peer_rows:
+        symbol = row.get("symbol")
+        if not symbol or symbol == subject_symbol:
+            continue
+        market_cap = _as_number(row.get("mktCap"))
+        if market_cap is None or market_cap <= 0:
+            continue
+        candidates.append(
+            (
+                market_cap,
+                {
+                    "symbol": symbol,
+                    "company_name": none_if_blank(row.get("companyName")),
+                    "market_cap": int(market_cap),
+                    "price": None,
+                    "change_pct": None,
+                },
+            )
+        )
+    candidates.sort(key=lambda item: item[0], reverse=True)
+    return [peer for _cap, peer in candidates[:max_peers]]
+
+
+def project_sector_context(
+    sector_rows: list[dict[str, Any]],
+    industry_rows: list[dict[str, Any]],
+    peer_rows: list[dict[str, Any]],
+    *,
+    subject_symbol: str | None,
+    sector: str | None,
+    industry: str | None,
+    exchange: str | None,
+    as_of_date: str | None,
+    max_peers: int,
+) -> dict[str, Any]:
+    """Build the slow-moving half of the sector-context block.
+
+    Computes the subject's sector/industry change vs. the exchange-wide average
+    from the daily performance snapshot, and selects the peer set. Live peer
+    changes and the subject's rank are layered on later by
+    :func:`compute_peer_comparison`. Changes are percent passthrough — the raw
+    FMP ``averageChange`` unit — so the field names carry ``_pct``.
+    """
+    sector = none_if_blank(sector)
+    industry = none_if_blank(industry)
+    exchange = none_if_blank(exchange)
+
+    sector_change = _match_change(sector_rows, "sector", sector)
+    industry_change = _match_change(industry_rows, "industry", industry)
+    market_change = _mean_change(sector_rows)
+    sector_vs_market = (
+        round(sector_change - market_change, 4)
+        if sector_change is not None and market_change is not None
+        else None
+    )
+    matched_benchmark = sector_change is not None or industry_change is not None
+    peers = _select_peers(
+        peer_rows, subject_symbol=subject_symbol, max_peers=max_peers
+    )
+    return {
+        "sector": sector,
+        "industry": industry,
+        "exchange": exchange,
+        "as_of_date": as_of_date if matched_benchmark else None,
+        "sector_change_pct": str_or_none(sector_change),
+        "industry_change_pct": str_or_none(industry_change),
+        "market_change_pct": str_or_none(market_change),
+        "sector_vs_market_pct": str_or_none(sector_vs_market),
+        "peers": peers,
+        "peer_count": len(peers) or None,
+        "rank_by_change": None,
+        "rank_by_market_cap": None,
+    }
+
+
+def _rank(subject_value: float | None, peer_values: list[float | None]) -> int | None:
+    """Competition rank of the subject among itself + peers (``1`` == highest).
+
+    None when the subject value is missing or no peer carries a comparable
+    value, so the caller degrades the rank to null rather than emitting a
+    meaningless rank of 1-of-1.
+    """
+    if subject_value is None:
+        return None
+    comparable = [value for value in peer_values if value is not None]
+    if not comparable:
+        return None
+    return 1 + sum(1 for value in comparable if value > subject_value)
+
+
+def compute_peer_comparison(
+    *,
+    subject_change: float | None,
+    subject_market_cap: float | None,
+    peers: list[dict[str, Any]],
+    peer_quotes: dict[str, dict[str, Any]],
+) -> tuple[list[dict[str, Any]], int | None, int | None]:
+    """Merge live peer quotes into the stored peer identities and rank the subject.
+
+    Pure so the ranking math is unit-testable without network: the caller
+    fetches ``peer_quotes`` (symbol → projected quote) and passes the subject's
+    own live figures in. Peers missing a live quote keep their stored market cap
+    and a null change, and drop out of whichever ranking they lack a value for.
+    """
+    enriched: list[dict[str, Any]] = []
+    for peer in peers:
+        quote = peer_quotes.get(peer["symbol"])
+        change_pct = quote.get("change_percent") if quote else None
+        price = quote.get("price") if quote else None
+        market_cap = (
+            quote.get("market_cap") if quote else None
+        ) or peer.get("market_cap")
+        enriched.append(
+            {
+                **peer,
+                "price": price,
+                "change_pct": change_pct,
+                "market_cap": market_cap,
+            }
+        )
+    rank_by_change = _rank(
+        subject_change, [_as_number(peer["change_pct"]) for peer in enriched]
+    )
+    rank_by_market_cap = _rank(
+        subject_market_cap, [_as_number(peer["market_cap"]) for peer in enriched]
+    )
+    return enriched, rank_by_change, rank_by_market_cap
 
 
 def _parse_iso_date(value: Any) -> date | None:

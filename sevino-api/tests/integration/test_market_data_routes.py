@@ -58,6 +58,9 @@ class TestGetStockInfoRoute:
         assert body["earnings"]["next_period_end"] == "2026-09-28"
         assert body["earnings"]["quarterly"][0]["eps_surprise_pct"] == "0.0308"
         assert body["earnings"]["avg_post_earnings_move_pct"] == "0.0365"
+        assert body["sector_context"]["sector_vs_market_pct"] == "1.0589"
+        assert body["sector_context"]["peers"][0]["symbol"] == "MSFT"
+        assert body["sector_context"]["rank_by_market_cap"] == 2
         assert body["analyst"]["target_consensus"] == "200.00"
         market_data_mock.get_stock_info.assert_awaited_once_with("AAPL")
 
