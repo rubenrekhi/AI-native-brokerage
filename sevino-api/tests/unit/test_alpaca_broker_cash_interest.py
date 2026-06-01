@@ -3,6 +3,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
+import app.services.alpaca_broker as alpaca_broker
 from app.exceptions import NotFoundError
 from app.services.alpaca_broker import AlpacaBrokerError
 
@@ -231,6 +232,113 @@ class TestGetInterestActivities:
         result = await service.get_interest_activities(account_id=ACCOUNT_ID)
 
         assert result == activities
+
+    async def test_forwards_after_until_when_provided(self, make_alpaca_service):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["query"] = parse_qs(urlparse(str(request.url)).query)
+            return httpx.Response(200, json=[])
+
+        service = make_alpaca_service(handler)
+        await service.get_interest_activities(
+            account_id=ACCOUNT_ID,
+            after="2026-05-01T00:00:00+00:00",
+            until="2026-05-31T23:59:59+00:00",
+        )
+
+        assert captured["query"] == {
+            "account_id": [ACCOUNT_ID],
+            "after": ["2026-05-01T00:00:00+00:00"],
+            "until": ["2026-05-31T23:59:59+00:00"],
+        }
+
+    async def test_paginate_walks_pages_via_page_token(self, make_alpaca_service):
+        # A full page must trigger a follow-up whose page_token is the last
+        # activity's id; the short second page ends the walk.
+        page_size = alpaca_broker._ACTIVITY_PAGE_SIZE
+        requests: list[dict] = []
+        full_page = [{"id": f"id_{n}", "net_amount": "1.00"} for n in range(page_size)]
+        short_page = [{"id": "id_tail", "net_amount": "1.00"}]
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            query = parse_qs(urlparse(str(request.url)).query)
+            requests.append(query)
+            if "page_token" not in query:
+                return httpx.Response(200, json=full_page)
+            return httpx.Response(200, json=short_page)
+
+        service = make_alpaca_service(handler)
+        result = await service.get_interest_activities(
+            account_id=ACCOUNT_ID, after="2026-01-01", paginate=True
+        )
+
+        assert len(requests) == 2
+        assert requests[0]["page_size"] == [str(page_size)]
+        assert requests[0]["direction"] == ["desc"]
+        assert requests[0]["after"] == ["2026-01-01"]
+        assert "page_token" not in requests[0]
+        # Cursor = last id of the first page; window params carried forward.
+        assert requests[1]["page_token"] == [f"id_{page_size - 1}"]
+        assert requests[1]["after"] == ["2026-01-01"]
+        assert len(result) == page_size + 1
+
+    async def test_paginate_single_short_page_makes_one_request(
+        self, make_alpaca_service
+    ):
+        requests: list[dict] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            requests.append(parse_qs(urlparse(str(request.url)).query))
+            return httpx.Response(200, json=[{"id": "only", "net_amount": "2.00"}])
+
+        service = make_alpaca_service(handler)
+        result = await service.get_interest_activities(
+            account_id=ACCOUNT_ID, paginate=True
+        )
+
+        assert len(requests) == 1
+        assert len(result) == 1
+
+    async def test_paginate_stops_at_max_pages(self, make_alpaca_service):
+        # Every page is full → the walk stops at the cap instead of looping
+        # forever on an account with more activity than the bound allows.
+        page_size = alpaca_broker._ACTIVITY_PAGE_SIZE
+        calls = {"n": 0}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls["n"] += 1
+            return httpx.Response(
+                200,
+                json=[
+                    {"id": f"p{calls['n']}_{i}", "net_amount": "1.00"}
+                    for i in range(page_size)
+                ],
+            )
+
+        service = make_alpaca_service(handler)
+        result = await service.get_interest_activities(
+            account_id=ACCOUNT_ID, paginate=True
+        )
+
+        assert calls["n"] == alpaca_broker._ACTIVITY_MAX_PAGES
+        assert len(result) == alpaca_broker._ACTIVITY_MAX_PAGES * page_size
+
+    async def test_no_pagination_params_when_paginate_false(
+        self, make_alpaca_service
+    ):
+        # Default path is a single request with no page_size/direction — the
+        # contract `brokerage` / `cash_interest` callers still rely on.
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["query"] = parse_qs(urlparse(str(request.url)).query)
+            return httpx.Response(200, json=[{"id": "x", "net_amount": "1.00"}] * 100)
+
+        service = make_alpaca_service(handler)
+        await service.get_interest_activities(account_id=ACCOUNT_ID)
+
+        assert captured["query"] == {"account_id": [ACCOUNT_ID]}
 
     async def test_401_raises_alpaca_broker_error(self, make_alpaca_service):
         def handler(request: httpx.Request) -> httpx.Response:
