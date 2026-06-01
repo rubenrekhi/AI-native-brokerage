@@ -79,7 +79,17 @@ struct AssistantTextBlockView: View {
         AssistantTextBlockView(
             block: TextBlock(
                 blockId: "1",
-                text: "Here is **bold** and *italic* text.\n\n### Heading\n\n| Col A | Col B |\n|---|---|\n| 1 | 2 |"
+                text: """
+                Here is **bold** and *italic* text.
+
+                ### Heading
+
+                | Symbol | Company | Price | Day Change | Market Cap |
+                |---|---|---|---|---|
+                | AAPL | Apple Inc. | $189.45 | +1.23% | $2.95T |
+                | MSFT | Microsoft Corporation | $412.80 | -0.45% | $3.07T |
+                | NVDA | NVIDIA Corporation | $1,024.30 | +3.10% | $2.52T |
+                """
             ),
             isStreaming: false,
             scale: 1,
