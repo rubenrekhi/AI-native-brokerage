@@ -16,6 +16,16 @@ PENDING_TRANSFER_STATUSES = frozenset(
     {"QUEUED", "APPROVAL_PENDING", "PENDING", "SENT_TO_CLEARING"}
 )
 
+# Subset of in-flight states Alpaca will still cancel — narrower than
+# PENDING_TRANSFER_STATUSES because SENT_TO_CLEARING has already been handed to
+# the clearing firm and a cancel is rejected (verified against the sandbox).
+CANCELABLE_TRANSFER_STATUSES = frozenset({"QUEUED", "APPROVAL_PENDING", "PENDING"})
+
+# `code` in Alpaca's 422 body when a transfer is past the cancelable window:
+# {"code": 40010001, "message": "transfer is not cancelable"}. Undocumented;
+# captured via a sandbox probe.
+ALPACA_TRANSFER_NOT_CANCELABLE_CODE = 40010001
+
 # The account-activities endpoint caps a page at 100 entries unless a single
 # `date` is given; an after/until range stays capped, so a wide window must be
 # walked via the cursor. Bound the walk so a pathological account can't fan out
@@ -297,6 +307,13 @@ class AlpacaBrokerService:
             "GET",
             f"/v1/accounts/{account_id}/transfers",
             params=params or None,
+        )
+
+    async def cancel_transfer(self, account_id: str, transfer_id: str) -> None:
+        """DELETE /v1/accounts/{id}/transfers/{transfer_id}. 200/204 → None."""
+        await self._request(
+            "DELETE",
+            f"/v1/accounts/{account_id}/transfers/{transfer_id}",
         )
 
     async def list_documents(
@@ -595,7 +612,9 @@ class AlpacaBrokerService:
         if response.status_code == 204:
             return {}
         if response.status_code in (200, 201):
-            return response.json()
+            # The transfer-cancel DELETE answers 200 with an empty body (other
+            # DELETEs use 204); `.json()` would raise on empty content.
+            return response.json() if response.content else {}
 
         try:
             body = response.json()

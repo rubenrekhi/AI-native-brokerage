@@ -822,6 +822,113 @@ class TestListTransfers:
         )
 
 
+class TestCancelTransfer:
+    async def test_happy_path_cancels_pending_transfer(
+        self, db, alpaca, patch_repos, user_id, brokerage
+    ):
+        alpaca.list_transfers.return_value = [
+            {"id": "xfer_1", "status": "QUEUED", "amount": "100.00"}
+        ]
+
+        await FundingService.cancel_transfer(
+            db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+        )
+
+        alpaca.cancel_transfer.assert_awaited_once_with(
+            brokerage.alpaca_account_id, "xfer_1"
+        )
+
+    async def test_unknown_transfer_id_raises_not_found(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [{"id": "other", "status": "QUEUED"}]
+
+        with pytest.raises(NotFoundError):
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+        alpaca.cancel_transfer.assert_not_called()
+
+    async def test_non_cancelable_status_blocks_before_alpaca(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [
+            {"id": "xfer_1", "status": "SENT_TO_CLEARING"}
+        ]
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+        assert info.value.code == "TRANSFER_NOT_CANCELABLE"
+        assert info.value.detail == {"status": "SENT_TO_CLEARING"}
+        alpaca.cancel_transfer.assert_not_called()
+
+    async def test_already_canceled_is_not_cancelable(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [{"id": "xfer_1", "status": "CANCELED"}]
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+        assert info.value.code == "TRANSFER_NOT_CANCELABLE"
+        alpaca.cancel_transfer.assert_not_called()
+
+    async def test_race_maps_alpaca_422_to_conflict(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [{"id": "xfer_1", "status": "QUEUED"}]
+        alpaca.cancel_transfer.side_effect = AlpacaBrokerError(
+            status_code=422,
+            message="transfer is not cancelable",
+            detail={"code": 40010001, "message": "transfer is not cancelable"},
+        )
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+        assert info.value.code == "TRANSFER_NOT_CANCELABLE"
+
+    async def test_other_alpaca_error_propagates(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [{"id": "xfer_1", "status": "QUEUED"}]
+        alpaca.cancel_transfer.side_effect = AlpacaBrokerError(
+            status_code=422, message="some other error", detail={"code": 99999}
+        )
+
+        with pytest.raises(AlpacaBrokerError):
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+
+    async def test_alpaca_unavailable_propagates(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.list_transfers.return_value = [{"id": "xfer_1", "status": "QUEUED"}]
+        alpaca.cancel_transfer.side_effect = AlpacaBrokerUnavailableError("down")
+
+        with pytest.raises(AlpacaBrokerUnavailableError):
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+
+    async def test_inactive_account_blocks_before_listing(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        patch_repos.get_brokerage.return_value = None
+
+        with pytest.raises(ConflictError) as info:
+            await FundingService.cancel_transfer(
+                db, alpaca=alpaca, user_id=user_id, transfer_id="xfer_1"
+            )
+        assert info.value.code == "ACCOUNT_NOT_ACTIVE"
+        alpaca.list_transfers.assert_not_called()
+
+
 # ---------------------------------------------------------------------------
 # create_link_token
 # ---------------------------------------------------------------------------

@@ -180,3 +180,18 @@ async def list_transfers(
     return TransferListResponse(
         transfers=[TransferResponse.model_validate(t) for t in transfers]
     )
+
+
+@router.delete("/transfers/{transfer_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def cancel_transfer(
+    transfer_id: str,
+    user_id: str = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    alpaca: AlpacaBrokerService = Depends(get_alpaca),
+) -> None:
+    await FundingService.cancel_transfer(
+        db,
+        alpaca=alpaca,
+        user_id=uuid.UUID(user_id),
+        transfer_id=transfer_id,
+    )

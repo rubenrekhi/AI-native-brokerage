@@ -19,7 +19,10 @@ from app.auth import get_current_user
 from app.database import get_db
 from app.exceptions import register_exception_handlers
 from app.routes.funding import get_alpaca, get_plaid, router as funding_router
-from app.services.alpaca_broker import AlpacaBrokerError
+from app.services.alpaca_broker import (
+    AlpacaBrokerError,
+    AlpacaBrokerUnavailableError,
+)
 
 TEST_USER_ID = str(uuid.uuid4())
 
@@ -527,6 +530,85 @@ class TestListTransfers:
         assert body["transfers"][0]["status"] == "RETURNED"
 
 
+class TestCancelTransfer:
+    async def test_204_cancels_pending_transfer(
+        self, client, patch_repos, alpaca_mock
+    ):
+        alpaca_mock.list_transfers.return_value = [
+            {
+                "id": "xfer_1",
+                "status": "QUEUED",
+                "amount": "100.00",
+                "direction": "INCOMING",
+            }
+        ]
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 204
+        alpaca_mock.cancel_transfer.assert_awaited_once_with("alpaca_acc_42", "xfer_1")
+
+    async def test_unknown_transfer_returns_404(
+        self, client, patch_repos, alpaca_mock
+    ):
+        alpaca_mock.list_transfers.return_value = []
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 404
+        assert response.json()["code"] == "NOT_FOUND"
+        alpaca_mock.cancel_transfer.assert_not_called()
+
+    async def test_non_cancelable_returns_409(self, client, patch_repos, alpaca_mock):
+        alpaca_mock.list_transfers.return_value = [
+            {"id": "xfer_1", "status": "COMPLETE"}
+        ]
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 409
+        body = response.json()
+        assert body["code"] == "TRANSFER_NOT_CANCELABLE"
+        assert body["detail"] == {"status": "COMPLETE"}
+        alpaca_mock.cancel_transfer.assert_not_called()
+
+    async def test_account_not_active_returns_409(self, client, patch_repos):
+        patch_repos.get_brokerage.return_value = None
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 409
+        assert response.json()["code"] == "ACCOUNT_NOT_ACTIVE"
+
+    async def test_alpaca_unavailable_returns_503(
+        self, client, patch_repos, alpaca_mock
+    ):
+        alpaca_mock.list_transfers.return_value = [
+            {"id": "xfer_1", "status": "QUEUED"}
+        ]
+        alpaca_mock.cancel_transfer.side_effect = AlpacaBrokerUnavailableError("down")
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 503
+        assert response.json()["code"] == "ALPACA_UNAVAILABLE"
+
+    async def test_other_alpaca_error_returns_422(
+        self, client, patch_repos, alpaca_mock
+    ):
+        alpaca_mock.list_transfers.return_value = [
+            {"id": "xfer_1", "status": "QUEUED"}
+        ]
+        alpaca_mock.cancel_transfer.side_effect = AlpacaBrokerError(
+            status_code=422, message="weird", detail={"code": 99999}
+        )
+
+        response = await client.delete("/v1/funding/transfers/xfer_1")
+
+        assert response.status_code == 422
+        assert response.json()["code"] == "ALPACA_ERROR"
+
+
 # ---------------------------------------------------------------------------
 # Auth
 # ---------------------------------------------------------------------------
@@ -568,6 +650,10 @@ class TestAuth:
 
     async def test_list_transfers_requires_auth(self, unauthenticated_client):
         response = await unauthenticated_client.get("/v1/funding/transfers")
+        assert response.status_code == 401
+
+    async def test_cancel_transfer_requires_auth(self, unauthenticated_client):
+        response = await unauthenticated_client.delete("/v1/funding/transfers/xfer_1")
         assert response.status_code == 401
 
     async def test_reauth_link_token_requires_auth(self, unauthenticated_client):

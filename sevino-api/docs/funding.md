@@ -42,6 +42,7 @@ Subsequent operations hit the backend, which reads local DB state and delegates 
 - `DELETE /v1/funding/ach-relationships/{id}` — unlinks (Alpaca DELETE then local soft-delete)
 - `POST /v1/funding/transfers` — creates a deposit (`INCOMING`) or withdrawal (`OUTGOING`)
 - `GET  /v1/funding/transfers` — lists transfers from Alpaca with merged local bank metadata
+- `DELETE /v1/funding/transfers/{id}` — cancels an in-flight transfer (Alpaca DELETE; no local write)
 
 ## Components
 
@@ -115,6 +116,16 @@ response: { transfers: [TransferResponse] }
 ```
 Merges local `nickname` / `account_mask` / `institution_name` onto each Alpaca record under `bank`, including relationships that have been canceled (historical rows retain their metadata).
 
+### `DELETE /v1/funding/transfers/{transfer_id}`
+```
+response: 204 No Content
+errors:   404 NOT_FOUND, 409 TRANSFER_NOT_CANCELABLE, 409 ACCOUNT_NOT_ACTIVE,
+          422 ALPACA_ERROR, 503 ALPACA_UNAVAILABLE
+```
+Cancels an in-flight ACH transfer. `transfer_id` is Alpaca's transfer id (a string), **not** a local PK — transfers are never persisted locally. Ownership is enforced by scoping to the caller's own `alpaca_account_id` (resolved via the active-brokerage gate): a `transfer_id` that isn't theirs isn't in their list and surfaces as `404`. Only transfers in `QUEUED` / `APPROVAL_PENDING` / `PENDING` (`CANCELABLE_TRANSFER_STATUSES`) can be canceled — anything else (a `COMPLETE`/`REJECTED`/`RETURNED` transfer, an already-`CANCELED` one on a double-cancel, or `SENT_TO_CLEARING` and beyond) is rejected with `TRANSFER_NOT_CANCELABLE` (`detail.status` carries the current value) before calling Alpaca. If a transfer races past the window between the pre-flight read and the DELETE, Alpaca returns `422 {"code":40010001,"message":"transfer is not cancelable"}`, which is mapped to the same `409 TRANSFER_NOT_CANCELABLE`. No local write — the next `GET /transfers` reflects the canceled status.
+
+The cancelable-status boundary (and the `40010001` error code) were verified against the Alpaca sandbox; the public docs are silent on both.
+
 ## Security posture
 
 ### Plaid access tokens encrypted at rest
@@ -138,6 +149,7 @@ Errors map to the standard `error_response` helper (`app/exceptions.py`):
 | `BANK_ALREADY_LINKED` | 409 | Alpaca returned 409 from `create_ach_relationship`. iOS refreshes relationships and can show the existing link. |
 | `RELATIONSHIP_CANCELED` | 409 | User tried to transfer through a canceled relationship — either locally soft-deleted via unlink, or Alpaca-side `CANCEL_REQUESTED` observed during the pre-transfer refresh. |
 | `RELATIONSHIP_NOT_APPROVED` | 409 | Relationship is still in `QUEUED` or `PENDING` at Alpaca after refresh. `detail.status` carries the current value. iOS can surface "still being verified — try again in a few minutes." |
+| `TRANSFER_NOT_CANCELABLE` | 409 | Cancel attempted on a transfer outside `QUEUED`/`APPROVAL_PENDING`/`PENDING` — caught by the pre-flight status gate (incl. double-cancel of an already-`CANCELED` transfer), or by Alpaca's `422 code 40010001` when it raced past the window. `detail.status` carries the pre-flight status when known. |
 | `ALPACA_ERROR` | 422 | Alpaca 4xx for any non-409 reason. Message forwarded verbatim; `detail` carries Alpaca's `{code, message}`. |
 | `ALPACA_UNAVAILABLE` | 503 | Alpaca 5xx or unreachable. |
 | `VALIDATION_ERROR` | 422 | Request failed Pydantic validation. |
@@ -175,6 +187,8 @@ Structured log events fire at boundary points. All include `user_id` for correla
 | `link_bank_alpaca_compensation_succeeded` | info | Orphan cleanup succeeded |
 | `link_bank_alpaca_compensation_failed` | error | Orphan cleanup failed — operator action required |
 | `transfer_initiated` | info | After `alpaca.create_transfer` returns |
+| `transfer_canceled` | info | After `alpaca.cancel_transfer` succeeds |
+| `transfer_cancel_blocked_not_cancelable` | info | Pre-flight gate rejected a cancel (status not in `CANCELABLE_TRANSFER_STATUSES`) |
 | `unlink_failed_alpaca_unavailable` | warning | Alpaca 5xx on DELETE before re-raise |
 | `bank_unlinked` | info | After local soft-delete |
 | `alpaca_ach_relationship_already_gone` | info | Alpaca 404 on DELETE (idempotent unlink) |

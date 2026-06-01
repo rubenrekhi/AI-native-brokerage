@@ -30,6 +30,8 @@ from app.repositories.brokerage_account import (
 from app.repositories.brokerage_account import BrokerageAccountRepository
 from app.repositories.plaid_item import PlaidItemRepository
 from app.services.alpaca_broker import (
+    ALPACA_TRANSFER_NOT_CANCELABLE_CODE,
+    CANCELABLE_TRANSFER_STATUSES,
     AlpacaBrokerError,
     AlpacaBrokerService,
     AlpacaBrokerUnavailableError,
@@ -427,6 +429,58 @@ class FundingService:
         for transfer in transfers:
             transfer["bank"] = bank_by_alpaca_id.get(transfer.get("relationship_id"))
         return transfers
+
+    @staticmethod
+    async def cancel_transfer(
+        db: AsyncSession,
+        *,
+        alpaca: AlpacaBrokerService,
+        user_id: uuid.UUID,
+        transfer_id: str,
+    ) -> None:
+        """Cancel an in-flight ACH transfer.
+
+        Transfers aren't persisted locally, so ownership is enforced by scoping
+        the lookup + DELETE to the caller's own Alpaca account — a transfer that
+        isn't theirs simply isn't in the list and surfaces as a 404.
+        """
+        brokerage = await _require_active_brokerage(db, user_id)
+
+        transfers = await alpaca.list_transfers(brokerage.alpaca_account_id)
+        target = next((t for t in transfers if t.get("id") == transfer_id), None)
+        if target is None:
+            raise NotFoundError("Transfer not found")
+
+        transfer_status = target.get("status")
+        if transfer_status not in CANCELABLE_TRANSFER_STATUSES:
+            logger.info(
+                "transfer_cancel_blocked_not_cancelable",
+                user_id=str(user_id),
+                transfer_id=transfer_id,
+                status=transfer_status,
+            )
+            raise ConflictError(
+                "This transfer can no longer be canceled.",
+                code="TRANSFER_NOT_CANCELABLE",
+                detail={"status": transfer_status},
+            )
+
+        try:
+            await alpaca.cancel_transfer(brokerage.alpaca_account_id, transfer_id)
+        except AlpacaBrokerError as exc:
+            if (exc.detail or {}).get("code") == ALPACA_TRANSFER_NOT_CANCELABLE_CODE:
+                raise ConflictError(
+                    "This transfer can no longer be canceled.",
+                    code="TRANSFER_NOT_CANCELABLE",
+                ) from exc
+            raise
+
+        logger.info(
+            "transfer_canceled",
+            user_id=str(user_id),
+            alpaca_account_id=brokerage.alpaca_account_id,
+            transfer_id=transfer_id,
+        )
 
 
 async def _refresh_statuses_from_alpaca(
