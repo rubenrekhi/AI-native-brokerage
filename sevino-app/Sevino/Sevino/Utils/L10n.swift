@@ -462,7 +462,6 @@ enum L10n {
         static let greetingAfternoonGeneric = String(localized: "home.greeting_afternoon_generic")
         static let greetingEveningGeneric = String(localized: "home.greeting_evening_generic")
         static let dailyDigestButton = String(localized: "home.daily_digest_button")
-        static let dismissDailyDigestAccessibility = String(localized: "home.dismiss_daily_digest_accessibility")
         static let digestErrorTitle = String(localized: "home.digest_error_title")
         static let digestErrorDismiss = String(localized: "home.digest_error_dismiss")
         static let shortcutMore = String(localized: "home.shortcut_more")
