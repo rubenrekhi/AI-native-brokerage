@@ -2,7 +2,7 @@
 
 import json
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -23,6 +23,7 @@ from app.services.alpaca_broker import (
 from app.services.fmp import FmpClient
 from app.services.market_data import (
     MarketDataService,
+    _market_today,
     get_market_data_service,
 )
 
@@ -115,6 +116,29 @@ def _service(
         )
 
     return service, fake_redis
+
+
+# ── _market_today ──────────────────────────────────────────
+
+
+class TestMarketToday:
+    @pytest.mark.parametrize(
+        "utc_instant, expected",
+        [
+            # Late-evening US window where UTC has rolled to the next day but the
+            # US trading day hasn't. Both DST states, since the fix relies on
+            # ZoneInfo (not a fixed offset) staying correct year-round:
+            # Summer (EDT, UTC-4): 01:30 UTC Jun 1 == 21:30 May 31 ET.
+            (datetime(2026, 6, 1, 1, 30, tzinfo=timezone.utc), date(2026, 5, 31)),
+            # Winter (EST, UTC-5): 01:30 UTC Jan 1 == 20:30 Dec 31 ET.
+            (datetime(2026, 1, 1, 1, 30, tzinfo=timezone.utc), date(2025, 12, 31)),
+        ],
+    )
+    def test_uses_eastern_date_not_utc(self, mocker, utc_instant, expected):
+        fake_datetime = mocker.patch("app.services.market_data.datetime")
+        fake_datetime.now.side_effect = lambda tz=None: utc_instant.astimezone(tz)
+
+        assert _market_today() == expected
 
 
 # ── _normalize_symbol ──────────────────────────────────────
