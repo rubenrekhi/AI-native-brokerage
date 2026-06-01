@@ -30,6 +30,13 @@ def get_action_executor(action_type: str) -> ActionExecutor:
         ) from exc
 
 
+# Register first-party executors (import for side effect). Bottom of the
+# module so the registry helpers above are defined first; executor modules
+# import only ``app.ai.actions.base``, so this doesn't cycle.
+from app.ai.actions.transfer import execute_transfer  # noqa: E402
+
+register_action_executor("transfer", execute_transfer)
+
 __all__ = [
     "ACTION_EXECUTORS",
     "ActionContext",

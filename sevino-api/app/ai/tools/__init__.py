@@ -24,6 +24,10 @@ from app.ai.tools.portfolio_performance import (
 )
 from app.ai.tools.radar_operations import RadarOperations, RadarOperationsInput
 from app.ai.tools.stock_info import GetStockInfo, StockInfoInput
+from app.ai.tools.transfer_operations import (
+    TransferOperations,
+    TransferOperationsInput,
+)
 
 __all__ = [
     "SSEEmitter",
@@ -44,6 +48,8 @@ __all__ = [
     "StockInfoInput",
     "RadarOperations",
     "RadarOperationsInput",
+    "TransferOperations",
+    "TransferOperationsInput",
     "build_default_registry",
     "DEFAULT_REGISTRY",
 ]
@@ -57,6 +63,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(GetPortfolioPerformance())
     registry.register(RadarOperations())
     registry.register(GetAccountActivity())
+    registry.register(TransferOperations())
     return registry
 
 
