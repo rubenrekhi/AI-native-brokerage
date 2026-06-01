@@ -36,14 +36,14 @@ logger = structlog.get_logger(__name__)
 
 _TOP_HOLDINGS = 5
 _CONCENTRATION_N = 3
-_MAX_POSITIONS = 50
+_MAX_FULL_POSITIONS = 20
 
 
 _TOOL_DESCRIPTION = """Read the user's current portfolio from their brokerage account: balances (equity, cash, buying power), today's change, and their holdings.
 
 Use detail="overview" (the default) for "how am I doing", "how much do I have", "am I up today", or "what's my biggest position" — it returns balances, today's change, and a rollup of the largest holdings with their portfolio weight and concentration.
 
-Use detail="positions" for the full holdings list with per-position cost basis, market value, and unrealized gain/loss. Pass symbols=["NVDA","AAPL"] for detail on specific holdings only ("how's my NVDA doing?"); requested symbols the user doesn't hold come back in "not_held". The positions list is capped at the top 50 by market value.
+Use detail="positions" for the full holdings list with per-position cost basis, market value, and unrealized gain/loss. The 20 largest holdings by market value come back with full detail; any beyond that are listed by ticker only in "omitted_symbols" — pass those tickers in symbols=[...] to get their full detail. Pass symbols=["NVDA","AAPL"] for detail on specific holdings only ("how's my NVDA doing?"); requested symbols the user doesn't hold come back in "not_held".
 
 All money, quantity, and percentage values are strings (e.g. "1204.10", "0.0117") representing exact decimals — never round them yourself or convert to a float. Percentages are fractions of 1 ("0.0117" = 1.17%). The result includes "as_of" (UTC fetch time); balances and holdings are real-time.
 
@@ -68,7 +68,6 @@ class PortfolioInput(BaseModel):
             "When set, returns those positions only and reports any not "
             "held; overrides detail."
         ),
-        max_length=30,
     )
 
 
@@ -146,14 +145,18 @@ def _build_portfolio_payload(
 
     if detail == "positions":
         payload["count"] = len(positions)
-        shown = positions[:_MAX_POSITIONS]
+        shown = positions[:_MAX_FULL_POSITIONS]
         payload["positions"] = [_position_entry(p, total) for p in shown]
-        if len(positions) > _MAX_POSITIONS:
+        if len(positions) > _MAX_FULL_POSITIONS:
             payload["truncated"] = True
+            payload["omitted_symbols"] = [
+                p["symbol"] for p in positions[_MAX_FULL_POSITIONS:]
+            ]
             payload["more"] = (
-                f"Showing the top {_MAX_POSITIONS} of {len(positions)} "
-                "positions by market value. Ask about specific holdings "
-                "with symbols=[...]."
+                f"Showing the {_MAX_FULL_POSITIONS} largest of "
+                f"{len(positions)} positions with full detail. The rest are "
+                "listed in omitted_symbols by ticker only — request full "
+                "detail on any of them with symbols=[...]."
             )
         return payload
 

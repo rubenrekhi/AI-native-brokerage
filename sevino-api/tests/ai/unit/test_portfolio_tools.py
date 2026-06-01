@@ -6,11 +6,13 @@ exercise payload shaping, the pill lifecycle, and every error branch the
 agent loop must not crash on:
 
 * ``get_portfolio`` overview — balances + holdings rollup, lean (no full list).
-* ``get_portfolio`` positions — full per-position P/L + weight; truncation cap.
-* ``get_portfolio`` symbols filter — selected only, with ``not_held``.
+* ``get_portfolio`` positions — full P/L + weight for the 20 largest; the rest
+  come back as bare tickers in ``omitted_symbols``.
+* ``get_portfolio`` symbols filter — selected only (incl. holdings past the
+  full-detail cap), with ``not_held``.
 * ``get_portfolio_performance`` — gain stats, high/low, downsampled trend.
 * Error paths — no/inactive account, missing deps, brokerage unavailable.
-* Input validation — detail/range literals, symbol cap.
+* Input validation — detail/range literals; symbols list is uncapped.
 """
 
 from __future__ import annotations
@@ -299,7 +301,9 @@ class TestPortfolioPositions:
         assert pos["weight"] == "1.0000"
         assert "truncated" not in p
 
-    async def test_positions_truncated_to_cap_with_more_notice(self, monkeypatch):
+    async def test_positions_caps_full_detail_then_lists_remaining_tickers(
+        self, monkeypatch
+    ):
         positions = [
             _position(f"S{i:02d}", market_value=str(1000 - i)) for i in range(60)
         ]
@@ -312,12 +316,52 @@ class TestPortfolioPositions:
         )
 
         p = result.model_payload
-        assert len(p["positions"]) == 50
+        assert len(p["positions"]) == 20
         assert p["count"] == 60
         assert p["truncated"] is True
-        assert "60" in p["more"] and "50" in p["more"]
-        # Sorted by value desc — the smallest 10 are the ones dropped.
+        assert "60" in p["more"] and "20" in p["more"]
+        # Sorted by value desc — the 20 largest get full detail, S00 first.
         assert p["positions"][0]["symbol"] == "S00"
+        assert p["positions"][-1]["symbol"] == "S19"
+        # The other 40 come back as bare tickers, in value order.
+        assert p["omitted_symbols"] == [f"S{i:02d}" for i in range(20, 60)]
+
+    async def test_no_omitted_symbols_at_or_below_cap(self, monkeypatch):
+        positions = [
+            _position(f"S{i:02d}", market_value=str(1000 - i)) for i in range(20)
+        ]
+        svc = _service(snapshot=_snapshot(), holdings=_holdings(positions))
+        _patch(monkeypatch, account=_account(), service=svc)
+        ctx, _ = _make_ctx()
+
+        result = await GetPortfolio().execute(
+            PortfolioInput(detail="positions"), ctx
+        )
+
+        p = result.model_payload
+        assert len(p["positions"]) == 20
+        assert "truncated" not in p
+        assert "omitted_symbols" not in p
+
+    async def test_symbols_retrieves_holding_past_full_detail_cap(
+        self, monkeypatch
+    ):
+        positions = [
+            _position(f"S{i:02d}", market_value=str(1000 - i)) for i in range(25)
+        ]
+        svc = _service(snapshot=_snapshot(), holdings=_holdings(positions))
+        _patch(monkeypatch, account=_account(), service=svc)
+        ctx, _ = _make_ctx()
+
+        # S22 ranks 23rd by value — past the 20 full-detail slots, so it is a
+        # bare ticker in omitted_symbols until asked for by symbol.
+        result = await GetPortfolio().execute(PortfolioInput(symbols=["S22"]), ctx)
+
+        p = result.model_payload
+        assert [pos["symbol"] for pos in p["positions"]] == ["S22"]
+        assert "qty" in p["positions"][0]
+        assert p["not_held"] == []
+        assert "omitted_symbols" not in p
 
     async def test_symbols_filter_selects_and_reports_not_held(self, monkeypatch):
         positions = [
@@ -502,6 +546,6 @@ class TestInputValidation:
         with pytest.raises(ValidationError):
             PortfolioPerformanceInput(range="2D")
 
-    def test_too_many_symbols_rejected(self):
-        with pytest.raises(ValidationError):
-            PortfolioInput(symbols=[f"S{i}" for i in range(31)])
+    def test_symbols_list_is_uncapped(self):
+        symbols = [f"S{i}" for i in range(200)]
+        assert PortfolioInput(symbols=symbols).symbols == symbols
