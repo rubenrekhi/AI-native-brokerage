@@ -1,3 +1,7 @@
+from app.ai.tools.account_activity import (
+    AccountActivityInput,
+    GetAccountActivity,
+)
 from app.ai.tools.base import (
     SSEEmitter,
     Tool,
@@ -28,6 +32,8 @@ __all__ = [
     "ToolHttpClients",
     "ToolRegistry",
     "ToolResult",
+    "AccountActivityInput",
+    "GetAccountActivity",
     "DisplayStockCard",
     "DisplayStockCardInput",
     "GetPortfolio",
@@ -50,6 +56,7 @@ def build_default_registry() -> ToolRegistry:
     registry.register(GetPortfolio())
     registry.register(GetPortfolioPerformance())
     registry.register(RadarOperations())
+    registry.register(GetAccountActivity())
     return registry
 
 
