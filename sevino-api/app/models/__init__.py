@@ -12,6 +12,7 @@ from app.models.order_event import OrderEvent
 from app.models.pending_action import PendingAction
 from app.models.plaid_item import PlaidItem
 from app.models.radar_item import RadarItem
+from app.models.recurring_investment import RecurringInvestment
 from app.models.sse_checkpoint import SseCheckpoint
 from app.models.tool_execution import ToolExecution
 from app.models.user_financial_profile import UserFinancialProfile
@@ -33,6 +34,7 @@ __all__ = [
     "PendingAction",
     "PlaidItem",
     "RadarItem",
+    "RecurringInvestment",
     "SseCheckpoint",
     "ToolExecution",
     "UserFinancialProfile",

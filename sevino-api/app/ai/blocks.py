@@ -11,6 +11,11 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
+from app.schemas.recurring_investment import (
+    RecurringEndCondition,
+    RecurringFrequency,
+)
+
 
 class TextBlock(BaseModel):
     type: Literal["text"] = "text"
@@ -85,15 +90,43 @@ class StockCardBlock(BaseModel):
     stats: StockStats | None = None
 
 
+class RecurringInvestmentSetupBlock(BaseModel):
+    type: Literal["recurring_investment_setup"] = "recurring_investment_setup"
+    block_id: str
+    ticker: str
+    company_name: str
+    exchange: str
+    current_price: str
+    default_amount: str
+    default_frequency: RecurringFrequency
+    default_start_date: str
+    default_end_condition: RecurringEndCondition
+    disclaimer: str
+
+
 Block = Annotated[
-    TextBlock | StatusBlock | StockCardBlock | ThinkingBlock,
+    TextBlock
+    | StatusBlock
+    | StockCardBlock
+    | ThinkingBlock
+    | RecurringInvestmentSetupBlock,
     Field(discriminator="type"),
 ]
 
 
 BlockAdapter: TypeAdapter[
-    TextBlock | StatusBlock | StockCardBlock | ThinkingBlock
+    TextBlock
+    | StatusBlock
+    | StockCardBlock
+    | ThinkingBlock
+    | RecurringInvestmentSetupBlock
 ] = TypeAdapter(Block)
 BlockListAdapter: TypeAdapter[
-    list[TextBlock | StatusBlock | StockCardBlock | ThinkingBlock]
+    list[
+        TextBlock
+        | StatusBlock
+        | StockCardBlock
+        | ThinkingBlock
+        | RecurringInvestmentSetupBlock
+    ]
 ] = TypeAdapter(list[Block])

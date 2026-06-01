@@ -34,6 +34,9 @@ from app.routes.phone_auth import router as phone_auth_router
 from app.routes.plaid_webhooks import router as plaid_webhooks_router
 from app.routes.portfolio import router as portfolio_router
 from app.routes.radar import router as radar_router
+from app.routes.recurring_investments import (
+    router as recurring_investments_router,
+)
 from app.routes.settings import router as settings_router
 from app.routes.shortcuts import router as shortcuts_router
 from app.routes.trading import router as trading_router
@@ -134,6 +137,11 @@ def include_routers(app: FastAPI) -> None:
         market_data_router, prefix="/v1/market-data", tags=["market-data"]
     )
     app.include_router(radar_router, prefix="/v1/radar", tags=["radar"])
+    app.include_router(
+        recurring_investments_router,
+        prefix="/v1/recurring-investments",
+        tags=["recurring-investments"],
+    )
     app.include_router(digest_router, prefix="/v1/digest", tags=["digest"])
     app.include_router(
         conversations_router, prefix="/v1/conversations", tags=["conversations"]
