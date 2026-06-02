@@ -129,3 +129,47 @@ Note that Alpaca + Plaid are still sandbox in both environments.
 - `funding_withdraw_smoke.sh` — OUTGOING transfer verification.
 - `funding_errors_smoke.sh` — ACCOUNT_NOT_ACTIVE gate.
 - `.funding_smoke_env` — seeder output. Contains a JWT. Git-ignored.
+
+## Stop-order smoke
+
+End-to-end sanity check for stop orders (`type: "stop"`) against the **real**
+Alpaca sandbox. Verifies what the mocked unit/integration tests cannot: that
+sandbox accepts `type=stop` + `stop_price` + `time_in_force=gtc`, echoes
+`stop_price` back (so the echo-sourced persistence is real), and what status a
+resting stop reports.
+
+Use it before merging anything that touches the order-placement path
+(`app/schemas/trading.py`, `app/services/trading.py`, the stop_price plumbing).
+
+### Prerequisites
+
+1. Real Alpaca sandbox credentials in `.env` (`ALPACA_API_KEY`, `ALPACA_SECRET_KEY`).
+2. `make infra` running.
+3. A **funded** sandbox account that holds at least one whole share of a long
+   equity (the sell stop protects it — no ACH settlement wait).
+
+### Running
+
+```bash
+# Terminal 1
+make server
+
+# Terminal 2 — seed against your funded account, then run the smoke
+uv run python scripts/seed_stop_sandbox.py <alpaca_account_id> [symbol]
+source scripts/.stop_smoke_env
+bash scripts/stop_order_smoke.sh              # place → read → cancel
+bash scripts/stop_order_smoke.sh --no-cancel  # leave the stop resting
+```
+
+The seed places a sell stop at half the current price (rests, never fires) and
+picks the first eligible long position if `[symbol]` is omitted. If the account
+is already linked in local Postgres (`brokerage_accounts.alpaca_account_id` is
+unique), the seed authenticates as its existing owner via a Supabase admin
+magic-link OTP exchange — no password change, no re-linking.
+
+### Files
+
+- `seed_stop_sandbox.py` — points a local user at an existing funded account,
+  mints a JWT, picks a held position, writes `.stop_smoke_env`.
+- `stop_order_smoke.sh` — POST stop → GET → DELETE, with assertions.
+- `.stop_smoke_env` — seeder output. Contains a JWT. Git-ignored.
