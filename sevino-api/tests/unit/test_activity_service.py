@@ -336,6 +336,32 @@ class TestUnifiedFeed:
         assert result["totals"]["executed_trades"] == 0
         assert result["totals"]["open_orders"] == 1
 
+    async def test_working_stop_order_carries_stop_price(self, patch_brokerage):
+        alpaca = _alpaca(
+            orders=[
+                _order(
+                    id="open",
+                    symbol="TSLA",
+                    status="new",
+                    order_type="stop",
+                    qty="2",
+                    filled_qty="0",
+                    filled_avg_price=None,
+                    stop_price="150.00",
+                    filled_at=None,
+                    submitted_at="2026-05-19T10:00:00Z",
+                )
+            ]
+        )
+
+        result = await _run(alpaca, types=["trade"])
+
+        row = result["activities"][0]
+        assert row["order_type"] == "stop"
+        assert row["stop_price"] == "150.00"
+        assert "limit_price" not in row
+        assert "150.00 stop" in row["summary"]
+
     async def test_negative_dividends_excluded(self, patch_brokerage):
         alpaca = _alpaca(
             dividends=[

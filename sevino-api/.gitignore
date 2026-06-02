@@ -21,3 +21,4 @@ htmlcov/
 # Supabase local
 supabase/.temp/
 scripts/.funding_smoke_env
+scripts/.stop_smoke_env

@@ -87,7 +87,27 @@ class TestCreate:
         assert order.qty == Decimal("3")
         assert order.limit_price == Decimal("250.50")
         assert order.notional is None
+        assert order.stop_price is None
         assert order.conversation_id is None
+
+    async def test_persists_stop_price(
+        self, db_session: AsyncSession, test_user
+    ):
+        order = await OrderEventRepository.create(
+            db_session,
+            user_id=test_user,
+            alpaca_order_id="alp_ord_stop",
+            symbol="AAPL",
+            side="sell",
+            order_type="stop",
+            status="new",
+            qty=Decimal("5"),
+            stop_price=Decimal("170.00"),
+        )
+
+        assert order.order_type == "stop"
+        assert order.stop_price == Decimal("170.00")
+        assert order.limit_price is None
 
     async def test_persists_to_db(
         self, db_session: AsyncSession, test_user

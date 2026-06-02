@@ -2,8 +2,8 @@
 
 Mirrors `funding.py` shape — validate locally, call Alpaca, persist row,
 return. Time-in-force is derived from order type, not user-supplied: market
-orders queue for the next session (`day`), limit orders sit until canceled
-(`gtc`).
+orders queue for the next session (`day`), limit and stop orders sit until
+canceled (`gtc`).
 """
 
 import uuid
@@ -73,6 +73,8 @@ class TradingService:
             payload["notional"] = data.notional
         if data.limit_price is not None:
             payload["limit_price"] = data.limit_price
+        if data.stop_price is not None:
+            payload["stop_price"] = data.stop_price
 
         alpaca_order = await alpaca.create_order(
             brokerage.alpaca_account_id, payload
@@ -106,6 +108,7 @@ class TradingService:
             qty=_decimal_or_none(alpaca_order.get("qty")),
             notional=_decimal_or_none(alpaca_order.get("notional")),
             limit_price=_decimal_or_none(alpaca_order.get("limit_price")),
+            stop_price=_decimal_or_none(alpaca_order.get("stop_price")),
             submitted_at=_datetime_or_none(alpaca_order.get("submitted_at")),
             conversation_id=data.conversation_id,
         )
