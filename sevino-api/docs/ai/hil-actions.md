@@ -1,9 +1,10 @@
 # Human-in-the-loop (HIL) actions
 
-> Target architecture (not yet implemented). Trades are the first planned consumer; the
-> examples below are illustrative — the system is feature-agnostic.
+> Status: implemented. Deposits/withdrawals (`transfer_operations`) are the first consumer;
+> the framework is feature-agnostic, so other actions named below (trades, order cancels,
+> profile changes) are illustrative until built.
 
-Some actions the AI can take are consequential: placing a trade, moving money, cancelling an
+Some actions the AI can take are consequential: moving money, placing a trade, cancelling an
 order, changing KYC details. These must never happen on the model's say-so alone — a human
 has to explicitly approve each one. The HIL framework is the shared machinery that lets the
 AI *propose* such an action and have it execute only after the user taps **Confirm** in the
@@ -11,9 +12,48 @@ app.
 
 It is deliberately generic. A feature opts in by describing *what* it wants confirmed and
 *how* to perform it; everything else — persistence, the confirmation card, the approval
-endpoint, cancellation, the follow-up narration — is shared and identical across features.
-Trades are the first consumer; transfers, order cancel/replace, position closes, and profile
-changes are expected to follow, each as just another `action_type`.
+endpoint, cancellation, the follow-up turn — is shared and identical across features.
+Deposits and withdrawals are the first consumer; trades, order cancel/replace, position
+closes, and profile changes can follow, each as just another `action_type`.
+
+## Big picture
+
+Three ideas, in one breath: **the model proposes, the user taps, the agent resumes.** A
+consequential tool never executes — it returns a *proposal*. The runtime gates the turn,
+persists it, and streams a confirmation card. When the user taps Confirm, the server performs
+the action and the agent picks the conversation back up as a normal turn — so it feels like
+the agent paused for the tap and continued (and it can call more tools).
+
+It spans **two backend turns** with a tap between them, but **one continuous chat thread** to
+the user:
+
+```
+  TURN 1 (the user's turn)                    TURN 2 (the confirm)
+  ─────────────────────────                   ─────────────────────────
+  user: "withdraw $200 to my bank"            user taps Confirm  (a button, not a message)
+    model calls a propose_* tool                POST /actions/{id}
+      runtime gates the turn:                     server claims the action (atomic CAS),
+        • persist a pending_actions row             runs the handler's side effect,
+        • stream a ConfirmationBlock card           then drives a FULL agent turn seeded
+        • end turn `awaiting_confirmation`          with the handler's per-type prompt
+                                                  → model narrates + may call more tools
+```
+
+Layered, most of it shared:
+
+| Layer | Responsibility | Shared across features? |
+|---|---|---|
+| **Wire** | `ConfirmationBlock` (gen-UI card) + SSE events; iOS mirror | ✅ shared |
+| **State** | `pending_actions` row — atomic-CAS source of truth, `effective_status`, supersede | ✅ shared |
+| **Gate** | tool dispatch turns a proposal into a row + card + `awaiting_confirmation` | ✅ shared |
+| **Confirm + resume** | endpoint claims the action, runs the handler, drives a system-initiated agent turn | ✅ shared |
+| **Handler** | the side effect (`execute`) + per-type resume/reject prompts | ⬅ per feature |
+| **Propose tool** | parse/validate inputs, build the card + `ProposedAction` | ⬅ per feature |
+
+A new HIL action is just the bottom two rows: a propose tool and a handler. The four shared
+layers are written once.
+
+The rest of this doc walks each layer in detail.
 
 ## Propose, confirm, narrate
 
@@ -69,11 +109,11 @@ user_id         uuid
 conversation_id uuid
 agent_turn_id   uuid
 tool_use_id     text          -- the proposing tool call (audit linkage)
-action_type     text          -- "place_order", "ach_transfer", ... — selects the executor
+action_type     text          -- "transfer", "place_order", ... — selects the handler
 payload         jsonb         -- resolved, deterministic args; executed verbatim server-side
 preview         jsonb         -- exactly what the card showed the user (audit / tamper evidence)
 status          text          -- written events only (see below)
-result          jsonb         -- the executor's outcome
+result          jsonb         -- the handler's outcome (summary)
 expires_at      timestamptz   -- per-action window
 confirmed_at / executed_at / rejected_at / superseded_at
 created_at / updated_at
@@ -190,7 +230,7 @@ synthetic, model-only message describing what the user confirmed and how it went
 confirmed the $500 deposit you proposed; it went through"). The model narrates from that and may
 call further tools. The seed is **per-action-type**, not generic: each handler writes its own
 success/failure phrasing, and the authoritative facts live in that seed (sourced from the
-executor's result), so the model relays them rather than inventing.
+handler's `execute` result), so the model relays them rather than inventing.
 
 The turn is system-initiated: no user bubble is persisted (the user tapped a button, not typed)
 and the supersede sweep is skipped (the confirmed action is already off `pending`, and a confirm
