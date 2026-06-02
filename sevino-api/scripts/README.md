@@ -157,12 +157,12 @@ make server
 # Terminal 2 — seed against your funded account, then run the smoke
 uv run python scripts/seed_stop_sandbox.py <alpaca_account_id> [symbol]
 source scripts/.stop_smoke_env
-bash scripts/stop_order_smoke.sh              # place → read → cancel
-bash scripts/stop_order_smoke.sh --no-cancel  # leave the stop resting
+bash scripts/stop_order_smoke.sh              # sell + buy + wrong-side + list
 ```
 
-The seed places a sell stop at half the current price (rests, never fires) and
-picks the first eligible long position if `[symbol]` is omitted. If the account
+The seed computes a resting sell-stop trigger at half the current price (so the
+stop the smoke places never fires) and picks the first eligible long position if
+`[symbol]` is omitted. If the account
 is already linked in local Postgres (`brokerage_accounts.alpaca_account_id` is
 unique), the seed authenticates as its existing owner via a Supabase admin
 magic-link OTP exchange — no password change, no re-linking.
@@ -171,5 +171,9 @@ magic-link OTP exchange — no password change, no re-linking.
 
 - `seed_stop_sandbox.py` — points a local user at an existing funded account,
   mints a JWT, picks a held position, writes `.stop_smoke_env`.
-- `stop_order_smoke.sh` — POST stop → GET → DELETE, with assertions.
+- `stop_order_smoke.sh` — sell stop, buy stop, wrong-side stop, and
+  list-projection coverage; each placed order is canceled.
+- `stop_trigger_fill_smoke.sh` — TRIGGER → FILL lifecycle (the SSE-handler
+  path). Requires market hours + the worker running, and sells one real
+  sandbox share.
 - `.stop_smoke_env` — seeder output. Contains a JWT. Git-ignored.

@@ -307,9 +307,7 @@ async def main(alpaca_account_id: str, wanted_symbol: str | None) -> int:
     symbol, held_qty, current_price = _pick_position(
         token, alpaca_account_id, wanted_symbol
     )
-    # Two non-triggering trigger prices, both on a 2-decimal (penny) tick
-    # Alpaca accepts for >= $1 stocks: half market (a valid resting sell stop)
-    # and double market (a valid resting buy stop, and a wrong-side sell stop).
+    # Alpaca rejects non-penny ticks and stops on sub-$1 stocks.
     stop_below = (current_price / 2).quantize(Decimal("0.01"))
     stop_above = (current_price * 2).quantize(Decimal("0.01"))
     qty = "1"
