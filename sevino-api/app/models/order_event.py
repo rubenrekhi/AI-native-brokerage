@@ -33,6 +33,7 @@ class OrderEvent(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     qty: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
     notional: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
     limit_price: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
+    stop_price: Mapped[Optional[Decimal]] = mapped_column(Numeric, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     filled_avg_price: Mapped[Optional[Decimal]] = mapped_column(
         Numeric, nullable=True
