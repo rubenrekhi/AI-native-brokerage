@@ -12,11 +12,13 @@ from app.exceptions import (
 )
 from app.services.fmp import (
     FmpClient,
+    _resample_weekly,
     compute_earnings_reactions,
     compute_peer_comparison,
     int_or_zero,
     none_if_blank,
     project_analyst,
+    project_bars,
     project_earnings,
     project_financials,
     project_profile,
@@ -1614,3 +1616,305 @@ class TestComputePeerComparison:
             peer_quotes=peer_quotes,
         )
         assert rank_change == 1
+
+
+class TestHistoricalChart:
+    async def test_passes_symbol_interval_window_and_extended(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "date": "2026-06-01 15:55:00",
+                        "open": 306.2,
+                        "high": 306.45,
+                        "low": 305.93,
+                        "close": 306.23,
+                        "volume": 2667385.76,
+                    }
+                ],
+            )
+
+        client = _make_client(handler)
+        result = await client.historical_chart(
+            "AAPL",
+            "5min",
+            start=date(2026, 5, 28),
+            end=date(2026, 6, 1),
+            extended=True,
+        )
+
+        assert captured["path"] == "/stable/historical-chart/5min"
+        assert captured["params"]["symbol"] == "AAPL"
+        assert captured["params"]["from"] == "2026-05-28"
+        assert captured["params"]["to"] == "2026-06-01"
+        assert captured["params"]["extended"] == "true"
+        assert captured["params"]["apikey"] == "test-api-key"
+        assert result[0]["close"] == 306.23
+
+    async def test_omits_optional_params_when_not_given(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        await client.historical_chart("AAPL", "1hour")
+
+        assert "from" not in captured["params"]
+        assert "to" not in captured["params"]
+        assert "extended" not in captured["params"]
+
+    async def test_empty_payload_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.historical_chart("AAPL", "5min") == []
+
+
+class TestHistoricalEod:
+    async def test_uses_full_endpoint_and_window(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "date": "2026-06-01",
+                        "open": 309.63,
+                        "high": 310.94,
+                        "low": 305.02,
+                        "close": 306.31,
+                        "volume": 47131978,
+                        "vwap": 307.975,
+                    }
+                ],
+            )
+
+        client = _make_client(handler)
+        result = await client.historical_eod(
+            "AAPL", start=date(2026, 1, 1), end=date(2026, 6, 1)
+        )
+
+        assert captured["path"] == "/stable/historical-price-eod/full"
+        assert captured["params"]["from"] == "2026-01-01"
+        assert captured["params"]["to"] == "2026-06-01"
+        assert result[0]["vwap"] == 307.975
+
+    async def test_empty_payload_returns_empty_list(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(200, json=[])
+
+        client = _make_client(handler)
+        assert await client.historical_eod("ZZZZINVALID") == []
+
+
+class TestProjectBars:
+    def _intraday_rows(self) -> list[dict]:
+        return [
+            {
+                "date": "2026-06-01 15:55:00",
+                "open": 306.2,
+                "high": 306.45,
+                "low": 305.93,
+                "close": 306.23,
+                "volume": 2667385.76,
+            },
+            {
+                "date": "2026-06-01 15:50:00",
+                "open": 305.9,
+                "high": 306.3,
+                "low": 305.8,
+                "close": 306.2,
+                "volume": 100.0,
+            },
+        ]
+
+    def test_intraday_reversed_to_ascending(self):
+        bars = project_bars(self._intraday_rows(), intraday=True)
+        assert [b["timestamp"] for b in bars] == [
+            "2026-06-01T19:50:00Z",
+            "2026-06-01T19:55:00Z",
+        ]
+
+    def test_intraday_timestamp_localized_edt(self):
+        # 2026-06-01 is EDT (UTC-4): 15:55 ET → 19:55Z.
+        bars = project_bars(self._intraday_rows(), intraday=True)
+        assert bars[1]["timestamp"] == "2026-06-01T19:55:00Z"
+
+    def test_intraday_timestamp_localized_est(self):
+        # 2026-01-15 is EST (UTC-5): 15:55 ET → 20:55Z.
+        rows = [
+            {
+                "date": "2026-01-15 15:55:00",
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+            }
+        ]
+        bars = project_bars(rows, intraday=True)
+        assert bars[0]["timestamp"] == "2026-01-15T20:55:00Z"
+
+    def test_intraday_field_shape_and_synthesis(self):
+        bars = project_bars(self._intraday_rows(), intraday=True)
+        bar = bars[1]  # the 15:55 bar after reversal
+        assert bar["open"] == "306.2"
+        assert bar["high"] == "306.45"
+        assert bar["low"] == "305.93"
+        assert bar["close"] == "306.23"
+        # FMP intraday volume is a float; coerced (truncated) to int.
+        assert bar["volume"] == 2667385
+        assert isinstance(bar["volume"], int)
+        assert bar["vwap"] == "0"
+        assert bar["trade_count"] == 0
+        assert set(bar.keys()) == {
+            "timestamp",
+            "open",
+            "high",
+            "low",
+            "close",
+            "volume",
+            "vwap",
+            "trade_count",
+        }
+
+    def test_daily_timestamp_is_et_midnight_utc(self):
+        # EDT date → T04:00:00Z; EST date → T05:00:00Z.
+        rows = [
+            {
+                "date": "2026-06-01",
+                "open": 309.63,
+                "high": 310.94,
+                "low": 305.02,
+                "close": 306.31,
+                "volume": 47131978,
+                "vwap": 307.975,
+            },
+            {
+                "date": "2026-01-28",
+                "open": 100,
+                "high": 101,
+                "low": 99,
+                "close": 100.5,
+                "volume": 1000,
+                "vwap": 100.2,
+            },
+        ]
+        bars = project_bars(rows, intraday=False)
+        assert bars[0]["timestamp"] == "2026-01-28T05:00:00Z"  # EST
+        assert bars[1]["timestamp"] == "2026-06-01T04:00:00Z"  # EDT
+        assert bars[0]["timestamp"][:10] == "2026-01-28"
+        assert bars[1]["timestamp"][:10] == "2026-06-01"
+
+    def test_daily_uses_real_vwap(self):
+        rows = [
+            {
+                "date": "2026-06-01",
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+                "vwap": 307.975,
+            }
+        ]
+        bars = project_bars(rows, intraday=False)
+        assert bars[0]["vwap"] == "307.975"
+        assert bars[0]["trade_count"] == 0
+
+    def test_daily_vwap_null_falls_back_to_zero(self):
+        rows = [
+            {
+                "date": "2026-06-01",
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+                "vwap": None,
+            }
+        ]
+        assert project_bars(rows, intraday=False)[0]["vwap"] == "0"
+
+    def test_daily_vwap_absent_falls_back_to_zero(self):
+        rows = [
+            {
+                "date": "2026-06-01",
+                "open": 1,
+                "high": 1,
+                "low": 1,
+                "close": 1,
+                "volume": 1,
+            }
+        ]
+        assert project_bars(rows, intraday=False)[0]["vwap"] == "0"
+
+    def test_empty_rows_return_empty_list(self):
+        assert project_bars([], intraday=True) == []
+        assert project_bars([], intraday=False) == []
+
+
+class TestResampleWeekly:
+    def _daily(self, *items: tuple[str, str, str, str, str, int]) -> list[dict]:
+        return [
+            {
+                "timestamp": f"{d}T05:00:00Z",
+                "open": o,
+                "high": h,
+                "low": low,
+                "close": c,
+                "volume": v,
+                "vwap": "0",
+                "trade_count": 0,
+            }
+            for (d, o, h, low, c, v) in items
+        ]
+
+    def test_aggregates_days_into_iso_weeks(self):
+        # 2026-01-05 (Mon) & 2026-01-06 (Tue) = ISO 2026-W02; 2026-01-12 = W03.
+        daily = self._daily(
+            ("2026-01-05", "10", "12", "9", "11", 100),
+            ("2026-01-06", "11", "15", "10", "14", 200),
+            ("2026-01-12", "14", "16", "13", "15", 300),
+        )
+        weekly = _resample_weekly(daily)
+
+        assert len(weekly) == 2
+        first = weekly[0]
+        assert first["open"] == "10"
+        assert first["close"] == "14"
+        assert first["high"] == "15"
+        assert first["low"] == "9"
+        assert first["volume"] == 300
+        assert first["timestamp"] == "2026-01-06T05:00:00Z"
+        assert first["vwap"] == "0"
+        assert first["trade_count"] == 0
+        assert weekly[1]["open"] == "14"
+        assert weekly[1]["timestamp"] == "2026-01-12T05:00:00Z"
+
+    def test_iso_week_handles_calendar_year_boundary(self):
+        # 2025-12-31 (Wed) and 2026-01-01 (Thu) both fall in ISO 2026-W01.
+        daily = self._daily(
+            ("2025-12-31", "10", "11", "9", "10", 50),
+            ("2026-01-01", "10", "13", "10", "12", 60),
+        )
+        weekly = _resample_weekly(daily)
+
+        assert len(weekly) == 1
+        assert weekly[0]["high"] == "13"
+        assert weekly[0]["volume"] == 110
+        assert weekly[0]["timestamp"] == "2026-01-01T05:00:00Z"
+
+    def test_empty_input_returns_empty_list(self):
+        assert _resample_weekly([]) == []

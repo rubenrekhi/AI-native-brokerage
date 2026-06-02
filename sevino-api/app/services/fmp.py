@@ -1,5 +1,7 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from typing import Any, ClassVar, TypeVar
+from zoneinfo import ZoneInfo
 
 import httpx
 import sentry_sdk
@@ -555,6 +557,59 @@ class FmpClient:
             if _comparable_datetime(item.published_at) >= cutoff
         ][:limit]
 
+    async def historical_chart(
+        self,
+        symbol: str,
+        interval: str,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+        extended: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Raw FMP intraday OHLCV bars, newest-first. Empty payload → ``[]``.
+
+        ``interval`` is an FMP token (``1min``/``5min``/``15min``/``30min``/
+        ``1hour``/``4hour``); ``from``/``to`` are date-granular. ``extended=True``
+        adds pre-/after-market bars (04:00–19:59 ET); the default is regular
+        session only. Intraday ``date`` values are naive US/Eastern, so callers
+        must normalize via :func:`project_bars` rather than trusting them as UTC.
+        """
+        params: dict[str, Any] = {"symbol": symbol}
+        if start is not None:
+            params["from"] = start.isoformat()
+        if end is not None:
+            params["to"] = end.isoformat()
+        if extended:
+            params["extended"] = "true"
+        data = await self._request(
+            f"/historical-chart/{interval}", params, symbol_for_errors=symbol
+        )
+        return data or []
+
+    async def historical_eod(
+        self,
+        symbol: str,
+        *,
+        start: date | None = None,
+        end: date | None = None,
+    ) -> list[dict[str, Any]]:
+        """Raw FMP daily EOD bars, newest-first. Empty payload → ``[]``.
+
+        Uses the ``full`` variant: the only one exposing ``open``/``close``/
+        ``vwap`` and split-adjusted (matching Alpaca's ``adjustment=split``). The
+        ``non-split-adjusted`` variant uses ``adj*`` keys with a null ``close``
+        and is never used here.
+        """
+        params: dict[str, Any] = {"symbol": symbol}
+        if start is not None:
+            params["from"] = start.isoformat()
+        if end is not None:
+            params["to"] = end.isoformat()
+        data = await self._request(
+            "/historical-price-eod/full", params, symbol_for_errors=symbol
+        )
+        return data or []
+
 
 def project_quote(raw: dict[str, Any]) -> dict[str, Any]:
     return {
@@ -580,6 +635,101 @@ def project_quote(raw: dict[str, Any]) -> dict[str, Any]:
         "earnings_announcement": raw.get("earningsAnnouncement"),
         "timestamp": int_or_zero(raw.get("timestamp")),
     }
+
+
+_BAR_TZ = ZoneInfo("America/New_York")
+
+
+def _intraday_timestamp(naive_et: str) -> str:
+    """FMP intraday ``date`` (naive US/Eastern, no offset) → UTC ISO-8601 ``Z``.
+
+    Localized per-instant via ``ZoneInfo`` so EST/EDT are both correct; US
+    session hours never hit the November fall-back fold, so it stays unambiguous.
+    """
+    aware_et = datetime.strptime(naive_et, "%Y-%m-%d %H:%M:%S").replace(
+        tzinfo=_BAR_TZ
+    )
+    return aware_et.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _daily_timestamp(date_only: str) -> str:
+    """FMP daily ``date`` (``"YYYY-MM-DD"``) → ET-midnight expressed as UTC ``Z``.
+
+    Emits Alpaca's exact daily form (``…T05:00:00Z`` EST / ``…T04:00:00Z`` EDT). A
+    bare date or ``T00:00:00Z`` would break ISO-8601 date parsing and roll the
+    session date back a day under the ET→UTC conversion.
+    """
+    midnight_et = datetime.combine(
+        date.fromisoformat(date_only), time.min, tzinfo=_BAR_TZ
+    )
+    return midnight_et.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def project_bars(
+    rows: list[dict[str, Any]], *, intraday: bool
+) -> list[dict[str, Any]]:
+    """Normalize raw FMP bar rows into the canonical 8-key bar dict.
+
+    Reproduces the shape Alpaca emitted: OHLC/vwap as strings, volume/trade_count
+    as ints, UTC-``Z`` timestamps, ascending by time. FMP returns rows
+    newest-first and omits vwap (intraday) and trade_count (always), so rows are
+    reversed and the missing fields synthesized to preserve the wire contract.
+    """
+    bars: list[dict[str, Any]] = []
+    for raw in reversed(rows):
+        timestamp = (
+            _intraday_timestamp(raw["date"])
+            if intraday
+            else _daily_timestamp(raw["date"])
+        )
+        # FMP daily vwap can be null; str(None) would emit the literal "None".
+        raw_vwap = raw.get("vwap")
+        bars.append(
+            {
+                "timestamp": timestamp,
+                "open": str(raw["open"]),
+                "high": str(raw["high"]),
+                "low": str(raw["low"]),
+                "close": str(raw["close"]),
+                "volume": int_or_zero(raw.get("volume")),
+                "vwap": "0" if intraday or raw_vwap is None else str(raw_vwap),
+                "trade_count": 0,
+            }
+        )
+    return bars
+
+
+def _resample_weekly(daily: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Aggregate ascending projected daily bars into weekly bars (FMP has no
+    native weekly feed).
+
+    Bucketed by ISO ``(year, week)`` so the week-1/week-53 boundary stays
+    deterministic across year edges. Input must already be projected and
+    ascending. Each weekly bar carries the last session's timestamp, matching
+    how Alpaca dated weekly bars.
+    """
+    buckets: dict[tuple[int, int], list[dict[str, Any]]] = {}
+    for bar in daily:
+        iso_year, iso_week, _ = date.fromisoformat(
+            bar["timestamp"][:10]
+        ).isocalendar()
+        buckets.setdefault((iso_year, iso_week), []).append(bar)
+    weekly: list[dict[str, Any]] = []
+    for key in sorted(buckets):
+        week = buckets[key]
+        weekly.append(
+            {
+                "timestamp": week[-1]["timestamp"],
+                "open": week[0]["open"],
+                "high": str(max(Decimal(b["high"]) for b in week)),
+                "low": str(min(Decimal(b["low"]) for b in week)),
+                "close": week[-1]["close"],
+                "volume": sum(b["volume"] for b in week),
+                "vwap": "0",
+                "trade_count": 0,
+            }
+        )
+    return weekly
 
 
 def project_profile(raw: dict[str, Any]) -> dict[str, Any]:
