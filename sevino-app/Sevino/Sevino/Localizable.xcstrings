@@ -809,6 +809,66 @@
         }
       }
     },
+    "confirmation.bank_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "your bank"
+          }
+        }
+      }
+    },
+    "confirmation.status_cancelled" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cancelled"
+          }
+        }
+      }
+    },
+    "confirmation.status_closed" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Closed"
+          }
+        }
+      }
+    },
+    "confirmation.status_expired" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Expired"
+          }
+        }
+      }
+    },
+    "confirmation.status_processing" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Processing…"
+          }
+        }
+      }
+    },
+    "confirmation.status_superseded" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No longer available"
+          }
+        }
+      }
+    },
     "Change" : {
 
     },

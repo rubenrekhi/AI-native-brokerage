@@ -260,6 +260,16 @@ async def _dispatch_one_tool_use(
     # rather than leaving a tappable card with no backing row.
     proposal_raised = False
     if tool_result.proposal is not None:
+        if ui_block_dict is None:
+            # A proposal with no confirmation card means an empty ``preview``,
+            # which defeats the audit/tamper-evidence guarantee. Surface it so
+            # a future propose-tool author fixes the gap rather than writing
+            # blank audit rows silently.
+            logger.warning(
+                "loop_proposal_without_ui_block",
+                tool_name=tool_name,
+                tool_use_id=tool_use_id,
+            )
         try:
             await _persist_pending_action(
                 db_factory,

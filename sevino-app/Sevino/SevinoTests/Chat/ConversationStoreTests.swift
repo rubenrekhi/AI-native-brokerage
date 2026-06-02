@@ -528,6 +528,60 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertFalse(after.isPending)
     }
 
+    func testSubmitActionRejectMarksCardRejectedAndPostsReject() async throws {
+        let client = MockSSEClient(scripts: [
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartConfirmationJSON(
+                    blockId: "c1", actionId: "a1", status: "pending"
+                ))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "c1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartTextJSON(blockId: "t1"))),
+                .yield(makeRaw(json: textDeltaJSON(blockId: "t1", text: "Okay"))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "t1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+        ])
+        let store = makeStore(client: client)
+        try await store.send(text: "deposit 500")
+
+        try await store.submitAction(actionId: "a1", decision: "reject")
+
+        // The tapped card is deadened locally to "rejected".
+        guard case .confirmation(let card)? = store.messages[1].blocks.first
+        else { return XCTFail("expected the confirmation card") }
+        XCTAssertEqual(card.status, "rejected")
+
+        // The reject POST carried decision=reject to the action endpoint.
+        let req = try XCTUnwrap(client.capturedRequests.last)
+        XCTAssertTrue(req.url?.absoluteString.hasSuffix("/actions/a1") ?? false)
+        let body = try XCTUnwrap(req.httpBody)
+        let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        XCTAssertEqual(json?["decision"] as? String, "reject")
+    }
+
+    func testSubmitActionStreamErrorSetsErrorStateAndThrows() async {
+        let client = MockSSEClient(script: [.fail(SSEClientError.httpStatus(500))])
+        let store = makeStore(client: client)
+
+        do {
+            try await store.submitAction(actionId: "a1", decision: "confirm")
+            XCTFail("expected submitAction to rethrow the transport error")
+        } catch {
+            XCTAssertEqual(error as? SSEClientError, .httpStatus(500))
+        }
+
+        if case .error(let code, _) = store.state {
+            XCTAssertEqual(code, .internalError)
+        } else {
+            XCTFail("expected .error state, got \(store.state)")
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeStore(

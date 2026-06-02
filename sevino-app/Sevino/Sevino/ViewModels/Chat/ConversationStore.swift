@@ -227,34 +227,7 @@ final class ConversationStore {
             currentTurnId = nil
         }
 
-        do {
-            for try await raw in sseClient.stream(request: request) {
-                try Task.checkCancellation()
-                guard let payload = raw.data.data(using: .utf8) else {
-                    Self.logger.error("Skipping SSE frame with non-UTF-8 data")
-                    continue
-                }
-                let event = try SSEEvent.decode(from: payload, decoder: eventDecoder)
-                apply(event)
-                if case .error = state { return }
-            }
-            // Stream finished. If the consuming task was cancelled, surface
-            // CancellationError to the caller; otherwise reset to idle so the
-            // next send isn't blocked behind a phantom in-flight turn.
-            try Task.checkCancellation()
-            if case .streaming = state {
-                state = .idle
-            }
-        } catch is CancellationError {
-            state = .idle
-            throw CancellationError()
-        } catch {
-            // Map transport / decode failures to the closed `internal_error`
-            // bucket so views have a single switch over `SSEEvent.ErrorCode`
-            // regardless of which layer raised.
-            state = .error(.internalError, error.localizedDescription)
-            throw error
-        }
+        try await consume(request)
     }
 
     /**
@@ -282,6 +255,15 @@ final class ConversationStore {
             currentTurnId = nil
         }
 
+        try await consume(request)
+    }
+
+    /// Drain an SSE turn from `request` into `messages`/`state`. Shared by
+    /// `send(text:)` and `submitAction` — the only difference between them is
+    /// how the request is built and what local state is primed first. Maps
+    /// transport/decode failures to `.error(.internalError, …)` so views have
+    /// one error shape; rethrows `CancellationError` after resetting to idle.
+    private func consume(_ request: URLRequest) async throws {
         do {
             for try await raw in sseClient.stream(request: request) {
                 try Task.checkCancellation()
@@ -293,6 +275,9 @@ final class ConversationStore {
                 apply(event)
                 if case .error = state { return }
             }
+            // Stream finished. Surface CancellationError if the task was
+            // cancelled; otherwise reset to idle so the next turn isn't blocked
+            // behind a phantom in-flight turn.
             try Task.checkCancellation()
             if case .streaming = state {
                 state = .idle

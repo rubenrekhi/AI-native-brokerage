@@ -5,6 +5,8 @@ import SwiftUI
 /// Status-driven:
 /// * `pending` → the proposal: amount/bank rows + a `HoldToConfirmButton` that
 ///   fires `onConfirm`, plus a Cancel affordance that fires `onCancel`.
+/// * `confirmed` → just tapped; the side effect is in flight (optimistic local
+///   state until read-time resolution flips it to `executed`).
 /// * `executed` / `failed` (kind `transfer`) → the read-only `TransferConfirmationCard`
 ///   receipt, built from `details`.
 /// * `rejected` / `superseded` / `expired` (or any other) → a dimmed, dead card.
@@ -23,6 +25,8 @@ struct ConfirmationCardView: View {
         switch block.status {
         case "pending":
             pendingCard
+        case "confirmed":
+            processingCard
         case "executed", "failed":
             receiptCard
         default:
@@ -69,6 +73,25 @@ struct ConfirmationCardView: View {
         }
     }
 
+    // MARK: - Processing (just confirmed, side effect in flight)
+
+    private var processingCard: some View {
+        VStack(alignment: .leading, spacing: 8 * scale) {
+            Text(block.title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(Color.sevinoSecondary)
+            rowsStack
+            HStack(spacing: 6 * scale) {
+                ProgressView().controlSize(.small)
+                Text(L10n.Confirmation.statusProcessing)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
+            }
+        }
+        .padding(14 * scale)
+        .background(cardBackground)
+    }
+
     // MARK: - Dead (rejected / superseded / expired / fallback)
 
     private var deadCard: some View {
@@ -88,10 +111,10 @@ struct ConfirmationCardView: View {
 
     private var deadLabel: String {
         switch block.status {
-        case "rejected": return "Cancelled"
-        case "superseded": return "No longer available"
-        case "expired": return "Expired"
-        default: return "Closed"
+        case "rejected": return L10n.Confirmation.statusCancelled
+        case "superseded": return L10n.Confirmation.statusSuperseded
+        case "expired": return L10n.Confirmation.statusExpired
+        default: return L10n.Confirmation.statusClosed
         }
     }
 
@@ -99,7 +122,7 @@ struct ConfirmationCardView: View {
 
     private var rowsStack: some View {
         VStack(alignment: .leading, spacing: 6 * scale) {
-            ForEach(Array(block.rows.enumerated()), id: \.offset) { _, row in
+            ForEach(block.rows, id: \.label) { row in
                 HStack {
                     Text(row.label)
                         .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
@@ -129,13 +152,55 @@ struct ConfirmationCardView: View {
             direction: direction,
             amount: amount,
             currencyCode: d.currency ?? "USD",
-            bankInstitution: d.bankInstitution ?? "Bank",
+            bankInstitution: d.bankInstitution ?? L10n.Confirmation.bankFallback,
             bankMask: d.bankMask ?? "",
             bankAccountType: nil,
             status: status,
-            createdAt: Date(),
+            createdAt: .now,
             estimatedSettlement: nil,
             reason: d.reason
         )
     }
+}
+
+#Preview {
+    func block(_ status: String) -> ConfirmationBlock {
+        ConfirmationBlock(
+            blockId: "blk-\(status)",
+            actionId: "act-\(status)",
+            kind: "transfer",
+            title: "Confirm deposit",
+            rows: [
+                ConfirmationRow(label: "Amount", value: "$500.00"),
+                ConfirmationRow(label: "Transfer", value: "Chase ••1234 → Sevino"),
+            ],
+            details: ConfirmationDetails(
+                operation: "deposit",
+                direction: "INCOMING",
+                amount: "500.00",
+                currency: "USD",
+                bankInstitution: "Chase",
+                bankMask: "1234",
+                bankNickname: "Checking",
+                transferId: nil,
+                transferStatus: "QUEUED",
+                reason: nil
+            ),
+            confirmLabel: "Confirm deposit",
+            cancelLabel: "Cancel",
+            holdToConfirm: true,
+            status: status
+        )
+    }
+    return ScrollView {
+        VStack(spacing: 16) {
+            ConfirmationCardView(block: block("pending"))
+            ConfirmationCardView(block: block("confirmed"))
+            ConfirmationCardView(block: block("executed"))
+            ConfirmationCardView(block: block("superseded"))
+        }
+        .padding()
+    }
+    .background(Color.sevinoPrimary)
+    .preferredColorScheme(.dark)
 }

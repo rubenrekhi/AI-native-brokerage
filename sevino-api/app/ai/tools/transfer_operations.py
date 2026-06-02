@@ -29,7 +29,7 @@ from app.services.funding import FundingService
 logger = structlog.get_logger(__name__)
 
 _APPROVED = "APPROVED"
-_TRANSFER_EXPIRES_S = 300
+_TRANSFER_EXPIRES_S = 60
 
 _TOOL_DESCRIPTION = """Propose moving money between the user's linked bank and their Sevino brokerage account. One tool, two operations selected by `operation`:
 
