@@ -13,6 +13,9 @@ from app.models.pending_action import PendingAction
 from app.models.plaid_item import PlaidItem
 from app.models.radar_item import RadarItem
 from app.models.recurring_investment import RecurringInvestment
+from app.models.recurring_investment_execution import (
+    RecurringInvestmentExecution,
+)
 from app.models.sse_checkpoint import SseCheckpoint
 from app.models.tool_execution import ToolExecution
 from app.models.user_financial_profile import UserFinancialProfile
@@ -35,6 +38,7 @@ __all__ = [
     "PlaidItem",
     "RadarItem",
     "RecurringInvestment",
+    "RecurringInvestmentExecution",
     "SseCheckpoint",
     "ToolExecution",
     "UserFinancialProfile",
