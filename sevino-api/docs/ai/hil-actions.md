@@ -199,10 +199,17 @@ serializer joins `pending_actions` and stamps the current `effective_status`, an
 interactive only while that is `pending`. This stays correct after a reload or on a second
 device.
 
-During a live session the app also deadens the card locally the instant the user taps Send, so
-the feedback is immediate; the read-time resolution is the durable source of truth. (The two
-agree because both react to the same event — the new message.) This avoids trying to mutate a
-closed historical block over the stream, which the wire format does not support.
+During a live session two faster paths keep the card current without a reload, with the
+read-time resolution as the durable backstop they both converge on:
+
+- **On Send (supersede):** the app deadens the card locally the instant the user taps Send, so
+  the feedback is immediate. It agrees with read-time resolution because both react to the same
+  event — the new message.
+- **On confirm/reject:** the resume stream opens with a `block_data` patch addressed to the
+  original card's `block_id`, flipping its status to `executed` / `failed` / `rejected` before
+  the agent's new blocks arrive. The client applies `block_data` across the whole transcript —
+  not just the current turn — so a card from an earlier turn resolves in place. This is why the
+  card never strands on a "submitting" state waiting for a reload.
 
 ### Confirmation is button-only
 
@@ -321,6 +328,7 @@ transfers; a trade or order-cancel consumer would be the same shape against its 
 | `awaiting_confirmation` turn end; system-initiated turn (`persist_user_message=False`) | `app/ai/runtime/loop.py`, `runtime/flow/turn_lifecycle.py` |
 | Supersede sweep at turn start | `app/ai/runtime/flow/turn_lifecycle.py` |
 | Read-time card-status resolution | conversation/message history serialization |
+| Live card-status patch on confirm/reject (`block_data` → original card) | `app/routes/actions.py`; client applies cross-transcript in `ConversationStore` |
 | Pending-action state + transitions | `app/models/pending_action.py` + repository |
 | Handler registry (`ActionHandler` + `ActionResult`) | `app/ai/actions/` (`transfer.py` = first handler) |
 | Confirm endpoint | `app/routes/actions.py` (`POST /v1/conversations/{id}/actions/{action_id}`) |

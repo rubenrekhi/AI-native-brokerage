@@ -102,8 +102,7 @@ struct MessageRowView: View {
             ConfirmationCardView(
                 block: cb,
                 scale: scale,
-                onConfirm: { onConfirmAction?(cb.actionId, "confirm") },
-                onCancel: { onConfirmAction?(cb.actionId, "reject") }
+                onConfirm: { onConfirmAction?(cb.actionId, "confirm") }
             )
         }
     }

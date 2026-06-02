@@ -240,6 +240,9 @@ final class ConversationStore {
      card is deadened locally up front so it can't be double-submitted.
      */
     func submitAction(actionId: String, decision: String) async throws {
+        // `reject` is part of the general HIL contract, but the transfer card is
+        // hold-to-confirm only (no cancel button) — so today only "confirm"
+        // reaches here from the UI; users dismiss a proposal by superseding it.
         markLocalConfirmation(
             actionId: actionId,
             status: decision == "reject" ? "rejected" : "confirmed"
@@ -405,16 +408,20 @@ final class ConversationStore {
             }
 
         case .blockData(let payload):
-            mutateAssistantMessage { message in
-                guard let index = message.blocks.firstIndex(where: { $0.blockId == payload.blockId }) else {
-                    Self.logger.error("block_data references unknown block id")
-                    return
-                }
-                guard let merged = mergePatch(into: message.blocks[index], patch: payload.data) else {
-                    return
-                }
-                message.blocks[index] = merged
+            // Searches every message, not just the current one: a confirmation
+            // card resolves cross-turn — the confirm endpoint patches the card's
+            // status before the resumed turn emits its first block.
+            guard let location = locateBlock(payload.blockId) else {
+                Self.logger.error("block_data references unknown block id")
+                return
             }
+            guard let merged = mergePatch(
+                into: messages[location.message].blocks[location.block],
+                patch: payload.data
+            ) else {
+                return
+            }
+            messages[location.message].blocks[location.block] = merged
 
         case .blockEnd:
             // Block finalization is implicit in v0 — no per-block terminal
@@ -438,6 +445,17 @@ final class ConversationStore {
             return
         }
         apply(&messages[index])
+    }
+
+    /// Find a block by id across all messages, newest first. Block ids are
+    /// server-unique, so the first hit is the only hit.
+    private func locateBlock(_ blockId: String) -> (message: Int, block: Int)? {
+        for mi in messages.indices.reversed() {
+            if let bi = messages[mi].blocks.firstIndex(where: { $0.blockId == blockId }) {
+                return (mi, bi)
+            }
+        }
+        return nil
     }
 
     /// Convert the opaque `JSONValue` payload from `block_start` into a typed

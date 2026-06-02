@@ -27,6 +27,7 @@ from app.ai.anthropic_client import get_anthropic
 from app.ai.observability.langfuse import _NoopLangfuse, get_langfuse
 from app.ai.runtime.db import get_db_factory, make_session_factory
 from app.ai.transport.events import (
+    BlockData,
     BlockEnd,
     BlockStart,
     Event,
@@ -167,7 +168,7 @@ async def _seed(
             tool_use_id="tu_1",
             action_type=action_type,
             payload={"amount": "10.00", "direction": "INCOMING"},
-            preview={"action_id": str(action_id)},
+            preview={"action_id": str(action_id), "block_id": "card-1"},
             expires_at=datetime.now(timezone.utc)
             + timedelta(seconds=expires_in_s),
         )
@@ -236,7 +237,12 @@ class TestConfirm:
             events = await _consume_sse(
                 client, _url(fix), json={"decision": "confirm"}
             )
-            assert type(events[0]) is TurnStarted
+            # The card resolves first: a block_data patch flips the originating
+            # card to its terminal status before the resumed turn streams.
+            assert type(events[0]) is BlockData
+            assert events[0].block_id == "card-1"
+            assert events[0].data == {"status": "executed"}
+            assert type(events[1]) is TurnStarted
             assert type(events[-1]) is TurnCompleted
 
             # Handler side effect ran with the persisted payload.
@@ -315,6 +321,9 @@ class TestReject:
             events = await _consume_sse(
                 client, _url(fix), json={"decision": "reject"}
             )
+            assert type(events[0]) is BlockData
+            assert events[0].block_id == "card-1"
+            assert events[0].data == {"status": "rejected"}
             assert type(events[-1]) is TurnCompleted
             assert ("reject", {"amount": "10.00", "direction": "INCOMING"}) in _HANDLER_CALLS
             assert _RUN_CALLS[0]["user_message"] == "REJECT_SEED"

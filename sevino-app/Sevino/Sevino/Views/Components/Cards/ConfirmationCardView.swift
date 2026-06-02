@@ -2,152 +2,73 @@ import SwiftUI
 
 /// Renders a `ConfirmationBlock` (the human-in-the-loop card).
 ///
-/// Status-driven:
-/// * `pending` → the proposal: amount/bank rows + a `HoldToConfirmButton` that
-///   fires `onConfirm`, plus a Cancel affordance that fires `onCancel`.
-/// * `confirmed` → just tapped; the side effect is in flight (optimistic local
-///   state until read-time resolution flips it to `executed`).
-/// * `executed` / `failed` (kind `transfer`) → the read-only `TransferConfirmationCard`
-///   receipt, built from `details`.
-/// * `rejected` / `superseded` / `expired` (or any other) → a dimmed, dead card.
+/// For the `transfer` kind it reuses the polished `TransferConfirmationCard` receipt
+/// for every state and drops a `HoldToConfirmButton` beneath it while the proposal is
+/// live. Holding fires `onConfirm`; afterwards the button falls away and the receipt
+/// reflects the resolved status:
+/// * `pending` → queued receipt + hold button (the proposal).
+/// * `confirmed` / `executed` → queued/submitted receipt, no button.
+/// * `failed` → failed receipt (the cause is narrated by the agent's reply,
+///   not the card — `details` carries no failure reason).
+/// * `rejected` / `superseded` / `expired` → the receipt, dimmed and dead.
 ///
-/// The status is re-stamped server-side at read time, so a resumed transcript
-/// renders the right state without any client bookkeeping.
+/// Status is re-stamped server-side at read time and patched live via `block_data`,
+/// so a resumed transcript renders the right state without client bookkeeping.
 struct ConfirmationCardView: View {
     let block: ConfirmationBlock
     var scale: CGFloat = 1
-    /// Tapped/held Confirm — the parent POSTs `confirm` to the action endpoint.
+    /// Held Confirm — the parent POSTs `confirm` to the action endpoint.
     var onConfirm: () -> Void = {}
-    /// Tapped Cancel — the parent POSTs `reject`.
-    var onCancel: () -> Void = {}
+
+    /// Stamped once when the card first appears so the receipt's submitted-time
+    /// row stays put across recomputes (the block carries no timestamp).
+    @State private var stampedAt = Date()
+
+    private var isPending: Bool { block.status == "pending" }
+
+    private var isDead: Bool {
+        switch block.status {
+        case "rejected", "superseded", "expired": return true
+        default: return false
+        }
+    }
 
     var body: some View {
-        switch block.status {
-        case "pending":
-            pendingCard
-        case "confirmed":
-            processingCard
-        case "executed", "failed":
-            receiptCard
-        default:
-            deadCard
-        }
-    }
-
-    // MARK: - Pending (the proposal)
-
-    private var pendingCard: some View {
-        VStack(alignment: .leading, spacing: 12 * scale) {
-            Text(block.title)
-                .font(.headline)
-                .foregroundStyle(Color.sevinoSecondary)
-
-            rowsStack
-
-            HoldToConfirmButton(
-                title: block.confirmLabel,
-                scale: scale,
-                action: onConfirm
-            )
-
-            Button(action: onCancel) {
-                Text(block.cancelLabel)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
-                    .frame(maxWidth: .infinity)
+        Group {
+            if block.kind == "transfer", let data = transferData {
+                transferCard(data)
+            } else {
+                genericCard
             }
-            .buttonStyle(.plain)
         }
-        .padding(16 * scale)
-        .background(cardBackground)
+        .opacity(isDead ? 0.55 : 1)
+        .animation(.easeInOut(duration: 0.25), value: block.status)
     }
 
-    // MARK: - Receipt (executed / failed)
+    // MARK: - Transfer (the premium receipt)
 
-    @ViewBuilder
-    private var receiptCard: some View {
-        if block.kind == "transfer", let data = transferReceiptData {
+    private func transferCard(_ data: TransferConfirmationData) -> some View {
+        VStack(spacing: 12 * scale) {
             TransferConfirmationCard(data: data, scale: scale)
-        } else {
-            deadCard
-        }
-    }
-
-    // MARK: - Processing (just confirmed, side effect in flight)
-
-    private var processingCard: some View {
-        VStack(alignment: .leading, spacing: 8 * scale) {
-            Text(block.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.sevinoSecondary)
-            rowsStack
-            HStack(spacing: 6 * scale) {
-                ProgressView().controlSize(.small)
-                Text(L10n.Confirmation.statusProcessing)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
-            }
-        }
-        .padding(14 * scale)
-        .background(cardBackground)
-    }
-
-    // MARK: - Dead (rejected / superseded / expired / fallback)
-
-    private var deadCard: some View {
-        VStack(alignment: .leading, spacing: 8 * scale) {
-            Text(block.title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Color.sevinoSecondary.opacity(0.55))
-            rowsStack
-            Text(deadLabel)
-                .font(.caption.weight(.medium))
-                .foregroundStyle(Color.sevinoSecondary.opacity(0.5))
-        }
-        .padding(14 * scale)
-        .background(cardBackground)
-        .opacity(0.6)
-    }
-
-    private var deadLabel: String {
-        switch block.status {
-        case "rejected": return L10n.Confirmation.statusCancelled
-        case "superseded": return L10n.Confirmation.statusSuperseded
-        case "expired": return L10n.Confirmation.statusExpired
-        default: return L10n.Confirmation.statusClosed
-        }
-    }
-
-    // MARK: - Shared pieces
-
-    private var rowsStack: some View {
-        VStack(alignment: .leading, spacing: 6 * scale) {
-            ForEach(block.rows, id: \.label) { row in
-                HStack {
-                    Text(row.label)
-                        .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
-                    Spacer()
-                    Text(row.value)
-                        .foregroundStyle(Color.sevinoSecondary)
-                        .multilineTextAlignment(.trailing)
-                }
-                .font(.subheadline)
+            if isPending {
+                HoldToConfirmButton(title: holdTitle, scale: scale, action: onConfirm)
+                    .padding(.horizontal, 4 * scale)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
         }
     }
 
-    private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
-            .fill(Color.sevinoSecondary.opacity(0.08))
+    private var holdTitle: String {
+        let direction = TransferDirection(rawValue: block.details.operation ?? "deposit") ?? .deposit
+        return direction == .withdraw
+            ? L10n.Confirmation.holdToWithdraw
+            : L10n.Confirmation.holdToDeposit
     }
 
-    private var transferReceiptData: TransferConfirmationData? {
+    private var transferData: TransferConfirmationData? {
         let d = block.details
-        let direction = TransferDirection(rawValue: d.operation ?? "deposit")
-            ?? .deposit
+        let direction = TransferDirection(rawValue: d.operation ?? "deposit") ?? .deposit
         let amount = Decimal(string: d.amount ?? "") ?? 0
-        let status: String =
-            block.status == "failed" ? "FAILED" : (d.transferStatus ?? "QUEUED")
         return TransferConfirmationData(
             direction: direction,
             amount: amount,
@@ -155,16 +76,76 @@ struct ConfirmationCardView: View {
             bankInstitution: d.bankInstitution ?? L10n.Confirmation.bankFallback,
             bankMask: d.bankMask ?? "",
             bankAccountType: nil,
-            status: status,
-            createdAt: .now,
-            estimatedSettlement: nil,
-            reason: d.reason
+            status: cardStatus,
+            createdAt: stampedAt,
+            estimatedSettlement: showsSettlement ? L10n.Confirmation.settlementEstimate : nil,
+            reason: cardReason
+        )
+    }
+
+    /// Maps the HIL block status onto the transfer-card status vocabulary
+    /// (`TransferStatusKind`): submitted states read as `QUEUED`, dead ones as
+    /// `CANCELED`, failures as `FAILED`.
+    private var cardStatus: String {
+        switch block.status {
+        case "failed": return "FAILED"
+        case "rejected", "superseded", "expired": return "CANCELED"
+        default: return "QUEUED"
+        }
+    }
+
+    private var showsSettlement: Bool {
+        block.status == "confirmed" || block.status == "executed"
+    }
+
+    private var cardReason: String? {
+        switch block.status {
+        case "failed": return block.details.reason
+        case "rejected": return L10n.Confirmation.statusCancelled
+        case "superseded": return L10n.Confirmation.statusSuperseded
+        case "expired": return L10n.Confirmation.statusExpired
+        default: return nil
+        }
+    }
+
+    // MARK: - Generic fallback (non-transfer HIL kinds)
+
+    private var genericCard: some View {
+        VStack(alignment: .leading, spacing: 12 * scale) {
+            Text(block.title)
+                .font(.headline)
+                .foregroundStyle(Color.sevinoSecondary)
+
+            if !block.rows.isEmpty {
+                VStack(alignment: .leading, spacing: 6 * scale) {
+                    ForEach(block.rows, id: \.label) { row in
+                        HStack {
+                            Text(row.label)
+                                .foregroundStyle(Color.sevinoSecondary.opacity(0.7))
+                            Spacer()
+                            Text(row.value)
+                                .foregroundStyle(Color.sevinoSecondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        .font(.subheadline)
+                    }
+                }
+            }
+
+            if isPending {
+                HoldToConfirmButton(title: block.confirmLabel, scale: scale, action: onConfirm)
+            }
+        }
+        .padding(16 * scale)
+        .background(
+            RoundedRectangle(cornerRadius: 16 * scale, style: .continuous)
+                .fill(Color.sevinoSecondary.opacity(0.08))
         )
     }
 }
 
 #Preview {
-    func block(_ status: String) -> ConfirmationBlock {
+    func block(_ status: String, operation: String = "deposit") -> ConfirmationBlock {
         ConfirmationBlock(
             blockId: "blk-\(status)",
             actionId: "act-\(status)",
@@ -175,7 +156,7 @@ struct ConfirmationCardView: View {
                 ConfirmationRow(label: "Transfer", value: "Chase ••1234 → Sevino"),
             ],
             details: ConfirmationDetails(
-                operation: "deposit",
+                operation: operation,
                 direction: "INCOMING",
                 amount: "500.00",
                 currency: "USD",
@@ -184,7 +165,7 @@ struct ConfirmationCardView: View {
                 bankNickname: "Checking",
                 transferId: nil,
                 transferStatus: "QUEUED",
-                reason: nil
+                reason: status == "failed" ? "Insufficient funds at your bank" : nil
             ),
             confirmLabel: "Confirm deposit",
             cancelLabel: "Cancel",
@@ -195,8 +176,8 @@ struct ConfirmationCardView: View {
     return ScrollView {
         VStack(spacing: 16) {
             ConfirmationCardView(block: block("pending"))
-            ConfirmationCardView(block: block("confirmed"))
             ConfirmationCardView(block: block("executed"))
+            ConfirmationCardView(block: block("failed"))
             ConfirmationCardView(block: block("superseded"))
         }
         .padding()

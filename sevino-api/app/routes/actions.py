@@ -38,7 +38,7 @@ from app.ai.runtime.loop import run_agent_turn
 from app.ai.runtime.types import ModelConfig, ServerToolsConfig
 from app.ai.tools import DEFAULT_REGISTRY, ToolHttpClients
 from app.ai.transport.emitter import SSEEmitter
-from app.ai.transport.events import Error
+from app.ai.transport.events import BlockData, Error
 from app.auth import get_current_user
 from app.config import settings
 from app.exceptions import ConflictError
@@ -82,6 +82,10 @@ async def submit_action(
         )
         action_type = action.action_type
         payload = dict(action.payload)
+        # The card the proposal rendered — we patch its status live so the
+        # client's pending card resolves the moment the side effect lands,
+        # instead of waiting for a transcript reload.
+        card_block_id = action.preview.get("block_id")
 
     # No handler → can't execute or describe the outcome. Refuse before the CAS
     # so the row isn't stranded in a terminal state with nothing to run it.
@@ -110,6 +114,7 @@ async def submit_action(
                 resource="pending_action",
             )
         seed_prompt = handler.reject_prompt(payload)
+        card_status = "rejected"
     else:
         # Confirm: atomic CAS. None => expired / superseded / already acted.
         async with db_factory() as db:
@@ -140,6 +145,7 @@ async def submit_action(
             result=result.summary,
         )
         seed_prompt = result.resume_prompt
+        card_status = "executed" if result.status == "executed" else "failed"
 
     return _stream_resume_turn(
         request=request,
@@ -147,6 +153,8 @@ async def submit_action(
         conversation_id=conversation_id,
         action_id=action_id,
         seed_prompt=seed_prompt,
+        card_block_id=card_block_id if isinstance(card_block_id, str) else None,
+        card_status=card_status,
         http_clients=http_clients,
         anthropic_client=anthropic_client,
         db_factory=db_factory,
@@ -163,6 +171,8 @@ def _stream_resume_turn(
     conversation_id: uuid.UUID,
     action_id: uuid.UUID,
     seed_prompt: str,
+    card_block_id: str | None,
+    card_status: str,
     http_clients: ToolHttpClients,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
@@ -171,11 +181,23 @@ def _stream_resume_turn(
     hard_caps: HardCaps,
 ) -> EventSourceResponse:
     """Drive a full, system-initiated agent turn seeded by ``seed_prompt`` and
-    stream its events. Same transport/driver shape as the chat-turn route."""
+    stream its events. Same transport/driver shape as the chat-turn route.
+
+    Before the turn starts we patch the originating confirmation card's status
+    so the client's pending card resolves immediately; the resumed turn then
+    appends fresh blocks as usual.
+    """
     emitter = SSEEmitter()
 
     async def _drive() -> None:
         try:
+            if card_block_id is not None:
+                await emitter.emit(
+                    BlockData(
+                        block_id=card_block_id,
+                        data={"status": card_status},
+                    )
+                )
             server_tools_config = ServerToolsConfig(
                 web_search_enabled=settings.anthropic_enable_web_search,
                 web_fetch_enabled=settings.anthropic_enable_web_fetch,

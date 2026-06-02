@@ -564,6 +564,42 @@ final class ConversationStoreTests: XCTestCase {
         XCTAssertEqual(json?["decision"] as? String, "reject")
     }
 
+    func testSubmitActionResolvesPriorCardViaCrossMessageBlockData() async throws {
+        let client = MockSSEClient(scripts: [
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartConfirmationJSON(
+                    blockId: "c1", actionId: "a1", status: "pending"
+                ))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "c1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+            // Confirm resume: the card patch lands first and targets a card in
+            // the *previous* message, then the turn streams its own blocks.
+            [
+                .yield(makeRaw(json: blockDataJSON(
+                    blockId: "c1", patch: ["status": "executed"]
+                ))),
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartTextJSON(blockId: "t1"))),
+                .yield(makeRaw(json: textDeltaJSON(blockId: "t1", text: "On its way"))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "t1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+        ])
+        let store = makeStore(client: client)
+        try await store.send(text: "deposit 500")
+
+        try await store.submitAction(actionId: "a1", decision: "confirm")
+
+        // The prior turn's card resolved to executed even though the resume
+        // turn created a fresh assistant message after it.
+        guard case .confirmation(let card)? = store.messages[1].blocks.first
+        else { return XCTFail("expected the confirmation card to persist") }
+        XCTAssertEqual(card.status, "executed")
+        XCTAssertFalse(card.isPending)
+    }
+
     func testSubmitActionStreamErrorSetsErrorStateAndThrows() async {
         let client = MockSSEClient(script: [.fail(SSEClientError.httpStatus(500))])
         let store = makeStore(client: client)
