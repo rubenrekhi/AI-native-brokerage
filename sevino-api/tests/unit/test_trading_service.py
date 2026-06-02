@@ -207,6 +207,68 @@ class TestPlaceOrderHappyPath:
         assert payload["qty"] == "5"
         assert payload["limit_price"] == "180.50"
 
+    async def test_stop_sell_within_position(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.create_order.return_value = {
+            **alpaca.create_order.return_value,
+            "side": "sell",
+            "type": "stop",
+            "qty": "5",
+            "stop_price": "170.00",
+        }
+        # Position fixture holds 5 shares, request 5 → allowed.
+        request = PlaceOrderRequest(
+            symbol="TSLA",
+            side="sell",
+            type="stop",
+            qty="5",
+            stop_price="170.00",
+        )
+
+        await TradingService.place_order(
+            db, alpaca=alpaca, user_id=user_id, data=request
+        )
+
+        alpaca.get_position.assert_awaited_once_with("alpaca_acc_42", "TSLA")
+        payload = alpaca.create_order.call_args.args[1]
+        assert payload["type"] == "stop"
+        assert payload["qty"] == "5"
+        assert payload["stop_price"] == "170.00"
+        assert "limit_price" not in payload
+        assert "notional" not in payload
+        # stop_price is persisted from Alpaca's echoed value, like limit_price.
+        assert patch_repos.order_create.call_args.kwargs["stop_price"] == (
+            Decimal("170.00")
+        )
+
+    async def test_stop_buy_skips_position_check(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        alpaca.create_order.return_value = {
+            **alpaca.create_order.return_value,
+            "side": "buy",
+            "type": "stop",
+            "qty": "3",
+            "stop_price": "250.00",
+        }
+        request = PlaceOrderRequest(
+            symbol="TSLA",
+            side="buy",
+            type="stop",
+            qty="3",
+            stop_price="250.00",
+        )
+
+        await TradingService.place_order(
+            db, alpaca=alpaca, user_id=user_id, data=request
+        )
+
+        alpaca.get_position.assert_not_called()
+        payload = alpaca.create_order.call_args.args[1]
+        assert payload["type"] == "stop"
+        assert payload["stop_price"] == "250.00"
+
 
 # ---------------------------------------------------------------------------
 # place_order — validation rules
@@ -399,6 +461,23 @@ class TestPlaceOrderPayload:
             type="limit",
             qty="1",
             limit_price="100",
+        )
+        await TradingService.place_order(
+            db, alpaca=alpaca, user_id=user_id, data=request
+        )
+
+        payload = alpaca.create_order.call_args.args[1]
+        assert payload["time_in_force"] == "gtc"
+
+    async def test_stop_uses_gtc_time_in_force(
+        self, db, alpaca, patch_repos, user_id
+    ):
+        request = PlaceOrderRequest(
+            symbol="TSLA",
+            side="sell",
+            type="stop",
+            qty="1",
+            stop_price="100",
         )
         await TradingService.place_order(
             db, alpaca=alpaca, user_id=user_id, data=request

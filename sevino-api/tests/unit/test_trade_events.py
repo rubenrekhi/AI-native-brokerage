@@ -34,6 +34,7 @@ def test_status_order_covers_alpaca_lifecycle():
     caught by this test, not by silently regressing a live order."""
     required = {
         "new",
+        "held",
         "accepted",
         "pending_new",
         "partially_filled",
@@ -157,6 +158,56 @@ async def test_handle_applies_when_incoming_status_newer(monkeypatch):
     assert row.filled_qty == Decimal("10")
     assert row.filled_avg_price == Decimal("150.25")
     assert row.filled_at == datetime(2026, 4, 20, 16, 30, tzinfo=timezone.utc)
+    session.flush.assert_awaited_once()
+
+
+async def test_handle_held_stop_resists_stale_replay(monkeypatch):
+    """A resting stop sits in ``held``; a stale ``new`` replay (lower rank,
+    within the ``since_id`` window) must not regress it. This is the reason
+    ``held`` was added to STATUS_ORDER — before, its unknown-status path would
+    have wrongly applied the older event."""
+    row = _row(status="held")
+    monkeypatch.setattr(
+        trade_events.OrderEventRepository,
+        "get_by_alpaca_order_id",
+        AsyncMock(return_value=row),
+    )
+    session = MagicMock()
+    session.flush = AsyncMock()
+
+    await trade_events.handle_trade_update(
+        session, {"order": {"id": "o_1", "status": "new"}}
+    )
+
+    assert row.status == "held"
+    session.flush.assert_not_awaited()
+
+
+async def test_handle_held_stop_advances_to_filled(monkeypatch):
+    """A triggered stop transitions held → filled; the forward move applies."""
+    row = _row(status="held")
+    monkeypatch.setattr(
+        trade_events.OrderEventRepository,
+        "get_by_alpaca_order_id",
+        AsyncMock(return_value=row),
+    )
+    session = MagicMock()
+    session.flush = AsyncMock()
+
+    await trade_events.handle_trade_update(
+        session,
+        {
+            "order": {
+                "id": "o_1",
+                "status": "filled",
+                "filled_qty": "1",
+                "filled_avg_price": "150.00",
+            }
+        },
+    )
+
+    assert row.status == "filled"
+    assert row.filled_qty == Decimal("1")
     session.flush.assert_awaited_once()
 
 

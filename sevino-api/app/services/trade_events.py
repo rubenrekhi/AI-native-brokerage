@@ -41,6 +41,7 @@ logger = structlog.get_logger(__name__)
 # rank 6.
 STATUS_ORDER: dict[str, int] = {
     "new": 0,
+    "held": 1,
     "accepted": 1,
     "accepted_for_bidding": 1,
     "pending_new": 1,

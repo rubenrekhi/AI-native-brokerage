@@ -183,6 +183,45 @@ class TestPlaceOrderRoute:
         assert sent_payload["time_in_force"] == "gtc"
         assert sent_payload["limit_price"] == "180.50"
 
+    async def test_stop_order_uses_gtc_and_echoes_stop_price(
+        self,
+        authenticated_db_client,
+        active_brokerage,
+        tradeable_asset,
+        alpaca_mock,
+    ):
+        alpaca_mock.create_order.return_value = {
+            **alpaca_mock.create_order.return_value,
+            "side": "sell",
+            "type": "stop",
+            "qty": "5",
+            "stop_price": "170.00",
+        }
+        # Position fixture holds 5 shares, request 5 → sell allowed.
+
+        response = await authenticated_db_client.post(
+            "/v1/trading/orders",
+            json={
+                "symbol": "TSLA",
+                "side": "sell",
+                "type": "stop",
+                "qty": "5",
+                "stop_price": "170.00",
+            },
+        )
+
+        assert response.status_code == 201
+        body = response.json()
+        assert body["type"] == "stop"
+        assert body["time_in_force"] == "gtc"
+        assert body["stop_price"] == "170.00"
+        assert body["limit_price"] is None
+        sent_payload = alpaca_mock.create_order.call_args.args[1]
+        assert sent_payload["type"] == "stop"
+        assert sent_payload["stop_price"] == "170.00"
+        assert sent_payload["time_in_force"] == "gtc"
+        assert "limit_price" not in sent_payload
+
     async def test_untradeable_symbol_returns_409(
         self, authenticated_db_client, active_brokerage
     ):

@@ -3,7 +3,9 @@
 Validation rules enforced here come from Alpaca's order constraints:
 market orders accept either `qty` or `notional` (dollar amount); limit
 orders require `limit_price` and a whole-share `qty` (Alpaca rejects
-fractional limit orders).
+fractional limit orders); stop orders require `stop_price` and, like
+limit orders, a whole-share `qty` (Alpaca rejects fractional and notional
+stop orders).
 """
 
 import uuid
@@ -15,7 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 def time_in_force_for(order_type: str) -> str:
-    """Default Sevino time-in-force convention: market → day, limit → gtc.
+    """Default Sevino time-in-force convention: market → day, limit/stop → gtc.
 
     Lives on the schema because it's a wire-format derivation, not a
     business rule the service owns: the column isn't persisted on
@@ -42,10 +44,11 @@ def _parse_positive_decimal(value: str, field_name: str) -> Decimal:
 class PlaceOrderRequest(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=10)
     side: Literal["buy", "sell"]
-    type: Literal["market", "limit"]
+    type: Literal["market", "limit", "stop"]
     qty: str | None = None
     notional: str | None = None
     limit_price: str | None = None
+    stop_price: str | None = None
     conversation_id: uuid.UUID | None = None
 
     @model_validator(mode="after")
@@ -64,18 +67,30 @@ class PlaceOrderRequest(BaseModel):
             raise ValueError("Limit orders require a limit price")
         if self.type == "market" and self.limit_price is not None:
             raise ValueError("Market orders cannot have a limit price")
+        if self.type == "stop" and self.limit_price is not None:
+            raise ValueError("Stop orders cannot have a limit price")
+
+        if self.type == "stop" and self.stop_price is None:
+            raise ValueError("Stop orders require a stop price")
+        if self.type != "stop" and self.stop_price is not None:
+            raise ValueError("Only stop orders can have a stop price")
 
         if self.qty is not None:
             qty_decimal = _parse_positive_decimal(self.qty, "qty")
             if (
-                self.type == "limit"
+                self.type in ("limit", "stop")
                 and qty_decimal != qty_decimal.to_integral_value()
             ):
-                raise ValueError("Limit orders require whole share quantities")
+                label = "Limit" if self.type == "limit" else "Stop"
+                raise ValueError(
+                    f"{label} orders require whole share quantities"
+                )
         if self.notional is not None:
             _parse_positive_decimal(self.notional, "notional")
         if self.limit_price is not None:
             _parse_positive_decimal(self.limit_price, "limit_price")
+        if self.stop_price is not None:
+            _parse_positive_decimal(self.stop_price, "stop_price")
 
         return self
 
@@ -84,6 +99,7 @@ _DECIMAL_FIELDS = (
     "qty",
     "notional",
     "limit_price",
+    "stop_price",
     "filled_qty",
     "filled_avg_price",
 )
@@ -101,6 +117,7 @@ class PlaceOrderResponse(BaseModel):
     qty: str | None = None
     notional: str | None = None
     limit_price: str | None = None
+    stop_price: str | None = None
     status: str
     submitted_at: datetime | None = None
     created_at: datetime

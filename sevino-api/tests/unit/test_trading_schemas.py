@@ -114,6 +114,105 @@ class TestPlaceOrderRequestTypeRules:
             )
 
 
+class TestPlaceOrderRequestStop:
+    def test_stop_sell_by_whole_qty(self):
+        order = PlaceOrderRequest(
+            symbol="AAPL",
+            side="sell",
+            type="stop",
+            qty="5",
+            stop_price="170.00",
+        )
+        assert order.type == "stop"
+        assert order.side == "sell"
+        assert order.qty == "5"
+        assert order.stop_price == "170.00"
+        assert order.limit_price is None
+
+    def test_stop_buy_by_whole_qty(self):
+        order = PlaceOrderRequest(
+            symbol="AAPL",
+            side="buy",
+            type="stop",
+            qty="3",
+            stop_price="250.00",
+        )
+        assert order.side == "buy"
+        assert order.stop_price == "250.00"
+
+    def test_rejects_missing_stop_price(self):
+        with pytest.raises(
+            ValidationError, match="Stop orders require a stop price"
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL", side="sell", type="stop", qty="5"
+            )
+
+    def test_rejects_stop_price_with_market(self):
+        with pytest.raises(
+            ValidationError, match="Only stop orders can have a stop price"
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL",
+                side="sell",
+                type="market",
+                qty="5",
+                stop_price="170",
+            )
+
+    def test_rejects_stop_price_with_limit(self):
+        with pytest.raises(
+            ValidationError, match="Only stop orders can have a stop price"
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL",
+                side="sell",
+                type="limit",
+                qty="5",
+                limit_price="180",
+                stop_price="170",
+            )
+
+    def test_rejects_limit_price_with_stop(self):
+        with pytest.raises(
+            ValidationError, match="Stop orders cannot have a limit price"
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL",
+                side="sell",
+                type="stop",
+                qty="5",
+                stop_price="170",
+                limit_price="165",
+            )
+
+    def test_rejects_fractional_qty_with_stop(self):
+        with pytest.raises(
+            ValidationError,
+            match="Stop orders require whole share quantities",
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL",
+                side="sell",
+                type="stop",
+                qty="0.5",
+                stop_price="170",
+            )
+
+    def test_rejects_notional_with_stop(self):
+        with pytest.raises(
+            ValidationError,
+            match="Dollar amount orders are only supported for market orders",
+        ):
+            PlaceOrderRequest(
+                symbol="AAPL",
+                side="sell",
+                type="stop",
+                notional="500",
+                stop_price="170",
+            )
+
+
 class TestPlaceOrderRequestPositiveDecimals:
     @pytest.mark.parametrize(
         "field, bad_value",
@@ -126,12 +225,16 @@ class TestPlaceOrderRequestPositiveDecimals:
             ("notional", "-0.01"),
             ("limit_price", "0"),
             ("limit_price", "-180.50"),
+            ("stop_price", "0"),
+            ("stop_price", "-180.50"),
         ],
     )
     def test_rejects_non_positive(self, field, bad_value):
         kwargs: dict = {"symbol": "TSLA", "side": "buy"}
         if field == "limit_price":
             kwargs.update(type="limit", qty="10", limit_price=bad_value)
+        elif field == "stop_price":
+            kwargs.update(type="stop", qty="10", stop_price=bad_value)
         else:
             kwargs.update(type="market", **{field: bad_value})
         with pytest.raises(
@@ -168,6 +271,18 @@ class TestPlaceOrderRequestPositiveDecimals:
                 type="limit",
                 qty="10",
                 limit_price="oops",
+            )
+
+    def test_rejects_non_numeric_stop_price(self):
+        with pytest.raises(
+            ValidationError, match="stop_price must be a valid decimal number"
+        ):
+            PlaceOrderRequest(
+                symbol="TSLA",
+                side="sell",
+                type="stop",
+                qty="10",
+                stop_price="oops",
             )
 
 

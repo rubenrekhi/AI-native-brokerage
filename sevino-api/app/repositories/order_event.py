@@ -49,6 +49,7 @@ class OrderEventRepository:
         qty: Decimal | None = None,
         notional: Decimal | None = None,
         limit_price: Decimal | None = None,
+        stop_price: Decimal | None = None,
         submitted_at: datetime | None = None,
         conversation_id: uuid.UUID | None = None,
     ) -> OrderEvent:
@@ -62,6 +63,7 @@ class OrderEventRepository:
             qty=qty,
             notional=notional,
             limit_price=limit_price,
+            stop_price=stop_price,
             submitted_at=submitted_at,
             conversation_id=conversation_id,
         )

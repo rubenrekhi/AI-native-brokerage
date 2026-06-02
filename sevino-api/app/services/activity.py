@@ -315,6 +315,7 @@ def _trade_row(o: dict[str, Any]) -> tuple[datetime | None, dict[str, Any]] | No
         amount = _money(-value) if side == "buy" else _money(value)
     ts = _first_dt(o, ("filled_at", "submitted_at", "created_at"))
     limit_price = o.get("limit_price")
+    stop_price = o.get("stop_price")
     notional = o.get("notional")
     row: dict[str, Any] = {
         "type": "trade",
@@ -338,12 +339,15 @@ def _trade_row(o: dict[str, Any]) -> tuple[datetime | None, dict[str, Any]] | No
             notional=notional,
             fill_price=fill_price,
             limit_price=_dec(limit_price),
+            stop_price=_dec(stop_price),
         ),
     }
-    # Carried only when set — they matter for working limit/notional orders and
-    # would be null noise on a plain filled market order.
+    # Carried only when set — they matter for working limit/stop/notional orders
+    # and would be null noise on a plain filled market order.
     if limit_price is not None:
         row["limit_price"] = limit_price
+    if stop_price is not None:
+        row["stop_price"] = stop_price
     if notional is not None:
         row["notional"] = notional
     return ts, row
@@ -471,6 +475,7 @@ def _trade_summary(
     notional: Any,
     fill_price: Decimal | None,
     limit_price: Decimal | None,
+    stop_price: Decimal | None,
 ) -> str:
     sym = symbol or "?"
     if status in _EXECUTED_ORDER_STATUSES and fill_price is not None:
@@ -487,7 +492,12 @@ def _trade_summary(
         size = f"${notional} of {sym}"
     else:
         size = sym
-    price_part = f" @ ${_money(limit_price)} limit" if limit_price is not None else ""
+    if limit_price is not None:
+        price_part = f" @ ${_money(limit_price)} limit"
+    elif stop_price is not None:
+        price_part = f" @ ${_money(stop_price)} stop"
+    else:
+        price_part = ""
     return f"{action} order: {size}{price_part} ({status})"
 
 
