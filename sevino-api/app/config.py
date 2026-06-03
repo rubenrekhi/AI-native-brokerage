@@ -75,6 +75,9 @@ class Settings(BaseSettings):
     langfuse_secret_key: str = ""
     langfuse_host: str = "https://us.cloud.langfuse.com"
     fmp_api_key: str
+    # Routes historical bars/charts through FMP (consolidated data) instead of
+    # Alpaca's IEX feed. Off by default; flipped per-environment during rollout.
+    fmp_bars_enabled: bool = False
 
     @property
     def plaid_fernet_keys(self) -> list[str]:

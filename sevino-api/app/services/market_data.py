@@ -28,9 +28,11 @@ from app.services.fmp import (
     FmpClient,
     _as_number,
     _parse_iso_date,
+    _resample_weekly,
     compute_earnings_reactions,
     compute_peer_comparison,
     project_analyst,
+    project_bars,
     project_earnings,
     project_financials,
     project_profile,
@@ -66,7 +68,22 @@ _CHART_PARAMS: dict[str, dict[str, Any]] = {
 
 # Intraday timeframes get a short TTL because bars roll forward minute-by-minute;
 # daily/weekly bars are stable for the rest of the session, so a 1h TTL is fine.
-_INTRADAY_TIMEFRAMES = frozenset({"5Min", "30Min", "1Hour"})
+# Only these three reach get_chart, so they alone drive the TTL switch.
+_INTRADAY_TTL_TIMEFRAMES = frozenset({"5Min", "30Min", "1Hour"})
+
+# Every timeframe the FMP intraday endpoint serves (vs the daily EOD endpoint).
+# Kept separate from the TTL set so adding an interval can't shift a chart's TTL.
+_INTRADAY_BAR_TIMEFRAMES = frozenset(
+    {"1Min", "5Min", "15Min", "30Min", "1Hour", "4Hour"}
+)
+_FMP_INTERVAL = {
+    "1Min": "1min",
+    "5Min": "5min",
+    "15Min": "15min",
+    "30Min": "30min",
+    "1Hour": "1hour",
+    "4Hour": "4hour",
+}
 
 _QUOTE_TTL = 15
 _QUOTE_TTL_CLOSED = 1800
@@ -228,13 +245,16 @@ class MarketDataService:
             return cached
 
         logger.info("market_data_cache_miss", key=cache_key)
-        bars = await self._alpaca_bars(
-            symbol, params["timeframe"], params["days_back"]
+        # Charts are regular-session only: a cleaner line for beginners, and the
+        # range %-change stays anchored to the open. Overnight/premarket moves
+        # are surfaced through the digest instead. See §8 (O3) in the arch doc.
+        bars = await self._bars(
+            symbol, params["timeframe"], params["days_back"], extended=False
         )
         response = {"symbol": symbol, "timeframe": timeframe, "bars": bars}
         ttl = (
             _CHART_TTL_INTRADAY
-            if params["timeframe"] in _INTRADAY_TIMEFRAMES
+            if params["timeframe"] in _INTRADAY_TTL_TIMEFRAMES
             else _CHART_TTL_DAILY
         )
         await self._cache_set(cache_key, response, ttl)
@@ -249,14 +269,15 @@ class MarketDataService:
         end: datetime | None = None,
         limit: int = 10000,
     ) -> list[dict[str, Any]]:
-        """Fetch projected Alpaca stock bars for internal batch workflows."""
+        """Fetch projected stock bars for internal batch workflows."""
         symbol = _normalize_symbol(symbol)
-        return await self._alpaca_bars(
+        return await self._bars(
             symbol,
             timeframe,
             start=start,
             end=end,
             limit=limit,
+            extended=timeframe in _INTRADAY_BAR_TIMEFRAMES,
         )
 
     async def get_market_status(self) -> dict[str, Any]:
@@ -394,7 +415,7 @@ class MarketDataService:
         """Fetch estimates, quarterly actuals, and daily bars, then project them.
 
         Three independent failure domains: FMP earnings, FMP estimates, and the
-        Alpaca daily bars used for the post-earnings reaction. Each is captured
+        daily bars used for the post-earnings reaction. Each is captured
         separately so a bar-fetch outage degrades only the reaction fields while
         estimates and actuals still populate (and vice versa). Never raises into
         ``get_stock_info``.
@@ -402,7 +423,7 @@ class MarketDataService:
         earnings_result, estimates_result, bars_result = await asyncio.gather(
             self._fmp.earnings(symbol, limit=_EARNINGS_HISTORY_ROWS),
             self._fmp.analyst_estimates(symbol, limit=_EARNINGS_ESTIMATE_ROWS),
-            self._alpaca_bars(symbol, "1Day", _EARNINGS_REACTION_LOOKBACK_DAYS),
+            self._bars(symbol, "1Day", _EARNINGS_REACTION_LOOKBACK_DAYS),
             return_exceptions=True,
         )
         earnings_rows = _earnings_rows_or_empty(earnings_result, symbol, "earnings")
@@ -712,6 +733,79 @@ class MarketDataService:
             await self._redis.set(key, json.dumps(data), ex=ttl)
         except Exception as exc:
             logger.warning("market_data_cache_set_failed", key=key, error=str(exc))
+
+    # ── Bar source routing ─────────────────────────────────
+
+    async def _bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        days_back: int | None = None,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        limit: int = 10000,
+        extended: bool = False,
+    ) -> list[dict[str, Any]]:
+        """Source historical bars from FMP or Alpaca per `FMP_BARS_ENABLED`.
+
+        FMP gives consolidated multi-exchange data; the Alpaca (IEX) path stays
+        live behind the flag so rollback is a single env var. `extended` is
+        honored only on the FMP path, `limit` only on the Alpaca path.
+        """
+        if settings.fmp_bars_enabled:
+            return await self._fmp_bars(
+                symbol,
+                timeframe,
+                days_back,
+                start=start,
+                end=end,
+                extended=extended,
+            )
+        return await self._alpaca_bars(
+            symbol, timeframe, days_back, start=start, end=end, limit=limit
+        )
+
+    async def _fmp_bars(
+        self,
+        symbol: str,
+        timeframe: str,
+        days_back: int | None = None,
+        *,
+        start: datetime | None = None,
+        end: datetime | None = None,
+        extended: bool = False,
+    ) -> list[dict[str, Any]]:
+        now = datetime.now(timezone.utc)
+        if start is None:
+            if days_back is None:
+                raise ValueError("days_back or start is required")
+            start = now - timedelta(days=days_back)
+        # FMP honors a `from`-only window as [from, now]; bounding `to` is
+        # defensive so a future API change can't silently widen the range.
+        if end is None:
+            end = now
+        start_date = start.astimezone(_MARKET_TZ).date()
+        end_date = end.astimezone(_MARKET_TZ).date()
+
+        if timeframe in _INTRADAY_BAR_TIMEFRAMES:
+            rows = await self._fmp.historical_chart(
+                symbol,
+                _FMP_INTERVAL[timeframe],
+                start=start_date,
+                end=end_date,
+                extended=extended,
+            )
+            return project_bars(rows, intraday=True)
+        if timeframe in ("1Day", "1Week"):
+            rows = await self._fmp.historical_eod(
+                symbol, start=start_date, end=end_date
+            )
+            daily = project_bars(rows, intraday=False)
+            return _resample_weekly(daily) if timeframe == "1Week" else daily
+        raise MarketDataInvalidInputError(
+            f"Unsupported bar timeframe: {timeframe}", symbol=symbol
+        )
 
     # ── Alpaca Market Data ─────────────────────────────────
 
