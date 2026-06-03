@@ -11,6 +11,7 @@ import httpx
 import pytest
 from fastapi import Request
 
+from app.config import settings
 from app.exceptions import (
     MarketDataError,
     MarketDataInvalidInputError,
@@ -24,6 +25,7 @@ from app.services.alpaca_broker import (
 from app.services.fmp import FmpClient
 from app.services.market_data import (
     MarketDataService,
+    _INTRADAY_TTL_TIMEFRAMES,
     _empty_sector_context,
     _market_today,
     _unwrap_snapshot,
@@ -1557,3 +1559,168 @@ class TestBearerRedaction:
         combined = " ".join(r.getMessage() for r in caplog.records)
         assert "abc123def.token-456" not in combined
         assert "Bearer ***" in combined
+
+
+class TestFmpBarsPath:
+    """Bars routed through FMP when FMP_BARS_ENABLED is on (the migration path)."""
+
+    @pytest.fixture(autouse=True)
+    def _enable_fmp_bars(self, monkeypatch):
+        monkeypatch.setattr(settings, "fmp_bars_enabled", True)
+
+    def _intraday_handler(
+        self, captured: dict
+    ) -> Callable[[httpx.Request], httpx.Response]:
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "date": "2026-06-01 15:55:00",
+                        "open": 306.2,
+                        "high": 306.45,
+                        "low": 305.93,
+                        "close": 306.23,
+                        "volume": 2667385.76,
+                    }
+                ],
+            )
+
+        return handler
+
+    async def test_intraday_chart_routes_to_fmp_bounded_regular_session(self):
+        captured: dict = {}
+        service, redis = _service(fmp_handler=self._intraday_handler(captured))
+
+        result = await service.get_chart("AAPL", "1M")
+
+        assert captured["path"] == "/stable/historical-chart/1hour"
+        assert captured["params"]["symbol"] == "AAPL"
+        # Charts are regular-session only — no extended-hours param.
+        assert "extended" not in captured["params"]
+        assert "from" in captured["params"] and "to" in captured["params"]
+        assert captured["params"]["apikey"] == "test-key"
+        bar = result["bars"][0]
+        assert bar["timestamp"] == "2026-06-01T19:55:00Z"  # 15:55 EDT → 19:55Z
+        assert bar["vwap"] == "0"
+        assert bar["trade_count"] == 0
+        assert bar["volume"] == 2667385
+        assert any(k == "market:chart:AAPL:1M" for k, _, _ in redis.set_calls)
+
+    async def test_daily_chart_routes_to_eod_without_extended(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(
+                200,
+                json=[
+                    {
+                        "date": "2026-06-01",
+                        "open": 309.63,
+                        "high": 310.94,
+                        "low": 305.02,
+                        "close": 306.31,
+                        "volume": 47131978,
+                        "vwap": 307.975,
+                    }
+                ],
+            )
+
+        service, _ = _service(fmp_handler=handler)
+        result = await service.get_chart("AAPL", "1Y")
+
+        assert captured["path"] == "/stable/historical-price-eod/full"
+        assert "extended" not in captured["params"]
+        assert result["bars"][0]["timestamp"] == "2026-06-01T04:00:00Z"
+        assert result["bars"][0]["vwap"] == "307.975"
+
+    async def test_5y_chart_resamples_daily_into_weekly(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            # FMP newest-first; 2026-01-05 (Mon) & 01-06 = ISO W02, 01-12 = W03.
+            return httpx.Response(
+                200,
+                json=[
+                    {"date": "2026-01-12", "open": 14, "high": 16, "low": 13,
+                     "close": 15, "volume": 300, "vwap": 1},
+                    {"date": "2026-01-06", "open": 11, "high": 15, "low": 10,
+                     "close": 14, "volume": 200, "vwap": 1},
+                    {"date": "2026-01-05", "open": 10, "high": 12, "low": 9,
+                     "close": 11, "volume": 100, "vwap": 1},
+                ],
+            )
+
+        service, _ = _service(fmp_handler=handler)
+        result = await service.get_chart("AAPL", "5Y")
+
+        bars = result["bars"]
+        assert len(bars) == 2
+        assert bars[0]["close"] == "14"
+        assert bars[0]["volume"] == 300
+        assert bars[1]["open"] == "14"
+
+    async def test_get_stock_bars_1min_requests_extended(self):
+        captured: dict = {}
+        service, _ = _service(fmp_handler=self._intraday_handler(captured))
+
+        await service.get_stock_bars(
+            "AAPL",
+            timeframe="1Min",
+            start=datetime(2026, 6, 1, 20, tzinfo=timezone.utc),
+            end=datetime(2026, 6, 2, 12, tzinfo=timezone.utc),
+        )
+
+        assert captured["path"] == "/stable/historical-chart/1min"
+        assert captured["params"]["extended"] == "true"
+
+    async def test_get_stock_bars_daily_omits_extended(self):
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["path"] = request.url.path
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[])
+
+        service, _ = _service(fmp_handler=handler)
+        await service.get_stock_bars(
+            "AAPL",
+            timeframe="1Day",
+            start=datetime(2026, 5, 22, tzinfo=timezone.utc),
+            end=datetime(2026, 6, 1, tzinfo=timezone.utc),
+        )
+
+        assert captured["path"] == "/stable/historical-price-eod/full"
+        assert "extended" not in captured["params"]
+
+    async def test_empty_fmp_chart_returns_empty_and_still_caches(self):
+        service, redis = _service(
+            fmp_handler=lambda r: httpx.Response(200, json=[])
+        )
+
+        result = await service.get_chart("ZZZZ", "1M")
+
+        assert result["bars"] == []
+        assert any(k == "market:chart:ZZZZ:1M" for k, _, _ in redis.set_calls)
+
+    async def test_daily_chart_window_includes_current_session(self):
+        # FMP daily EOD returns the in-progress current-day bar, so charts
+        # request through today. O4: confirm this matches Alpaca before the flip.
+        captured: dict = {}
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            captured["params"] = dict(request.url.params)
+            return httpx.Response(200, json=[])
+
+        service, _ = _service(fmp_handler=handler)
+        await service.get_chart("AAPL", "1Y")
+
+        assert captured["params"]["to"] == _market_today().isoformat()
+
+
+def test_dispatch_only_intervals_absent_from_ttl_set():
+    assert "1Min" not in _INTRADAY_TTL_TIMEFRAMES
+    assert "15Min" not in _INTRADAY_TTL_TIMEFRAMES
+    assert "4Hour" not in _INTRADAY_TTL_TIMEFRAMES
