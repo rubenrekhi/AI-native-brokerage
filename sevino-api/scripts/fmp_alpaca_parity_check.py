@@ -14,8 +14,12 @@ overnight window. Flags mark disagreements beyond tolerance.
 """
 
 import asyncio
+import sys
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from app.config import settings
 from app.services.alpaca_broker import AlpacaBrokerService
