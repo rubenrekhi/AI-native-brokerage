@@ -809,6 +809,56 @@
         }
       }
     },
+    "confirmation.bank_fallback" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "your bank"
+          }
+        }
+      }
+    },
+    "confirmation.hold_to_deposit" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to deposit"
+          }
+        }
+      }
+    },
+    "confirmation.hold_to_withdraw" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hold to withdraw"
+          }
+        }
+      }
+    },
+    "confirmation.settlement_estimate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2-3 days"
+          }
+        }
+      }
+    },
+    "confirmation.submitting" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Submitting…"
+          }
+        }
+      }
+    },
     "Change" : {
 
     },

@@ -335,6 +335,20 @@ struct HomeView: View {
         }
     }
 
+    /// Confirm/reject a HIL action card. Streams the result back into the
+    /// conversation; failure is reflected in the store's turn state.
+    private func confirmAction(actionId: String, decision: String) {
+        Task {
+            do {
+                try await viewModel.submitAction(
+                    actionId: actionId, decision: decision
+                )
+            } catch {
+                // Failure reflected in the conversation store's turn state.
+            }
+        }
+    }
+
     private func sendMessage(segments: [MessageSegment]) {
         let text = segments.map { segment -> String in
             switch segment {
@@ -646,7 +660,8 @@ struct HomeView: View {
                 messages: viewModel.messages,
                 turnState: viewModel.turnState,
                 scale: scale,
-                onRetry: retryLastMessage
+                onRetry: retryLastMessage,
+                onConfirmAction: confirmAction
             )
             .safeAreaPadding(.top, 56 * scale)
             .safeAreaPadding(.bottom, chatInputHeight + 48 * scale)

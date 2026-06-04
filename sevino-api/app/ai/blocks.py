@@ -7,7 +7,7 @@ Mirrors the iOS ``enum Block``. Persisted user-attachment context blocks
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
 
@@ -104,12 +104,46 @@ class RecurringInvestmentSetupBlock(BaseModel):
     disclaimer: str
 
 
+class ConfirmationRow(BaseModel):
+    label: str
+    value: str
+
+
+class ConfirmationBlock(BaseModel):
+    # Human-in-the-loop card: the assistant proposes a consequential action and
+    # the user must tap to confirm before it executes (see docs/ai/hil-actions.md).
+    # ``kind`` lets iOS pick a typed layout (``details`` carries its fields);
+    # ``rows`` is the generic fallback. ``status`` is "pending" on the wire and
+    # re-stamped from the live pending_action at history-read time — never trust
+    # the persisted value.
+    type: Literal["confirmation"] = "confirmation"
+    block_id: str
+    action_id: str
+    kind: str
+    title: str
+    rows: list[ConfirmationRow] = Field(default_factory=list)
+    details: dict[str, Any] = Field(default_factory=dict)
+    confirm_label: str = "Confirm"
+    cancel_label: str = "Cancel"
+    hold_to_confirm: bool = True
+    status: Literal[
+        "pending",
+        "confirmed",
+        "rejected",
+        "superseded",
+        "expired",
+        "executed",
+        "failed",
+    ] = "pending"
+
+
 Block = Annotated[
     TextBlock
     | StatusBlock
     | StockCardBlock
     | ThinkingBlock
-    | RecurringInvestmentSetupBlock,
+    | RecurringInvestmentSetupBlock
+    | ConfirmationBlock,
     Field(discriminator="type"),
 ]
 
@@ -120,6 +154,7 @@ BlockAdapter: TypeAdapter[
     | StockCardBlock
     | ThinkingBlock
     | RecurringInvestmentSetupBlock
+    | ConfirmationBlock
 ] = TypeAdapter(Block)
 BlockListAdapter: TypeAdapter[
     list[
@@ -128,5 +163,6 @@ BlockListAdapter: TypeAdapter[
         | StockCardBlock
         | ThinkingBlock
         | RecurringInvestmentSetupBlock
+        | ConfirmationBlock
     ]
 ] = TypeAdapter(list[Block])

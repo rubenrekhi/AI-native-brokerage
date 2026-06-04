@@ -29,6 +29,10 @@ def effective_status(status: str, expires_at: datetime, *, now: datetime) -> str
     A still-``pending`` row past its window reads as ``expired`` without ever
     being written (see docs/ai/hil-actions.md §"Status is partly written,
     partly derived"). Every other state is a real stored value.
+
+    ``expires_at`` and ``now`` must both be tz-aware (UTC); comparing a naive
+    against an aware datetime raises ``TypeError``. The repository sources both
+    correctly — this matters only for direct callers.
     """
     if status == PendingActionStatus.PENDING and expires_at <= now:
         return PendingActionStatus.EXPIRED

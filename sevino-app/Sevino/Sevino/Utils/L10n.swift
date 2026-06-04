@@ -969,6 +969,14 @@ enum L10n {
         static let cancellationFailed = String(localized: "cancel_transfer.cancellation_failed")
     }
 
+    enum Confirmation {
+        static let bankFallback = String(localized: "confirmation.bank_fallback")
+        static let holdToDeposit = String(localized: "confirmation.hold_to_deposit")
+        static let holdToWithdraw = String(localized: "confirmation.hold_to_withdraw")
+        static let settlementEstimate = String(localized: "confirmation.settlement_estimate")
+        static let submitting = String(localized: "confirmation.submitting")
+    }
+
     enum TradeExecution {
         static let sideBuy = String(localized: "trade_execution.side_buy")
         static let sideSell = String(localized: "trade_execution.side_sell")

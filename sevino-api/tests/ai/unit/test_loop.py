@@ -277,6 +277,15 @@ def repo_mocks(monkeypatch):
         monkeypatch.setattr(
             "app.ai.runtime.loop.ConversationRepository." + name, mocks[name]
         )
+    # The supersede sweep runs in initialize_turn against the stub session;
+    # patch it so unit tests don't need a real DB.
+    supersede = AsyncMock(return_value=0)
+    mocks["supersede_pending_for_conversation"] = supersede
+    monkeypatch.setattr(
+        "app.ai.runtime.flow.turn_lifecycle."
+        "PendingActionRepository.supersede_pending_for_conversation",
+        supersede,
+    )
     return mocks
 
 
@@ -334,6 +343,7 @@ async def _run(
     server_tools_config: ServerToolsConfig | None = None,
     time_context: str | None = None,
     user_profile: str | None = None,
+    persist_user_message: bool | None = None,
 ) -> tuple[Any, list[Event]]:
     """Run the loop and return ``(result, events)``.
 
@@ -367,6 +377,8 @@ async def _run(
         kwargs["time_context"] = time_context
     if user_profile is not None:
         kwargs["user_profile"] = user_profile
+    if persist_user_message is not None:
+        kwargs["persist_user_message"] = persist_user_message
 
     try:
         result = await run_agent_turn(**kwargs)
@@ -422,6 +434,28 @@ class TestHappyPath:
         assert kwargs["prompt_hash"] == SYSTEM_PROMPT.hash
         assert kwargs["model_id"] == MODEL_ID
         assert kwargs["user_message_id"] == repo_mocks["_ids"]["user_msg_id"]
+
+    async def test_system_initiated_turn_skips_user_bubble_and_supersede(
+        self, repo_mocks
+    ):
+        # A HIL confirm seeds a turn without persisting a user bubble or
+        # superseding sibling proposals; the agent_turn has no user_message_id.
+        client = _make_client(_make_response())
+
+        await _run(
+            client,
+            repo_mocks,
+            user_message="[the user confirmed the deposit; result: success]",
+            persist_user_message=False,
+        )
+
+        repo_mocks["append_user_message"].assert_not_awaited()
+        repo_mocks["supersede_pending_for_conversation"].assert_not_awaited()
+        repo_mocks["start_agent_turn"].assert_awaited_once()
+        assert (
+            repo_mocks["start_agent_turn"].call_args.kwargs["user_message_id"]
+            is None
+        )
 
     async def test_records_model_invocation_with_full_request_response(
         self, repo_mocks
@@ -919,18 +953,15 @@ class TestRequestShape:
         assert create_kwargs["max_tokens"] == HardCaps().max_output_tokens
 
     async def test_thinking_config_sent_on_every_call(self, repo_mocks):
-        # A1.7 requires every Anthropic call to enable extended thinking
-        # with budget_tokens >= 1024 — Anthropic returns 400s otherwise
-        # when thinking blocks roundtrip on later iterations.
+        # Every Anthropic call enables adaptive extended thinking at high
+        # effort; the model spends thinking tokens up to ``max_tokens``.
         client = _make_client(_make_response())
 
         await _run(client, repo_mocks)
 
         create_kwargs = client.messages.stream.call_args.kwargs
-        assert create_kwargs["thinking"] == {
-            "type": "enabled",
-            "budget_tokens": 1024,
-        }
+        assert create_kwargs["thinking"] == {"type": "adaptive"}
+        assert create_kwargs["output_config"] == {"effort": "high"}
 
     async def test_tools_kwarg_included_when_registry_has_tools(
         self, repo_mocks
@@ -1245,8 +1276,6 @@ class TestCapBreaches:
         # iteration's ``check_caps`` then breaches because
         # state.output_tokens (1500) >= max_output_tokens (1100), so the
         # loop exits with the cap-breach terminal state.
-        # ``max_output_tokens`` must stay > 1024 (thinking budget) for
-        # ``run_agent_turn`` to accept the caps.
         client = _make_client(
             _make_response(
                 stop_reason="pause_turn",
@@ -1264,23 +1293,6 @@ class TestCapBreaches:
         # Only one Anthropic call: iteration 2's cap check fires before
         # the second stream() would have been issued.
         client.messages.stream.assert_called_once()
-
-    async def test_max_output_tokens_at_or_below_thinking_budget_raises(
-        self, repo_mocks
-    ):
-        # Anthropic 400s when budget_tokens >= max_tokens. The loop fails
-        # fast at the entry to surface the misconfig before any DB writes.
-        client = _make_client(_make_response())
-
-        with pytest.raises(ValueError, match="thinking budget"):
-            await _run(
-                client, repo_mocks, hard_caps=HardCaps(max_output_tokens=1024)
-            )
-
-        # No persistence side-effects from the rejected call.
-        repo_mocks["append_user_message"].assert_not_awaited()
-        repo_mocks["start_agent_turn"].assert_not_awaited()
-        client.messages.stream.assert_not_called()
 
 
 # ---------- A1.7: extended thinking + signature roundtripping ----------

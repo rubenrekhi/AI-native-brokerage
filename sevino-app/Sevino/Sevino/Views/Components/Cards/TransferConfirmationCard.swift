@@ -131,10 +131,7 @@ private struct TransferHeroReceipt: View {
         }
         .padding(20 * scale)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 28 * scale)
-                .fill(TransferPalette.cardBackground)
-        )
+        .background(GenUICardBackground(cornerRadius: 28 * scale))
     }
 }
 
@@ -228,10 +225,7 @@ private struct TransferCompactReceipt: View {
         }
         .padding(20 * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 28 * scale)
-                .fill(TransferPalette.cardBackground)
-        )
+        .background(GenUICardBackground(cornerRadius: 28 * scale))
     }
 
     private func metaColumn(title: String, value: String, alignment: HorizontalAlignment) -> some View {
@@ -384,10 +378,7 @@ private struct TransferFailedReceipt: View {
         }
         .padding(20 * scale)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 28 * scale)
-                .fill(TransferPalette.cardBackground)
-        )
+        .background(GenUICardBackground(cornerRadius: 28 * scale))
     }
 
     private var bankTypeLine: String {

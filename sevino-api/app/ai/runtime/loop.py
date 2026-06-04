@@ -1,8 +1,10 @@
 """Agent loop — runs one turn end-to-end.
 
-Extended thinking is always enabled (1024-token budget). The loop iterates
-on ``stop_reason == "pause_turn"``; prior thinking blocks are appended to
-``messages`` before each call so signatures roundtrip byte-for-byte.
+Adaptive extended thinking is always enabled — the model spends only the
+thinking it needs up to the combined ``max_output_tokens`` ceiling. The loop
+iterates on ``stop_reason == "pause_turn"``/``"tool_use"``; prior thinking
+blocks are appended to ``messages`` before each call so signatures roundtrip
+byte-for-byte.
 
 No FastAPI imports — collaborators are passed in so the same function
 runs in sub-agents and unit tests.
@@ -110,6 +112,8 @@ async def run_agent_turn(
     conversation_id: uuid.UUID,
     user_message: str,
     user_context: AttachedContextRequest | None = None,
+    persist_user_message: bool = True,
+    suppress_proposals: bool = False,
     anthropic_client: AsyncAnthropic,
     db_factory: DbSessionFactory,
     tool_registry: ToolRegistry,
@@ -140,9 +144,6 @@ async def run_agent_turn(
     ``terminal_state='error'``. ``CancelledError`` propagates after
     partial state is flushed.
 
-    Raises ``ValueError`` if ``max_output_tokens <= thinking budget``;
-    Anthropic 400s on every call otherwise.
-
     The body runs inside one outer try/except/finally so cancellation at
     any await still finalises the agent_turn row.
 
@@ -151,17 +152,13 @@ async def run_agent_turn(
     ``request.is_disconnected`` never fires. Cancellation arrives via
     ``task.cancel()`` when the SSE asyncgen closes.
     """
-    if hard_caps.max_output_tokens <= hard_caps.thinking_budget_tokens:
-        raise ValueError(
-            f"hard_caps.max_output_tokens ({hard_caps.max_output_tokens}) "
-            f"must be > thinking budget ({hard_caps.thinking_budget_tokens}); "
-            f"Anthropic requires budget_tokens < max_tokens."
-        )
-
     # Initialised before the first await so the finally has well-defined
     # values even on early cancellation. The finally guards on ``turn_id``.
     turn_id: uuid.UUID | None = None
-    state = LoopState(started_at_monotonic=time.monotonic())
+    state = LoopState(
+        started_at_monotonic=time.monotonic(),
+        suppress_proposals=suppress_proposals,
+    )
     assistant_blocks: list[dict[str, Any]] = []
     totals = TurnTotals()
     terminal_state: str | None = None
@@ -182,6 +179,7 @@ async def run_agent_turn(
             model_config=model_config,
             db_factory=db_factory,
             time_context=time_context,
+            persist_user_message=persist_user_message,
         )
 
         # Emitted here (not in ``initialize_turn``) so that a cancel on

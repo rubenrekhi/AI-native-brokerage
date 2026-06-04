@@ -16,12 +16,23 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 
 _MAX_CONTEXT_BYTES = 10_000
+
+
+class ActionDecisionRequest(BaseModel):
+    """Body of ``POST /v1/conversations/{id}/actions/{action_id}``.
+
+    The client sends only the decision — never the action's parameters. What
+    executes is the server-persisted ``pending_actions.payload`` (HIL tamper
+    safety; see docs/ai/hil-actions.md).
+    """
+
+    decision: Literal["confirm", "reject"]
 
 
 class ContextKind(str, Enum):

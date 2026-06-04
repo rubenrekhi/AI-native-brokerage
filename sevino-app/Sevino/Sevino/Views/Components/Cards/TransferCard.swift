@@ -13,10 +13,21 @@ struct TransferCard: View {
     var onDismiss: (() -> Void)?
     var onLinkBank: (() -> Void)?
 
+    /// Confirmation mode (an AI-proposed transfer). When `prefilledAmount` is set the
+    /// amount is fixed and shown read-only, the CTA becomes a hold-to-confirm button
+    /// (`onHoldConfirm`), and the settlement disclaimer is dropped. Leaving it `nil`
+    /// keeps the interactive entry mode the manual transfer sheet uses.
+    var prefilledAmount: Decimal?
+    var onHoldConfirm: (() -> Void)?
+    var isSubmitting: Bool = false
+    var holdTitle: String = ""
+
     @State private var selectedBankAccountID: String?
     @State private var amountText: String = ""
     @State private var isPickerOpen: Bool = false
     @FocusState private var amountFocused: Bool
+
+    private var isConfirmMode: Bool { prefilledAmount != nil }
 
     private var selectedBank: TransferBankAccount? {
         guard let id = selectedBankAccountID else { return data.bankAccounts.first }
@@ -52,15 +63,19 @@ struct TransferCard: View {
             if data.bankAccounts.isEmpty {
                 TransferEmptyBanksView(scale: scale, onLinkBank: onLinkBank)
             } else {
-                TransferAmountDisplay(
-                    amountText: $amountText,
-                    amountFocused: $amountFocused,
-                    direction: data.direction,
-                    currencyCode: data.currencyCode,
-                    exceedsAvailable: exceedsAvailable,
-                    availableBalance: data.availableBalance,
-                    scale: scale
-                )
+                if let prefilledAmount {
+                    TransferStaticAmountDisplay(amount: prefilledAmount, scale: scale)
+                } else {
+                    TransferAmountDisplay(
+                        amountText: $amountText,
+                        amountFocused: $amountFocused,
+                        direction: data.direction,
+                        currencyCode: data.currencyCode,
+                        exceedsAvailable: exceedsAvailable,
+                        availableBalance: data.availableBalance,
+                        scale: scale
+                    )
+                }
 
                 TransferEndpointStack(
                     direction: data.direction,
@@ -82,7 +97,14 @@ struct TransferCard: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
-                if let onConfirm {
+                if isConfirmMode {
+                    TransferHoldCTA(
+                        isSubmitting: isSubmitting,
+                        holdTitle: holdTitle,
+                        onHoldConfirm: onHoldConfirm,
+                        scale: scale
+                    )
+                } else if let onConfirm {
                     TransferConfirmButton(
                         direction: data.direction,
                         amount: amountDecimal,
@@ -95,18 +117,17 @@ struct TransferCard: View {
                 }
             }
 
-            Text(L10n.Transfer.disclaimer)
-                .font(.system(size: 12 * scale))
-                .foregroundStyle(Color.sevinoGreyContrast)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .fixedSize(horizontal: false, vertical: true)
+            if !isConfirmMode {
+                Text(L10n.Transfer.disclaimer)
+                    .font(.system(size: 12 * scale))
+                    .foregroundStyle(Color.sevinoGreyContrast)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(20 * scale)
-        .background(
-            RoundedRectangle(cornerRadius: 28 * scale)
-                .fill(TransferPalette.cardBackground)
-        )
+        .background(GenUICardBackground(cornerRadius: 28 * scale))
         .animation(.spring(duration: 0.3, bounce: 0.15), value: isPickerOpen)
         .onAppear {
             if selectedBankAccountID == nil {
@@ -467,6 +488,57 @@ private struct TransferConfirmButton: View {
     }
 }
 
+// MARK: - Confirmation mode (read-only amount + hold-to-confirm)
+
+private struct TransferStaticAmountDisplay: View {
+    let amount: Decimal
+    let scale: CGFloat
+
+    var body: some View {
+        VStack(spacing: 10 * scale) {
+            Text(L10n.Transfer.amountLabel.uppercased())
+                .font(.system(size: 10 * scale, weight: .semibold))
+                .tracking(1.2)
+                .foregroundStyle(TransferPalette.textMuted)
+
+            HStack(alignment: .firstTextBaseline, spacing: 2 * scale) {
+                Text(verbatim: "$")
+                    .font(.system(size: 42 * scale, weight: .medium))
+                    .foregroundStyle(TransferPalette.textPrimary.opacity(0.7))
+                Text(amount.formatted(.number.precision(.fractionLength(0...2))))
+                    .font(.system(size: 64 * scale, weight: .bold))
+                    .foregroundStyle(TransferPalette.textPrimary)
+            }
+            .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+private struct TransferHoldCTA: View {
+    let isSubmitting: Bool
+    let holdTitle: String
+    let onHoldConfirm: (() -> Void)?
+    let scale: CGFloat
+
+    var body: some View {
+        if isSubmitting {
+            HStack(spacing: 8 * scale) {
+                ProgressView().controlSize(.small)
+                Text(L10n.Confirmation.submitting)
+                    .font(.system(size: 15 * scale, weight: .semibold))
+                    .foregroundStyle(TransferPalette.textSecondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 38 * scale)
+        } else if let onHoldConfirm {
+            HoldToConfirmButton(
+                title: holdTitle,
+                scale: scale,
+                action: onHoldConfirm
+            )
+        }
+    }
+}
+
 // MARK: - Empty state
 
 private struct TransferEmptyBanksView: View {
@@ -554,6 +626,26 @@ private let previewBankMulti: [TransferBankAccount] = [
             ),
             onConfirm: { id, amount in print("deposit \(amount) from \(id)") },
             onDismiss: { print("dismiss") }
+        )
+        .padding(20)
+    }
+    .preferredColorScheme(.dark)
+}
+
+#Preview("Confirmation · hold to confirm") {
+    ZStack {
+        Color.sevinoPrimary.ignoresSafeArea()
+        TransferCard(
+            data: TransferCardData(
+                direction: .deposit,
+                bankAccounts: [previewBankChase],
+                brokerageLabel: L10n.Transfer.brokerageName,
+                availableBalance: nil,
+                currencyCode: "USD"
+            ),
+            prefilledAmount: 500,
+            onHoldConfirm: {},
+            holdTitle: "Hold to deposit"
         )
         .padding(20)
     }

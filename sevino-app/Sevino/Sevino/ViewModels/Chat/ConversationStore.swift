@@ -191,6 +191,11 @@ final class ConversationStore {
         attachedContext: AttachedContext? = nil,
         idempotencyKey: String? = nil
     ) async throws {
+        // A new user message supersedes any hanging proposal — deaden its card
+        // locally so it can't be tapped (the backend's supersede sweep does the
+        // same server-side; read-time resolution confirms it on reload).
+        supersedeLocalPendingConfirmations()
+
         // SEV-615 B: a digest card rides the unified `context` channel as
         // `kind=digest` (its payload is the opaque `data`), instead of a
         // separate `digest_card` field. The source chip renders above the
@@ -222,6 +227,46 @@ final class ConversationStore {
             currentTurnId = nil
         }
 
+        try await consume(request)
+    }
+
+    /**
+     Confirm or reject a pending HIL action (e.g. a proposed transfer).
+
+     `POST`s `{decision}` to `/v1/conversations/{id}/actions/{actionId}` and
+     consumes the resulting SSE turn exactly as `send(text:)` does — the server
+     streams the executed/failed result back as a fresh assistant message. No
+     user bubble is appended: tapping a card is not a chat message. The tapped
+     card is deadened locally up front so it can't be double-submitted.
+     */
+    func submitAction(actionId: String, decision: String) async throws {
+        // `reject` is part of the general HIL contract, but the transfer card is
+        // hold-to-confirm only (no cancel button) — so today only "confirm"
+        // reaches here from the UI; users dismiss a proposal by superseding it.
+        markLocalConfirmation(
+            actionId: actionId,
+            status: decision == "reject" ? "rejected" : "confirmed"
+        )
+        let request = try buildActionRequest(
+            actionId: actionId, decision: decision
+        )
+        state = .streaming
+        currentAssistantMessageId = nil
+
+        defer {
+            currentAssistantMessageId = nil
+            currentTurnId = nil
+        }
+
+        try await consume(request)
+    }
+
+    /// Drain an SSE turn from `request` into `messages`/`state`. Shared by
+    /// `send(text:)` and `submitAction` — the only difference between them is
+    /// how the request is built and what local state is primed first. Maps
+    /// transport/decode failures to `.error(.internalError, …)` so views have
+    /// one error shape; rethrows `CancellationError` after resetting to idle.
+    private func consume(_ request: URLRequest) async throws {
         do {
             for try await raw in sseClient.stream(request: request) {
                 try Task.checkCancellation()
@@ -233,9 +278,9 @@ final class ConversationStore {
                 apply(event)
                 if case .error = state { return }
             }
-            // Stream finished. If the consuming task was cancelled, surface
-            // CancellationError to the caller; otherwise reset to idle so the
-            // next send isn't blocked behind a phantom in-flight turn.
+            // Stream finished. Surface CancellationError if the task was
+            // cancelled; otherwise reset to idle so the next turn isn't blocked
+            // behind a phantom in-flight turn.
             try Task.checkCancellation()
             if case .streaming = state {
                 state = .idle
@@ -244,11 +289,43 @@ final class ConversationStore {
             state = .idle
             throw CancellationError()
         } catch {
-            // Map transport / decode failures to the closed `internal_error`
-            // bucket so views have a single switch over `SSEEvent.ErrorCode`
-            // regardless of which layer raised.
             state = .error(.internalError, error.localizedDescription)
             throw error
+        }
+    }
+
+    /// Flip every still-pending confirmation card to `superseded` in place.
+    private func supersedeLocalPendingConfirmations() {
+        rewriteConfirmations { cb in
+            cb.isPending ? cb.withStatus("superseded") : nil
+        }
+    }
+
+    /// Flip the pending card with `actionId` to `status` in place.
+    private func markLocalConfirmation(actionId: String, status: String) {
+        rewriteConfirmations { cb in
+            cb.isPending && cb.actionId == actionId
+                ? cb.withStatus(status)
+                : nil
+        }
+    }
+
+    /// Apply `transform` to every confirmation block; a non-nil return replaces
+    /// it. Keeps the two local-deaden helpers DRY.
+    private func rewriteConfirmations(
+        _ transform: (ConfirmationBlock) -> ConfirmationBlock?
+    ) {
+        for i in messages.indices {
+            var blocks = messages[i].blocks
+            var changed = false
+            for j in blocks.indices {
+                if case .confirmation(let cb) = blocks[j],
+                   let replacement = transform(cb) {
+                    blocks[j] = .confirmation(replacement)
+                    changed = true
+                }
+            }
+            if changed { messages[i].blocks = blocks }
         }
     }
 
@@ -323,20 +400,28 @@ final class ConversationStore {
                     Self.logger.error(
                         "text_delta targeted .stockComparison block id=\(payload.blockId, privacy: .public)"
                     )
+                case .confirmation:
+                    Self.logger.error(
+                        "text_delta targeted .confirmation block id=\(payload.blockId, privacy: .public)"
+                    )
                 }
             }
 
         case .blockData(let payload):
-            mutateAssistantMessage { message in
-                guard let index = message.blocks.firstIndex(where: { $0.blockId == payload.blockId }) else {
-                    Self.logger.error("block_data references unknown block id")
-                    return
-                }
-                guard let merged = mergePatch(into: message.blocks[index], patch: payload.data) else {
-                    return
-                }
-                message.blocks[index] = merged
+            // Searches every message, not just the current one: a confirmation
+            // card resolves cross-turn — the confirm endpoint patches the card's
+            // status before the resumed turn emits its first block.
+            guard let location = locateBlock(payload.blockId) else {
+                Self.logger.error("block_data references unknown block id")
+                return
             }
+            guard let merged = mergePatch(
+                into: messages[location.message].blocks[location.block],
+                patch: payload.data
+            ) else {
+                return
+            }
+            messages[location.message].blocks[location.block] = merged
 
         case .blockEnd:
             // Block finalization is implicit in v0 — no per-block terminal
@@ -360,6 +445,17 @@ final class ConversationStore {
             return
         }
         apply(&messages[index])
+    }
+
+    /// Find a block by id across all messages, newest first. Block ids are
+    /// server-unique, so the first hit is the only hit.
+    private func locateBlock(_ blockId: String) -> (message: Int, block: Int)? {
+        for mi in messages.indices.reversed() {
+            if let bi = messages[mi].blocks.firstIndex(where: { $0.blockId == blockId }) {
+                return (mi, bi)
+            }
+        }
+        return nil
     }
 
     /// Convert the opaque `JSONValue` payload from `block_start` into a typed
@@ -427,6 +523,24 @@ final class ConversationStore {
         request.httpBody = try requestEncoder.encode(body)
         return request
     }
+
+    private func buildActionRequest(
+        actionId: String, decision: String
+    ) throws -> URLRequest {
+        let path =
+            "/v1/conversations/\(conversationId.uuidString.lowercased())"
+            + "/actions/\(actionId)"
+        guard let url = URL(string: baseURL + path) else {
+            throw URLError(.badURL)
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try requestEncoder.encode(
+            ActionDecisionBody(decision: decision)
+        )
+        return request
+    }
 }
 
 /// Wire body for `POST /v1/conversations/{id}/turns`. Mirrors
@@ -444,4 +558,11 @@ private struct TurnRequestBody: Encodable {
         case idempotencyKey = "idempotency_key"
         case clientTimezone = "client_timezone"
     }
+}
+
+/// Wire body for `POST /v1/conversations/{id}/actions/{actionId}`. Mirrors
+/// `app/schemas/conversations.py:ActionDecisionRequest`. The client sends only
+/// the decision — never the action's parameters.
+private struct ActionDecisionBody: Encodable {
+    let decision: String
 }

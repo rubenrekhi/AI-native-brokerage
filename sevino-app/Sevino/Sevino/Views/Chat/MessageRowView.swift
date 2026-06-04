@@ -5,6 +5,9 @@ struct MessageRowView: View {
     let isLastAssistantMessage: Bool
     let turnState: ConversationStore.TurnState
     let scale: CGFloat
+    /// Invoked when the user confirms/rejects a HIL confirmation card.
+    /// `(actionId, decision)` where decision is "confirm" or "reject".
+    var onConfirmAction: ((String, String) -> Void)?
 
     @State private var sequencer = MessageTypewriterSequencer()
 
@@ -95,6 +98,12 @@ struct MessageRowView: View {
             CancelTransferCard(block: ctb, scale: scale)
         case .cancelOrder(let cob):
             CancelOrderCard(block: cob, scale: scale)
+        case .confirmation(let cb):
+            ConfirmationCardView(
+                block: cb,
+                scale: scale,
+                onConfirm: { onConfirmAction?(cb.actionId, "confirm") }
+            )
         }
     }
 }

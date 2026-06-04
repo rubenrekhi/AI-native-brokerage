@@ -326,6 +326,10 @@ class FundingService:
         )
 
     @staticmethod
+    async def require_active_brokerage(db: AsyncSession, user_id: uuid.UUID):
+        return await _require_active_brokerage(db, user_id)
+
+    @staticmethod
     async def create_transfer(
         db: AsyncSession,
         *,

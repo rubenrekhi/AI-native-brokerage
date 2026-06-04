@@ -13,7 +13,7 @@ class TestHardCaps:
         assert caps.max_iterations == 10
         assert caps.max_tool_calls == 20
         assert caps.max_wall_clock_s == 60.0
-        assert caps.max_output_tokens == 2048
+        assert caps.max_output_tokens == 32000
 
     def test_is_frozen(self):
         caps = HardCaps()

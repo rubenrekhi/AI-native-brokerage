@@ -92,16 +92,17 @@ def _free_tcp_port() -> int:
 
 @pytest.fixture(scope="session", autouse=True)
 def _smoke_model_override() -> Iterator[None]:
-    """Pin the smoke harness to ``MODELS.SMOKE`` (Haiku) for the full session.
+    """Pin the smoke harness to ``MODELS.MAIN`` (the prod model) for the session.
 
-    Per AI v0 plan B4.2: smoke tests bill real Anthropic, and the plan
-    pins this harness to the cheap Haiku tier (decision D9) regardless
-    of what ``ANTHROPIC_MODEL_MAIN`` is set to in production. Installing
-    the override here keeps the test files focused on the case under
-    assertion rather than the model wiring.
+    Originally pinned to the cheap Haiku tier (AI v0 plan B4.2, decision D9) to
+    keep smoke billing low. Reversed because Haiku does not support adaptive
+    extended thinking — which the runtime now requests — so calls 400 with
+    "adaptive thinking is not supported on this model". Pinning to MAIN
+    (claude-sonnet-4-6) both supports adaptive and makes smoke canary the real
+    production model, at the cost of pricier smoke runs.
     """
     app.dependency_overrides[get_default_model_config] = (
-        lambda: ModelConfig(model_id=MODELS.SMOKE)
+        lambda: ModelConfig(model_id=MODELS.MAIN)
     )
     try:
         yield

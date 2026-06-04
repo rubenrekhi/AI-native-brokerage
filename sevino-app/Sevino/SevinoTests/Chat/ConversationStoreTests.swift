@@ -456,6 +456,168 @@ final class ConversationStoreTests: XCTestCase {
         _ = try? await task.value
     }
 
+    // MARK: - submitAction (HIL confirm/reject)
+
+    func testSubmitActionPostsDecisionAndStreamsResult() async throws {
+        let client = MockSSEClient(script: [
+            .yield(makeRaw(json: turnStartedJSON())),
+            .yield(makeRaw(json: blockStartTextJSON(blockId: "n1"))),
+            .yield(makeRaw(json: textDeltaJSON(blockId: "n1", text: "Done"))),
+            .yield(makeRaw(json: blockEndJSON(blockId: "n1"))),
+            .yield(makeRaw(json: blockStartConfirmationJSON(
+                blockId: "r1", actionId: "act-123", status: "executed"
+            ))),
+            .yield(makeRaw(json: blockEndJSON(blockId: "r1"))),
+            .yield(makeRaw(json: turnCompletedJSON())),
+        ])
+        let store = makeStore(client: client)
+
+        try await store.submitAction(actionId: "act-123", decision: "confirm")
+
+        XCTAssertEqual(client.capturedRequests.count, 1)
+        let request = client.capturedRequests[0]
+        XCTAssertEqual(
+            request.url?.absoluteString,
+            "\(Self.testBaseURL)/v1/conversations/\(conversationId.uuidString.lowercased())/actions/act-123"
+        )
+        XCTAssertEqual(request.httpMethod, "POST")
+        let body = try XCTUnwrap(request.httpBody)
+        let decoded = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        XCTAssertEqual(decoded?["decision"] as? String, "confirm")
+
+        // No user bubble; the result streams into one assistant message.
+        XCTAssertEqual(store.messages.count, 1)
+        XCTAssertEqual(store.messages[0].role, .assistant)
+        XCTAssertEqual(store.messages[0].blocks.count, 2)
+        XCTAssertEqual(store.state, .idle)
+    }
+
+    func testSendSupersedesPendingConfirmationCard() async throws {
+        let client = MockSSEClient(scripts: [
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartConfirmationJSON(
+                    blockId: "c1", actionId: "a1", status: "pending"
+                ))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "c1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartTextJSON(blockId: "t1"))),
+                .yield(makeRaw(json: textDeltaJSON(blockId: "t1", text: "ok"))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "t1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+        ])
+        let store = makeStore(client: client)
+
+        try await store.send(text: "deposit 500")
+        guard case .confirmation(let card)? = store.messages[1].blocks.first
+        else {
+            return XCTFail("expected a pending confirmation card")
+        }
+        XCTAssertTrue(card.isPending)
+
+        try await store.send(text: "actually never mind")
+        guard case .confirmation(let after)? = store.messages[1].blocks.first
+        else {
+            return XCTFail("confirmation card should still be present")
+        }
+        XCTAssertEqual(after.status, "superseded")
+        XCTAssertFalse(after.isPending)
+    }
+
+    func testSubmitActionRejectMarksCardRejectedAndPostsReject() async throws {
+        let client = MockSSEClient(scripts: [
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartConfirmationJSON(
+                    blockId: "c1", actionId: "a1", status: "pending"
+                ))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "c1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartTextJSON(blockId: "t1"))),
+                .yield(makeRaw(json: textDeltaJSON(blockId: "t1", text: "Okay"))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "t1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+        ])
+        let store = makeStore(client: client)
+        try await store.send(text: "deposit 500")
+
+        try await store.submitAction(actionId: "a1", decision: "reject")
+
+        // The tapped card is deadened locally to "rejected".
+        guard case .confirmation(let card)? = store.messages[1].blocks.first
+        else { return XCTFail("expected the confirmation card") }
+        XCTAssertEqual(card.status, "rejected")
+
+        // The reject POST carried decision=reject to the action endpoint.
+        let req = try XCTUnwrap(client.capturedRequests.last)
+        XCTAssertTrue(req.url?.absoluteString.hasSuffix("/actions/a1") ?? false)
+        let body = try XCTUnwrap(req.httpBody)
+        let json = try JSONSerialization.jsonObject(with: body) as? [String: Any]
+        XCTAssertEqual(json?["decision"] as? String, "reject")
+    }
+
+    func testSubmitActionResolvesPriorCardViaCrossMessageBlockData() async throws {
+        let client = MockSSEClient(scripts: [
+            [
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartConfirmationJSON(
+                    blockId: "c1", actionId: "a1", status: "pending"
+                ))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "c1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+            // Confirm resume: the card patch lands first and targets a card in
+            // the *previous* message, then the turn streams its own blocks.
+            [
+                .yield(makeRaw(json: blockDataJSON(
+                    blockId: "c1", patch: ["status": "executed"]
+                ))),
+                .yield(makeRaw(json: turnStartedJSON())),
+                .yield(makeRaw(json: blockStartTextJSON(blockId: "t1"))),
+                .yield(makeRaw(json: textDeltaJSON(blockId: "t1", text: "On its way"))),
+                .yield(makeRaw(json: blockEndJSON(blockId: "t1"))),
+                .yield(makeRaw(json: turnCompletedJSON())),
+            ],
+        ])
+        let store = makeStore(client: client)
+        try await store.send(text: "deposit 500")
+
+        try await store.submitAction(actionId: "a1", decision: "confirm")
+
+        // The prior turn's card resolved to executed even though the resume
+        // turn created a fresh assistant message after it.
+        guard case .confirmation(let card)? = store.messages[1].blocks.first
+        else { return XCTFail("expected the confirmation card to persist") }
+        XCTAssertEqual(card.status, "executed")
+        XCTAssertFalse(card.isPending)
+    }
+
+    func testSubmitActionStreamErrorSetsErrorStateAndThrows() async {
+        let client = MockSSEClient(script: [.fail(SSEClientError.httpStatus(500))])
+        let store = makeStore(client: client)
+
+        do {
+            try await store.submitAction(actionId: "a1", decision: "confirm")
+            XCTFail("expected submitAction to rethrow the transport error")
+        } catch {
+            XCTAssertEqual(error as? SSEClientError, .httpStatus(500))
+        }
+
+        if case .error(let code, _) = store.state {
+            XCTAssertEqual(code, .internalError)
+        } else {
+            XCTFail("expected .error state, got \(store.state)")
+        }
+    }
+
     // MARK: - Helpers
 
     private func makeStore(
@@ -511,6 +673,14 @@ final class ConversationStoreTests: XCTestCase {
     private func blockStartStatusJSON(blockId: String, label: String, state: String) -> String {
         """
         {"id":"01BS","type":"block_start","block":{"type":"status","block_id":"\(blockId)","label":"\(label)","state":"\(state)"}}
+        """
+    }
+
+    private func blockStartConfirmationJSON(
+        blockId: String, actionId: String, status: String
+    ) -> String {
+        """
+        {"id":"01BS","type":"block_start","block":{"type":"confirmation","block_id":"\(blockId)","action_id":"\(actionId)","kind":"transfer","title":"Confirm deposit","rows":[{"label":"Amount","value":"$500.00"}],"details":{"operation":"deposit","direction":"INCOMING","amount":"500.00","currency":"USD","bank_institution":"Chase","bank_mask":"1234","bank_nickname":"Checking"},"confirm_label":"Confirm","cancel_label":"Cancel","hold_to_confirm":true,"status":"\(status)"}}
         """
     }
 

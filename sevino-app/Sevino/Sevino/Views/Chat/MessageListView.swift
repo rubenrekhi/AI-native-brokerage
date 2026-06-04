@@ -5,6 +5,8 @@ struct MessageListView: View {
     let turnState: ConversationStore.TurnState
     let scale: CGFloat
     var onRetry: (() -> Void)?
+    /// Forwarded to each row's HIL confirmation card: `(actionId, decision)`.
+    var onConfirmAction: ((String, String) -> Void)?
 
     private enum Anchor {
         case bottom
@@ -20,7 +22,8 @@ struct MessageListView: View {
                             message: message,
                             isLastAssistantMessage: index == lastAssistantIdx,
                             turnState: turnState,
-                            scale: scale
+                            scale: scale,
+                            onConfirmAction: onConfirmAction
                         )
                         .padding(.top, index == 0 ? 0 : spacingBefore(index: index))
                     }

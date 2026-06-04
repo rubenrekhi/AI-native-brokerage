@@ -31,6 +31,7 @@ from app.ai.runtime.types import ModelConfig
 from app.ai.transport.emitter import SSEEmitter
 from app.ai.transport.events import Error, TurnCompleted
 from app.repositories.conversation import ConversationRepository
+from app.repositories.pending_action import PendingActionRepository
 from app.schemas.conversations import AttachedContextRequest
 
 __all__ = [
@@ -80,6 +81,7 @@ async def initialize_turn(
     model_config: ModelConfig,
     db_factory: DbSessionFactory,
     time_context: str | None = None,
+    persist_user_message: bool = True,
 ) -> tuple[uuid.UUID, list[dict[str, Any]]]:
     """Persist the user message, load history, open the agent_turn row.
 
@@ -105,28 +107,41 @@ async def initialize_turn(
     conversation caches across turns while the per-turn clock, sitting after
     that breakpoint, never invalidates the cached prefix.
     """
-    async with db_factory() as db:
-        content_blocks: list[dict[str, Any]] = [
-            {
-                "type": "text",
-                "block_id": str(ULID()),
-                "text": user_message,
-            }
-        ]
-        ctx_block: ContextBlock | None = None
-        if user_context is not None:
-            ctx_block = build_context_block(
-                block_id=str(ULID()),
-                kind=user_context.kind,
-                data=user_context.data,
+    # ``persist_user_message=False`` is a system-initiated turn (e.g. a HIL
+    # confirm): no user bubble is persisted and the supersede sweep is skipped
+    # — the confirmed action is already off ``pending`` and a confirm shouldn't
+    # cancel unrelated proposals. The seed prompt reaches the model below.
+    user_message_id: uuid.UUID | None = None
+    ctx_block: ContextBlock | None = None
+    if persist_user_message:
+        async with db_factory() as db:
+            # Any new user message supersedes a hanging proposal in this
+            # conversation — deterministic HIL safety sweep, before the model
+            # runs (docs/ai/hil-actions.md §"Sending a message cancels live
+            # proposals").
+            await PendingActionRepository.supersede_pending_for_conversation(
+                db, conversation_id=conversation_id
             )
-            content_blocks.append(ctx_block.model_dump(mode="json"))
-        user_msg = await ConversationRepository.append_user_message(
-            db,
-            conversation_id=conversation_id,
-            content_blocks=content_blocks,
-        )
-        user_message_id = user_msg.id
+            content_blocks: list[dict[str, Any]] = [
+                {
+                    "type": "text",
+                    "block_id": str(ULID()),
+                    "text": user_message,
+                }
+            ]
+            if user_context is not None:
+                ctx_block = build_context_block(
+                    block_id=str(ULID()),
+                    kind=user_context.kind,
+                    data=user_context.data,
+                )
+                content_blocks.append(ctx_block.model_dump(mode="json"))
+            user_msg = await ConversationRepository.append_user_message(
+                db,
+                conversation_id=conversation_id,
+                content_blocks=content_blocks,
+            )
+            user_message_id = user_msg.id
 
     async with db_factory() as db:
         history = await ConversationRepository.load_history(db, conversation_id)
@@ -135,12 +150,22 @@ async def initialize_turn(
         for m in history
     ]
 
-    # Model channel, current turn only: build the attachment's hint and
-    # append it to the just-persisted user message (``messages[-1]``). The
-    # hint is ``kind``-driven and projects only a whitelisted ``data`` field.
-    if ctx_block is not None:
-        messages[-1]["content"].append(
-            {"type": "text", "text": ctx_block.render_hint()}
+    if persist_user_message:
+        # Model channel, current turn only: append the attachment's hint to
+        # the just-persisted user message (``messages[-1]``). The hint is
+        # ``kind``-driven and projects only a whitelisted ``data`` field.
+        if ctx_block is not None:
+            messages[-1]["content"].append(
+                {"type": "text", "text": ctx_block.render_hint()}
+            )
+    else:
+        # The seed prompt is the model's latest input for this system-initiated
+        # turn (model-only — not persisted, never replayed).
+        messages.append(
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": user_message}],
+            }
         )
 
     append_time_context(messages, time_context)
