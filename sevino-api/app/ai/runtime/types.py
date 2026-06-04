@@ -17,6 +17,9 @@ class LoopState:
     tool_calls: int = 0
     output_tokens: int = 0
     started_at_monotonic: float = field(default_factory=time.monotonic)
+    # Set on system-initiated resume turns (post-confirmation): a proposal raised
+    # here is dropped rather than carded, so the turn can't re-propose (Bug A).
+    suppress_proposals: bool = False
 
 
 @dataclass(frozen=True, slots=True)

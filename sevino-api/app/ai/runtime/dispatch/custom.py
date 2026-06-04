@@ -155,6 +155,7 @@ async def _dispatch_one_tool_use(
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
     invocation_id: uuid.UUID,
+    suppress_proposals: bool = False,
 ) -> _PerToolResult:
     """Lookup → validate → execute → persist → emit wire events.
 
@@ -259,6 +260,42 @@ async def _dispatch_one_tool_use(
     # card. A persist failure degrades to a tool error (no card, no gate)
     # rather than leaving a tappable card with no backing row.
     proposal_raised = False
+    if tool_result.proposal is not None and suppress_proposals:
+        # Bug A runtime guard: a system-initiated resume turn (post-confirmation)
+        # must never re-propose — the action is already final. Drop the proposal
+        # without persisting a row or emitting a card, and hand the model a result
+        # that tells it to narrate, so it can't spin up a fresh confirmation card.
+        logger.info(
+            "loop_proposal_suppressed_on_resume",
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+        )
+        await record_tool_execution(
+            db_factory,
+            model_invocation_id=invocation_id,
+            tool_name=tool_name,
+            tool_use_id=tool_use_id,
+            input_payload=input_payload,
+            status="success",
+            output_payload=tool_result.model_payload,
+            internal_trace=tool_result.internal_trace,
+            latency_ms=tool_latency_ms,
+        )
+        return _PerToolResult(
+            tool_result_block={
+                "type": "tool_result",
+                "tool_use_id": tool_use_id,
+                "content": (
+                    "This action has already been completed and cannot be "
+                    "proposed again here. Do not call this tool — just tell the "
+                    "user the outcome in plain words."
+                ),
+            },
+            ui_block_dict=None,
+            counted=True,
+            error_code=None,
+            proposal_raised=False,
+        )
     if tool_result.proposal is not None:
         if ui_block_dict is None:
             # A proposal with no confirmation card means an empty ``preview``,
@@ -351,6 +388,7 @@ async def dispatch_tool_uses(
     sse_emitter: SSEEmitter,
     http_clients: ToolHttpClients,
     invocation_id: uuid.UUID,
+    suppress_proposals: bool = False,
 ) -> ToolDispatchOutcome:
     """Run every ``tool_use`` block in parallel.
 
@@ -379,6 +417,7 @@ async def dispatch_tool_uses(
             sse_emitter=sse_emitter,
             http_clients=http_clients,
             invocation_id=invocation_id,
+            suppress_proposals=suppress_proposals,
         )
         for block in tool_use_blocks
     ]

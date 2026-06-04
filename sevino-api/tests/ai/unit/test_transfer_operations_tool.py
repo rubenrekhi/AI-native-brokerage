@@ -14,6 +14,7 @@ from app.ai.tools.transfer_operations import (
     TransferOperations,
     TransferOperationsInput,
 )
+from app.exceptions import ConflictError
 
 
 def _rel(
@@ -55,7 +56,16 @@ def _patch_list(monkeypatch, rels):
     )
 
 
+def _patch_active_brokerage(monkeypatch, exc=None):
+    monkeypatch.setattr(
+        "app.ai.tools.transfer_operations.FundingService."
+        "require_active_brokerage",
+        AsyncMock(side_effect=exc) if exc else AsyncMock(return_value=MagicMock()),
+    )
+
+
 async def _run(monkeypatch, rels, **input_kwargs):
+    _patch_active_brokerage(monkeypatch)
     _patch_list(monkeypatch, rels)
     return await TransferOperations().execute(
         TransferOperationsInput(**input_kwargs), _make_ctx()
@@ -166,3 +176,21 @@ async def test_brokerage_unavailable_when_no_alpaca():
     )
     assert result.proposal is None
     assert result.model_payload["code"] == "BROKERAGE_UNAVAILABLE"
+
+
+async def test_account_not_active_blocks_proposal(monkeypatch):
+    _patch_active_brokerage(
+        monkeypatch,
+        exc=ConflictError(
+            "Your brokerage account is not active yet.",
+            code="ACCOUNT_NOT_ACTIVE",
+        ),
+    )
+    _patch_list(monkeypatch, [_rel()])
+    result = await TransferOperations().execute(
+        TransferOperationsInput(operation="deposit", amount=Decimal("100")),
+        _make_ctx(),
+    )
+    assert result.proposal is None
+    assert result.ui_block is None
+    assert result.model_payload["code"] == "ACCOUNT_NOT_ACTIVE"

@@ -270,12 +270,10 @@ async def test_iteration_two_request_messages_contain_iteration_one_signature(
         assert result.iterations_count == 2
         assert client.messages.stream.call_count == 2
 
-        # Both stream() calls must carry the thinking config (A1.7).
+        # Both stream() calls must carry the adaptive thinking config.
         for call in client.messages.stream.call_args_list:
-            assert call.kwargs["thinking"] == {
-                "type": "enabled",
-                "budget_tokens": 1024,
-            }
+            assert call.kwargs["thinking"] == {"type": "adaptive"}
+            assert call.kwargs["output_config"] == {"effort": "high"}
 
         async with AsyncSession(bind=db_engine, expire_on_commit=False) as v:
             invs = (

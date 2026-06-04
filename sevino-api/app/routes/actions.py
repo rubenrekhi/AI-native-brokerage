@@ -210,6 +210,7 @@ def _stream_resume_turn(
                 conversation_id=conversation_id,
                 user_message=seed_prompt,
                 persist_user_message=False,
+                suppress_proposals=True,
                 anthropic_client=anthropic_client,
                 db_factory=db_factory,
                 tool_registry=DEFAULT_REGISTRY,

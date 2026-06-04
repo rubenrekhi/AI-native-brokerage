@@ -48,6 +48,34 @@ def _flow_phrase(operation: str, bank: str) -> str:
     )
 
 
+def _alpaca_failure_reason(exc: AlpacaBrokerError) -> str:
+    """Translate a known Alpaca rejection into an honest, user-safe reason.
+
+    Matches on Alpaca's stable error code first, then message text. Unknown
+    errors fall back to a generic line — raw upstream text is never surfaced
+    (Section 7), but the common, non-sensitive cases get a truthful reason the
+    model can relay instead of a vague "couldn't process it".
+    """
+    code = (exc.detail or {}).get("code")
+    text = (exc.message or "").lower()
+
+    # 40310000: withdrawal exceeds withdrawable cash — typically because a
+    # recent ACH deposit hasn't settled yet.
+    if code == 40310000 or "withdrawable" in text:
+        return (
+            "that's more than the balance available to withdraw right now — "
+            "recently deposited funds aren't withdrawable until they settle, "
+            "which takes about 1–3 business days."
+        )
+    # Alpaca de-dupes identical transfers submitted close together.
+    if "duplicate" in text:
+        return (
+            "it looked like a duplicate of a transfer that was just made, so "
+            "it wasn't submitted again."
+        )
+    return "the brokerage couldn't process it right now."
+
+
 class TransferActionHandler:
     """Executes confirmed deposits/withdrawals and supplies the resume/reject
     prompts that seed the follow-up agent turn."""
@@ -70,22 +98,26 @@ class TransferActionHandler:
             return ActionResult(
                 status="executed",
                 resume_prompt=(
-                    f"The user just confirmed and authorized the {verb} you "
-                    f"proposed: {amount_str} {flow}. It went through — the "
-                    "transfer has been created and is on its way. Let them "
-                    "know it's submitted (ACH transfers typically take 1–3 "
-                    "business days to settle) and offer any natural next step. "
-                    "Keep it brief and conversational."
+                    f"The {verb} the user authorized is already complete: "
+                    f"{amount_str} {flow} went through and is on its way (ACH "
+                    "transfers take 1–3 business days to settle). Your only job "
+                    "now is to narrate this in one or two brief, friendly "
+                    "sentences. Do NOT call the transfer tool again or propose "
+                    "another transfer — the action is already final. Don't line "
+                    "up a next step; wait for the user to ask."
                 ),
                 summary={"amount": str(amount), "direction": direction},
             )
         return ActionResult(
             status="failed",
             resume_prompt=(
-                f"The user confirmed the {verb} you proposed ({amount_str} "
-                f"{flow}), but it could not be completed: {reason} Briefly "
-                "apologize, explain what happened in plain terms, and suggest "
-                "what they can do next. Do not claim the transfer succeeded."
+                f"The {verb} the user authorized ({amount_str} {flow}) was "
+                f"already attempted and could not be completed: {reason} Your "
+                "only job now is to narrate this in one or two brief sentences: "
+                "apologize and explain the reason in plain language. Do NOT call "
+                "the transfer tool again or retry/propose the transfer yourself "
+                "— if they want to try again, they can ask. Do not claim the "
+                "transfer succeeded."
             ),
             summary={
                 "error": reason,
@@ -103,8 +135,9 @@ class TransferActionHandler:
         return (
             f"The user declined the {_verb(operation)} you proposed "
             f"(${amount:,.2f} with {_bank_label(payload)}) — they tapped "
-            "Cancel without confirming. Acknowledge briefly and let them know "
-            "they can ask again whenever they're ready. Don't be pushy."
+            "Cancel without confirming. Acknowledge briefly, don't be pushy, "
+            "and don't re-propose it; let them know they can ask again whenever "
+            "they're ready."
         )
 
     @staticmethod
@@ -141,15 +174,27 @@ class TransferActionHandler:
             )
             message = getattr(exc, "message", None)
             return message or "please try again shortly."
-        except (AlpacaBrokerError, AlpacaBrokerUnavailableError) as exc:
+        except AlpacaBrokerUnavailableError as exc:
+            logger.warning(
+                "transfer_action_unavailable",
+                user_id=str(ctx.user_id),
+                direction=direction,
+                error=str(exc),
+            )
+            return (
+                "the brokerage is temporarily unreachable — please try again "
+                "in a moment."
+            )
+        except AlpacaBrokerError as exc:
             logger.warning(
                 "transfer_action_upstream_failed",
                 user_id=str(ctx.user_id),
                 direction=direction,
+                status_code=exc.status_code,
+                code=(exc.detail or {}).get("code"),
                 error=str(exc),
-                exc_type=type(exc).__name__,
             )
-            return "the brokerage couldn't process it right now."
+            return _alpaca_failure_reason(exc)
         except Exception:
             logger.exception(
                 "transfer_action_unexpected_error",

@@ -99,10 +99,8 @@ def build_iteration_request(
         "system": request_system,
         "messages": messages,
         "max_tokens": hard_caps.max_output_tokens,
-        "thinking": {
-            "type": "enabled",
-            "budget_tokens": hard_caps.thinking_budget_tokens,
-        },
+        "thinking": {"type": "adaptive"},
+        "output_config": {"effort": "high"},
     }
     server_tool_specs = build_server_tool_specs(server_tools_config)
     registry_specs: list[dict[str, Any]] = (
@@ -156,6 +154,7 @@ async def _decide_after_response(
             sse_emitter=sse_emitter,
             http_clients=http_clients,
             invocation_id=invocation_id,
+            suppress_proposals=state.suppress_proposals,
         )
         if tool_outcomes.terminal_error_code is not None:
             assistant_blocks.extend(tool_outcomes.ui_block_dicts)

@@ -166,6 +166,62 @@ async def test_dispatch_does_not_persist_when_create_fails(monkeypatch):
     )
 
 
+async def test_dispatch_suppresses_proposal_on_resume(patched_repos):
+    # Bug A guard: on a system-initiated resume turn a proposal is dropped — no
+    # pending row, no card, no gate — but the model still gets a tool_result so
+    # it narrates instead of spinning up another confirmation card.
+    create = patched_repos
+    emitter = _RecordingEmitter()
+
+    outcome = await dispatch_tool_uses(
+        response_blocks=[_tool_use_block()],
+        tool_registry=_registry(),
+        user_id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        turn_id=uuid.uuid4(),
+        db_factory=_db_factory,
+        sse_emitter=emitter,
+        http_clients=ToolHttpClients(),
+        invocation_id=uuid.uuid4(),
+        suppress_proposals=True,
+    )
+
+    assert outcome.proposal_raised is False
+    create.assert_not_awaited()
+    assert not any(
+        isinstance(e, BlockStart) and e.block.get("type") == "confirmation"
+        for e in emitter.events
+    )
+    assert len(outcome.tool_result_blocks) == 1
+
+
+async def test_decide_after_response_does_not_gate_on_resume(patched_repos):
+    # With suppress_proposals the resume turn keeps going rather than ending
+    # awaiting_confirmation, and appends no confirmation card.
+    emitter = _RecordingEmitter()
+    response = SimpleNamespace(stop_reason="tool_use", content=[_tool_use_block()])
+    messages: list = []
+    assistant_blocks: list = []
+
+    outcome = await _decide_after_response(
+        response=response,
+        invocation_id=uuid.uuid4(),
+        state=LoopState(suppress_proposals=True),
+        messages=messages,
+        assistant_blocks=assistant_blocks,
+        tool_registry=_registry(),
+        user_id=uuid.uuid4(),
+        conversation_id=uuid.uuid4(),
+        turn_id=uuid.uuid4(),
+        db_factory=_db_factory,
+        sse_emitter=emitter,
+        http_clients=ToolHttpClients(),
+    )
+
+    assert outcome.terminal_state != "awaiting_confirmation"
+    assert not any(b.get("type") == "confirmation" for b in assistant_blocks)
+
+
 async def test_decide_after_response_ends_turn_awaiting_confirmation(
     patched_repos,
 ):

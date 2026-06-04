@@ -26,9 +26,9 @@ class HardCaps:
     max_iterations: int = 10
     max_tool_calls: int = 20
     max_wall_clock_s: float = 60.0
-    max_output_tokens: int = 2048
-    # Anthropic requires ``budget_tokens >= 1024`` and ``< max_tokens``.
-    thinking_budget_tokens: int = 1024
+    # Hard ceiling on thinking + output tokens combined. Adaptive thinking
+    # (set in the request) spends only what it needs up to this cap.
+    max_output_tokens: int = 32000
 
 
 def check_caps(

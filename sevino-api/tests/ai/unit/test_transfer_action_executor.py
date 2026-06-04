@@ -54,6 +54,8 @@ async def test_execute_success_returns_executed_resume_prompt(monkeypatch):
     assert "$500.00" in result.resume_prompt
     # The seed instructs the model to narrate success (not assert it itself).
     assert "went through" in result.resume_prompt
+    # Bug A regression: the seed must not invite re-proposing on the resume turn.
+    assert "do not call the transfer tool again" in result.resume_prompt.lower()
     assert result.summary == {"amount": "500.00", "direction": "INCOMING"}
 
 
@@ -69,6 +71,7 @@ async def test_execute_business_error_uses_curated_reason(monkeypatch):
     assert result.status == "failed"
     assert "still being verified" in result.resume_prompt
     assert "do not claim the transfer succeeded".lower() in result.resume_prompt.lower()
+    assert "do not call the transfer tool again" in result.resume_prompt.lower()
 
 
 async def test_execute_alpaca_error_does_not_leak_raw_text(monkeypatch):
@@ -79,6 +82,42 @@ async def test_execute_alpaca_error_does_not_leak_raw_text(monkeypatch):
     result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
     assert result.status == "failed"
     assert "xyz" not in result.resume_prompt
+
+
+async def test_execute_insufficient_withdrawable_explains_settlement(monkeypatch):
+    _patch_create(
+        monkeypatch,
+        side_effect=AlpacaBrokerError(
+            403,
+            "transfer amount must be less than or equal to withdrawable cash",
+            detail={
+                "code": 40310000,
+                "message": "transfer amount must be less than or equal to withdrawable cash",
+            },
+        ),
+    )
+    result = await TransferActionHandler().execute(
+        {**_PAYLOAD, "direction": "OUTGOING", "operation": "withdraw"}, _ctx()
+    )
+    assert result.status == "failed"
+    reason = result.resume_prompt.lower()
+    assert "settle" in reason and "withdraw" in reason
+    # The curated reason explains the cause without echoing raw Alpaca phrasing.
+    assert "withdrawable cash" not in result.resume_prompt
+
+
+async def test_execute_duplicate_transfer_is_explained(monkeypatch):
+    _patch_create(
+        monkeypatch,
+        side_effect=AlpacaBrokerError(
+            422,
+            "duplicate transfer request",
+            detail={"message": "duplicate transfer request"},
+        ),
+    )
+    result = await TransferActionHandler().execute(_PAYLOAD, _ctx())
+    assert result.status == "failed"
+    assert "duplicate" in result.resume_prompt.lower()
 
 
 async def test_execute_unavailable_does_not_leak(monkeypatch):

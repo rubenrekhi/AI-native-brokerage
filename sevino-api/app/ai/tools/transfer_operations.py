@@ -23,6 +23,7 @@ from ulid import ULID
 
 from app.ai.blocks import ConfirmationBlock, ConfirmationRow
 from app.ai.tools.base import ProposedAction, Tool, ToolContext, ToolResult
+from app.exceptions import ConflictError
 from app.models.ach_relationship import AchRelationship
 from app.services.funding import FundingService
 
@@ -39,6 +40,7 @@ _TOOL_DESCRIPTION = """Propose moving money between the user's linked bank and t
 This tool does NOT move the money. It presents a confirmation card showing the amount and bank; the user must physically tap to confirm before the transfer runs. Never tell the user the transfer is done, scheduled, or in progress from this call — the result comes back to you only after they confirm.
 
 Requires `amount` (US dollars, > 0). `bank_hint` is optional: pass it (a bank nickname, institution name, or last-4) only when the user has more than one linked bank and named which one. Behaviour:
+- Brokerage account not active yet → {"status":"error","code":"ACCOUNT_NOT_ACTIVE"}: tell the user their account isn't ready for transfers yet.
 - No linked bank → returns {"status":"error","code":"NO_LINKED_BANK"}: tell the user to link a bank first.
 - Bank linked but still verifying → {"status":"error","code":"BANK_NOT_APPROVED"}.
 - One usable bank → returns {"status":"proposal_presented", ...} and the confirmation card is shown.
@@ -120,6 +122,16 @@ class TransferOperations(Tool[TransferOperationsInput]):
             )
 
         async with ctx.db_factory() as db:
+            try:
+                await FundingService.require_active_brokerage(db, ctx.user_id)
+            except ConflictError as exc:
+                return ToolResult(
+                    model_payload={
+                        "status": "error",
+                        "code": exc.code,
+                        "error": exc.message,
+                    }
+                )
             relationships = (
                 await FundingService.list_active_ach_relationships(
                     db, alpaca=alpaca, user_id=ctx.user_id
