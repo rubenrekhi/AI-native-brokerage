@@ -1,37 +1,38 @@
 import SwiftUI
 
-/// Card-local palette for the transfer flow. Saturated mint/amber/red tints that
-/// don't exist in the global theme (Sevino is pre-launch, so these live here until a
-/// shared "MCP card" palette is extracted). Shared between `TransferCard` and
-/// `TransferConfirmationCard`.
+/// Card-local palette for the transfer flow. Adapts to light/dark via the app's
+/// `Color.adaptive` / `sevinoSecondary` tokens so text and accents read correctly
+/// in both modes — the card surface itself comes from the shared
+/// `GenUICardBackground`. The saturated mint/amber/red accents are deepened in
+/// light mode for contrast on a white card and stay bright in dark mode. Shared
+/// between `TransferCard` and `TransferConfirmationCard`.
 enum TransferPalette {
-    // Surfaces
-    static let cardBackground = Color(red: 0.09, green: 0.09, blue: 0.10)
-    static let chipBackground = Color.white.opacity(0.04)
-    static let chipBorder = Color.white.opacity(0.06)
+    // Inner surfaces (chips sit on top of the GenUICardBackground card surface)
+    static let chipBackground = Color.sevinoSecondary.opacity(0.05)
+    static let chipBorder = Color.sevinoSecondary.opacity(0.08)
 
-    // Direction accents
-    static let depositGreen = Color(red: 0.48, green: 0.91, blue: 0.56)
-    static let depositGreenMuted = Color(red: 0.48, green: 0.91, blue: 0.56).opacity(0.14)
-    static let withdrawAmber = Color(red: 0.93, green: 0.71, blue: 0.29)
-    static let withdrawAmberMuted = Color(red: 0.93, green: 0.71, blue: 0.29).opacity(0.14)
-    static let failRed = Color(red: 0.93, green: 0.34, blue: 0.34)
-    static let failRedMuted = Color(red: 0.93, green: 0.34, blue: 0.34).opacity(0.14)
+    // Direction accents — bright in dark, deepened in light for white-card contrast
+    static let depositGreen = Color.adaptive(light: 0x1E8A60, dark: 0x7AE88F)
+    static let depositGreenMuted = Color.adaptive(light: 0x1E8A60, dark: 0x7AE88F).opacity(0.16)
+    static let withdrawAmber = Color.adaptive(light: 0xB7791F, dark: 0xEDB54A)
+    static let withdrawAmberMuted = Color.adaptive(light: 0xB7791F, dark: 0xEDB54A).opacity(0.16)
+    static let failRed = Color.adaptive(light: 0xC0392B, dark: 0xED5757)
+    static let failRedMuted = Color.adaptive(light: 0xC0392B, dark: 0xED5757).opacity(0.16)
 
-    // Confirm button
-    static let confirmEnabled = Color(red: 0.66, green: 0.94, blue: 0.55)
-    static let confirmEnabledText = Color.black
-    static let confirmDisabledBg = Color.white.opacity(0.06)
-    static let confirmDisabledText = Color.white.opacity(0.45)
+    // Confirm button (manual entry flow only — the AI card uses HoldToConfirmButton)
+    static let confirmEnabled = Color.adaptive(light: 0x1E8A60, dark: 0xA8F08C)
+    static let confirmEnabledText = Color.adaptive(light: 0xFFFFFF, dark: 0x000000)
+    static let confirmDisabledBg = Color.sevinoSecondary.opacity(0.08)
+    static let confirmDisabledText = Color.sevinoSecondary.opacity(0.4)
 
-    // Semantic text & stroke tokens (used across both card files)
-    static let textPrimary = Color.white
-    static let textSecondary = Color.white.opacity(0.55)
-    static let textTertiary = Color.white.opacity(0.5)
-    static let textMuted = Color.white.opacity(0.45)
-    static let textFaint = Color.white.opacity(0.4)
-    static let iconBgSubtle = Color.white.opacity(0.08)
-    static let iconBgHairline = Color.white.opacity(0.06)
-    static let hairline = Color.white.opacity(0.06)
-    static let dividerSubtle = Color.white.opacity(0.05)
+    // Text & strokes — sevinoSecondary is near-black in light, near-white in dark
+    static let textPrimary = Color.sevinoSecondary
+    static let textSecondary = Color.sevinoSecondary.opacity(0.6)
+    static let textTertiary = Color.sevinoSecondary.opacity(0.5)
+    static let textMuted = Color.sevinoSecondary.opacity(0.45)
+    static let textFaint = Color.sevinoSecondary.opacity(0.4)
+    static let iconBgSubtle = Color.sevinoSecondary.opacity(0.08)
+    static let iconBgHairline = Color.sevinoSecondary.opacity(0.06)
+    static let hairline = Color.sevinoSecondary.opacity(0.1)
+    static let dividerSubtle = Color.sevinoSecondary.opacity(0.08)
 }

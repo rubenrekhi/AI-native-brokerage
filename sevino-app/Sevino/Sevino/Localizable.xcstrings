@@ -844,37 +844,17 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "1–3 business days"
+            "value" : "2-3 days"
           }
         }
       }
     },
-    "confirmation.status_cancelled" : {
+    "confirmation.submitting" : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Cancelled"
-          }
-        }
-      }
-    },
-    "confirmation.status_expired" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Expired"
-          }
-        }
-      }
-    },
-    "confirmation.status_superseded" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No longer available"
+            "value" : "Submitting…"
           }
         }
       }
