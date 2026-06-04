@@ -13,7 +13,7 @@ File paths are relative to `sevino-api/`.
 | Reads / writes | reads the user's **APPROVED** ACH relationships via `FundingService.list_active_ach_relationships`; **moves no money** — the transfer runs on confirm, not here |
 | Freshness | live read of the user's linked banks (DB + Alpaca, via `FundingService`) |
 | Status pill | **none** — unlike the read tools, this one emits no `StatusBlock`; its `ui_block` is the `ConfirmationBlock` card |
-| Proposal | `ConfirmationBlock(kind="transfer")` + `ProposedAction(action_type="transfer")`, `expires_in_s=300` |
+| Proposal | `ConfirmationBlock(kind="transfer")` + `ProposedAction(action_type="transfer")`, `expires_in_s=60` |
 | Session | opens its own DB session from `ctx.db_factory` |
 
 The model calls this when the user wants to move money — "deposit $500", "add money", "withdraw $200 to my bank", "take some cash out". It parses the dollar `amount`, picks `operation`, and passes `bank_hint` **only** when the user has more than one linked bank and named which one. It never tells the user the transfer is done, scheduled, or in progress from this call — the outcome comes back only after the tap. The system prompt (`app/ai/prompts/sevino_v1.md` §"Deposits and withdrawals (`transfer_operations`)" and §"Confirming consequential actions") owns this guidance.
@@ -48,6 +48,7 @@ The tool returns one of three shapes. **None of them means money moved** — at 
 
 | `code` | When | What the model does |
 |---|---|---|
+| `ACCOUNT_NOT_ACTIVE` | the user's brokerage account isn't `ACTIVE` yet (`FundingService.require_active_brokerage` raises `ConflictError`) | tell them their account isn't ready for transfers yet |
 | `NO_LINKED_BANK` | the user has no linked bank at all | tell them to link a bank first |
 | `BANK_NOT_APPROVED` | a bank is linked but still verifying (no relationship in `APPROVED`) | tell them the link is still being verified |
 | `BROKERAGE_UNAVAILABLE` | the Alpaca client is absent (`ctx.http_clients.alpaca is None`) | tell them transfers are temporarily unavailable |
@@ -58,9 +59,10 @@ The tool returns one of three shapes. **None of them means money moved** — at 
 
 `execute` resolves exactly one source bank, or refuses:
 
-1. List the user's active ACH relationships → none at all ⇒ `NO_LINKED_BANK`.
-2. Keep only those in `APPROVED` status (`usable`) → none usable ⇒ `BANK_NOT_APPROVED`.
-3. `_resolve_bank(usable, bank_hint)`:
+1. The brokerage account must be `ACTIVE` (`FundingService.require_active_brokerage`) → otherwise `ACCOUNT_NOT_ACTIVE`. (This is checked after the `BROKERAGE_UNAVAILABLE` Alpaca-client guard.)
+2. List the user's active ACH relationships → none at all ⇒ `NO_LINKED_BANK`.
+3. Keep only those in `APPROVED` status (`usable`) → none usable ⇒ `BANK_NOT_APPROVED`.
+4. `_resolve_bank(usable, bank_hint)`:
    - **with `bank_hint`** — keep relationships whose nickname/institution/mask contains the hint; a **single** match wins, zero or multiple ⇒ `needs_clarification`.
    - **without `bank_hint`** — the **single** usable bank wins; more than one ⇒ `needs_clarification`.
 
@@ -79,7 +81,7 @@ On success the tool builds two artifacts that travel together; the HIL gate pers
 - `details` (kind-specific, opaque to the framework, consumed by the iOS layout): `operation`, `direction`, `amount`, `currency` (`"USD"`), `bank_institution`, `bank_mask`, `bank_nickname`.
 - `hold_to_confirm` defaults `true` (iOS renders hold-to-confirm).
 
-**`ProposedAction`** (`proposal`, `action_type="transfer"`, `expires_in_s=300`) — what executes server-side on confirm. Its `payload` is the resolved, deterministic, executed-verbatim args: `relationship_pk`, `amount`, `direction`, `operation`, plus the **display-only** `bank_institution` / `bank_mask` / `bank_nickname` (carried so the result receipt can name the bank without a re-lookup). The client can't alter this payload between proposing and confirming.
+**`ProposedAction`** (`proposal`, `action_type="transfer"`, `expires_in_s=60` — the transfer overrides the 300s `ProposedAction` default with a deliberately short window) — what executes server-side on confirm. Its `payload` is the resolved, deterministic, executed-verbatim args: `relationship_pk`, `amount`, `direction`, `operation`, plus the **display-only** `bank_institution` / `bank_mask` / `bank_nickname` (carried so the result receipt can name the bank without a re-lookup). The client can't alter this payload between proposing and confirming.
 
 The same `action_id` is stamped on both the card and the proposal — it is what `POST /v1/conversations/{conversation_id}/actions/{action_id}` posts back.
 

@@ -18,6 +18,7 @@ Major moving parts:
 - **Tools** (`tools/`) — the `Tool` ABC, `ToolRegistry`, and seven concrete tools. Six have a dedicated reference under [`tools/`](tools/): [`get_stock_info`](tools/get_stock_info.md), [`display_stock_card`](tools/display_stock_card.md), [`radar_operations`](tools/radar_operations.md), [`get_portfolio`](tools/get_portfolio.md), [`get_portfolio_performance`](tools/get_portfolio_performance.md), [`transfer_operations`](tools/transfer_operations.md) (the first human-in-the-loop tool — see [`hil-actions.md`](hil-actions.md)); `get_account_activity` is summarized in §6.
 - **Transport** (`transport/`) — SSE event types (`events.py`), the bounded-queue emitter (`emitter.py`), and Redis idempotency (`idempotency.py`).
 - **Blocks** (`blocks.py`) — the UI block schemas streamed and persisted; hand-mirrored by iOS.
+- **HIL actions** (`actions/`) — handlers for consequential, human-confirmed actions (deposits/withdrawals today); the propose → confirm → resume framework is documented in [`hil-actions.md`](hil-actions.md).
 - **Prompts / models / client / observability** — system-prompt loading, model identifiers, the Anthropic client, and the Langfuse wrapper.
 
 Anthropic errors and cap breaches never raise out of the loop — they are persisted with `terminal_state='error'` (or a specific cap state) and surfaced as an SSE `error` frame. Only `CancelledError` propagates (after partial state is flushed).
@@ -30,8 +31,12 @@ Anthropic errors and cap breaches never raise out of the loop — they are persi
 app/ai/
 ├── __init__.py                     # empty package marker
 ├── anthropic_client.py             # create AsyncAnthropic; get_anthropic(request) dependency
-├── blocks.py                       # UI Block schemas (text/status/stock_card/thinking); iOS mirror
+├── blocks.py                       # UI Block schemas (text/status/stock_card/thinking/recurring_investment_setup/confirmation); iOS mirror
 ├── models.py                       # MODELS (MAIN/SMOKE) + get_default_model_config()
+├── actions/                        # human-in-the-loop action handlers (run on confirm)
+│   ├── __init__.py                 # ACTION_HANDLERS registry + register/get_action_handler
+│   ├── base.py                     # ActionHandler Protocol, ActionResult, ActionContext
+│   └── transfer.py                 # TransferActionHandler — runs the ACH transfer on confirm
 ├── observability/
 │   ├── __init__.py                 # empty
 │   └── langfuse.py                 # real Langfuse or _NoopLangfuse stub; get_langfuse(request)
@@ -85,6 +90,8 @@ Persistence and wiring live outside `ai/` but are integral:
 - `app/routes/conversations.py` — the HTTP endpoint, idempotency, replay, SSE driver task.
 - `app/repositories/conversation.py` — `ConversationRepository`, all DB reads/writes for the audit trail.
 - `app/models/{conversation,message,agent_turn,model_invocation,tool_execution}.py` — the schema.
+- `app/routes/actions.py` — the HIL confirm endpoint (`POST /v1/conversations/{id}/actions/{action_id}`) + its own SSE driver for the follow-up turn.
+- `app/models/pending_action.py` + `app/repositories/pending_action.py` — the `pending_actions` row (HIL source of truth) and its atomic-CAS transitions. See [`hil-actions.md`](hil-actions.md).
 - `app/lifecycle.py` — builds the Anthropic client, Langfuse client, `db_factory`, and `MarketDataService` onto `app.state`.
 
 ---
@@ -103,10 +110,10 @@ A single user message, traced through the exact functions it hits.
    - `claimed` → first mover, continue.
 4. **`SSEEmitter()`** is created. `post_turn` returns `EventSourceResponse(_stream())`. `_stream` spawns `_drive_turn` as a detached `asyncio.Task` and then yields events out of `emitter.iter_events()`.
 5. **`_drive_turn`** builds `ServerToolsConfig` from `settings`, fetches the live time context and the per-user profile (`_build_turn_user_profile` → `build_user_profile_context`), and calls **`run_agent_turn`** (`runtime/loop.py`) with the emitter, `DEFAULT_REGISTRY`, `ToolHttpClients(...)`, the system prompt, time context, user profile, model config, hard caps, and Langfuse.
-6. **`run_agent_turn`** validates caps (`max_output_tokens > thinking_budget_tokens`, else `ValueError`), then **`initialize_turn`** (`flow/turn_lifecycle.py`): persists the user message (+ optional `context` block), loads history into `messages`, appends the request-only time-context block to the current user message, marks the end of prior-turn history as a cache breakpoint, and opens the `agent_turns` row. Returns `(turn_id, messages)`.
+6. **`run_agent_turn`** calls **`initialize_turn`** (`flow/turn_lifecycle.py`): on a user-initiated turn it first runs the **HIL supersede sweep** (any new user message cancels a still-`pending` proposal in this conversation — see [`hil-actions.md`](hil-actions.md)), persists the user message (+ optional `context` block), loads history into `messages`, appends the request-only time-context block to the current user message, marks the end of prior-turn history as a cache breakpoint, and opens the `agent_turns` row. Returns `(turn_id, messages)`. (A system-initiated confirm turn passes `persist_user_message=False`: no user bubble, no supersede sweep — the handler's seed prompt is appended as the model's latest input instead.)
 7. The loop **emits `TurnStarted`**, marks the system prompt as a cache breakpoint (and, when a user profile is present, a second `system` block + breakpoint for it) — the live clock rides the user message instead (step 6) — opens a Langfuse `agent` span, and enters `while True`.
 8. Each iteration: `disconnect_check` (None in prod) → `check_caps` → **`run_one_iteration`** (`flow/iteration.py:195`):
-   1. **`build_iteration_request`** — assembles `messages.stream` kwargs: model, system, messages, `max_tokens`, `thinking`, and a combined `tools` array (server-tool specs + registry specs; no cache marker — tools cache via the system-prompt prefix).
+   1. **`build_iteration_request`** — assembles `messages.stream` kwargs: model, system, messages, `max_tokens` (the `max_output_tokens` cap), `thinking: {type: adaptive}` + `output_config: {effort: high}` (adaptive extended thinking — the model spends only the thinking it needs under the combined token cap), and a combined `tools` array (server-tool specs + registry specs; no cache marker — tools cache via the system-prompt prefix).
    2. **`StreamConsumer.consume`** (`flow/stream_consumer.py`) — opens `anthropic_client.messages.stream`, forwards chunks to SSE as `BlockStart` / `TextDelta` / `BlockData` / `BlockEnd`, and returns the final `Message`. **This is where the LLM is called.**
    3. **`scrub_blocks`** strips SDK-only fields from the response; **`cost_usd_micros`** computes cost.
    4. **`ConversationRepository.record_model_invocation`** writes one `model_invocations` row (fresh session).
@@ -115,7 +122,7 @@ A single user message, traced through the exact functions it hits.
    7. **`_decide_after_response`** routes on `stop_reason`:
       - `end_turn` → break, `terminal_state="end_turn"`.
       - `max_tokens` → break, `OUTPUT_TOKEN_LIMIT`.
-      - `tool_use` → **`dispatch_tool_uses`** (`dispatch/custom.py`) runs every `tool_use` block in parallel; appends a `user` message of `tool_result` blocks; **continue**.
+      - `tool_use` → **`dispatch_tool_uses`** (`dispatch/custom.py`) runs every `tool_use` block in parallel. Normally it appends a `user` message of `tool_result` blocks and **continues**. But if a tool returned a `proposal` (the **HIL gate**), a `pending_actions` row is persisted, the confirmation card stays in `assistant_blocks`, and the turn **breaks** with `terminal_state="awaiting_confirmation"` — no `tool_result`, no continue (see [`hil-actions.md`](hil-actions.md)).
       - `pause_turn` → continue verbatim (server tool mid-flight).
       - else (refusal/stop_sequence) → break, recorded verbatim.
 9. On normal break: if server tools enabled, **`flush_orphans`** closes any unmatched server-tool pills. `completed_normally = True`.
@@ -196,13 +203,13 @@ sequenceDiagram
 
 | File · symbol | Purpose | Notes |
 |---|---|---|
-| `loop.py` · `run_agent_turn(**kwargs)` | The orchestrator. One outer try/except/finally guarantees the `agent_turns` row finalizes even on cancellation. Iterates while `stop_reason` is `tool_use`/`pause_turn`. | No FastAPI imports — collaborators are injected, so it can run in sub-agents/tests. Returns `AgentTurnResult`. `_BREACH_TO_ERROR_CODE` maps cap breaches to error codes (`TIMEOUT`→`INTERNAL_ERROR`). |
-| `types.py` · `LoopState` | Mutable per-turn counters: `iterations`, `tool_calls`, `output_tokens`, `started_at_monotonic`. | Passed by reference into `run_one_iteration`. |
+| `loop.py` · `run_agent_turn(**kwargs)` | The orchestrator. One outer try/except/finally guarantees the `agent_turns` row finalizes even on cancellation. Iterates while `stop_reason` is `tool_use`/`pause_turn`; a tool `proposal` breaks the turn `awaiting_confirmation`. | No FastAPI imports — collaborators are injected, so it can run in sub-agents/tests. Returns `AgentTurnResult`. `persist_user_message`/`suppress_proposals` mark a system-initiated HIL confirm turn (no user bubble; a re-proposal is dropped). `_BREACH_TO_ERROR_CODE` maps cap breaches to error codes (`TIMEOUT`→`INTERNAL_ERROR`). |
+| `types.py` · `LoopState` | Mutable per-turn counters: `iterations`, `tool_calls`, `output_tokens`, `started_at_monotonic`, plus `suppress_proposals` (set on a HIL resume turn so a re-proposal is dropped rather than carded). | Passed by reference into `run_one_iteration`. |
 | `types.py` · `ModelConfig` | Frozen `model_id` holder. | — |
 | `types.py` · `ServerToolsConfig` | Flags + max-uses for hosted tools; `any_enabled` property. `DISABLED_SERVER_TOOLS` is the default-off singleton. | Built per request in `post_turn`. |
 | `types.py` · `AgentTurnResult` | Return shape: `turn_id`, `terminal_state`, `assistant_message_blocks`, `total_cost_usd_micros`, `iterations_count`. | Consumed by `_drive_turn` to decide replayability. |
 | `types.py` · `ToolRegistry` (Protocol) + `EMPTY_REGISTRY` | The registry surface the loop depends on (`is_empty`, `to_anthropic_spec`, `get`) without importing the tool framework. | Concrete impl is `tools/base.py:ToolRegistry`. |
-| `caps.py` · `HardCaps` | Frozen limits: `max_iterations=10`, `max_tool_calls=20`, `max_wall_clock_s=60.0`, `max_output_tokens=2048`, `thinking_budget_tokens=1024`. | `get_hard_caps()` is the dependency. |
+| `caps.py` · `HardCaps` | Frozen limits: `max_iterations=10`, `max_tool_calls=20`, `max_wall_clock_s=60.0`, `max_output_tokens=32000` — a combined ceiling on thinking + output. Adaptive thinking spends only what it needs under it; there is no separate thinking budget. | `get_hard_caps()` is the dependency. |
 | `caps.py` · `check_caps(state, caps)` → `CapBreach | None` | Checks iterations, tool calls, wall clock, output tokens **in that order**. | Called at the top of each loop iteration, before the model call. |
 | `cost.py` · `cost_usd_micros(usage, model_id)` | Per-call cost in microUSD from `_PRICING`. Adds web_search/web_fetch request fees ($10/1k). | **Raises `ValueError` for an unknown `model_id`** — a model with no `_PRICING` entry fails the turn. |
 | `db.py` · `make_session_factory(engine)` / `get_db_factory(request)` | Session-per-write factory; each `async with db_factory() as db:` opens, commits (or rolls back), closes one session. | The loop does **not** use `Depends(get_db)` — a request-scoped session can't be held across a 60s turn under pgbouncer transaction mode, and audit rows must be durable mid-turn. |
@@ -217,12 +224,12 @@ sequenceDiagram
 
 | File · symbol | Purpose | Notes |
 |---|---|---|
-| `iteration.py` · `build_iteration_request(...)` | Build `messages.stream` kwargs: model/system/messages/max_tokens/thinking + combined `tools`. | Tools carry no `cache_control` — they precede `system` in the cache prefix, so the system-prompt breakpoint caches them. Empty `tools` is omitted (Anthropic 400s on empty). |
+| `iteration.py` · `build_iteration_request(...)` | Build `messages.stream` kwargs: model/system/messages/`max_tokens` + `thinking: {type: adaptive}` + `output_config: {effort: high}` + combined `tools`. | Adaptive extended thinking is always on, so `ANTHROPIC_MODEL_MAIN` must be a model that supports it (Haiku does not — §7). Tools carry no `cache_control` — they precede `system` in the cache prefix, so the system-prompt breakpoint caches them. Empty `tools` is omitted (Anthropic 400s on empty). |
 | `iteration.py` · `run_one_iteration(...)` → `IterationOutcome` | One full iteration: build → stream → persist invocation → reconcile server tools → accumulate → route. Wraps the model call in a Langfuse `generation` span. | On stream exception → returns `break`/`error` with `to_error_code(exc)`. On `CancelledError` → flushes partial text + status pills, re-raises. Falls back to a minted ULID + `loop_text_block_id_fallback` warning if a persisted text block has no streamed `block_start`. |
-| `iteration.py` · `_decide_after_response(...)` | The `stop_reason` router (see lifecycle step 8.7). | A `tool_use` stop with **zero** tool_use blocks → `INTERNAL_ERROR` break (would otherwise loop forever). |
+| `iteration.py` · `_decide_after_response(...)` | The `stop_reason` router (see lifecycle step 8.7). On `tool_use`, a raised `proposal` breaks the turn `awaiting_confirmation` instead of appending `tool_result`s and continuing. | A `tool_use` stop with **zero** tool_use blocks → `INTERNAL_ERROR` break (would otherwise loop forever). |
 | `stream_consumer.py` · `StreamConsumer` | Per-iteration. Owns stream-time state (`open_text_blocks`, `open_thinking_blocks`, `accumulated_text`); emits SSE block events; polls `disconnect_check` every 16th text delta. | Closes the upstream stream eagerly on cancel. `redacted_thinking` emits a one-shot complete block. Server-tool start/result chunks delegate to the shared `ServerToolTracker`. |
 | `stream_consumer.py` · `flush_partial_text(...)` | Append in-flight text partials to `assistant_blocks` on cancel (since `get_final_message` never returns mid-stream). | — |
-| `turn_lifecycle.py` · `initialize_turn(...)` | Persist user message (+`context` block), load history → `messages`, append the request-only time-context block + mark the history cache breakpoint, open `agent_turns` row. Returns `(turn_id, messages)`. | User message persisted **first** so a mid-turn crash doesn't lose input. `TurnStarted` is emitted by the caller, not here. |
+| `turn_lifecycle.py` · `initialize_turn(...)` | On a user-initiated turn: run the HIL supersede sweep (`PendingActionRepository.supersede_pending_for_conversation`), persist user message (+`context` block), load history → `messages`, append the request-only time-context block + mark the history cache breakpoint, open `agent_turns` row. Returns `(turn_id, messages)`. | User message persisted **first** so a mid-turn crash doesn't lose input. `persist_user_message=False` (HIL confirm turn) skips the sweep and the user bubble, appending the handler's seed prompt as the model's latest input instead. `TurnStarted` is emitted by the caller, not here. |
 | `turn_lifecycle.py` · `TurnTotals` | Running token/cost counter accumulated across iterations. | Written to `agent_turns.total_*` at finalize. |
 | `turn_lifecycle.py` · `finalize_turn_row(...)` | Append assistant message (if any blocks) + `complete_agent_turn`. | Run under `asyncio.shield`; errors are logged, never re-raised (the row is the last signal left). |
 | `turn_lifecycle.py` · `emit_terminal_frame(...)` | Emit `Error` if `error_code` set, else `TurnCompleted`. | Only called on `completed_normally`. |
@@ -231,8 +238,8 @@ sequenceDiagram
 
 | File · symbol | Purpose | Notes |
 |---|---|---|
-| `custom.py` · `dispatch_tool_uses(...)` → `ToolDispatchOutcome` | Run every `tool_use` block in parallel via `asyncio.gather`. Aggregates `tool_result_blocks`, `ui_block_dicts`, `tool_call_count`, and the **first** `terminal_error_code` (siblings still finish + write audit rows). | — |
-| `custom.py` · `_dispatch_one_tool_use(...)` | Lookup → validate (`tool.Input.model_validate`) → execute → persist `tool_executions` row → emit wire events. Every exit path writes exactly one audit row. | Lookup miss → `INTERNAL_ERROR`; validation fail → `VALIDATION_ERROR`; execute raise → `TOOL_ERROR`. JSON-encodes `model_payload` into the `tool_result.content`. |
+| `custom.py` · `dispatch_tool_uses(...)` → `ToolDispatchOutcome` | Run every `tool_use` block in parallel via `asyncio.gather`. Aggregates `tool_result_blocks`, `ui_block_dicts`, `tool_call_count`, `proposal_raised`, and the **first** `terminal_error_code` (siblings still finish + write audit rows). | A `proposal_raised` alongside sibling tools logs `loop_proposal_with_sibling_tools` — those siblings' results are dropped when the turn gates. |
+| `custom.py` · `_dispatch_one_tool_use(...)` | Lookup → validate (`tool.Input.model_validate`) → execute → (HIL gate) → persist `tool_executions` row → emit wire events. Every exit path writes exactly one audit row. | Lookup miss → `INTERNAL_ERROR`; validation fail → `VALIDATION_ERROR`; execute raise → `TOOL_ERROR`. A returned `proposal` persists a `pending_actions` row (`_persist_pending_action`) **before** the card is emitted (persist failure → `TOOL_ERROR`, no card); on a `suppress_proposals` resume turn the proposal is dropped and the model told the action is already done. JSON-encodes `model_payload` into the `tool_result.content`. |
 | `custom.py` · `RecordingEmitter` | Wraps the emitter, records `BlockStart` block_ids so the result branch knows whether a tool already announced its UI block inline (dedup). | A tool that emits its own `BlockStart` (e.g. `get_stock_info`) won't get a duplicate; `display_stock_card` emits nothing, so dispatch sends both `BlockStart` + `BlockEnd`. |
 | `server.py` · `ServerToolTracker` | Turn-scoped. Pairs hosted-tool uses with results across iterations; renders/updates the status pill; writes `tool_executions` rows; `flush_orphans` closes unmatched uses (failed pill + `status=error` row). | `mark_active_failed` flips live pills to `failed` on cancel (shared refs with `assistant_blocks`). Orphans/dump failures emit Sentry warnings. |
 | `server.py` · `build_server_tool_specs(config)` | Build the date-pinned hosted-tool specs (`web_search_20250305`, `web_fetch_20250910`, `code_execution_20250825`). | Bumping a version pin opts into Anthropic behavior changes. |
@@ -245,7 +252,8 @@ Most tools have a dedicated reference under [`tools/`](tools/) — [`get_stock_i
 | File · symbol | Purpose | Contract / Notes |
 |---|---|---|
 | `base.py` · `Tool[InputT]` (ABC) | Base for registered tools. ClassVars `name`, `description`, `Input` (a `BaseModel`); `async execute(input, ctx) -> ToolResult`. | The loop validates input against `Input` before calling `execute`. |
-| `base.py` · `ToolResult` | `model_payload` (back to Anthropic), `ui_block: Block | None` (to the user), `internal_trace` (audit only). | `protected_namespaces=()` to allow the `model_payload` field name. |
+| `base.py` · `ToolResult` | `model_payload` (back to Anthropic), `ui_block: Block | None` (to the user), `internal_trace` (audit only), `proposal: ProposedAction | None` (presence raises the HIL gate — ends the turn `awaiting_confirmation`). | `protected_namespaces=()` to allow the `model_payload` field name. |
+| `base.py` · `ProposedAction` | A consequential action a tool proposes instead of performing: `action_id` (matches `ConfirmationBlock.action_id`), `action_type` (selects the `app/ai/actions/` handler), `payload` (executed verbatim on confirm), `expires_in_s=300`. | Returned on `ToolResult.proposal`; full framework in [`hil-actions.md`](hil-actions.md). |
 | `base.py` · `ToolContext` | Injected into `execute`: `user_id`, `db_factory`, `sse_emitter`, `http_clients`, and an **unused** `parent_emitter` (sub-agent scaffolding). | — |
 | `base.py` · `ToolHttpClients` | `market_data` (None without `FMP_API_KEY`) plus `alpaca` / `redis` (back the portfolio tools; None only when booted without a lifespan). All `… | None`. | Extend here to give tools more outbound clients. |
 | `base.py` · `ToolRegistry` | `register(tool)` (rejects dupes), `get(name)`, `is_empty`, `to_anthropic_spec()` (no cache marker — tools cache via the system-prompt prefix). | Concrete impl of the `types.py` Protocol. |
@@ -308,11 +316,12 @@ The live **time context** (clock + market status) is appended to the **current u
 |---|---|---|
 | User message (text + context block) | Yes | `messages` |
 | Assistant text blocks | Yes | `messages` (`assistant_blocks`) |
-| Tool UI blocks (`status`, `stock_card`) | Yes | `messages` (`assistant_blocks`) |
+| Tool UI blocks (`status`, `stock_card`, `confirmation`) | Yes | `messages` (`assistant_blocks`) |
 | Thinking blocks | **No** | Streamed live only; lost on reload |
 | Per-iteration request/response + tokens | Yes | `model_invocations` |
 | Each tool call (input/output/trace/latency) | Yes | `tool_executions` |
 | Turn outcome + token/cost totals | Yes | `agent_turns` |
+| Pending HIL action (proposal payload + card preview + outcome) | Yes | Postgres `pending_actions` (see [`hil-actions.md`](hil-actions.md)) |
 | Idempotency slot + turn_id | Yes (TTL'd) | Redis |
 | Langfuse trace | Yes (if keyed) | Langfuse, keyed by `turn_id.hex` |
 
@@ -346,6 +355,7 @@ class MyTool(Tool[MyInput]):
 - **Selection:** the model picks tools by name; the harness does no pre-filtering. Every registered tool is offered on every turn.
 - **Execution:** on a `tool_use` stop, `dispatch_tool_uses` runs all blocks in parallel. Per tool: `tool.Input.model_validate(raw_input)` (failure → `VALIDATION_ERROR`, audit row, no execute), then `execute(validated, ctx)` (any raise → `TOOL_ERROR`, audit row). Unknown tool name → `INTERNAL_ERROR`.
 - **Result re-entry:** `model_payload` is `json.dumps`'d into a `tool_result` block keyed by `tool_use_id`, collected into one follow-up `user` message, and the loop **continues** — the model sees the results on the next iteration. `ui_block` is emitted to SSE (`BlockStart`/`BlockEnd`, deduped via `RecordingEmitter`) and appended to the persisted `assistant_blocks`. `internal_trace` goes only to the `tool_executions` row.
+- **Human-in-the-loop gate:** if `execute` returns a `ToolResult.proposal`, the tool does **not** re-enter the model. Dispatch persists a `pending_actions` row, the `ConfirmationBlock` stays in `assistant_blocks`, and the turn ends `awaiting_confirmation`. The action executes server-side only after the user taps Confirm (`POST /v1/conversations/{id}/actions/{action_id}`), which drives a fresh follow-up turn. Full design: [`hil-actions.md`](hil-actions.md).
 - **Side effects available via `ctx`:** open DB sessions (`ctx.db_factory`), emit interim SSE (`ctx.sse_emitter` — e.g. an "active" pill before the work completes), and call outbound services (`ctx.http_clients`).
 
 Error isolation: one tool's failure sets the iteration's terminal error code but does **not** cancel its siblings — they finish and write audit rows. The first error in input order wins.
@@ -357,7 +367,8 @@ Error isolation: one tool's failure sets the iteration's terminal error code but
 ### Models
 
 - **Main:** `settings.anthropic_model_main` (env `ANTHROPIC_MODEL_MAIN`, default `claude-sonnet-4-6`). Wired via `get_default_model_config()`.
-- **Smoke:** `claude-haiku-4-5-20251001` (fixed, CI).
+- **Smoke:** `MODELS.SMOKE` is still `claude-haiku-4-5-20251001`, but the smoke harness now pins to `MODELS.MAIN` — Haiku does **not** support the adaptive extended thinking the runtime requests (the call 400s), and running smoke on the prod model also makes it a real canary (`tests/ai/smoke/conftest.py`).
+- **Adaptive thinking constraint:** every iteration sends `thinking: {type: adaptive}` (see §4 `build_iteration_request`), so `ANTHROPIC_MODEL_MAIN` must be a model that supports adaptive thinking — one that doesn't (e.g. Haiku) fails every turn.
 - `cost.py:_PRICING` has entries for `claude-sonnet-4-6`, `claude-opus-4-7`, `claude-haiku-4-5-20251001`. **A model without an entry raises `ValueError` mid-turn** → the turn errors out. Adding a model means adding pricing.
 
 ### Environment variables (in `app/config.py`)
@@ -401,6 +412,15 @@ Server-tool flags are **global** (per-deployment), not per-user or per-conversat
 4. If the tool needs a new outbound client, add it to `ToolHttpClients` and populate it in `lifecycle.py` + `post_turn`.
 
 No loop changes are required — dispatch, validation, audit, and SSE are generic over `Tool`.
+
+### Adding a human-in-the-loop action
+
+A consequential action (move money, place a trade, cancel an order) must be confirmed by an explicit tap, never executed on the model's say-so. The framework — the `pending_actions` table and its transitions, the dispatch gate, the confirm endpoint, supersede, expiry, and the resume turn — is shared. A feature adds just two pieces:
+
+1. **A propose tool** — a normal `Tool` whose `execute` validates inputs and returns a `ToolResult` carrying a `proposal: ProposedAction` and a `ConfirmationBlock` as its `ui_block`, instead of performing the action. Register it like any other tool.
+2. **A handler** — an `ActionHandler` (`execute` → `ActionResult`, plus `reject_prompt`) registered under its `action_type` in `app/ai/actions/__init__.py`.
+
+Optionally add a bespoke `ConfirmationBlock.kind` (with a matching iOS layout) and a system-prompt snippet describing when to propose. Full walkthrough and contracts: [`hil-actions.md`](hil-actions.md); the transfer feature is the worked example ([`tools/transfer_operations.md`](tools/transfer_operations.md)).
 
 ### Adding middleware / cross-cutting behavior
 

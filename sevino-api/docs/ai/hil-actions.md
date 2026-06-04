@@ -268,6 +268,7 @@ The seams are these contracts:
 
 ```python
 class ProposedAction(BaseModel):
+    action_id: str              # matches ConfirmationBlock.action_id
     action_type: str            # selects the handler
     payload: dict[str, Any]     # resolved, deterministic args
     expires_in_s: int = 300     # per-action window

@@ -1,8 +1,10 @@
 """Agent loop — runs one turn end-to-end.
 
-Extended thinking is always enabled (1024-token budget). The loop iterates
-on ``stop_reason == "pause_turn"``; prior thinking blocks are appended to
-``messages`` before each call so signatures roundtrip byte-for-byte.
+Adaptive extended thinking is always enabled — the model spends only the
+thinking it needs up to the combined ``max_output_tokens`` ceiling. The loop
+iterates on ``stop_reason == "pause_turn"``/``"tool_use"``; prior thinking
+blocks are appended to ``messages`` before each call so signatures roundtrip
+byte-for-byte.
 
 No FastAPI imports — collaborators are passed in so the same function
 runs in sub-agents and unit tests.
