@@ -50,8 +50,9 @@ spurious failures on contributor PRs.
 ## What's here
 
 * `conftest.py` — server / DB / HTTP / SSE fixtures (B4.1). Pins the
-  endpoint to `MODELS.SMOKE` (Haiku) for the full session via a
-  session-scoped `get_default_model_config` override.
+  endpoint to `MODELS.MAIN` (the prod model) for the full session via a
+  session-scoped `get_default_model_config` override — Haiku doesn't
+  support the adaptive thinking the runtime requests.
 * `test_hello.py` — smoke case: `"say hello"` turn (B4.2). Asserts the
   full SSE envelope and that `agent_turns` records a positive cost.
 * `test_iteration_cap.py` — smoke case: iteration cap breach (B4.3).

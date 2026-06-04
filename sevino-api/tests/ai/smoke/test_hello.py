@@ -1,4 +1,4 @@
-"""Smoke case: ``"say hello"`` against real Anthropic Haiku (B4.2).
+"""Smoke case: ``"say hello"`` against the real Anthropic API (B4.2).
 
 End-to-end happy path through the SSE chat-turn endpoint:
 
@@ -11,8 +11,8 @@ End-to-end happy path through the SSE chat-turn endpoint:
 
 The test is gated by ``RUN_AI_SMOKE=1`` and the prerequisites enforced
 by ``conftest.py:_smoke_prereqs``. The session-scoped
-``_smoke_model_override`` fixture pins the run to ``MODELS.SMOKE``
-(Haiku) so the test bills the cheap tier.
+``_smoke_model_override`` fixture pins the run to ``MODELS.MAIN`` (the
+prod model) — Haiku doesn't support the adaptive thinking the runtime requests.
 """
 
 from __future__ import annotations
