@@ -8,6 +8,46 @@ Replaced by the pytest smoke harness at `tests/ai/smoke/` — see
 `tests/ai/smoke/README.md`. Run with
 `RUN_AI_SMOKE=1 uv run pytest tests/ai/smoke -v`.
 
+## Daily Digest tools
+
+### Dry-run a real user's digest
+
+Runs the production digest assembly path for a user without writing a snapshot.
+Requires local infrastructure plus real `FMP_API_KEY` and `ANTHROPIC_API_KEY`
+in `.env`.
+
+```bash
+make digest-dry-run USER_EMAIL=user@example.com
+# equivalent:
+uv run python scripts/digest_dry_run.py --user-email user@example.com
+```
+
+The script prints the ordered digest cards as JSON to stdout and sends
+progress/errors to stderr, so it can be piped through `jq`.
+
+### Seed deterministic digest fixture data
+
+`seed_digest.py` creates a local fixture user and verifies digest generation
+without external Alpaca/FMP/Anthropic calls; provider inputs are in-memory
+fixtures.
+
+```bash
+make infra
+make migrate
+uv run python scripts/seed_digest.py
+```
+
+## FMP / market-data rollout checks
+
+`fmp_alpaca_parity_check.py` compares FMP bars against Alpaca bars for the
+`FMP_BARS_ENABLED` rollout. Run it only in an environment with real production
+market-data credentials; Alpaca sandbox data is synthetic and not useful for
+parity.
+
+```bash
+uv run python scripts/fmp_alpaca_parity_check.py
+```
+
 ## Funding smoke tests
 
 End-to-end sanity checks for the `/v1/funding/*` stack against **real** Plaid
@@ -43,6 +83,8 @@ Use them:
 | `funding_smoke.sh` | Happy-path link-bank → deposit → list → unlink → historical display. Plus DB-level ciphertext assertion and 409 BANK_ALREADY_LINKED. | ~15s | `seed_funding_sandbox.py` |
 | `funding_withdraw_smoke.sh` | OUTGOING transfer E2E. Does a deposit, waits up to 30 min for settlement, then withdraws. | Up to 30 min | `seed_funding_sandbox.py` |
 | `funding_errors_smoke.sh` | ACCOUNT_NOT_ACTIVE gate. Flips `brokerage_accounts.account_status` to SUBMITTED, verifies both `POST /link-bank` and `GET /transfers` 409 with the right code + detail, restores status. | ~2s | `seed_funding_sandbox.py` |
+| `funding_reauth_smoke.sh` | Plaid ITEM_LOGIN_REQUIRED reauth flow: links a sandbox item, forces reset_login, waits for webhook delivery, and verifies `requires_reauth=true`. | ~30s | `seed_funding_sandbox.py`, public `PLAID_WEBHOOK_URL` |
+| `funding_reconcile_smoke.sh` | Funding reconciliation cron path: detects local/Alpaca status drift and out-of-band server-side ACH cancellation. | ~15s | `funding_smoke.sh --skip-unlink` |
 
 ### Running them
 
@@ -61,10 +103,12 @@ bash scripts/funding_smoke.sh --skip-unlink        # leave bank linked + deposit
 bash scripts/funding_errors_smoke.sh               # quick — error-path gate
 bash scripts/funding_withdraw_smoke.sh             # slow — waits for settlement
 bash scripts/funding_withdraw_smoke.sh --assume-settled  # if you've already waited
+bash scripts/funding_reauth_smoke.sh               # requires public PLAID_WEBHOOK_URL
+bash scripts/funding_reconcile_smoke.sh            # after funding_smoke.sh --skip-unlink
 ```
 
-Each script ends in a green "PASSED" line on success and exits non-zero on
-any failure.
+Each script prints a green success line on success and exits non-zero on any
+failure.
 
 ### Re-seeding
 
@@ -128,6 +172,8 @@ Note that Alpaca + Plaid are still sandbox in both environments.
 - `funding_smoke.sh` — happy path + ciphertext-at-rest + 409 duplicate.
 - `funding_withdraw_smoke.sh` — OUTGOING transfer verification.
 - `funding_errors_smoke.sh` — ACCOUNT_NOT_ACTIVE gate.
+- `funding_reauth_smoke.sh` — Plaid reauth webhook verification.
+- `funding_reconcile_smoke.sh` — direct funding reconciliation task verification.
 - `.funding_smoke_env` — seeder output. Contains a JWT. Git-ignored.
 
 ## Stop-order smoke
@@ -177,3 +223,24 @@ magic-link OTP exchange — no password change, no re-linking.
   path). Requires market hours + the worker running, and sells one real
   sandbox share.
 - `.stop_smoke_env` — seeder output. Contains a JWT. Git-ignored.
+
+## Portfolio iOS E2E seed
+
+`seed_portfolio_e2e.py` links a local phone-OTP test user to an existing
+Alpaca sandbox account so the iOS simulator can exercise holdings/portfolio
+screens against real sandbox positions.
+
+Prerequisites:
+
+1. `make infra` running.
+2. Real Alpaca sandbox credentials in `.env`.
+3. An existing Alpaca sandbox account with positions.
+
+Run:
+
+```bash
+uv run python scripts/seed_portfolio_e2e.py <alpaca_account_id>
+```
+
+Then sign in on the iOS simulator with phone `15551234567` and OTP `123456`
+from the local Supabase `auth.sms.test_otp` config.

@@ -13,9 +13,17 @@ FastAPI backend for Sevino. Handles authentication, trading (via Alpaca), bank l
 - [git-worktreeinclude](https://github.com/satococoa/git-worktreeinclude) — install via `brew install satococoa/tap/git-worktreeinclude`. Required for carrying `.env` into new git worktrees (see [Worktrees](#worktrees)).
 - Docker (required by Supabase CLI)
 - Alpaca Broker API sandbox keys ([sign up](https://broker-app.alpaca.markets/sign-up))
-- Financial Modeling Prep API key for radar enrichment. The free tier is not
-  sufficient for a cold radar bootstrap or ongoing full-catalog enrichment;
-  use a paid tier if you need the AI Radar pipeline to populate locally.
+- Alpaca APR tier name for FDIC cash sweep enrollment. Alpaca configures this
+  during partner onboarding; local cash-interest flows need the sandbox tier.
+- Financial Modeling Prep API key for market data, stock cards, radar,
+  digest, and asset enrichment. You can leave it blank for local work that
+  does not touch those flows. The free tier is not sufficient for a cold radar
+  bootstrap or ongoing full-catalog enrichment; use a paid tier if you need
+  those pipelines to populate locally.
+- Anthropic API key for AI chat, radar LLM picks, digest reranking, and AI
+  smoke tests.
+- Langfuse project keys are optional locally. Leave them empty to use the
+  no-op tracing client.
 - Plaid sandbox keys ([sign up](https://dashboard.plaid.com/signup))
 - Supabase project ([create one](https://supabase.com/dashboard))
 
@@ -32,7 +40,8 @@ uv sync
 cp .env.example .env
 
 # Start infrastructure (Supabase local config lives in supabase/config.toml)
-# Run `supabase status` after this to confirm local services are running
+# Run `supabase status` after this to confirm local services and copy local
+# Supabase keys into .env / the iOS xcconfig as needed.
 make infra
 make migrate
 make server
@@ -89,6 +98,7 @@ test:           # Run all tests
 test-unit:      # Run unit tests only
 migrate:        # Apply database migrations
 migration:      # Create a new migration (usage: make migration msg="add table")
+digest-dry-run: # Generate digest cards for a user without writing a snapshot
 ```
 
 ### Running Tests
@@ -98,10 +108,16 @@ migration:      # Create a new migration (usage: make migration msg="add table")
 uv run pytest
 
 # Unit tests only (or: make test-unit)
-uv run pytest tests/unit
+uv run pytest tests/unit tests/ai/unit
 
 # Integration tests only
-uv run pytest tests/integration
+uv run pytest tests/integration tests/ai/integration
+
+# AI smoke tests (real Anthropic calls; default-skipped)
+RUN_AI_SMOKE=1 uv run pytest tests/ai/smoke -v
+
+# Live radar LLM integration test (real Anthropic call; default-skipped)
+RUN_LIVE_LLM_TESTS=1 uv run pytest tests/integration/test_radar_llm_live.py -v
 
 # Stop on first failure
 uv run pytest -x
@@ -149,20 +165,77 @@ The deploy sequence is: build (`uv sync`) → release command (`alembic upgrade 
 
 ## Environment Variables
 
+`cp .env.example .env` creates every setting consumed by `app.config.Settings`.
+Keep required keys present even when intentionally blank; pydantic-settings
+fails when a required setting is missing entirely. Real provider credentials
+are only needed for flows that call those providers.
+
+### Core Runtime
+
 | Variable | Description | Local Default |
 |----------|-------------|---------------|
-| `ENVIRONMENT` | App environment; normalized to `dev`, `staging`, or `prod`. Controls SSL, log format (console vs JSON), and whether `/docs` is exposed. | `dev` |
-| `DATABASE_URL` | Postgres connection (pooled in prod via port 6543) | `postgresql+asyncpg://postgres:postgres@localhost:54322/postgres` |
-| `DATABASE_URL_DIRECT` | Direct Postgres connection (for Alembic, port 5432 in prod) | Same as DATABASE_URL locally |
-| `REDIS_URL` | Redis connection for ARQ job queue | `redis://localhost:6379` |
-| `SUPABASE_URL` | Supabase API URL — used to fetch JWKS public keys for JWT verification. Production: Supabase dashboard → Settings → API → Project URL. | `http://127.0.0.1:54321` |
-| `API_KEY` | Static API key checked via `X-API-Key` header — lightweight gate to prevent random API discovery (not auth). **Optional for local dev** (leave empty to disable). Required for staging/prod. Generate with `openssl rand -hex 32`. | _(empty — disabled)_ |
-| `ALPACA_API_KEY` | Alpaca Broker API key (sandbox) | From Alpaca dashboard |
-| `ALPACA_SECRET_KEY` | Alpaca Broker API secret (sandbox) | From Alpaca dashboard |
-| `PLAID_CLIENT_ID` | Plaid client ID (sandbox) | From Plaid dashboard |
-| `PLAID_SECRET` | Plaid secret key (sandbox) | From Plaid dashboard |
-| `PLAID_ENV` | Plaid environment | `sandbox` |
-| `SENTRY_DSN` | Sentry DSN for error tracking. Optional — Sentry is disabled when empty. | _(empty — disabled)_ |
+| `ENVIRONMENT` | App environment; normalized to `dev`, `staging`, or `prod`. Controls SSL, log format, docs exposure, CORS, and Alpaca host selection. | `dev` |
+| `DATABASE_URL` | Async Postgres connection used by the running app. Hosted environments use the pooled Supavisor URL. | `postgresql+asyncpg://postgres:postgres@localhost:54322/postgres` |
+| `DATABASE_URL_DIRECT` | Direct Postgres connection used by Alembic. Hosted environments use the direct DB URL. | Same as `DATABASE_URL` locally |
+| `REDIS_URL` | Redis connection for ARQ jobs, rate limiting, listener state, and cache clients. Market data rewrites this URL to DB index 1 internally. | `redis://localhost:6379` |
+| `SUPABASE_URL` | Supabase API URL used for JWKS JWT verification and GoTrue admin/phone flows. | `http://127.0.0.1:54321` |
+| `SUPABASE_ANON_KEY` | Supabase publishable key sent as the `apikey` header for GoTrue REST calls. Also used by the iOS app. | From `supabase status` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase secret key for privileged admin operations and local seed scripts. Required outside `dev`. | From `supabase status` |
+| `API_KEY` | Static `X-API-Key` gate. Not user auth; JWT still handles identity. Optional locally, required in staging/prod/PR previews. | _(empty — disabled)_ |
+| `SENTRY_DSN` | Sentry error/performance telemetry. Optional locally. | _(empty — disabled)_ |
+| `RAILWAY_ENVIRONMENT_NAME` | Railway-provided env name. Used to tag Sentry and detect PR previews named `sevino-pr-*`. | _(empty)_ |
+
+### Alpaca
+
+| Variable | Description | Local Default |
+|----------|-------------|---------------|
+| `ALPACA_API_KEY` | Alpaca Broker API key. Use sandbox keys locally. | From Alpaca dashboard |
+| `ALPACA_SECRET_KEY` | Alpaca Broker API secret. Use sandbox keys locally. | From Alpaca dashboard |
+| `ALPACA_APR_TIER_NAME` | Alpaca FDIC cash-sweep APR tier name assigned when accounts become active. | Partner sandbox tier |
+| `CASH_SWEEP_FDIC_INSURED_LIMIT` | Cash-sweep marketing/config value returned by cash-interest endpoints. | `2500000` |
+| `CASH_SWEEP_PAYOUT_CADENCE` | Cash-sweep payout cadence returned by cash-interest endpoints. | `monthly` |
+
+### Plaid
+
+| Variable | Description | Local Default |
+|----------|-------------|---------------|
+| `PLAID_CLIENT_ID` | Plaid client ID. Use sandbox locally. | From Plaid dashboard |
+| `PLAID_SECRET` | Plaid secret. Use sandbox locally. | From Plaid dashboard |
+| `PLAID_ENV` | Plaid environment. Code accepts `sandbox` and `production`. | `sandbox` |
+| `PLAID_FERNET_KEY` | Fernet key list for encrypting Plaid access tokens at rest. First key encrypts; all keys decrypt for rotation. | Generate locally |
+| `PLAID_WEBHOOK_URL` | Per-environment Plaid item webhook URL. Leave empty locally unless using a public tunnel; set to `https://<host>/v1/plaid/webhooks` in hosted envs. | _(empty)_ |
+
+Generate a local Plaid Fernet key with:
+
+```bash
+uv run python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+### AI and Observability
+
+| Variable | Description | Local Default |
+|----------|-------------|---------------|
+| `ANTHROPIC_API_KEY` | Anthropic Claude API key for chat turns, radar LLM picks, digest reranking, and AI smoke tests. Use a real key for AI flows. | From Anthropic Console |
+| `ANTHROPIC_MODEL_MAIN` | Main chat model loaded at process startup. | `claude-sonnet-4-6` |
+| `RADAR_LLM_MODEL` | Radar pick/label model loaded independently from chat. | `claude-sonnet-4-6` |
+| `ANTHROPIC_ENABLE_WEB_SEARCH` | Enables Anthropic-hosted web search tool. Requires compliance review before staging/prod. | `false` |
+| `ANTHROPIC_ENABLE_WEB_FETCH` | Enables Anthropic-hosted web fetch tool. Requires compliance review before staging/prod. | `false` |
+| `ANTHROPIC_ENABLE_CODE_EXECUTION` | Enables Anthropic-hosted code execution tool. Requires compliance review before staging/prod. | `false` |
+| `ANTHROPIC_WEB_SEARCH_MAX_USES` | Per-turn max web-search tool calls. | `5` |
+| `ANTHROPIC_WEB_FETCH_MAX_USES` | Per-turn max web-fetch tool calls. | `5` |
+| `LANGFUSE_PUBLIC_KEY` | Langfuse public key for AI traces. Blank uses the no-op client. | _(empty)_ |
+| `LANGFUSE_SECRET_KEY` | Langfuse secret key for AI traces. Blank uses the no-op client. | _(empty)_ |
+| `LANGFUSE_HOST` | Langfuse host. | `https://us.cloud.langfuse.com` |
+
+The current AI runtime uses the Anthropic SDK directly with Langfuse tracing.
+There is no LangChain or LangSmith dependency in `pyproject.toml`.
+
+### Market Data and Radar
+
+| Variable | Description | Local Default |
+|----------|-------------|---------------|
+| `FMP_API_KEY` | Financial Modeling Prep key for quotes, fundamentals, profiles, ratios, analyst targets, earnings, news, stock cards, radar/digest enrichment, and asset sync. Blank disables market-data clients in dev. | _(empty)_ |
+| `FMP_BARS_ENABLED` | Routes historical chart/bars through FMP instead of Alpaca's market-data feed. Kept as a reversible rollout flag. | `false` |
 
 ## API Key
 

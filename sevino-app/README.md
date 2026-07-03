@@ -6,15 +6,22 @@ iOS app for Sevino — an AI-native brokerage built by [Sevino](https://sevino.a
 
 ### Prerequisites
 
-- macOS with Xcode 16+
-- iOS 17+ deployment target
-- Supabase project credentials (URL + anon key)
-- Sevino API running locally or pointed at a dev environment
+- macOS with an Xcode/iOS SDK that can build the checked-in deployment target (`IPHONEOS_DEPLOYMENT_TARGET = 26.2`).
+- Swift Package Manager access to GitHub for `supabase-swift`, `plaid-link-ios` (`LinkKit`), and `swift-markdown-ui` (`MarkdownUI`).
+- Supabase project credentials (URL + anon key). For local dev, run `supabase status` from `sevino-api/` after `make infra`.
+- Sevino API running locally or pointed at a dev/staging environment.
 
 ### Setup
 
-1. Open `sevino-app/Sevino/Sevino.xcodeproj` in Xcode.
-2. Copy `Config.xcconfig.example` to create per-environment config files (all gitignored):
+1. From the monorepo root, start the backend if you want the full local experience:
+   ```bash
+   cd sevino-api
+   make infra
+   make migrate
+   make server
+   ```
+2. Open `sevino-app/Sevino/Sevino.xcodeproj` in Xcode.
+3. Copy `sevino-app/Sevino/Config.xcconfig.example` to create per-environment config files (all gitignored):
    - `Config.debug.xcconfig` — local development (Cmd+R)
    - `Config.staging.xcconfig` — TestFlight / staging builds
    - `Config.release.xcconfig` — App Store / production builds
@@ -26,129 +33,82 @@ iOS app for Sevino — an AI-native brokerage built by [Sevino](https://sevino.a
    API_BASE_URL = http:/$()/127.0.0.1:8000
    API_KEY =
    ```
-   Note: Use `$()` in URLs to prevent `//` being parsed as an xcconfig comment.
-3. Build and run on the iOS Simulator (Cmd+R).
-
-For the full experience locally, you need the Sevino API running — see [sevino-api/README.md](../sevino-api/README.md).
+   Use the same `API_KEY` as `sevino-api/.env`; leave it empty locally when the backend key gate is disabled. Use `$()` in URLs to prevent `//` from being parsed as an xcconfig comment.
+4. Let Xcode resolve packages, then build and run on the iOS Simulator (Cmd+R).
 
 ## Project Structure
 
 ```
 sevino-app/
-├── Sevino.xcodeproj
-├── Config.xcconfig.example       # Template for per-environment configs
-├── Sevino/
-│   ├── App/
-│   │   └── SevinoApp.swift       # @main entry point
-│   ├── Views/                    # SwiftUI views (screens + components)
-│   │   ├── ContentView.swift     # Root view / navigation shell
-│   │   ├── Auth/                 # Login, sign-up, phone number screens
-│   │   ├── Onboarding/           # Multi-step onboarding flow (phase 1)
-│   │   ├── AlpacaSetup/          # KYC / brokerage account setup (phase 2)
-│   │   ├── Home/                 # Home screen
-│   │   ├── Trading/              # (placeholder)
-│   │   ├── Portfolio/            # (placeholder)
-│   │   ├── Funding/              # (placeholder)
-│   │   ├── Chat/                 # (placeholder)
-│   │   └── Components/           # (placeholder)
-│   ├── ViewModels/
-│   │   ├── Auth/
-│   │   │   ├── AuthViewModel.swift       # Observable auth state for views
-│   │   │   └── PhoneNumberViewModel.swift
-│   │   └── Home/
-│   │       └── HomeViewModel.swift
-│   ├── Services/
-│   │   ├── APIClient.swift       # HTTP client (conforms to APIClientProtocol); snake_case encoding/decoding; GET/POST/PUT/PATCH/DELETE
-│   │   ├── AuthService.swift     # Supabase Auth wrapper (protocol-backed)
-│   │   ├── OnboardingService.swift  # Calls PATCH /v1/onboarding, POST /v1/onboarding/submit, GET /v1/onboarding/status
-│   │   └── Supabase+Client.swift # SupabaseClient singleton
-│   ├── Models/
-│   │   ├── APIError.swift        # Structured error model matching backend format
-│   │   └── Onboarding/
-│   │       └── OnboardingModels.swift  # Request/response Codable types for onboarding API
-│   └── Utils/
-│       ├── AppConfig.swift           # Reads xcconfig values from Info.plist at runtime
-│       ├── AnyCodable.swift          # Type-erased Codable wrapper (for APIError.detail)
-│       └── OnboardingDataMapper.swift  # Pure functions: date formatting, name splitting, value normalization
-├── SevinoTests/
-│   ├── Auth/
-│   │   ├── AuthViewModelTests.swift
-│   │   ├── AuthServiceIntegrationTests.swift
-│   │   └── PhoneNumberViewModelTests.swift
-│   ├── Models/
-│   │   ├── APIErrorTests.swift
-│   │   └── AnyCodableTests.swift
-│   ├── Onboarding/
-│   │   ├── OnboardingServiceTests.swift
-│   │   └── OnboardingDataMapperTests.swift
-│   └── Mocks/
-│       ├── MockAuthService.swift
-│       └── MockAPIClient.swift   # Implements APIClientProtocol for test injection
-└── SevinoUITests/                # UI tests (critical flows only)
+└── Sevino/
+    ├── Config.xcconfig.example
+    ├── Sevino.xcodeproj
+    ├── Sevino/
+    │   ├── App/                  # @main app, routing/bootstrap, UI test launch hooks
+    │   ├── Assets.xcassets/      # Logos, app icon, welcome/sign-up imagery
+    │   ├── Models/               # DTOs and UI data models
+    │   │   ├── Auth/ Brokerage/ Cards/ Chat/ Digest/ Funding/
+    │   │   ├── Home/ MarketData/ Onboarding/ Portfolio/ Settings/ Trading/
+    │   │   └── APIError.swift, AssetSearchResult.swift
+    │   ├── Services/             # API clients and platform/service adapters
+    │   │   ├── Chat/             # SSE parser/client for streamed AI turns
+    │   │   ├── APIClient.swift   # REST client with auth/API-key headers
+    │   │   ├── Supabase+Client.swift, AuthService.swift
+    │   │   ├── FundingService.swift, TradingService.swift, PortfolioService.swift
+    │   │   ├── MarketDataService.swift, RadarAPIClient.swift, DigestAPIClient.swift
+    │   │   └── SettingsService.swift, ShortcutsAPIClient.swift, UserProfileService.swift
+    │   ├── ViewModels/           # App, auth, chat, digest, funding, home, onboarding, portfolio, settings
+    │   ├── Views/                # SwiftUI screens and components
+    │   ├── Utils/                # AppConfig, JSON coders, formatting, theme, markdown, helpers
+    │   └── Resources/Fonts/
+    ├── SevinoTests/              # XCTest unit/integration tests with mocks
+    └── SevinoUITests/            # XCUITest flows
 ```
 
-## How It Connects to the Backend
+## Backend Connection
 
-All API communication goes through `Services/APIClient.swift`, which conforms to `APIClientProtocol`. Every request includes:
-- `Authorization: Bearer <jwt>` — Supabase Auth token, managed by `AuthService`.
-- `X-API-Key: <key>` — static API key for app identification.
+Runtime config is read from Info.plist build settings via `Utils/AppConfig.swift`:
 
-`APIClient` uses `JSONEncoder` with `.convertToSnakeCase` and `JSONDecoder` with `.convertFromSnakeCase`, so Swift camelCase model fields map automatically to the backend's snake_case JSON.
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `API_BASE_URL`
+- `API_KEY`
 
-The base URL (`API_BASE_URL`) points to `localhost:8000` in development and the Railway production URL in release builds. Non-2xx responses are decoded into a structured `APIError` model (with `error`, `code`, and `detail` fields matching the backend's error format).
+REST calls go through `Services/APIClient.swift`, which attaches `Authorization: Bearer <jwt>` when a Supabase session exists and `X-API-Key` when `API_KEY` is non-empty. The JSON coders in `Utils/JSONCoders+Sevino.swift` use snake-case/camel-case conversion to match the FastAPI API.
 
-`APIClientProtocol` allows injecting `MockAPIClient` in unit tests without network calls.
-
-## Authentication
-
-Auth is handled by Supabase via the `supabase-swift` SDK:
-- `AuthService` wraps Supabase auth and listens to auth state changes (sign in, sign out, token refresh) via an async stream.
-- Conforms to `AuthServiceProtocol` for dependency injection — tests use `MockAuthService`.
-- `AuthViewModel` observes `AuthService` and exposes auth state (`isAuthenticated`, `isLoading`, `authError`) to SwiftUI views.
-- JWT is attached to every API request by `APIClient` (reads the token from `AuthService.accessToken`).
-- Social logins (Google, Apple) supported via Supabase Auth.
+Streamed AI chat turns use `Services/Chat/SSEClient.swift` and `ViewModels/Chat/ConversationStore.swift`. The SSE client attaches the same JWT/API-key headers and parses wire events before the chat model layer decodes them.
 
 ## Key Integrations
 
-### Plaid Link
-
-Bank account linking uses Plaid's native iOS SDK (LinkKit). The flow:
-1. App requests a `link_token` from the Sevino API.
-2. App opens Plaid Link with the token — user selects their bank and authenticates.
-3. Plaid Link returns a `public_token` on success.
-4. App sends the `public_token` to the Sevino API, which handles the rest (token exchange → Alpaca ACH link).
-
-### Alpaca (indirect)
-
-The app never talks to Alpaca directly. All trading, portfolio, and account operations go through the Sevino API. The API returns data in app-friendly shapes — the app doesn't need to know about Alpaca's data models.
+- **Supabase Auth** — `AuthService` wraps `supabase-swift`, handles session state, social login, token refresh, email verification, and phone verification flows.
+- **Sevino API** — all brokerage, trading, portfolio, market data, funding, radar, digest, shortcuts, and settings features call the backend. The app never talks directly to Alpaca, FMP, Anthropic, or Langfuse.
+- **Plaid Link** — native LinkKit flow gets a link token from the API, opens Plaid Link, then sends the public token/account selection back to the API for ACH setup.
+- **MarkdownUI** — renders assistant/chat markdown blocks using the app theme.
 
 ## Testing
 
-### Unit Tests (SevinoTests/)
+### Unit Tests
 
-Tests for view models, services, data models, and business logic. Uses XCTest (built into Xcode).
+Run in Xcode with Cmd+U or Product → Test. The suite covers view models, services, DTO decoding, chat/SSE parsing, card data, onboarding, funding, portfolio, settings, and utility logic. Production services are protocol-backed so tests can inject mocks from `SevinoTests/Mocks/`.
 
-**Mocking pattern:** Define protocols for services (e.g., `AuthServiceProtocol`, `APIClientProtocol`). In production, inject the real implementation. In tests, inject a mock that returns predetermined data (see `MockAuthService`, `MockAPIClient`). This also benefits SwiftUI previews.
+### Integration Tests
 
-Run in Xcode: Cmd+U or Product → Test.
+Some tests are skipped unless `INTEGRATION_TESTS=1` is set in the Xcode scheme environment. Local Supabase/API-backed tests use:
 
-### UI Tests (SevinoUITests/)
+```
+INTEGRATION_TESTS = 1
+SUPABASE_TEST_URL = http://127.0.0.1:54321
+SUPABASE_TEST_ANON_KEY = <from supabase status>
+SUPABASE_TEST_SERVICE_ROLE_KEY = <from supabase status>
+SEVINO_API_TEST_URL = http://127.0.0.1:8000
+```
 
-XCUITest for automated UI testing of critical flows. Use sparingly — these are slow and brittle. Focus on:
-- Onboarding / KYC flow
-- Trade execution flow
-- Deposit flow
+Start the backend stack first with `make infra`, `make migrate`, and `make server` from `sevino-api/`.
 
-### Snapshot Tests (later)
+### UI Tests
 
-Once the UI design stabilizes, add `swift-snapshot-testing` to catch unintended visual regressions. Not needed for MVP.
+XCUITest coverage lives in `SevinoUITests/` for critical flows such as welcome/auth and digest. Keep UI tests focused; most business logic belongs in unit tests.
 
 ## CI
 
-Frontend tests run in GitHub Actions on a macOS runner, triggered on changes to `sevino-app/**`.
-
-Workflow:
-1. Checkout repo.
-2. Build Xcode project.
-3. Run XCTest suite.
-4. Catches build failures and test regressions before merging.
+There is no frontend GitHub Actions workflow checked into `.github/workflows/` right now; the current CI workflow is backend-only. Until a frontend workflow is added, run the Xcode build/test suite locally before merging iOS changes.

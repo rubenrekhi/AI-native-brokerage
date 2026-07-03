@@ -7,8 +7,9 @@ The harness spins up a local uvicorn server, hits
 into typed `Event` objects, and verifies persistence via the local
 Supabase Postgres.
 
-Each test costs real money — the agent calls Claude (Haiku tier per
-decision D9 in `sevino-api/docs/ai-v0-plan.md`).
+Each enabled test can cost real money. The harness pins to `MODELS.MAIN`
+(currently `claude-sonnet-4-6`) because the runtime requests adaptive
+thinking, which the older Haiku smoke-model plan does not support.
 
 ## When does this run?
 
@@ -50,17 +51,14 @@ spurious failures on contributor PRs.
 ## What's here
 
 * `conftest.py` — server / DB / HTTP / SSE fixtures (B4.1). Pins the
-  endpoint to `MODELS.MAIN` (the prod model) for the full session via a
-  session-scoped `get_default_model_config` override — Haiku doesn't
-  support the adaptive thinking the runtime requests.
+  endpoint to `MODELS.MAIN` for the full session via a session-scoped
+  `get_default_model_config` override.
 * `test_hello.py` — smoke case: `"say hello"` turn (B4.2). Asserts the
   full SSE envelope and that `agent_turns` records a positive cost.
 * `test_iteration_cap.py` — smoke case: iteration cap breach (B4.3).
   Overrides `get_hard_caps` to `HardCaps(max_iterations=0)` so the
   loop short-circuits with `terminal_state='iteration_limit'` before
   any Anthropic call (so this case bills nothing).
-* (Phase 3) `test_get_stock_info.py` — AMD price query exercising
-  `get_stock_info` (C5.3).
 
 ## Available fixtures
 
@@ -82,6 +80,6 @@ spurious failures on contributor PRs.
 
 ## Why default-skipped
 
-Real Anthropic calls bill in CI minutes and dollars. Per risk R10 in
-`docs/ai-v0-plan.md`, the harness is off by default and gated on
-explicit opt-in (`RUN_AI_SMOKE=1` locally; the CI secret on workflows).
+Real Anthropic calls bill in CI minutes and dollars. The harness is off by
+default and gated on explicit opt-in (`RUN_AI_SMOKE=1` locally; the CI secret
+on workflows).

@@ -4,35 +4,48 @@ Sevino is an AI-native brokerage app for US consumers, built by [Sevino](https:/
 
 ## How It Works
 
-The iOS app is the user-facing interface. It communicates with a FastAPI backend over HTTPS using REST APIs. Every request is authenticated with a JWT issued by Supabase Auth.
+The iOS app is the user-facing interface. It communicates with a FastAPI backend over HTTPS using REST APIs and SSE streams. User requests are authenticated with a JWT issued by Supabase Auth; hosted environments also require the static `X-API-Key` gate.
 
 ```
-┌──────────────┐        HTTPS + JWT         ┌──────────────┐
+┌──────────────┐     HTTPS + JWT/API key    ┌──────────────┐
 │              │  ────────────────────────▶ │              │
 │  Sevino App  │                            │  Sevino API  │
 │  (Swift/     │  ◀──────────────────────── │  (FastAPI)   │
 │   SwiftUI)   │        JSON responses      │              │
 └──────────────┘                            └──────┬───────┘
                                                    │
-                              ┌─────────────┬──────┴───────┬─────────────┐
-                              │             │              │             │
-                        ┌─────▼─────┐ ┌─────▼─────┐ ┌─────▼─────┐ ┌────▼────┐
-                        │ Supabase  │ │  Alpaca   │ │   Plaid   │ │  Redis  │
-                        │ Postgres  │ │ Broker API│ │    API    │ │  + ARQ  │
-                        └───────────┘ └───────────┘ └───────────┘ └─────────┘
+                                  Backend dependencies/providers
+                                                   │
+             ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌─────────┐
+             │ Supabase  │ │  Alpaca   │ │   Plaid   │ │ Redis   │
+             │ Postgres  │ │ Broker API│ │    API    │ │ + ARQ   │
+             └───────────┘ └───────────┘ └───────────┘ └─────────┘
+             ┌───────────┐ ┌───────────┐ ┌───────────┐
+             │ Anthropic │ │    FMP    │ │ Langfuse  │
+             │  Claude   │ │Market Data│ │  Tracing  │
+             └───────────┘ └───────────┘ └───────────┘
 ```
 
 - **Supabase Postgres** — user profiles, AI conversation history, app data. Accessed via SQLAlchemy + asyncpg.
 - **Alpaca Broker API** — brokerage accounts, KYC, trading, portfolio data, custody of funds. Source of truth for all financial data.
 - **Plaid** — bank account linking for deposits/withdrawals via ACH.
-- **Redis + ARQ** — background job queue for AI agent processing, trade analysis, and scheduled tasks.
+- **Redis + ARQ** — background job queue for AI agent processing, trade analysis, scheduled tasks, SSE listeners, funding reconciliation, radar refreshes, and digest generation.
+- **Anthropic Claude** — AI agent runtime for natural-language brokerage workflows.
+- **Langfuse** — optional tracing and cost observability for AI turns.
+- **Financial Modeling Prep (FMP)** — market data, fundamentals, news, earnings, radar/digest enrichment, and optional chart-bar source during the FMP bars rollout.
+
+## Development Setup
+
+- Backend setup, provider keys, migrations, tests, and worker commands live in [sevino-api/README.md](sevino-api/README.md).
+- iOS setup, Xcode configuration, local API wiring, and app test notes live in [sevino-app/README.md](sevino-app/README.md).
+- Backend environment variables are copied from [sevino-api/.env.example](sevino-api/.env.example).
 
 ## Monorepo Structure
 
 ```
 sevino/
 ├── .claude/          # Claude Code configuration
-├── .github/          # CI workflows (backend + frontend, triggered independently)
+├── .github/          # GitHub Actions workflows (backend CI currently)
 ├── README.md         # ← you are here
 ├── sevino-api/       # FastAPI backend (Python)
 │   └── README.md     # Backend setup & dev guide
